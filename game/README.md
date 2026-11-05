@@ -11,6 +11,6 @@ for simple UI wiring and MonoBehaviours.
 project unlocked), then `bash scripts/verify.sh` runs the EditMode tests. In the Editor,
 use the Test Runner or MCP for Unity.
 
-**Creating the project (human, task 0.8):** Unity Hub will not create a project inside a
+**Creating the project (human, task 0.6):** Unity Hub will not create a project inside a
 non-empty folder. Create it elsewhere (3D URP, any name), then move its contents into this
 folder, keeping this README. Never commit `Library/`, `Temp/`, `Logs/`, `UserSettings/`.

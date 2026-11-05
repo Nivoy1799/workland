@@ -16,7 +16,7 @@ Tick boxes as you go and commit after each finished task.
 - [ ] 0.6 [HUMAN] On the Windows PC: install Unity Hub, Unity 6 LTS with Windows, Linux and
       Linux Dedicated Server Build Support, and Claude Code. Clone the repo. Create the project
       in `/game` (see `game/README.md`), import FishNet, FishySteamworks, Steamworks.NET, MCP for Unity.
-- [ ] 0.7 [AGENT] On Windows: verify the MCP connection, read the Unity console through MCP and report.
+- [x] 0.7 [AGENT] On Windows: verify the MCP connection, read the Unity console through MCP and report.
 
 ## Phase 1: Netcode (target: 2 to 3 weeks)
 
