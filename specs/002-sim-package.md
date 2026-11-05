@@ -24,7 +24,7 @@ Unity-free test loop from day one.
 - `sim/Runtime/Core/IsExternalInit.cs` (new): polyfill, see Design.
 - `sim/Directory.Build.props` (new): redirects build output, see Design.
 - `sim/Sim.csproj` (new): targets `netstandard2.1`, compiles only `Runtime/**/*.cs`.
-- `sim/Sim.Tests~/Sim.Tests.csproj` (new): xUnit, targets `net8.0`, references `../Sim.csproj`.
+- `sim/Sim.Tests~/Sim.Tests.csproj` (new): xUnit, targets `net10.0`, references `../Sim.csproj`.
 - `sim/Sim.Tests~/Cooking/DishScorerTests.cs` (new)
 - `sim/Sim.sln` (new): contains both projects.
 
@@ -92,4 +92,4 @@ starting with `.`. So:
 - Command: `bash scripts/verify.sh`
 
 ## Human steps
-- Install the .NET 8 SDK if `dotnet --version` fails.
+- Install the .NET 10 SDK (LTS) if `dotnet --version` fails. `global.json` pins the 10.0 feature band.
