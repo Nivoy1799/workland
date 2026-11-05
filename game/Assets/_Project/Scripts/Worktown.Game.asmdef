@@ -1,0 +1,20 @@
+{
+    "name": "Worktown.Game",
+    "rootNamespace": "Worktown.Game",
+    "references": [
+        "FishNet.Runtime",
+        "GameKit.Dependencies",
+        "com.rlabrecque.steamworks.net",
+        "Worktown.Sim",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
