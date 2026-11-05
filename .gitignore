@@ -1,0 +1,49 @@
+# Secrets
+.env
+*.pem
+*.key
+
+# Unity
+game/[Ll]ibrary/
+game/[Tt]emp/
+game/[Oo]bj/
+game/[Bb]uild/
+game/[Bb]uilds/
+game/[Ll]ogs/
+game/[Uu]ser[Ss]ettings/
+game/[Mm]emoryCaptures/
+game/*.csproj
+game/*.sln
+game/*.suo
+game/*.user
+game/*.pidb
+game/*.booproj
+game/*.svd
+game/*.pdb
+game/*.mdb
+game/*.opendb
+game/*.VC.db
+game/sysinfo.txt
+game/crashlytics-build.properties
+game/.vs/
+game/.idea/
+
+# .NET
+**/bin/
+**/obj/
+*.nupkg
+TestResults/
+
+# Node / Python
+node_modules/
+__pycache__/
+.venv/
+*.pyc
+
+# Tooling output
+.verify/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
