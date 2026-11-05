@@ -13,7 +13,7 @@ Tick boxes as you go and commit after each finished task.
       in branch `spec/002-sim-package`.
 - [x] 0.5 [AGENT] Run the tester subagent, then the reviewer subagent on branch `spec/002-sim-package`.
       Fix or hand back. Merge to `main` and push.
-- [ ] 0.6 [HUMAN] On the Windows PC: install Unity Hub, Unity 6 LTS with Windows, Linux and
+- [x] 0.6 [HUMAN] On the Windows PC: install Unity Hub, Unity 6 LTS with Windows, Linux and
       Linux Dedicated Server Build Support, and Claude Code. Clone the repo. Create the project
       in `/game` (see `game/README.md`), import FishNet, FishySteamworks, Steamworks.NET, MCP for Unity.
 - [x] 0.7 [AGENT] On Windows: verify the MCP connection, read the Unity console through MCP and report.
