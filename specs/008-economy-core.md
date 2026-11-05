@@ -38,7 +38,7 @@ Only `/sim`. Runtime in `sim/Runtime/Economy/`, namespace `Worktown.Sim.Economy`
 ## Design
 
 ### Units and determinism
-- Money is `long` minor units (placeholder "coin", 100 minor = 1 coin). No float in money, demand, prices or
+- Money is `long` whole dollars ($). There are no sub-units (no cents, D23). No float in money, demand, prices or
   anything in `EconomyState`. All divisions are integer division on non-negative operands (= floor).
 - `EconomyLimits`: `MaxBalance = 1e15`, `MaxPrice = 1e9`, `MaxGoodUnits = 1_000_000` (per account per good),
   `MaxLot = 10_000` (units per goods sale or grocer buy), `MaxPopulation = 100_000`, `MaxDemandPerTick = 1_000_000`,
@@ -65,7 +65,7 @@ public enum ByproductTrigger { Operation, Discard, Sale }
 // SourceId: operation id (Operation), market id (Sale), "" (Discard).
 public sealed record ByproductRule(ByproductTrigger Trigger, string SourceId, string GoodId,
     int FixedUnits, int UnitsPerComponent);
-public sealed record GrocerPrice(string BaseId, long Price);       // spec 005 BaseItemDef id, minor units
+public sealed record GrocerPrice(string BaseId, long Price);       // spec 005 BaseItemDef id, whole dollars
 public sealed class EconomyCatalog
 {
     public EconomyCatalog(IEnumerable<MarketDef> markets, IEnumerable<CategoryRule> rules,
@@ -91,7 +91,7 @@ SourceId is unknown in `operations` or has `Kind == Mix` (flattening removes nod
 a Sale rule not on an Item market; a Discard rule with SourceId != ""; grocer: bad/duplicate BaseId, Price not in
 1..MaxPrice, empty while byproduct rules exist; **anti-faucet rule** `B >= min(grocer Price)`.
 
-Default catalog (all numbers PROVISIONAL, see Open questions; prices in minor units):
+Default catalog (all numbers PROVISIONAL, see Open questions; prices in whole dollars):
 | market | kind | floor | ceiling | npc q | min q | units/NPC/day | hours (weight) |
 |---|---|---|---|---|---|---|---|
 | meal | Item | 300 | 1200 | 350 | 150 | 1.50 (150) | 6:1 7:3 8:2 9:1 10:1 11:4 12:6 13:3 14:1 15:1 16:1 17:2 18:5 19:6 20:3 21:1, else 0 |
@@ -240,7 +240,7 @@ Let F = Floor, C = Ceiling, P = Price, q in 0..1000, q_N = NpcQualityPermille <=
   Proof: attribute every payout to the item lineage it came from (bases only via the grocer, byproducts only from
   that lineage's operations/end). A lineage not ending in a demand sale nets `< 0`; one that does nets
   `<= floor(1.5 C_m) + W*B - Cost < floor(1.5 C_m)`. Held, unfinished lineages net `<= W*B - Cost < 0`.
-  Defaults: about 180 meals, 96 snacks, 240 drinks per day, so `M(24) ~= 471_600` minor (4_716 coin per town-day).
+  Defaults: about 180 meals, 96 snacks, 240 drinks per day, so `M(24) ~= $471_600` per town-day.
 
 ### Anti-exploit behaviour
 - Same item twice: the server inventory removes it in the same step as an Ok sale (later spec); the economy also
@@ -303,7 +303,8 @@ Prices and `Last` may be broadcast read-only. The server drives `Tick` and persi
 None (pure /sim). The human answers the Open questions or approves the defaults.
 
 ## Open questions (recommended default in brackets; all numbers provisional and data-only)
-1. Currency name and minor units. [placeholder "coin", 100 minor = 1 coin]
+1. Currency: decided 2026-11-05, dollar ($), whole dollars only, no sub-units (D23). Price levels stay
+   in the hundreds because integer quality steps and the byproduct bound B need headroom; see Q2.
 2. Floor/ceiling prices per market. [table above; commodities kept tiny (ceilings 3 and 4) so B stays < cheapest grocer price]
 3. NPC population and needs per NPC per day. [120 NPCs; meal 1.5, snack 0.8, drink 2.0; hour weights above]
 4. Margin rule. [Ceiling >= 1.5 x Floor, enforced by the catalog]
@@ -315,7 +316,7 @@ None (pure /sim). The human answers the Open questions or approves the defaults.
 10. Byproducts. [cut: 1 food_scraps per component; fry: 1 used_cooking_oil; discard: 1 food_scraps per component; no sale byproducts]
 11. Money source/sink. [NPC money unlimited, totals tracked; the grocer is the v1 sink; rent etc. later]
 12. Starting balance for new players. [0 in /sim; a starting grant (needed to buy first ingredients) is a /game decision]
-13. Grocer prices (minor units). [salt 35, basil 40, oil 50, onion 50, potato 60, tomato 70, apple 80, cheese 150; all > B]
+13. Grocer prices (whole dollars). [salt 35, basil 40, oil 50, onion 50, potato 60, tomato 70, apple 80, cheese 150; all > B]
 14. Grocer stock limits or dynamic prices. [none in v1; fixed prices, unlimited stock]
 
 ## Implementation notes
