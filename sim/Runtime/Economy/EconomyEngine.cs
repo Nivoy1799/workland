@@ -99,7 +99,7 @@ namespace Worktown.Sim.Economy
                 msOut = ms with
                 {
                     OpenDemand = ms.OpenDemand - 1,
-                    PlayerFilledThisTick = ms.PlayerFilledThisTick + 1,
+                    PlayerFilledThisTick = SatInt(ms.PlayerFilledThisTick, 1),
                     DemandPaidThisTick = ms.DemandPaidThisTick + payout,
                 };
             }
@@ -108,7 +108,7 @@ namespace Worktown.Sim.Economy
                 channel = SaleChannel.Wholesaler;
                 payout = PriceRules.ItemWholesalePayout(_catalog, market, item, q);
                 if (payout < 1) return Fail(s, EconomyError.WholesaleRefused);
-                msOut = ms with { WholesaleThisTick = ms.WholesaleThisTick + 1 };
+                msOut = ms with { WholesaleThisTick = SatInt(ms.WholesaleThisTick, 1) };
             }
 
             var acc = s.Accounts[ai];
@@ -117,8 +117,9 @@ namespace Worktown.Sim.Economy
             var goodsOut = acc.Goods;
             if (byproducts.Count > 0)
             {
-                goodsOut = MergeGoods(acc.Goods, byproducts)!;
-                if (goodsOut == null) return Fail(s, EconomyError.GoodsLimit);
+                var merged = MergeGoods(acc.Goods, byproducts);
+                if (merged == null) return Fail(s, EconomyError.GoodsLimit);
+                goodsOut = merged;
             }
 
             var markets = new List<MarketState>(s.Markets);
@@ -165,8 +166,8 @@ namespace Worktown.Sim.Economy
             markets[mi] = ms with
             {
                 OpenDemand = ms.OpenDemand - atDemand,
-                PlayerFilledThisTick = ms.PlayerFilledThisTick + atDemand,
-                WholesaleThisTick = ms.WholesaleThisTick + atFloor,
+                PlayerFilledThisTick = SatInt(ms.PlayerFilledThisTick, atDemand),
+                WholesaleThisTick = SatInt(ms.WholesaleThisTick, atFloor),
                 DemandPaidThisTick = ms.DemandPaidThisTick + atDemand * ms.Price,
             };
             var next = s with
@@ -191,8 +192,9 @@ namespace Worktown.Sim.Economy
             var goodsOut = acc.Goods;
             if (byproducts.Count > 0)
             {
-                goodsOut = MergeGoods(acc.Goods, byproducts)!;
-                if (goodsOut == null) return Led(s, EconomyError.GoodsLimit);
+                var merged = MergeGoods(acc.Goods, byproducts);
+                if (merged == null) return Led(s, EconomyError.GoodsLimit);
+                goodsOut = merged;
             }
             var consumed = new List<ConsumedInstance>(s.RecentConsumed) { new ConsumedInstance(instanceId, s.Tick) };
             var next = s with
@@ -244,7 +246,7 @@ namespace Worktown.Sim.Economy
                 var last = new MarketReport(ms.DemandThisTick, ms.PlayerFilledThisTick, ms.WholesaleThisTick,
                     npcFilled, ms.DemandPaidThisTick);
                 // 3. price
-                long price = PriceRules.NextPrice(m, ms.Price, ms.DemandThisTick, ms.PlayerFilledThisTick + ms.WholesaleThisTick);
+                long price = PriceRules.NextPrice(m, ms.Price, ms.DemandThisTick, SatInt(ms.PlayerFilledThisTick, ms.WholesaleThisTick));
                 // 4. new demand
                 int units = 0;
                 long carry = ms.DemandCarry;
@@ -309,6 +311,8 @@ namespace Worktown.Sim.Economy
                 if (string.Equals(s.Markets[i].MarketId, id, StringComparison.Ordinal)) return i;
             throw new InvalidOperationException($"State has no market '{id}'. Use EconomyEngine.Initial() of the same catalog.");
         }
+
+        private static int SatInt(int a, int b) => (int)Math.Min((long)a + b, int.MaxValue);
 
         private static bool IsConsumed(EconomyState s, long instanceId)
         {

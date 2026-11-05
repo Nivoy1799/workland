@@ -213,8 +213,8 @@ namespace Worktown.Sim.Economy
                 foreach (var r in rules)
                 {
                     long v = (r.FixedUnits + r.UnitsPerComponent) * _markets[r.GoodId].Ceiling;
-                    var map = r.Trigger == ByproductTrigger.Operation ? perOp : perSale;
                     if (r.Trigger == ByproductTrigger.Discard) { discard += v; continue; }
+                    var map = r.Trigger == ByproductTrigger.Operation ? perOp : perSale;
                     map.TryGetValue(r.SourceId, out var cur);
                     map[r.SourceId] = cur + v;
                 }

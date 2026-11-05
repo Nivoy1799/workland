@@ -317,5 +317,24 @@ namespace Worktown.Sim.Tests.Economy
             (EconomyState, EconomyError, long) S(SaleResult r) => (r.State, r.Error, r.Payout);
             (EconomyState, EconomyError, long) P(PurchaseResult r) => (r.State, r.Error, r.Cost);
         }
+
+        [Fact]
+        public void DedupWindowBoundary()
+        {
+            var s = Noon(); // tick 12
+            long t0 = s.Tick;
+            var sold = E.TrySellItem(s, "alice", 77, TestEconomy.PlatedFries());
+            Assert.True(sold.Ok, sold.Error.ToString());
+            var st = sold.State;
+            for (int k = 0; k <= EconomyLimits.DedupWindowTicks; k++)
+            {
+                Assert.Equal(t0 + k, st.Tick);
+                var again = E.TrySellItem(st, "alice", 77, TestEconomy.PlatedFries());
+                Assert.Equal(EconomyError.AlreadyConsumed, again.Error);
+                st = TestEconomy.Advance(E, st, 1);
+            }
+            Assert.Equal(t0 + EconomyLimits.DedupWindowTicks + 1, st.Tick);
+            Assert.True(E.TrySellItem(st, "alice", 77, TestEconomy.PlatedFries()).Ok);
+        }
     }
 }

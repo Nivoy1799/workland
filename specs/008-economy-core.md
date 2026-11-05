@@ -1,7 +1,7 @@
 ---
 id: 008
 title: Economy core (markets, NPC demand and supply, sales, byproducts, hourly tick) in /sim
-status: approved
+status: done
 owner: architect
 builder: sonnet
 ---
@@ -256,40 +256,40 @@ resolves items from its own inventory and never accepts price, quality, market, 
 Prices and `Last` may be broadcast read-only. The server drives `Tick` and persists state (later specs).
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes incl. `PASS sim: dotnet test` and `PASS sim: no UnityEngine references`;
+- [x] AC1: `bash scripts/verify.sh` passes incl. `PASS sim: dotnet test` and `PASS sim: no UnityEngine references`;
       no file under `sim/Runtime/Cooking/` or `sim/Runtime/Core/` changed (`git diff --stat main` shows none).
-- [ ] AC2: Arbitrage grid in `PriceRulesTests`: for F in {1,2,3,7,100,300,999}, C in {ceil(1.5F), 2F, 4F, MaxPrice},
+- [x] AC2: Arbitrage grid in `PriceRulesTests`: for F in {1,2,3,7,100,300,999}, C in {ceil(1.5F), 2F, 4F, MaxPrice},
       every P in a 9-step grid of [F, C] (incl. both ends), q in 0..1000 step 10 and q_N in 0..499 step 7:
       `WholesalePayout(F, q) < C` and `DemandPayout(P, q_N) < C`.
-- [ ] AC3: Default catalog, population 120, no player sales, 240 ticks: every Item market with demand has
+- [x] AC3: Default catalog, population 120, no player sales, 240 ticks: every Item market with demand has
       `Last.NpcFilled == Last.Demand` each tick, Price == Ceiling, and the meal demand summed over ticks 1..24 is
       within 10 % of 180 (jitter 0 run: exactly 180).
-- [ ] AC4: After 12 ticks (hour 12, snack demand open), `Plate(fries)` (quality ~0.70) earns more than
+- [x] AC4: After 12 ticks (hour 12, snack demand open), `Plate(fries)` (quality ~0.70) earns more than
       `Plate(burnt potato)` (~0.30, passes `MinQuality`), both via `NpcDemand` in `snack`.
-- [ ] AC5: Flooding `snack`: selling 3x its open demand (at least 1) every tick for 48 ticks makes Price
+- [x] AC5: Flooding `snack`: selling 3x its open demand (at least 1) every tick for 48 ticks makes Price
       non-increasing, reach Floor, and never go below Floor; sales beyond demand report channel `Wholesaler`.
-- [ ] AC6: `ForOperation` for fry on cut potato and for cut on potato give 1 used_cooking_oil and 1 food_scraps;
+- [x] AC6: `ForOperation` for fry on cut potato and for cut on potato give 1 used_cooking_oil and 1 food_scraps;
       after `AddGoods`, `TrySellGoods` of each is Ok with payout >= its Floor; cut no-op gives no goods.
-- [ ] AC7: Same seed and same scripted sales twice -> identical `EconomySnapshot.Digest` after 100 ticks;
+- [x] AC7: Same seed and same scripted sales twice -> identical `EconomySnapshot.Digest` after 100 ticks;
       a different seed gives a different digest.
-- [ ] AC8: Each `EconomyError` except `None` is produced by at least one test, with `State` unchanged
+- [x] AC8: Each `EconomyError` except `None` is produced by at least one test, with `State` unchanged
       (same reference) and `Payout == 0`. Plated raw potato -> `QualityTooLow`; unplated fries -> `NoMarket`.
-- [ ] AC9: Balance at `MaxBalance - 1` plus a sale -> `BalanceLimit`; `TryDebit` more than the balance ->
+- [x] AC9: Balance at `MaxBalance - 1` plus a sale -> `BalanceLimit`; `TryDebit` more than the balance ->
       `InsufficientFunds`; 1000 random ops (seeded) never leave a negative balance or goods count.
-- [ ] AC10: Catalog validation: margin violation (F=100, C=149), byproduct to a non-commodity good, 23 hour
+- [x] AC10: Catalog validation: margin violation (F=100, C=149), byproduct to a non-commodity good, 23 hour
       weights, `NpcQualityPermille = 500`, a rule on `mix`, a grocer price 31 with default byproducts (B = 31),
       and a duplicate grocer id each throw `ArgumentException`; `CreateDefault()` does not and has `B == 31`.
-- [ ] AC11: Every public method of `PriceRules`, `Byproducts`, `EconomyRng`, `EconomySnapshot`, `EconomyCatalog`
+- [x] AC11: Every public method of `PriceRules`, `Byproducts`, `EconomyRng`, `EconomySnapshot`, `EconomyCatalog`
       and `EconomyEngine` has at least one test. Total test count >= 69 + 40.
-- [ ] AC12: Faucet grid: for Plate(fries), Plate(raw potato), Plate(burnt potato), Plate(Mix(tomato, cheese)),
+- [x] AC12: Faucet grid: for Plate(fries), Plate(raw potato), Plate(burnt potato), Plate(Mix(tomato, cheese)),
       Plate(salt), Plate(apple) and q in 0..1000 step 10: `max(0, ItemWholesalePayout) + Weight * B < ItemCost`.
       End to end: buy a potato, cut, fry, plate, `AddGoods` the `ForOperation` goods, sell the plate to the saturated
       wholesaler and the goods with commodity `OpenDemand > 0` and `Price = Ceiling` (set via `with`): final
       balance < starting balance. Same for a plated raw potato via `Discard`.
-- [ ] AC13: `TryBuyBase` of 3 potatoes debits 180 and `GrocerRevenue == 180`; unknown base -> `UnknownBaseItem`,
+- [x] AC13: `TryBuyBase` of 3 potatoes debits 180 and `GrocerRevenue == 180`; unknown base -> `UnknownBaseItem`,
       units 0 or `MaxLot + 1` -> `InvalidQuantity`, cost > balance -> `InsufficientFunds` (`Cost == 0`, state
       unchanged); a plate with an unpriced component -> `WholesaleRefused` when saturated, and no byproducts.
-- [ ] AC14: Money bound: 8 seeded bots (grant set via `with`) for 72 ticks buy, cook (fries, plated apple, mixes),
+- [x] AC14: Money bound: 8 seeded bots (grant set via `with`) for 72 ticks buy, cook (fries, plated apple, mixes),
       sell into demand, flood, discard and sell all goods. Every tick and market `Last.DemandPaid <= Last.Demand *
       DemandPayout(C_m, 1000)` (Commodity `* C_m`); at the end `PaidToPlayers - GrocerRevenue - DebitedFromPlayers <= M(72)`.
 
@@ -334,6 +334,9 @@ Built exactly to the spec; no formula, catalog default or AC was changed. 184 te
 - Catalog `Demand.HourWeights` and rule tag lists are copied into read-only arrays; all state lists are read-only copies.
 - Review hint: `EconomyCatalog.ComputeB` groups Operation rules per SourceId (V_op = max), all Discard rules as one group,
   Sale rules per market (V_sale = max).
+
+### Follow-ups
+- Per-sale cost is O(recent sales + accounts) due to immutable copies and a linear dedup scan; fine for 16-24 players, revisit in the persistence/netcode spec (sorted set or per-tick buckets).
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

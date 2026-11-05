@@ -64,7 +64,8 @@ namespace Worktown.Sim.Economy
             foreach (var kv in sums)
             {
                 if (kv.Value <= 0) continue;
-                list.Add(new GoodAmount(kv.Key, (int)Math.Min(kv.Value, int.MaxValue)));
+                // cannot overflow: validated rules bound FixedUnits/UnitsPerComponent and CookingLimits.MaxComponents bounds weight
+                list.Add(new GoodAmount(kv.Key, checked((int)kv.Value)));
             }
             return list.Count == 0 ? Empty : Array.AsReadOnly(list.ToArray());
         }
