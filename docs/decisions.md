@@ -30,14 +30,14 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D21 | Process visibility | Players see only buckets ("crispy fried"), never exact values | 2026-11-05 | Readable, keeps a skill element |
 | D22 | Operations | Fixed set of operations per station to start; which items go in and what comes out stays open (data-driven, not a recipe list) | 2026-11-05 | Balanceable start without closing off emergent combinations |
 | D23 | Currency | Dollar ($), whole dollars only, no sub-units | 2026-11-05 | Simple to read; integer money keeps the sim deterministic |
+| D24 | Cloud LLM provider (was O2) | OpenRouter, with pinned providers that support strict JSON output | 2026-11-05 | One key, easy model comparison; switching is a config change (D3) |
+| D25 | Gateway language (was O3) | C# / ASP.NET on .NET 10 | 2026-11-05 | One language and toolchain for the project; can reuse /sim (item hash, process tree) without a second implementation |
 
 ## OPEN
 
 | # | Topic | Options | Needed by |
 |---|---|---|---|
 | O1 | Working title | "Worktown" is a placeholder | Steam page |
-| O2 | Cloud LLM provider | OpenRouter (pinned providers with strict JSON) vs direct provider | Spec for AI gateway (Phase 2) |
-| O3 | Gateway language | Python (FastAPI) vs TypeScript (Node) vs C# (ASP.NET) | Spec for AI gateway (Phase 2) |
 | O4 | Backend stack | Own API + Postgres vs Nakama | Phase 4 |
 | O5 | Server hoster | Which rental provider, region (EU) | Phase 4 |
 | O6 | Moderation approach | Rule-based filter, small classifier model, or provider moderation API | Before Early Access |
