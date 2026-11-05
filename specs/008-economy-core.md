@@ -320,7 +320,20 @@ None (pure /sim). The human answers the Open questions or approves the defaults.
 14. Grocer stock limits or dynamic prices. [none in v1; fixed prices, unlimited stock]
 
 ## Implementation notes
-(Builder fills this in.)
+Built exactly to the spec; no formula, catalog default or AC was changed. 184 tests total (85 old + 99 new).
+- Key numbers match the spec: B = 31, fries wholesale 28 (60 - 1 - 31), plated salt 3, tomato+cheese 157,
+  zero-jitter money bound 324_000 + 57_600 + 90_000 = 471_600 per town-day (asserted by a test).
+  Measured qualities: fries 696 permille, burnt 296, raw 125, tomato+cheese 746, salt 166, apple 396.
+  AC14 bots (seed 7, 72 ticks): net 19_280 below zero, bound M(72) = 1_419_150 (bots never come close).
+- String ids (account, good, base) that are null or invalid return error codes (`UnknownAccount`, `UnknownGood`,
+  `UnknownBaseItem`, `InvalidAccountId`) instead of throwing; only state/item/list/TickInput nulls throw.
+- Extra validation beyond the spec text: `Floor` in 1..MaxPrice and `Ceiling >= Floor` are checked before the margin
+  rule so `2*Ceiling`/`3*Floor` cannot wrap; CategoryRule `MinWeight` must be 0..1000.
+- `SurplusCap` is not clamped at 0 (may be negative); the engine treats `< 1` as `WholesaleRefused`.
+- `Byproducts.ForSale` is `internal` (engine use only); Sale-trigger rules are covered through `TrySellItem`.
+- Catalog `Demand.HourWeights` and rule tag lists are copied into read-only arrays; all state lists are read-only copies.
+- Review hint: `EconomyCatalog.ComputeB` groups Operation rules per SourceId (V_op = max), all Discard rules as one group,
+  Sale rules per market (V_sale = max).
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
