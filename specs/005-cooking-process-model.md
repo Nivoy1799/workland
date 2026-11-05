@@ -1,7 +1,7 @@
 ---
 id: 005
 title: Cooking process model (items, operations, identity, rating) in /sim
-status: approved
+status: done
 owner: architect
 builder: sonnet
 ---
@@ -193,29 +193,29 @@ permutations, id/stat validation tests move to `ItemCatalogTests`, empty list be
 The 5 `SeededRandomTests` stay unchanged.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes, including `PASS sim: dotnet test` and
+- [x] AC1: `bash scripts/verify.sh` passes, including `PASS sim: dotnet test` and
       `PASS sim: no UnityEngine references`. Total test count is >= 27.
-- [ ] AC2: Hash of `potato` differs from `Fry(Cut(potato, sticks), 190, 150)`, and from `Cut(potato, sticks)`.
-- [ ] AC3: Mix of 5 fixtures in all 120 permutations gives identical Hash, CanonicalTree, Stats,
+- [x] AC2: Hash of `potato` differs from `Fry(Cut(potato, sticks), 190, 150)`, and from `Cut(potato, sticks)`.
+- [x] AC3: Mix of 5 fixtures in all 120 permutations gives identical Hash, CanonicalTree, Stats,
       Surface, Components (sequence equal) and Rating. `Mix(Mix(a,b),c)` equals `Mix(a,b,c)` on the same fields.
-- [ ] AC4: Order of an ordered chain matters: `Fry(Cut(potato))` and `Cut(Fry(potato))` (same params) differ in Hash.
-- [ ] AC5: `Fry(Cut(potato, sticks), 190, 100)` and `(190, 170)` have equal Hash and fallback name
+- [x] AC4: Order of an ordered chain matters: `Fry(Cut(potato))` and `Cut(Fry(potato))` (same params) differ in Hash.
+- [x] AC5: `Fry(Cut(potato, sticks), 190, 100)` and `(190, 170)` have equal Hash and fallback name
       but different Quality.
-- [ ] AC6: With `TestItems` data: raw potato Quality < raw apple Quality, raw potato < fries
+- [x] AC6: With `TestItems` data: raw potato Quality < raw apple Quality, raw potato < fries
       (`Fry(Cut(potato, sticks), 190, 150)`), burnt potato (`..., 190, 400`) < fries.
-- [ ] AC7: `Cut(Cut(potato, sticks), sticks)` and `Cut(Cut(potato, dice), halves)` return the input item's Hash.
-- [ ] AC8: Depth 9 returns `DepthLimit` (chain `Fry` x 8 on potato); 17 components returns
+- [x] AC7: `Cut(Cut(potato, sticks), sticks)` and `Cut(Cut(potato, dice), halves)` return the input item's Hash.
+- [x] AC8: Depth 9 returns `DepthLimit` (chain `Fry` x 8 on potato); 17 components returns
       `ComponentLimit` (e.g. mix of three `Cut(Mix(...), halves)` items with 6 + 6 + 5
       components, since cut mixes are not flattened); 7 mix inputs after flattening returns `ArityViolation`; a plated input returns
       `ForbiddenInput`; temperature 250 or NaN returns `InvalidParam`.
-- [ ] AC9: Pinned vectors: potato Hash equals the literal output of
+- [x] AC9: Pinned vectors: potato Hash equals the literal output of
       `printf '%s' 'v1|b|potato' | shasum -a 256`; `Cut(potato, sticks).Hash` equals SHA-256 of
       `"v1|o|cut|shape=sticks|" + potatoHash`; fries `CanonicalTree` equals
       `fry(temp=hot,time=medium;cut(shape=sticks;potato))`.
-- [ ] AC10: Fries fallback name is `crispy fried potato sticks`; with a `NameCatalog` entry for its
+- [x] AC10: Fries fallback name is `crispy fried potato sticks`; with a `NameCatalog` entry for its
       hash, `Resolve` returns `fries`; a stub `IItemNameSource` is used only when the catalog misses.
-- [ ] AC11: Each heat transform has a test with exact expected stats (tolerance 1e-5) for one input.
-- [ ] AC12: No file named `DishScorer.cs`, `Ingredient.cs`, `IngredientStats.cs` or `DishResult.cs` remains under `sim/`.
+- [x] AC11: Each heat transform has a test with exact expected stats (tolerance 1e-5) for one input.
+- [x] AC12: No file named `DishScorer.cs`, `Ingredient.cs`, `IngredientStats.cs` or `DishResult.cs` remains under `sim/`.
 
 ## Test plan
 - `TestItems.cs`: catalog with the 6 spec 002 fixtures (same taste stats, Doneness 0,
@@ -253,6 +253,10 @@ The 5 `SeededRandomTests` stay unchanged.
   canonical (hash) order, not alphabetical.
 - Heat on a cut/mixed item uses the item's (weighted mean) HeatTolerance and Surface for every component.
 - AC11 expected values are derived by hand in the test comments (fry/saute: T=180,t=90; boil: t=600).
+
+### Follow-ups for later specs
+- Heat uses the item's mean HeatTolerance for all components; add HeatTolerance to ItemComponent and apply per component (changes exact values only, no hash v2 needed).
+- Mix fallback names list inputs in hash order, which reads arbitrarily; spec 006 should define a readable order for display.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

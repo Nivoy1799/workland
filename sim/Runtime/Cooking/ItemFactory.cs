@@ -27,8 +27,8 @@ namespace Worktown.Sim.Cooking
             var distinct = DistinctSorted(tags);
             var comp = new ItemComponent(def.Id, def.Stats.Doneness, def.IdealDoneness);
             var item = new Item(
-                ItemCanonical.BaseHash(def.Id), def.Id, def.Id, null, NoStrings, Array.Empty<Item>(),
-                def.Stats, 0f, new[] { comp }, distinct, 1,
+                ItemCanonical.BaseHash(def.Id), def.Id, def.Id, null, NoStrings, Array.AsReadOnly(Array.Empty<Item>()),
+                def.Stats, 0f, Array.AsReadOnly(new[] { comp }), distinct, 1,
                 null, def.DisplayName, def.DisplayName, NoStrings);
             return new OperationResult(item, OperationError.None);
         }
@@ -47,7 +47,7 @@ namespace Worktown.Sim.Cooking
             var flat = new List<Item>();
             foreach (var input in inputs)
             {
-                if (op.Kind == OperationKind.Mix && input.Kind == OperationKind.Mix) flat.AddRange(input.Inputs);
+                if (op.Kind == OperationKind.Mix && input.OperationId == op.Id) flat.AddRange(input.Inputs);
                 else flat.Add(input);
             }
             if (flat.Count < op.MinInputs || flat.Count > op.MaxInputs) return Fail(OperationError.ArityViolation);
@@ -71,7 +71,8 @@ namespace Worktown.Sim.Cooking
             {
                 case OperationKind.Cut:
                 {
-                    float s = resolved[0].Bucket.Value;
+                    float s = 0f;
+                    foreach (var r in resolved) if (r.Name == "shape") s = r.Bucket.Value;
                     var src = flat[0];
                     if (s <= src.Surface) return new OperationResult(src, OperationError.None);
                     stats = src.Stats;
@@ -111,8 +112,8 @@ namespace Worktown.Sim.Cooking
 
             var item = new Item(
                 ItemCanonical.OpHash(op.Id, buckets, flat), ItemCanonical.OpTree(op.Id, buckets, flat),
-                null, op.Id, new ReadOnlyDictionary<string, string>(bucketMap), flat.ToArray(),
-                stats, surface, components.ToArray(), DistinctSorted(tags), depth,
+                null, op.Id, new ReadOnlyDictionary<string, string>(bucketMap), Array.AsReadOnly(flat.ToArray()),
+                stats, surface, Array.AsReadOnly(components.ToArray()), DistinctSorted(tags), depth,
                 op.Kind, string.Empty, op.NameTemplate, new ReadOnlyDictionary<string, string>(labels));
             return new OperationResult(item, OperationError.None);
         }
@@ -232,7 +233,7 @@ namespace Worktown.Sim.Cooking
             var result = new List<string>();
             foreach (var t in sorted)
                 if (result.Count == 0 || result[result.Count - 1] != t) result.Add(t);
-            return result.ToArray();
+            return Array.AsReadOnly(result.ToArray());
         }
 
         private static bool Contains(IReadOnlyList<string> list, string value)

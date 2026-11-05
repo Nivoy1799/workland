@@ -17,7 +17,7 @@ namespace Worktown.Sim.Cooking
             {
                 Validate(def);
                 if (_defs.ContainsKey(def.Id)) throw new ArgumentException($"Duplicate base item id '{def.Id}'.", nameof(defs));
-                _defs.Add(def.Id, def);
+                _defs.Add(def.Id, def with { Tags = Array.AsReadOnly(new List<string>(def.Tags).ToArray()) });
             }
         }
 

@@ -31,12 +31,33 @@ namespace Worktown.Sim.Cooking
             foreach (var input in item.Inputs)
                 names.Add(catalog.TryGetName(input.Hash, out var n) ? n : FallbackName(input, catalog));
 
-            string text = item.NameTemplate.Replace("{in}", Join(names));
-            foreach (var kv in item.BucketLabels)
-                text = text.Replace("{" + kv.Key + "}", kv.Value);
+            string text = Expand(item.NameTemplate, Join(names), item.BucketLabels);
 
             while (text.Contains("  ")) text = text.Replace("  ", " ");
             return text.Trim();
+        }
+
+        /// <summary>Single pass: braces inside inserted text are never expanded again.</summary>
+        private static string Expand(string template, string inputs, IReadOnlyDictionary<string, string> labels)
+        {
+            var sb = new StringBuilder();
+            int i = 0;
+            while (i < template.Length)
+            {
+                if (template[i] == '{')
+                {
+                    int end = template.IndexOf('}', i + 1);
+                    if (end > 0)
+                    {
+                        string key = template.Substring(i + 1, end - i - 1);
+                        if (key == "in") { sb.Append(inputs); i = end + 1; continue; }
+                        if (labels.TryGetValue(key, out var label)) { sb.Append(label); i = end + 1; continue; }
+                    }
+                }
+                sb.Append(template[i]);
+                i++;
+            }
+            return sb.ToString();
         }
 
         private static string Join(List<string> names)

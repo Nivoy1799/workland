@@ -94,7 +94,19 @@ namespace Worktown.Sim.Cooking
             if ((c = x.HeatTolerance.CompareTo(y.HeatTolerance)) != 0) return c;
             if ((c = x.Doneness.CompareTo(y.Doneness)) != 0) return c;
             if ((c = x.Moisture.CompareTo(y.Moisture)) != 0) return c;
-            return a.Surface.CompareTo(b.Surface);
+            if ((c = a.Surface.CompareTo(b.Surface)) != 0) return c;
+            // Final tie-break: the component sequence (BaseId, Doneness, Ideal window).
+            int n = Math.Min(a.Components.Count, b.Components.Count);
+            for (int i = 0; i < n; i++)
+            {
+                var p = a.Components[i];
+                var q = b.Components[i];
+                if ((c = StringComparer.Ordinal.Compare(p.BaseId, q.BaseId)) != 0) return c;
+                if ((c = p.Doneness.CompareTo(q.Doneness)) != 0) return c;
+                if ((c = p.Ideal.Min.CompareTo(q.Ideal.Min)) != 0) return c;
+                if ((c = p.Ideal.Max.CompareTo(q.Ideal.Max)) != 0) return c;
+            }
+            return a.Components.Count.CompareTo(b.Components.Count);
         }
 
         internal static int CompareComponents(ItemComponent a, ItemComponent b)

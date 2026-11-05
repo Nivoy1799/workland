@@ -15,8 +15,24 @@ namespace Worktown.Sim.Cooking
             {
                 Validate(op);
                 if (_ops.ContainsKey(op.Id)) throw new ArgumentException($"Duplicate operation id '{op.Id}'.", nameof(ops));
-                _ops.Add(op.Id, op);
+                _ops.Add(op.Id, Copy(op));
             }
+        }
+
+        private static IReadOnlyList<T> ReadOnlyCopy<T>(IReadOnlyList<T> list) => Array.AsReadOnly(new List<T>(list).ToArray());
+
+        private static bool Fin(float x) => !float.IsNaN(x) && !float.IsInfinity(x);
+
+        private static OperationDef Copy(OperationDef op)
+        {
+            var pars = new List<ParamDef>();
+            foreach (var pd in op.Params) pars.Add(pd with { Buckets = ReadOnlyCopy(pd.Buckets) });
+            return op with
+            {
+                Params = ReadOnlyCopy(pars),
+                ForbiddenInputTags = ReadOnlyCopy(op.ForbiddenInputTags),
+                AddedTags = ReadOnlyCopy(op.AddedTags),
+            };
         }
 
         public int Count => _ops.Count;
@@ -104,6 +120,8 @@ namespace Worktown.Sim.Cooking
                     throw new ArgumentException($"Param '{param.Name}' of '{op.Id}' needs buckets.", p);
                 var ids = new HashSet<string>(StringComparer.Ordinal);
                 float prev = float.NegativeInfinity;
+                if (param.Kind == ParamKind.Number && param.Buckets[0] != null && param.Buckets[0].Value != param.Min)
+                    throw new ArgumentException($"First bucket of '{param.Name}' of '{op.Id}' must start at Min.", p);
                 foreach (var b in param.Buckets)
                 {
                     if (b == null || !ItemCanonical.IsValidId(b.Id) || b.Label == null || float.IsNaN(b.Value) || float.IsInfinity(b.Value))
@@ -113,7 +131,10 @@ namespace Worktown.Sim.Cooking
                     {
                         if (!(b.Value > prev)) throw new ArgumentException($"Buckets of '{param.Name}' must ascend.", p);
                         prev = b.Value;
+                        if (!(b.Value <= param.Max)) throw new ArgumentException($"Bucket '{b.Id}' of '{param.Name}' exceeds Max.", p);
                     }
+                    if (op.Kind == OperationKind.Cut && param.Name == "shape" && !(b.Value >= 0f && b.Value <= 1f))
+                        throw new ArgumentException($"Cut shape bucket '{b.Id}' of '{op.Id}' must have a value in 0..1.", p);
                 }
             }
 
@@ -127,6 +148,11 @@ namespace Worktown.Sim.Cooking
             else if (op.Kind == OperationKind.Heat)
             {
                 if (op.Heat == null) throw new ArgumentException($"Heat operation '{op.Id}' needs a HeatProfile.", p);
+                var h = op.Heat;
+                if (!Fin(h.FatGain) || !Fin(h.MoistureDelta) || !Fin(h.CrunchGain)
+                    || !Fin(h.UmamiGain) || !Fin(h.Dilution)
+                    || (h.FixedTemperatureC.HasValue && !Fin(h.FixedTemperatureC.Value)))
+                    throw new ArgumentException($"Heat profile of '{op.Id}' must be finite.", p);
                 var time = Find("time");
                 if (time == null || time.Kind != ParamKind.Number)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs a Number param 'time'.", p);
