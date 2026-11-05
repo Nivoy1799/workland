@@ -15,6 +15,15 @@ namespace Worktown.Sim.Tests.Core
         }
 
         [Fact]
+        public void SameSeed_SameNextIntAndNextFloatSequences()
+        {
+            var a = new SeededRandom(99);
+            var b = new SeededRandom(99);
+            for (int i = 0; i < 50; i++) Assert.Equal(a.NextInt(-10, 10), b.NextInt(-10, 10));
+            for (int i = 0; i < 50; i++) Assert.Equal(a.NextFloat(), b.NextFloat());
+        }
+
+        [Fact]
         public void Seed0_PinnedOutputs()
         {
             // Reference SplitMix64 values for seed 0.

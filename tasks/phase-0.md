@@ -7,11 +7,11 @@ Tick boxes as you go and commit after each finished task.
 
 - [x] 0.1 [AGENT] Read AGENTS.md, docs/*, this file. Summarize understanding, list questions. Wait.
 - [x] 0.2 [AGENT] Implement spec 001 (repo skeleton). Verify, commit.
-- [ ] 0.3 [HUMAN] Install the .NET 10 SDK on the Mac: `brew install --cask dotnet-sdk`
+- [x] 0.3 [HUMAN] Install the .NET 10 SDK on the Mac: `brew install --cask dotnet-sdk`
       (LTS; .NET 8 support ends 2026-11-10).
-- [ ] 0.4 [AGENT] Implement spec 002 (/sim package) with the builder subagent (sonnet)
+- [x] 0.4 [AGENT] Implement spec 002 (/sim package) with the builder subagent (sonnet)
       in branch `spec/002-sim-package`.
-- [ ] 0.5 [AGENT] Run the tester subagent, then the reviewer subagent on branch `spec/002-sim-package`.
+- [x] 0.5 [AGENT] Run the tester subagent, then the reviewer subagent on branch `spec/002-sim-package`.
       Fix or hand back. Merge to `main` and push.
 - [ ] 0.6 [HUMAN] On the Windows PC: install Unity Hub, Unity 6 LTS with Windows, Linux and
       Linux Dedicated Server Build Support, and Claude Code. Clone the repo. Create the project

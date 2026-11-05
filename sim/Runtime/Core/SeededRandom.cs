@@ -40,6 +40,7 @@ namespace Worktown.Sim.Core
             {
                 throw new ArgumentOutOfRangeException(nameof(maxExclusive), "maxExclusive must be greater than minInclusive.");
             }
+            // Modulo bias (<= ~2^-32 for int ranges) is intentional and acceptable here.
             ulong range = (ulong)((long)maxExclusive - minInclusive);
             return (int)((long)minInclusive + (long)(NextUInt64() % range));
         }
