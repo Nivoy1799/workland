@@ -8,6 +8,6 @@ Deterministic: inject a seeded RNG and a clock, no static mutable state.
 (`game/Packages/manifest.json`: `"file:../../sim"`), and `dotnet test` builds the same
 files via `Sim.csproj`. Folders ending in `~` (tests, build output) are ignored by Unity.
 
-**Typically built by:** Qwen Code (routine logic from a clear spec), Claude for design-heavy parts.
+**Typically built by:** builder subagent on Sonnet (routine logic from a clear spec), Opus for design-heavy parts.
 
 **How to test:** `dotnet test sim/Sim.sln`, or `bash scripts/verify.sh` from the repo root.

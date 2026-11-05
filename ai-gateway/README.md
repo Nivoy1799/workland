@@ -5,7 +5,7 @@ Pipeline per request: rate limit, cache lookup (stable hash of inputs), upstream
 JSON schema validation (`schemas/`), moderation, cache write. Invalid output is rejected,
 never repaired. Upstream configured by `GATEWAY_UPSTREAM_*` env vars.
 
-**Typically built by:** Claude writes the spec (language is decision O3, still OPEN);
-Qwen Code for routine parts.
+**Typically built by:** architect (Opus) writes the spec (language is decision O3, still OPEN);
+builder on Sonnet for routine parts.
 
 **How to test:** `bash scripts/verify.sh` (runs `npm test` or `pytest`, once the stack is chosen).

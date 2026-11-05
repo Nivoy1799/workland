@@ -24,7 +24,7 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D15 | Hosting | Self-hosted: rented servers, k3s, Agones | 2026-11-05 | Persistent servers, team knows the stack |
 | D16 | Servers | Official only | 2026-11-05 | Protects global state |
 | D17 | Unity editor AI | MCP for Unity (CoplayDev), not Unity AI | 2026-11-05 | Unity AI too expensive |
-| D18 | Agents | Claude Code for specs, netcode and review; Qwen Code for routine building | 2026-11-05 | Stretch Claude Max budget |
+| D18 | Agents | Anthropic models only, via the Claude subscription: Opus for specs, netcode and review; Sonnet for routine building and tests; Haiku for trivial tasks | 2026-11-05 | One subscription, no per-token bills; model tiering stretches the budget (replaces the earlier Qwen Code builder plan) |
 
 ## OPEN
 

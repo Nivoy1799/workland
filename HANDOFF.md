@@ -33,9 +33,8 @@ Then:
 
 | Path | Purpose |
 |---|---|
-| `AGENTS.md` | Rules for every agent (Claude Code and Qwen Code) |
+| `AGENTS.md` | Rules for every agent (main session and subagents) |
 | `CLAUDE.md` | Claude Code entry point, imports AGENTS.md |
-| `QWEN.md` | Qwen Code entry point, imports AGENTS.md |
 | `.claude/agents/` | Architect, Builder, Tester, Reviewer subagents |
 | `.claude/settings.json` | Hooks (verify before finishing) and blocked commands |
 | `.mcp.json` | MCP for Unity (CoplayDev, free) |
@@ -43,4 +42,4 @@ Then:
 | `specs/` | Spec template plus the first four specs |
 | `tasks/phase-0.md` | Ordered checklist with human and agent steps |
 | `scripts/verify.sh` | The single "is it green?" command |
-| `.env.example` | Endpoint config for Qwen Code and the AI gateway |
+| `.env.example` | Endpoint config for the AI gateway, Steam and Unity |

@@ -5,9 +5,10 @@
 ## Claude Code specifics
 
 ### Your role
-In this repo, Claude is mainly the **architect and reviewer**. Routine implementation
-can be done by the Builder subagent or handed to Qwen Code (see docs/workflow.md).
-Netcode and hard debugging stay with Claude.
+In this repo, the main session (Opus) is the **architect, reviewer and netcode owner**.
+Routine implementation goes to the builder subagent on Sonnet, trivial edits on Haiku
+(see docs/workflow.md, "Who builds what"). Netcode and hard debugging stay on Opus.
+Only Anthropic models are used, via the user's subscription. No other coding agents.
 
 ### Subagents (in .claude/agents/)
 - `architect`: turns a short human idea into a spec in /specs. Never writes code.

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Shared rules for every coding agent in this repo (Claude Code, Qwen Code, others).
+Shared rules for every coding agent in this repo (Claude Code main session and its subagents, on any model).
 Read this fully before every task. If anything here conflicts with a spec, stop and ask.
 
 ## Project in one paragraph

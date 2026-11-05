@@ -3,7 +3,7 @@ id: NNN
 title: Short name
 status: draft        # draft | approved | in-progress | done | blocked
 owner: architect     # who wrote it
-builder: qwen        # qwen | claude
+builder: sonnet      # haiku | sonnet | opus (model for the builder subagent)
 ---
 
 # NNN: Short name

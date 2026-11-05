@@ -3,7 +3,7 @@ id: 003
 title: Netcode graybox, two players and pickups on a dedicated server
 status: draft
 owner: architect
-builder: claude
+builder: opus
 ---
 
 # 003: Netcode graybox

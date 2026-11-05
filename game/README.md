@@ -4,8 +4,8 @@
 Linux dedicated server (headless). Networking via FishNet (FishySteamworks + Tugboat).
 MonoBehaviours stay thin: they call into `/sim` and networking and hold no game rules.
 
-**Typically built by:** Claude for anything touching FishNet/networking; Qwen Code for
-simple UI wiring and MonoBehaviours.
+**Typically built by:** Opus for anything touching FishNet/networking; builder on Sonnet
+for simple UI wiring and MonoBehaviours.
 
 **How to test:** set `UNITY_PATH` to the editor binary, close the Editor (batch mode needs the
 project unlocked), then `bash scripts/verify.sh` runs the EditMode tests. In the Editor,

@@ -3,7 +3,7 @@ id: 001
 title: Repo skeleton and tooling
 status: done
 owner: architect
-builder: claude
+builder: opus
 ---
 
 # 001: Repo skeleton and tooling

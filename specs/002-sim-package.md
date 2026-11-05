@@ -3,7 +3,7 @@ id: 002
 title: /sim package with first ingredient model and test harness
 status: approved
 owner: architect
-builder: qwen
+builder: sonnet
 ---
 
 # 002: /sim package with first ingredient model and test harness
