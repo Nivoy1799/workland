@@ -1,7 +1,7 @@
 ---
 id: 008
 title: Economy core (markets, NPC demand and supply, sales, byproducts, hourly tick) in /sim
-status: draft
+status: approved
 owner: architect
 builder: sonnet
 ---
@@ -302,7 +302,7 @@ Prices and `Last` may be broadcast read-only. The server drives `Tick` and persi
 ## Human steps
 None (pure /sim). The human answers the Open questions or approves the defaults.
 
-## Open questions (recommended default in brackets; all numbers provisional and data-only)
+## Open questions (answered 2026-11-05: human approved all recommended defaults; numbers stay provisional data)
 1. Currency: decided 2026-11-05, dollar ($), whole dollars only, no sub-units (D23). Price levels stay
    in the hundreds because integer quality steps and the byproduct bound B need headroom; see Q2.
 2. Floor/ceiling prices per market. [table above; commodities kept tiny (ceilings 3 and 4) so B stays < cheapest grocer price]
