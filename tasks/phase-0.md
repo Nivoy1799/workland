@@ -5,8 +5,8 @@ Tick boxes as you go and commit after each finished task.
 
 ## Phase 0: Setup (target: 1 week)
 
-- [ ] 0.1 [AGENT] Read AGENTS.md, docs/*, this file. Summarize understanding, list questions. Wait.
-- [ ] 0.2 [AGENT] Implement spec 001 (repo skeleton). Verify, commit.
+- [x] 0.1 [AGENT] Read AGENTS.md, docs/*, this file. Summarize understanding, list questions. Wait.
+- [x] 0.2 [AGENT] Implement spec 001 (repo skeleton). Verify, commit.
 - [ ] 0.3 [HUMAN] Install .NET 8 SDK, Node 20+ (for Qwen Code), Unity Hub.
 - [ ] 0.4 [HUMAN] Install Qwen Code (`npm install -g @qwen-code/qwen-code`), copy `.env.example`
       to `.env`, add an API key for an OpenAI-compatible provider.
