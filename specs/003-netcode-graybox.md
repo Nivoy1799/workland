@@ -43,9 +43,9 @@ via Steam, walk around a graybox and pick up and drop objects, all server-author
 - [ ] AC3: Two clients join via Tugboat with `-connect` and see each other move.
 - [ ] AC4: A client cannot pick up an object further than 2.5 m away (EditMode or PlayMode test of the server validation).
 - [ ] AC5: Two clients requesting the same object at the same time: exactly one gets it (test).
-- [ ] AC6: A `Sim` type (e.g. `DishScorer`) is callable from a game script, proving the package link.
-      An EditMode test calls `DishScorer.Score` and asserts the pinned ComboHash for "salt"
-      (same value as the /sim unit test). `SHA256.Create()` can be stripped under IL2CPP with
+- [ ] AC6: A `Sim` type is callable from a game script, proving the package link.
+      An EditMode test builds `potato` with `ItemFactory` (spec 005) and asserts its pinned
+      `Item.Hash` (same value as the /sim unit test). `SHA256.Create()` can be stripped under IL2CPP with
       high managed stripping: add a `link.xml` preserving it if server or client builds use IL2CPP.
 - [ ] AC7: `bash scripts/verify.sh` passes.
 
