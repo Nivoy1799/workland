@@ -28,8 +28,8 @@ Tick boxes as you go and commit after each finished task.
 - [ ] 1.6 [AGENT] Implement spec 004, run 8 / 16 / 32 bot tests, write docs/loadtest-results.md.
 - [ ] 1.7 [HUMAN] Decide O7 (player cap) in docs/decisions.md.
 - [ ] 1.8 [AGENT] Draft the next specs as `draft` for the human to approve:
-      005 AI gateway skeleton, 006 cooking station in game, 007 economy core in /sim.
-      Do not start building them.
+      005 cooking process model in /sim (drafted early, 2026-11-05), 006 AI gateway skeleton,
+      007 cooking station in game, 008 economy core in /sim. Do not start building them.
 
 ## Exit criteria for Phase 1
 - Dedicated Linux server runs, players join via Steam, pick up objects, server-authoritative.

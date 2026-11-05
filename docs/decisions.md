@@ -25,6 +25,10 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D16 | Servers | Official only | 2026-11-05 | Protects global state |
 | D17 | Unity editor AI | MCP for Unity (CoplayDev), not Unity AI | 2026-11-05 | Unity AI too expensive |
 | D18 | Agents | Anthropic models only, via the Claude subscription: Opus for specs, netcode and review; Sonnet for routine building and tests; Haiku for trivial tasks | 2026-11-05 | One subscription, no per-token bills; model tiering stretches the budget (replaces the earlier Qwen Code builder plan) |
+| D19 | Items | One `Item` type: ingredients and dishes are the same. Every item is servable; the rating decides if it is good (raw apple fine, raw potato bad) | 2026-11-05 | Simpler model, more emergent play |
+| D20 | Item identity | Every operation creates a new item; identity = hash of its process tree with time/temperature in buckets. Exact values only affect quality | 2026-11-05 | Process matters (potato vs fries) while keeping discoveries and the AI text cache meaningful |
+| D21 | Process visibility | Players see only buckets ("crispy fried"), never exact values | 2026-11-05 | Readable, keeps a skill element |
+| D22 | Operations | Fixed set of operations per station to start; which items go in and what comes out stays open (data-driven, not a recipe list) | 2026-11-05 | Balanceable start without closing off emergent combinations |
 
 ## OPEN
 
