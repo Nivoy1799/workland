@@ -26,14 +26,22 @@ run() {
 skip() { summary+=("SKIP  $1 ($2)"); }
 
 # 1. Pure C# simulation: build and unit tests
-if [ -f sim/Sim.sln ] || ls sim/*.sln >/dev/null 2>&1; then
-  if command -v dotnet >/dev/null 2>&1; then
-    run "sim: dotnet test" dotnet test sim --nologo --verbosity quiet
+# Point at the .sln explicitly: /sim holds both Sim.sln and Sim.csproj, and a bare
+# `dotnet test sim` fails with MSB1011 (more than one project or solution file).
+if [ -f sim/Sim.sln ]; then
+  if command -v dotnet >/dev/null 2>&1 && dotnet --version >/dev/null 2>&1; then
+    run "sim: dotnet test" dotnet test sim/Sim.sln --nologo --verbosity quiet
   else
-    skip "sim: dotnet test" "dotnet not installed"
+    skip "sim: dotnet test" "dotnet not installed or not working"
   fi
 else
   skip "sim: dotnet test" "no solution in /sim yet"
+fi
+
+# 1b. /sim must never reference Unity (AGENTS.md, spec 002 AC6)
+if [ -d sim ]; then
+  run "sim: no UnityEngine references" bash -c \
+    '! grep -rnE "\bUnityEngine\b|\bUnityEditor\b" sim --include="*.cs" --include="*.csproj" --include="*.asmdef"'
 fi
 
 # 2. Unity edit-mode tests (batch mode). Needs UNITY_PATH pointing to the Unity editor binary.

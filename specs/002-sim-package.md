@@ -18,12 +18,15 @@ Unity-free test loop from day one.
 - `sim/Runtime/Worktown.Sim.asmdef` (new): `noEngineReferences: true`, `autoReferenced: true`.
 - `sim/Runtime/Cooking/IngredientStats.cs` (new)
 - `sim/Runtime/Cooking/Ingredient.cs` (new)
+- `sim/Runtime/Cooking/DishResult.cs` (new)
 - `sim/Runtime/Cooking/DishScorer.cs` (new)
 - `sim/Runtime/Core/IRandom.cs`, `sim/Runtime/Core/SeededRandom.cs` (new)
-- `sim/Sim.csproj` (new): targets `netstandard2.1`, compiles `Runtime/**/*.cs`.
-- `sim/Sim.Tests/Sim.Tests.csproj` (new): xUnit, targets `net8.0`, references `../Sim.csproj`.
+- `sim/Runtime/Core/IsExternalInit.cs` (new): polyfill, see Design.
+- `sim/Directory.Build.props` (new): redirects build output, see Design.
+- `sim/Sim.csproj` (new): targets `netstandard2.1`, compiles only `Runtime/**/*.cs`.
+- `sim/Sim.Tests~/Sim.Tests.csproj` (new): xUnit, targets `net8.0`, references `../Sim.csproj`.
+- `sim/Sim.Tests~/Cooking/DishScorerTests.cs` (new)
 - `sim/Sim.sln` (new): contains both projects.
-- `sim/Sim.Tests/Cooking/DishScorerTests.cs` (new)
 
 ## Out of scope
 - Unity project integration (done in spec 003, which adds the package to the manifest).
@@ -54,6 +57,25 @@ public static class DishScorer
 }
 ```
 
+### Layout rules (Unity and dotnet share this folder)
+Unity imports **everything** inside a `file:` package except folders ending in `~` or
+starting with `.`. So:
+- Tests live in `sim/Sim.Tests~/`, never in a folder Unity can see. Otherwise Unity tries
+  to compile them without xUnit.
+- Build output must not land in `sim/bin` or `sim/obj`, or Unity imports the built
+  `Sim.dll` as a plugin next to the source and you get duplicate type errors.
+  `sim/Directory.Build.props` sets, for every project under `/sim`:
+  `BaseIntermediateOutputPath = $(MSBuildThisFileDirectory)Build~/obj/$(MSBuildProjectName)/`
+  and `BaseOutputPath = $(MSBuildThisFileDirectory)Build~/bin/$(MSBuildProjectName)/`.
+- `Sim.csproj` sets `EnableDefaultCompileItems=false` and includes only `Runtime/**/*.cs`,
+  so it never picks up test files.
+- `Sim.csproj`: `LangVersion` 9.0 (records; Unity 6 supports C# 9), `Nullable` enable.
+- Positional records need `System.Runtime.CompilerServices.IsExternalInit`, which
+  netstandard2.1 and Unity do not ship. Add it as an `internal static class` in
+  `Runtime/Core/IsExternalInit.cs`.
+- Unity writes `.meta` files into `/sim` once the package is linked (spec 003). Those are
+  committed. Folders ending in `~` get none.
+
 ## Acceptance criteria
 - [ ] AC1: `dotnet test sim` passes.
 - [ ] AC2: `ComboHash` is identical for the same ingredients in any order (test).
@@ -61,11 +83,12 @@ public static class DishScorer
 - [ ] AC4: A single extreme ingredient (e.g. salt only) scores lower than a balanced
       mix of 3 complementary ingredients (test with fixed data).
 - [ ] AC5: `Score` with an empty list throws `ArgumentException` (test).
-- [ ] AC6: No `UnityEngine` references anywhere under `/sim` (verify with grep in a test or in verify.sh).
+- [ ] AC6: No `UnityEngine` references anywhere under `/sim` (checked by `scripts/verify.sh` as `PASS sim: no UnityEngine references`).
 - [ ] AC7: `bash scripts/verify.sh` shows `PASS sim: dotnet test`.
+- [ ] AC8: After `dotnet test`, no `bin/` or `obj/` folder exists under `sim/` outside `sim/Build~/` and `sim/Sim.Tests~/`.
 
 ## Test plan
-- xUnit tests in `sim/Sim.Tests/Cooking/DishScorerTests.cs` with 5 to 8 hard-coded test ingredients.
+- xUnit tests in `sim/Sim.Tests~/Cooking/DishScorerTests.cs` with 5 to 8 hard-coded test ingredients.
 - Command: `bash scripts/verify.sh`
 
 ## Human steps

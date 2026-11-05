@@ -47,3 +47,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# /sim build output (kept out of Unity via the ~ suffix)
+sim/Build~/
