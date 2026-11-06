@@ -9,7 +9,9 @@ namespace Worktown.Game.Player
     public static class MovementRules
     {
         public const float WalkSpeed = 4f;
-        public const float SprintSpeed = 6.5f;
+        public const float SprintSpeed = 8f;
+        /// <summary>Jump apex height in metres; the take-off speed follows from gravity.</summary>
+        public const float JumpHeight = 1.2f;
         public const float CrouchSpeed = 2f;
         /// <summary>m/s² towards a higher target speed.</summary>
         public const float Acceleration = 30f;
@@ -48,6 +50,18 @@ namespace Worktown.Game.Player
         {
             if (crouched) return CrouchSpeed;
             return sprint ? SprintSpeed : WalkSpeed;
+        }
+
+        /// <summary>Take-off speed that reaches <see cref="JumpHeight"/> under the given gravity (positive, m/s²).</summary>
+        public static float JumpSpeed(float gravity)
+        {
+            return Mathf.Sqrt(2f * Mathf.Abs(gravity) * JumpHeight);
+        }
+
+        /// <summary>Jumping needs ground under the feet and a standing stance.</summary>
+        public static bool CanJump(bool wantsJump, bool grounded, bool crouched)
+        {
+            return wantsJump && grounded && !crouched;
         }
 
         /// <summary>Moves the horizontal velocity towards the target with limited acceleration.</summary>

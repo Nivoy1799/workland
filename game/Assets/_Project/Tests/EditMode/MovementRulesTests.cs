@@ -56,6 +56,24 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void Jump_ReachesConfiguredHeight()
+        {
+            float g = 9.81f;
+            float v = MovementRules.JumpSpeed(g);
+            Assert.AreEqual(MovementRules.JumpHeight, v * v / (2f * g), 0.001f);
+            Assert.AreEqual(v, MovementRules.JumpSpeed(-g), 0.001f, "sign of gravity does not matter");
+        }
+
+        [TestCase(true, true, false, true)]
+        [TestCase(true, false, false, false)]   // in the air
+        [TestCase(true, true, true, false)]     // crouched
+        [TestCase(false, true, false, false)]   // no input
+        public void CanJump_OnlyFromGroundStanding(bool wants, bool grounded, bool crouched, bool expected)
+        {
+            Assert.AreEqual(expected, MovementRules.CanJump(wants, grounded, crouched));
+        }
+
+        [Test]
         public void Acceleration_IsLimitedPerTick()
         {
             Vector3 v = MovementRules.Accelerate(Vector3.zero, Vector3.forward * 4f, 1f / 30f);

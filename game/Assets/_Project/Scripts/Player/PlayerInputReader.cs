@@ -16,8 +16,10 @@ namespace Worktown.Game.Player
         private InputAction _look;
         private InputAction _sprint;
         private InputAction _crouch;
+        private InputAction _jump;
         private bool _active;
         private bool _crouchToggled;
+        private bool _jumpPressed;
 
         public Vector2 Move => _active ? _move.ReadValue<Vector2>() : Vector2.zero;
         public bool Sprint => _active && _sprint.IsPressed();
@@ -29,6 +31,15 @@ namespace Worktown.Game.Player
         /// <summary>Mouse wheel this frame (positive = zoom in).</summary>
         public float Zoom => _active && Mouse.current != null ? Mouse.current.scroll.ReadValue().y : 0f;
 
+        /// <summary>True once per Jump press (Space / gamepad south); the next call returns false
+        /// until the button is pressed again. Read once per network tick.</summary>
+        public bool ConsumeJump()
+        {
+            bool pressed = _jumpPressed;
+            _jumpPressed = false;
+            return _active && pressed;
+        }
+
         /// <summary>Called by the owner's player when it spawns.</summary>
         public void Activate()
         {
@@ -38,6 +49,7 @@ namespace Worktown.Game.Player
             _look = map.FindAction("Look", true);
             _sprint = map.FindAction("Sprint", true);
             _crouch = map.FindAction("Crouch", true);
+            _jump = map.FindAction("Jump", true);
             map.Enable();
             _active = true;
             LockCursor(true);
@@ -54,6 +66,7 @@ namespace Worktown.Game.Player
         {
             if (!_active) return;
             if (_crouch.WasPressedThisFrame()) _crouchToggled = !_crouchToggled;
+            if (_jump.WasPressedThisFrame()) _jumpPressed = true;
 
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null && (keyboard.escapeKey.wasPressedThisFrame || keyboard.leftAltKey.wasPressedThisFrame))

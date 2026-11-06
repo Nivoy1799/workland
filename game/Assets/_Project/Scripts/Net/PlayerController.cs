@@ -10,7 +10,7 @@ namespace Worktown.Game.Net
     /// <summary>
     /// Third-person movement with client-side prediction (spec 010), following FishNet's own
     /// CharacterControllerPrediction example: the owner sends intents (move, camera yaw, sprint,
-    /// crouch) through [Replicate], simulates them at once, and the server runs the same code as the
+    /// crouch, jump) through [Replicate], simulates them at once, and the server runs the same code as the
     /// authority and corrects the owner through [Reconcile]. All numbers come from MovementRules.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
@@ -22,14 +22,17 @@ namespace Worktown.Game.Net
             public float CameraYaw;
             public bool Sprint;
             public bool Crouch;
+            /// <summary>One-time input: true only on the tick the button was pressed.</summary>
+            public bool Jump;
             private uint _tick;
 
-            public MoveData(Vector2 move, float cameraYaw, bool sprint, bool crouch)
+            public MoveData(Vector2 move, float cameraYaw, bool sprint, bool crouch, bool jump)
             {
                 Move = move;
                 CameraYaw = cameraYaw;
                 Sprint = sprint;
                 Crouch = crouch;
+                Jump = jump;
                 _tick = 0;
             }
 
@@ -128,7 +131,7 @@ namespace Worktown.Game.Net
             if (!IsOwner || _input == null) return default;
             Camera cam = Camera.main;
             float cameraYaw = cam != null ? cam.transform.eulerAngles.y : _yaw;
-            return new MoveData(_input.Move, cameraYaw, _input.Sprint, _input.Crouch);
+            return new MoveData(_input.Move, cameraYaw, _input.Sprint, _input.Crouch, _input.ConsumeJump());
         }
 
         public override void CreateReconcile()
@@ -153,7 +156,10 @@ namespace Worktown.Game.Net
                     if (md.GetTick() - _lastTicked.GetTick() > 1)
                         md = default;
                     else
+                    {
                         md = _lastTicked;
+                        md.Jump = false; // a second jump in a row is unlikely; do not predict it (FishNet example)
+                    }
                 }
             }
 
@@ -169,10 +175,13 @@ namespace Worktown.Game.Net
             _yaw = MovementRules.TurnTowards(_yaw, direction, delta);
             transform.rotation = Quaternion.Euler(0f, _yaw, 0f);
 
-            if (_controller.isGrounded && _verticalVelocity < 0f)
+            bool grounded = _controller.isGrounded;
+            if (grounded && _verticalVelocity < 0f)
                 _verticalVelocity = -2f;
             else
                 _verticalVelocity = Mathf.Max(_verticalVelocity + Physics.gravity.y * delta, -40f);
+            if (MovementRules.CanJump(md.Jump, grounded, _crouched))
+                _verticalVelocity = MovementRules.JumpSpeed(Physics.gravity.y);
 
             _controller.Move((_velocity + Vector3.up * _verticalVelocity) * delta);
 

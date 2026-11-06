@@ -27,7 +27,7 @@ Only `game/` (branch stacked on `spec/009-sell-dishes`).
 - `game/Assets/_Project/Tests/EditMode/MovementRulesTests.cs` (new).
 
 ## Out of scope
-- Jumping (decided: no jump), animations and a character model (still the capsule), climbing,
+- Animations and a character model (still the capsule), climbing,
   swimming, vehicles.
 - Non-vocal communication (emotes, gestures, pointing / ping markers): very important per the
   human, but its own spec (011) so this one stays about movement and camera.
@@ -42,15 +42,16 @@ Only `game/` (branch stacked on `spec/009-sell-dishes`).
 - **Mouse style:** see open question 1.
 - **Movement:** WASD / left stick moves relative to the camera's view; the character turns smoothly
   toward the direction it moves (no strafing turn on its own). Walk about 4 m/s, Shift / stick-click
-  sprints about 6.5 m/s, short acceleration and deceleration so it does not feel like ice or a wall.
+  sprints about 8 m/s, short acceleration and deceleration so it does not feel like ice or a wall.
   Ctrl / C / east button crouches: lower capsule and camera, about 2 m/s, cannot sprint while
-  crouched, stands up only if there is room. No jump (human decision). Gravity and slopes from
+  crouched, stands up only if there is room. Space / south button jumps (about 1.2 m, only from
+  the ground and not while crouched; a one-time input like in FishNet's example). Gravity and slopes from
   `CharacterController`. Other players see the crouch (synced state).
 - **Netcode (state of the art, FishNet standard):** client-side prediction with reconciliation, following
   FishNet's own `CharacterControllerPrediction` example (`[Replicate]` / `[Reconcile]` on a
   `TickNetworkBehaviour`). The owner moves instantly; the server runs the same input and stays the
   authority, corrections are smoothed. Input data stays intents only (move vector, camera yaw,
-  sprint, crouch); the server clamps them (`MovementRules`), so a modified client cannot move faster.
+  sprint, crouch, jump); the server clamps them (`MovementRules`), so a modified client cannot move faster.
 - **Input:** the project's existing `InputSystem_Actions` asset (`Player` map: Move, Look, Sprint,
   Crouch, Interact); keyboard, mouse and gamepad bindings come with it.
 - **Mouse style (decided):** action style. Cursor hidden and locked while playing, the mouse always
@@ -75,7 +76,9 @@ Only `game/` (branch stacked on `spec/009-sell-dishes`).
 
 ## Open questions (answered 2026-11-06)
 1. Mouse style: action style (cursor locked, mouse turns the camera, Esc/Alt frees it).
-2. Jump: no. Sprint and crouch instead; non-vocal communication follows in spec 011.
+2. Jump: yes. First recorded as "no" (misread answer); corrected after play-testing on 2026-11-06:
+   jumping, sprinting and crouching all matter. Sprint raised to 8 m/s after the same test.
+   Non-vocal communication follows in its own spec.
 
 ## Human steps
 - Approve, answer the open questions, play it and say if it feels right.
