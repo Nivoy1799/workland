@@ -10,6 +10,10 @@ namespace Worktown.Game.Cooking
         UnknownStation,
         InvalidOption,
         NotFood,
-        SimRefused
+        SimRefused,
+        /// <summary>Spec 009: the grocer price is more than the wallet holds.</summary>
+        NotEnoughMoney,
+        /// <summary>Spec 009: no market wants it (e.g. quality too low, raw potato).</summary>
+        CannotSell
     }
 }

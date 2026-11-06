@@ -20,6 +20,8 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Worktown.Game.Cooking;
+using Worktown.Game.Economy;
+using Worktown.Sim.Economy;
 using Worktown.Game.Net;
 
 namespace Worktown.Game.Editor
@@ -39,6 +41,7 @@ namespace Worktown.Game.Editor
         private const float FoodSize = 0.4f;
         private const float StationHeight = 1f;
         private const float KitchenZ = 13f;
+        private static readonly EconomyCatalog GrocerPrices = EconomyCatalog.CreateDefault();
         private const string DistanceConditionPath = Root + "/Settings/DistanceCondition40m.asset";
         private const string LoggingConfigurationPath = Root + "/Settings/FishNetLogging.asset";
         private const string GroundMaterialPath = Root + "/Settings/Ground.mat";
@@ -115,6 +118,7 @@ namespace Worktown.Game.Editor
             AddServerAuthoritativeTransform(root);
             root.AddComponent<PlayerController>();
             var interactor = root.AddComponent<PickupInteractor>();
+            root.AddComponent<Wallet>(); // spec 009
             SetField(interactor, "_holdPoint", hold.transform);
 
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PlayerPrefabPath);
@@ -209,6 +213,16 @@ namespace Worktown.Game.Editor
             SetField(kitchen, "_foodPrefab", foodPrefab);
             SetField(kitchen, "_feed", feed);
             SetField(kitchen, "_stations", stations);
+
+            // Spec 009: market board (global, like the feed) and the server-side economy.
+            var boardObject = new GameObject("MarketBoard");
+            NetworkObject boardNob = boardObject.AddComponent<NetworkObject>();
+            SetField(boardNob, "_isGlobal", true);
+            var board = boardObject.AddComponent<MarketBoard>();
+            var economy = networkManager.gameObject.AddComponent<EconomyService>();
+            SetField(economy, "_networkManager", networkManager);
+            SetField(economy, "_board", board);
+            SetField(kitchen, "_economy", economy);
         }
 
         private static Station CreateStation(Transform parent, int index, StationKind kind, string displayName,
@@ -227,7 +241,11 @@ namespace Worktown.Game.Editor
 
             string keys = kind == StationKind.Crate || kind == StationKind.Counter ? "E" : "1-" + StationRules.OptionCount(kind);
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, StationHeight * 0.5f + 0.6f, 0f), 60, 0.05f);
-            label.text = displayName + "\n" + keys;
+            string price = string.Empty;
+            if (kind == StationKind.Crate
+                && GrocerPrices.TryGetGrocerPrice(DemoIngredients.All[ingredientIndex].Id, out long dollars))
+                price = " " + EconomyRules.Money(dollars);
+            label.text = displayName + price + "\n" + keys;
 
             var station = root.AddComponent<Station>();
             SetField(station, "_index", index);

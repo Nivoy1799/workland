@@ -2,6 +2,7 @@ using FishNet.Managing;
 using FishNet.Object;
 using UnityEngine;
 using Worktown.Game.Cooking;
+using Worktown.Game.Economy;
 using Worktown.Game.Net.Rules;
 
 namespace Worktown.Game.Net
@@ -18,6 +19,7 @@ namespace Worktown.Game.Net
         private string _joinSteamId = string.Empty;
         private string _simStatus;
         private ServeFeed _feed;
+        private MarketBoard _board;
 
         private void Start()
         {
@@ -60,7 +62,8 @@ namespace Worktown.Game.Net
                 GUILayout.Label("Players: " + players);
                 DrawHeld(nm);
                 GUILayout.Label("Move WASD, turn arrows or right mouse, E pick up / drop");
-                GUILayout.Label("Kitchen (north): crate E, board 1-4, pan 1-3, pot 1-3, counter E serves");
+                GUILayout.Label("Kitchen (north): crate E buys, board 1-4, pan 1-3, pot 1-3, counter E sells");
+                DrawMarketBoard();
                 DrawServeFeed();
             }
             else
@@ -86,11 +89,20 @@ namespace Worktown.Game.Net
             string heldText = "nothing";
             if (held != null)
                 heldText = held.TryGetComponent(out Food food) ? food.Describe() : held.name + " #" + held.ObjectId;
+            if (local.TryGetComponent(out Wallet wallet))
+                GUILayout.Label("Wallet: " + EconomyRules.Money(wallet.Balance.Value), GUI.skin.box);
             GUILayout.Label("Held: " + heldText);
             if (local.NearestStation != null)
                 GUILayout.Label(">> " + local.NearestStation.Prompt, GUI.skin.box);
             if (local.LastResult.Length > 0)
                 GUILayout.Label("Last: " + local.LastResult);
+        }
+
+        private void DrawMarketBoard()
+        {
+            if (_board == null) _board = FindFirstObjectByType<MarketBoard>();
+            if (_board == null || !_board.IsSpawned || _board.Clock.Value.Length == 0) return;
+            GUILayout.Label(_board.Clock.Value + "  |  " + _board.Prices.Value);
         }
 
         private void DrawServeFeed()
