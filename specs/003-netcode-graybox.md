@@ -46,7 +46,8 @@ via Steam, walk around a graybox and pick up and drop objects, all server-author
 - **Debug overlay:** ping, server tick, player count, held object.
 
 ## Acceptance criteria
-- [ ] AC1: Linux dedicated server build runs headless and logs "Server started" within 30 s.
+- [x] AC1: Linux dedicated server build runs headless and logs "Server started" within 30 s.
+      Done 2026-11-06: in WSL Ubuntu, "Server started (Tugboat)" after 3.8 s.
 - [ ] AC2a: Two clients on different machines connect via Steam (FishySteamworks, App ID 480)
       and see each other move. One of them may host (server plus client in one process); the
       server-side code paths are the same as on the dedicated server.
@@ -55,10 +56,17 @@ via Steam, walk around a graybox and pick up and drop objects, all server-author
       gets a `## Blockers` note: what was tried, what failed, and the proposed path (patch
       FishySteamworks, another Steam transport, or Steam for lobby only plus Tugboat for traffic).
       A failed spike does not block merging this spec; the follow-up becomes its own spec.
-- [ ] AC3: Two clients join via Tugboat with `-connect` and see each other move.
-- [ ] AC4: A client cannot pick up an object further than 2.5 m away (EditMode or PlayMode test of the server validation).
-- [ ] AC5: Two clients requesting the same object at the same time: exactly one gets it (test).
-- [ ] AC6: A `Sim` type is callable from a game script, proving the package link.
+- [x] AC3: Two clients join via Tugboat with `-connect` and see each other move.
+      Done 2026-11-06: two Windows client builds on the WSL Linux server; server log shows
+      both spawned with 2 observers; human confirmed movement syncs, also while carrying a cube.
+- [x] AC4: A client cannot pick up an object further than 2.5 m away (EditMode or PlayMode test of the server validation).
+      Done: `PickupRulesTests` (EditMode), plus the real RPC path in an Editor host
+      (5.8 m refused with TooFar, 2.0 m accepted with ownership, drop releases it).
+- [x] AC5: Two clients requesting the same object at the same time: exactly one gets it (test).
+      Done: `PickupRegistryTests` (two clients and 32 racing clients, first claim wins).
+- [x] AC6: A `Sim` type is callable from a game script, proving the package link.
+      Done: `SimLinkTests` matches the pinned potato hash; the overlay also shows it at runtime.
+      Builds use Mono, so no `link.xml` yet.
       An EditMode test builds `potato` with `ItemFactory` (spec 005) and asserts its pinned
       `Item.Hash` (same value as the /sim unit test). `SHA256.Create()` can be stripped under IL2CPP with
       high managed stripping: add a `link.xml` preserving it if server or client builds use IL2CPP.
@@ -70,6 +78,18 @@ via Steam, walk around a graybox and pick up and drop objects, all server-author
 - Server validation logic extracted into plain C# where possible and unit tested.
 - PlayMode test for pickup race if feasible, otherwise documented manual test.
 - Manual: two Steam accounts on two PCs (AC2a), then a client against the Linux server (AC2b).
+
+## Notes from the build (2026-11-06)
+- **Tugboat and path MTU.** FishNet's Tugboat sends UDP packets up to 1350 bytes with
+  DontFragment set (`MAXIMUM_UDP_MTU`, LiteNetLib). On a path with a smaller MTU the large
+  packets (spawns) are dropped silently while small ones (tick, ping) still arrive: clients
+  connect but nothing spawns. Seen locally because WSL inherited MTU 1280 from Tailscale;
+  fixed for testing with `sudo ip link set dev eth0 mtu 1500` in WSL (or Tailscale off).
+  Risk for players or bots on VPN or IPv6-tunnel paths (MTU 1280) using Tugboat; Steam
+  transport fragments on its own. Check in spec 004; do not patch FishNet sources.
+- FishNet logs only errors in `UNITY_SERVER` builds by default. The scene uses
+  `FishNetLogging.asset` (headless: Common), and the server logs each join step
+  (`[Net] player N joined / authenticated / spawned / loaded start scenes`).
 
 ## Human steps
 - Done (task 0.6, 2026-11-05): Unity 6.3 LTS (6000.3.28f1) with Windows, Linux and Linux
