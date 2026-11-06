@@ -70,9 +70,10 @@ via Steam, walk around a graybox and pick up and drop objects, all server-author
       An EditMode test builds `potato` with `ItemFactory` (spec 005) and asserts its pinned
       `Item.Hash` (same value as the /sim unit test). `SHA256.Create()` can be stripped under IL2CPP with
       high managed stripping: add a `link.xml` preserving it if server or client builds use IL2CPP.
-- [ ] AC7: `bash scripts/verify.sh` passes on the Windows PC with `UNITY_PATH` set to the
+- [x] AC7: `bash scripts/verify.sh` passes on the Windows PC with `UNITY_PATH` set to the
       6000.3.28f1 editor, so the Unity EditMode tests (AC4 to AC6) run instead of being skipped.
       The Editor must be closed for the batch run.
+      Done 2026-11-06: PASS (5 ran): Unity EditMode 27/27, /sim 191/191.
 
 ## Test plan
 - Server validation logic extracted into plain C# where possible and unit tested.
