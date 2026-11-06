@@ -5,6 +5,7 @@ using FishNet.Component.Observing;
 using FishNet.Component.Spawning;
 using FishNet.Component.Transforming;
 using FishNet.Managing;
+using FishNet.Managing.Logging;
 using FishNet.Managing.Object;
 using FishNet.Managing.Observing;
 using FishNet.Managing.Timing;
@@ -34,6 +35,7 @@ namespace Worktown.Game.Editor
         private const string PlayerPrefabPath = Root + "/Prefabs/Player.prefab";
         private const string PickupPrefabPath = Root + "/Prefabs/PickupCube.prefab";
         private const string DistanceConditionPath = Root + "/Settings/DistanceCondition40m.asset";
+        private const string LoggingConfigurationPath = Root + "/Settings/FishNetLogging.asset";
         private const string GroundMaterialPath = Root + "/Settings/Ground.mat";
         private const string PickupMaterialPath = Root + "/Settings/Pickup.mat";
         private const string DefaultPrefabObjectsPath = "Assets/DefaultPrefabObjects.asset";
@@ -236,6 +238,7 @@ namespace Worktown.Game.Editor
             if (prefabs == null)
                 throw new InvalidOperationException(DefaultPrefabObjectsPath + " not found");
             networkManager.SpawnablePrefabs = prefabs;
+            SetField(networkManager, "_logging", CreateLoggingConfiguration());
             go.AddComponent<TimeManager>();
 
             var tugboat = go.AddComponent<Tugboat>();
@@ -258,6 +261,24 @@ namespace Worktown.Game.Editor
             var pickups = go.AddComponent<PickupService>();
             SetField(pickups, "_networkManager", networkManager);
             return networkManager;
+        }
+
+        /// <summary>
+        /// FishNet's default logs only errors in server builds (UNITY_SERVER), which hides
+        /// warnings such as refused spawns on the dedicated server. Log warnings everywhere and
+        /// common messages on the headless server.
+        /// </summary>
+        private static LevelLoggingConfiguration CreateLoggingConfiguration()
+        {
+            var logging = AssetDatabase.LoadAssetAtPath<LevelLoggingConfiguration>(LoggingConfigurationPath);
+            if (logging == null)
+            {
+                logging = ScriptableObject.CreateInstance<LevelLoggingConfiguration>();
+                AssetDatabase.CreateAsset(logging, LoggingConfigurationPath);
+            }
+            logging.LoggingConstructor(true, LoggingType.Common, LoggingType.Warning, LoggingType.Common);
+            EditorUtility.SetDirty(logging);
+            return logging;
         }
 
         private static Transport AddSteamTransport(GameObject go)

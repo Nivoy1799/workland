@@ -1,6 +1,8 @@
 using System;
+using FishNet.Component.Spawning;
 using FishNet.Connection;
 using FishNet.Managing;
+using FishNet.Object;
 using FishNet.Transporting;
 using FishNet.Transporting.Multipass;
 using FishNet.Transporting.Tugboat;
@@ -43,7 +45,12 @@ namespace Worktown.Game.Net
         {
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
             _networkManager.ServerManager.OnRemoteConnectionState += OnRemoteConnectionState;
+            _networkManager.ServerManager.OnAuthenticationResult += OnAuthenticationResult;
+            _networkManager.SceneManager.OnClientLoadedStartScenes += OnClientLoadedStartScenes;
             _networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
+            PlayerSpawner spawner = _networkManager.GetComponent<PlayerSpawner>();
+            if (spawner != null)
+                spawner.OnSpawned += OnPlayerSpawned;
 
             Args =LaunchArgs.Parse(Environment.GetCommandLineArgs());
             if (!Args.IsValid)
@@ -79,7 +86,12 @@ namespace Worktown.Game.Net
             if (_networkManager == null) return;
             _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
             _networkManager.ServerManager.OnRemoteConnectionState -= OnRemoteConnectionState;
+            _networkManager.ServerManager.OnAuthenticationResult -= OnAuthenticationResult;
+            _networkManager.SceneManager.OnClientLoadedStartScenes -= OnClientLoadedStartScenes;
             _networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
+            PlayerSpawner spawner = _networkManager.GetComponent<PlayerSpawner>();
+            if (spawner != null)
+                spawner.OnSpawned -= OnPlayerSpawned;
         }
 
         /// <summary>Starts the server on every transport (Tugboat, and Steam when available).</summary>
@@ -178,6 +190,24 @@ namespace Worktown.Game.Net
                 - (args.ConnectionState == RemoteConnectionState.Stopped && _networkManager.ServerManager.Clients.ContainsKey(connection.ClientId) ? 1 : 0);
             Debug.Log("[Net] player " + connection.ClientId + " " + verb + " via " + TransportName(args.TransportIndex)
                 + ", players " + players);
+        }
+
+        // Join pipeline on the server: connected -> authenticated -> start scenes loaded -> player spawned.
+        private void OnAuthenticationResult(NetworkConnection connection, bool passed)
+        {
+            Debug.Log("[Net] player " + connection.ClientId + (passed ? " authenticated" : " failed authentication"));
+        }
+
+        private void OnClientLoadedStartScenes(NetworkConnection connection, bool asServer)
+        {
+            if (asServer)
+                Debug.Log("[Net] player " + connection.ClientId + " loaded start scenes");
+        }
+
+        private void OnPlayerSpawned(NetworkObject player)
+        {
+            Debug.Log("[Net] player " + player.OwnerId + " spawned as object " + player.ObjectId
+                + " at " + player.transform.position + ", observers " + player.Observers.Count);
         }
 
         private void OnClientConnectionState(ClientConnectionStateArgs args)
