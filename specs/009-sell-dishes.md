@@ -1,7 +1,7 @@
 ---
 id: 009
 title: Buy, cook, sell: money loop in the graybox (playable demo)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -70,7 +70,7 @@ Only `game/` (branch stacked on `spec/007-cooking-stations`).
 - EditMode tests `Economy*Tests.cs` with `EconomyCatalog.CreateDefault()` and `DemoIngredients`.
 - Manual demo: Linux server in WSL, two Windows clients.
 
-## Open questions (human decides; recommended defaults in brackets)
+## Open questions (answered 2026-11-06: human approved both defaults)
 1. Starting money per player for the demo. [$500: about 8 potatoes; enough to make mistakes, small next to dish payouts]
 2. Real time per in-game hour. [60 s, so a demo of 10 minutes shows most of a day's demand curve]
 
