@@ -1,7 +1,7 @@
 ---
 id: 007
 title: Cooking stations in the graybox, playable demo
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
