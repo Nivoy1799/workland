@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.unity.cinemachine": "3.1.7",
     "com.worktown.sim": "file:../../sim",
     "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#81542a7e86292b5c4c21b1782c5af23b567f45ce",
     "com.rlabrecque.steamworks.net": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net#ea51b029a5dbcb47a99d3c1fac930b811672ed32",

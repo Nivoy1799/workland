@@ -4,6 +4,7 @@ using System.Reflection;
 using FishNet.Component.Observing;
 using FishNet.Component.Spawning;
 using FishNet.Component.Transforming;
+using FishNet.Component.Transforming.Beta;
 using FishNet.Managing;
 using FishNet.Managing.Logging;
 using FishNet.Managing.Object;
@@ -23,6 +24,9 @@ using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Sim.Economy;
 using Worktown.Game.Net;
+using Worktown.Game.Player;
+using Unity.Cinemachine;
+using UnityEngine.InputSystem;
 
 namespace Worktown.Game.Editor
 {
@@ -41,6 +45,7 @@ namespace Worktown.Game.Editor
         private const float FoodSize = 0.4f;
         private const float StationHeight = 1f;
         private const float KitchenZ = 13f;
+        private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         private static readonly EconomyCatalog GrocerPrices = EconomyCatalog.CreateDefault();
         private const string DistanceConditionPath = Root + "/Settings/DistanceCondition40m.asset";
         private const string LoggingConfigurationPath = Root + "/Settings/FishNetLogging.asset";
@@ -88,24 +93,33 @@ namespace Worktown.Game.Editor
             Debug.Log("[Graybox] scene generated at " + ScenePath);
         }
 
+        /// <summary>
+        /// Spec 010: player with FishNet client-side prediction, structured like FishNet's
+        /// CharacterControllerPrediction example: the root simulates (no NetworkTransform), the
+        /// visible "Graphic" child is smoothed by a NetworkTickSmoother and followed by the camera.
+        /// </summary>
         private static NetworkObject CreatePlayerPrefab()
         {
             var root = new GameObject("Player");
+            root.tag = "Player";
             var controller = root.AddComponent<CharacterController>();
             controller.height = 2f;
             controller.radius = 0.4f;
             controller.center = new Vector3(0f, 1f, 0f);
 
+            var graphic = new GameObject("Graphic");
+            graphic.transform.SetParent(root.transform, false);
+
             GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             body.name = "Body";
             UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
-            body.transform.SetParent(root.transform, false);
+            body.transform.SetParent(graphic.transform, false);
             body.transform.localPosition = new Vector3(0f, 1f, 0f);
 
             GameObject nose = GameObject.CreatePrimitive(PrimitiveType.Cube);
             nose.name = "Facing";
             UnityEngine.Object.DestroyImmediate(nose.GetComponent<Collider>());
-            nose.transform.SetParent(root.transform, false);
+            nose.transform.SetParent(graphic.transform, false);
             nose.transform.localPosition = new Vector3(0f, 1.5f, 0.45f);
             nose.transform.localScale = new Vector3(0.3f, 0.15f, 0.2f);
 
@@ -115,8 +129,16 @@ namespace Worktown.Game.Editor
             hold.transform.localPosition = new Vector3(0f, 2.5f, 0f);
 
             NetworkObject nob = root.AddComponent<NetworkObject>();
-            AddServerAuthoritativeTransform(root);
-            root.AddComponent<PlayerController>();
+            SetField(nob, "_enablePrediction", true);
+            SetField(nob, "_predictionType", 0); // Other: CharacterController, not a rigidbody
+            SetField(nob, "_enableStateForwarding", true);
+
+            var smoother = graphic.AddComponent<NetworkTickSmoother>();
+            SetField(smoother, "_initializationSettings.TargetTransform", root.transform);
+
+            var player = root.AddComponent<PlayerController>();
+            SetField(player, "_graphic", graphic.transform);
+            SetField(player, "_body", body.transform);
             var interactor = root.AddComponent<PickupInteractor>();
             root.AddComponent<Wallet>(); // spec 009
             SetField(interactor, "_holdPoint", hold.transform);
@@ -272,6 +294,41 @@ namespace Worktown.Game.Editor
             return text;
         }
 
+        /// <summary>
+        /// Spec 010: the standard Cinemachine third-person rig. One camera in the scene; the local
+        /// player binds it on spawn (PlayerCameraRig). Orbit, zoom range and wall avoidance here.
+        /// </summary>
+        private static void CreatePlayerCamera()
+        {
+            var go = new GameObject("PlayerCamera");
+            go.transform.SetPositionAndRotation(new Vector3(0f, 6f, -10f), Quaternion.Euler(20f, 0f, 0f));
+            var cam = go.AddComponent<CinemachineCamera>();
+            cam.Lens.FieldOfView = 60f;
+
+            var orbit = go.AddComponent<CinemachineOrbitalFollow>();
+            orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
+            orbit.Radius = 5f;
+            orbit.TargetOffset = new Vector3(0f, 1.6f, 0f);
+            orbit.VerticalAxis.Range = new Vector2(-30f, 70f);
+            orbit.VerticalAxis.Value = 20f;
+            orbit.VerticalAxis.Center = 20f;
+            orbit.RadialAxis.Range = new Vector2(0.4f, 1.6f); // 2 to 8 m
+            orbit.RadialAxis.Value = 1f;
+            orbit.TrackerSettings.PositionDamping = new Vector3(0.2f, 0.2f, 0.2f);
+
+            var composer = go.AddComponent<CinemachineRotationComposer>();
+            composer.TargetOffset = new Vector3(0f, 1.6f, 0f);
+            composer.Damping = new Vector2(0.1f, 0.1f);
+
+            var deoccluder = go.AddComponent<CinemachineDeoccluder>();
+            deoccluder.IgnoreTag = "Player";
+
+            var input = new GameObject("PlayerInput");
+            var reader = input.AddComponent<PlayerInputReader>();
+            SetField(reader, "_actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath));
+            input.AddComponent<PlayerCameraRig>();
+        }
+
         private static void AddServerAuthoritativeTransform(GameObject go)
         {
             var nt = go.AddComponent<NetworkTransform>();
@@ -302,6 +359,8 @@ namespace Worktown.Game.Editor
             cam.AddComponent<Camera>();
             cam.AddComponent<AudioListener>();
             cam.transform.SetPositionAndRotation(new Vector3(0f, 12f, -18f), Quaternion.Euler(30f, 0f, 0f));
+            cam.AddComponent<CinemachineBrain>();
+            CreatePlayerCamera();
 
             GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
