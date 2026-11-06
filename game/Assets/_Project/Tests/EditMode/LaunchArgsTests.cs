@@ -69,6 +69,24 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void Latency_ForTesting()
+        {
+            var a = Parse("-connect", "127.0.0.1", "-latency", "150");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual(150, a.LatencyMs);
+            Assert.AreEqual(0, Parse("-connect", "h").LatencyMs);
+        }
+
+        [TestCase("-latency")]
+        [TestCase("-latency", "-5")]
+        [TestCase("-latency", "abc")]
+        [TestCase("-latency", "5000")]
+        public void BadLatency_IsAnError(params string[] args)
+        {
+            Assert.IsFalse(LaunchArgs.Parse(args).IsValid);
+        }
+
+        [Test]
         public void TwoModeFlags_AreAnError()
         {
             var a = Parse("-server", "-connect", "127.0.0.1");
