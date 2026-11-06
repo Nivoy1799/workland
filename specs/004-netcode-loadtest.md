@@ -1,7 +1,7 @@
 ---
 id: 004
 title: Bot load test, 32 bots and 500 networked objects
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---

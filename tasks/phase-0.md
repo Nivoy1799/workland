@@ -24,7 +24,7 @@ Tick boxes as you go and commit after each finished task.
 - [ ] 1.2 [AGENT] Implement spec 003 with the builder subagent (opus: netcode).
 - [ ] 1.3 [AGENT] Tester and reviewer subagents on spec 003.
 - [ ] 1.4 [HUMAN] Review the netcode diff. Two-PC Steam test (AC2). Merge.
-- [ ] 1.5 [HUMAN] Approve spec 004. Provide a Linux test VM.
+- [x] 1.5 [HUMAN] Approve spec 004. Provide a Linux test VM.
 - [ ] 1.6 [AGENT] Implement spec 004, run 8 / 16 / 32 bot tests, write docs/loadtest-results.md.
 - [ ] 1.7 [HUMAN] Decide O7 (player cap) in docs/decisions.md.
 - [ ] 1.8 [AGENT] Draft the next specs as `draft` for the human to approve:
