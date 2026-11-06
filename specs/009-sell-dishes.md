@@ -55,16 +55,16 @@ Only `game/` (branch stacked on `spec/007-cooking-stations`).
   existing E-key intents.
 
 ## Acceptance criteria
-- [ ] AC1: `TownEconomy` opens an account with the grant, buying a potato costs the grocer price, and
+- [x] AC1: `TownEconomy` opens an account with the grant, buying a potato costs the grocer price, and
       buying without enough money is refused with no state change (EditMode tests with the real engine).
-- [ ] AC2: Plate-and-sell of golden fries pays more than plate-and-sell of dark fries made from the same
+- [x] AC2: Plate-and-sell of golden fries pays more than plate-and-sell of dark fries made from the same
       potato (EditMode test, fresh state for each).
-- [ ] AC3: Selling the same dish type repeatedly in one in-game hour does not raise the payout, and
+- [x] AC3: Selling the same dish type repeatedly in one in-game hour does not raise the payout, and
       after ticks the demand refills (EditMode test, numbers come from the engine).
-- [ ] AC4: `EconomyRules` clock text and account id mapping (EditMode tests).
-- [ ] AC5: In a running game two players buy, cook and sell; wallets, the clock and the feed update on
+- [x] AC4: `EconomyRules` clock text and account id mapping (EditMode tests).
+- [x] AC5: In a running game two players buy, cook and sell; wallets, the clock and the feed update on
       both clients (manual on the WSL server; server log `[Economy] player N sold ... for $X`).
-- [ ] AC6: `bash scripts/verify.sh` passes with `UNITY_PATH` set.
+- [x] AC6: `bash scripts/verify.sh` passes with `UNITY_PATH` set.
 
 ## Test plan
 - EditMode tests `Economy*Tests.cs` with `EconomyCatalog.CreateDefault()` and `DemoIngredients`.
@@ -79,7 +79,19 @@ Only `game/` (branch stacked on `spec/007-cooking-stations`).
 - Play it with a second person for 5 minutes.
 
 ## Implementation notes
-(Builder fills this in.)
+Done 2026-11-06 on `spec/009-sell-dishes` (stacked on spec 007).
+- AC1-AC4: `EconomyDemoTests` with the real engine and default catalog: grant once, grocer price,
+  refused buy without money, golden fries pay more than dark fries, raw potato refused
+  (QualityTooLow), repeated sales never raise the payout, demand refills after ticks, clock text.
+- AC5: two clients on the WSL server, human confirmed "money works". Server log:
+  `player 1 bought potato for $60`, `sold crispy fried potato cubes for $478 to snack q=0.70`,
+  `sold crispy fried onion sticks for $551`, `Day 1, 09:00 ... snack $388 (7 orders)`.
+- AC6: verify.sh PASS, Unity EditMode 93/93, /sim 191/191.
+- Observed: a q=0.18 dish ("soft boiled potato slices") still sells for $261 because the snack
+  minimum is 150 permille. That is the spec 008 provisional data, not a game bug; a balancing pass
+  may want a higher minimum or a steeper quality curve.
+- Known demo limits: FishNet reuses client ids, so a new player can inherit a previous player's
+  account (no second grant); wallets reset on server restart (no persistence, out of scope).
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
