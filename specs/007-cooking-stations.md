@@ -68,18 +68,18 @@ Only `game/` (builds on spec 003, branch stacked on `spec/003-netcode-graybox`).
   run (the sim guarantees it; tests pin one case).
 
 ## Acceptance criteria
-- [ ] AC1: `StationRules` maps every station + option to the sim operation and parameters above,
+- [x] AC1: `StationRules` maps every station + option to the sim operation and parameters above,
       and rejects unknown options (EditMode test).
-- [ ] AC2: Server-side kitchen logic (pure part, EditMode test): crate potato -> board `3` ->
+- [x] AC2: Server-side kitchen logic (pure part, EditMode test): crate potato -> board `3` ->
       pan `2` gives the same `Item.Hash` as `Fry(Cut(potato, sticks), 190, 150)` from the sim,
       and its name is "crispy fried potato sticks" (whatever `FallbackName` returns, pinned in the test).
-- [ ] AC3: Requests are refused (outcome, no state change) when: too far from the station,
+- [x] AC3: Requests are refused (outcome, no state change) when: too far from the station,
       hands empty, unknown station or option, or the sim returns an error (EditMode tests).
-- [ ] AC4: `StarRating` maps quality to 1..5 stars at fixed boundaries (EditMode test).
-- [ ] AC5: In a running game, a client takes a potato, cuts, fries and serves it; all clients see
+- [x] AC4: `StarRating` maps quality to 1..5 stars at fixed boundaries (EditMode test).
+- [x] AC5: In a running game, a client takes a potato, cuts, fries and serves it; all clients see
       the label change and the serve message (manual, two clients on the WSL server; server log
       line `[Kitchen] player N served <name> q=<quality>` as evidence).
-- [ ] AC6: `bash scripts/verify.sh` passes with `UNITY_PATH` set (Unity tests run).
+- [x] AC6: `bash scripts/verify.sh` passes with `UNITY_PATH` set (Unity tests run).
 
 ## Test plan
 - EditMode tests in `game/Assets/_Project/Tests/EditMode/Cooking*Tests.cs` for AC1 to AC4,
@@ -92,7 +92,15 @@ Only `game/` (builds on spec 003, branch stacked on `spec/003-netcode-graybox`).
 - Play the demo for 5 minutes with a second person or two windows; say if it is fun to show.
 
 ## Implementation notes
-(Builder fills this in.)
+Done 2026-11-06 on `spec/007-cooking-stations` (stacked on spec 003).
+- AC1-AC4: `CookingRulesTests`, `KitchenStateTests` (potato -> sticks -> golden fry gives hash
+  `2ab1f862...` and "crispy fried potato sticks", same as the sim).
+- AC5: two Windows clients on the WSL Linux server; human confirmed it works. Server log, e.g.
+  `[Kitchen] player 1 served crispy fried tomato slices q=0.77`.
+- AC6: verify.sh PASS with UNITY_PATH, Unity EditMode 81/81, /sim 191/191.
+- Observed: cutting an already cut item stacks the names ("onion halves slices sticks").
+  That is the spec 005 naming of operation chains, not a game bug; worth a naming pass
+  (or AI names, spec 006) before a wider demo.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
