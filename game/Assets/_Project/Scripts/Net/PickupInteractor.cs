@@ -2,6 +2,7 @@ using FishNet.Connection;
 using FishNet.Object;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Worktown.Game.Cooking;
 
 namespace Worktown.Game.Net
 {
@@ -22,6 +23,8 @@ namespace Worktown.Game.Net
         [SerializeField] private Transform _holdPoint;
 
         private PickupService _service;
+        private KitchenService _kitchen;
+        private Station[] _stations;
         private readonly Collider[] _hits = new Collider[16];
 
         public Transform HoldPoint => _holdPoint;
@@ -34,14 +37,21 @@ namespace Worktown.Game.Net
             _service = NetworkManager.GetComponent<PickupService>();
             if (_service == null)
                 Debug.LogError("[Pickup] PickupService missing on the NetworkManager object");
+            _kitchen = NetworkManager.GetComponent<KitchenService>();
         }
 
         private void Update()
         {
             if (!IsOwner) return;
             Keyboard keyboard = Keyboard.current;
-            if (keyboard == null || !keyboard.eKey.wasPressedThisFrame) return;
+            if (keyboard == null) return;
 
+            // Spec 007: near a station, E and 1-4 go to the kitchen.
+            Station station = FindNearestStation();
+            NearestStation = station;
+            if (station != null && TryHandleStationKeys(keyboard, station)) return;
+
+            if (!keyboard.eKey.wasPressedThisFrame) return;
             if (IsHoldingSomething())
             {
                 RequestDrop();
@@ -53,6 +63,62 @@ namespace Worktown.Game.Net
                 LastResult = "no cube within " + ClientSearchRadius + " m";
             else
                 RequestPickup(nearest.NetworkObject);
+        }
+
+        /// <summary>Owner side: the station within reach, for keys and the overlay prompt. Null if none.</summary>
+        public Station NearestStation { get; private set; }
+
+        private bool TryHandleStationKeys(Keyboard keyboard, Station station)
+        {
+            bool holding = IsHoldingSomething();
+            switch (station.Kind)
+            {
+                case StationKind.Crate:
+                    if (!keyboard.eKey.wasPressedThisFrame || holding) return false;
+                    RequestStation(station.Index, 0);
+                    return true;
+                case StationKind.Counter:
+                    if (!keyboard.eKey.wasPressedThisFrame || !holding) return false;
+                    RequestStation(station.Index, 0);
+                    return true;
+                default:
+                    int option = PressedOption(keyboard);
+                    if (option == 0) return false;
+                    if (option > StationRules.OptionCount(station.Kind))
+                    {
+                        LastResult = station.DisplayName + " has no option " + option;
+                        return true;
+                    }
+                    RequestStation(station.Index, option);
+                    return true;
+            }
+        }
+
+        private static int PressedOption(Keyboard keyboard)
+        {
+            if (keyboard.digit1Key.wasPressedThisFrame) return 1;
+            if (keyboard.digit2Key.wasPressedThisFrame) return 2;
+            if (keyboard.digit3Key.wasPressedThisFrame) return 3;
+            if (keyboard.digit4Key.wasPressedThisFrame) return 4;
+            return 0;
+        }
+
+        private Station FindNearestStation()
+        {
+            if (_stations == null) _stations = FindObjectsByType<Station>(FindObjectsSortMode.None);
+            Station best = null;
+            float bestSqr = float.MaxValue;
+            foreach (Station s in _stations)
+            {
+                if (s == null || !StationRules.IsInReach(transform.position, s.transform.position)) continue;
+                float sqr = (s.transform.position - transform.position).sqrMagnitude;
+                if (sqr < bestSqr)
+                {
+                    bestSqr = sqr;
+                    best = s;
+                }
+            }
+            return best;
         }
 
         /// <summary>Owner side: true if a cube we own says we hold it.</summary>
@@ -99,6 +165,23 @@ namespace Worktown.Game.Net
             if (IsRateLimited()) return;
             PickupOutcome outcome = _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
             ReportResult(Owner, outcome, false);
+        }
+
+        /// <summary>Spec 007: take from a crate (option 0), cook at a station (1-4) or serve (0).</summary>
+        [ServerRpc]
+        private void RequestStation(int stationIndex, int option)
+        {
+            if (IsRateLimited()) return;
+            CookOutcome outcome = _kitchen != null ? _kitchen.TryUseStation(this, stationIndex, option) : CookOutcome.UnknownStation;
+            ReportCook(Owner, outcome);
+        }
+
+        [TargetRpc]
+        private void ReportCook(NetworkConnection target, CookOutcome outcome)
+        {
+            LastResult = "kitchen: " + outcome;
+            if (outcome != CookOutcome.Ok)
+                Debug.Log("[Kitchen] " + LastResult);
         }
 
         /// <summary>Server: drop requests that come faster than a person can press E.

@@ -68,6 +68,38 @@ namespace Worktown.Game.Net
             return PickupOutcome.Ok;
         }
 
+        /// <summary>Server: the object this player holds, if any (spec 007 stations work on it).</summary>
+        public bool TryGetHeld(PickupInteractor player, out NetworkObject held)
+        {
+            held = null;
+            return _registry.TryGetHeldItem(player.Owner.ClientId, out int itemId)
+                && _networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out held);
+        }
+
+        /// <summary>
+        /// Server: puts an object the server just spawned (e.g. an ingredient from a crate) into
+        /// the player's hands. No reach check: the server chose the object, not the client.
+        /// </summary>
+        public bool HandTo(PickupInteractor player, NetworkObject target)
+        {
+            if (target == null || !target.TryGetComponent(out Pickup pickup)) return false;
+            int clientId = player.Owner.ClientId;
+            if (!_registry.TryClaim(target.ObjectId, clientId)) return false;
+            target.GiveOwnership(player.Owner);
+            pickup.ServerAttach(player.HoldPoint, clientId);
+            return true;
+        }
+
+        /// <summary>Server: removes the held object from the player's hands without dropping it
+        /// (it is about to be despawned, e.g. served).</summary>
+        public bool TakeAway(PickupInteractor player, out NetworkObject taken)
+        {
+            if (!TryGetHeld(player, out taken)) return false;
+            _registry.TryRelease(taken.ObjectId, player.Owner.ClientId);
+            taken.RemoveOwnership();
+            return true;
+        }
+
         private void OnRemoteConnectionState(NetworkConnection connection, RemoteConnectionStateArgs args)
         {
             // FishNet raises this before despawning the client's owned objects, so taking the
