@@ -175,7 +175,9 @@ namespace Worktown.Game.Net
             _yaw = MovementRules.TurnTowards(_yaw, direction, delta);
             transform.rotation = Quaternion.Euler(0f, _yaw, 0f);
 
-            bool grounded = _controller.isGrounded;
+            // Own probe, not CharacterController.isGrounded: that flag resets after every reconcile
+            // teleport, so client replays and the server disagreed about jumps (the 'invisible ceiling').
+            bool grounded = IsGrounded();
             if (grounded && _verticalVelocity < 0f)
                 _verticalVelocity = -2f;
             else
@@ -206,6 +208,16 @@ namespace Worktown.Game.Net
         {
             if (wantsCrouch && !_crouched) SetCrouched(true);
             else if (!wantsCrouch && _crouched && CanStand()) SetCrouched(false);
+        }
+
+        private bool IsGrounded()
+        {
+            float radius = _controller.radius * 0.95f;
+            Vector3 center = transform.position + Vector3.up * (radius - 0.08f);
+            _controller.enabled = false; // do not hit ourselves
+            bool grounded = Physics.CheckSphere(center, radius, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            _controller.enabled = true;
+            return grounded;
         }
 
         private bool CanStand()
