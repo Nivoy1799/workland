@@ -69,6 +69,50 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void Bot_WithConnectAndSeed()
+        {
+            var a = Parse("-batchmode", "-nographics", "-bot", "-connect", "127.0.0.1:7770", "-seed", "17");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual(LaunchMode.ClientTugboat, a.Mode);
+            Assert.IsTrue(a.IsBot);
+            Assert.AreEqual(17, a.Seed);
+        }
+
+        [Test]
+        public void Seed_AcceptsNegative()
+        {
+            Assert.AreEqual(-3, Parse("-bot", "-connect", "h", "-seed", "-3").Seed);
+        }
+
+        [TestCase("-bot")]
+        [TestCase("-bot", "-server")]
+        [TestCase("-bot", "-host")]
+        [TestCase("-bot", "-steam", "123")]
+        [TestCase("-bot", "-connect", "h", "-seed")]
+        [TestCase("-bot", "-connect", "h", "-seed", "x")]
+        public void BotWithoutTugboatOrBadSeed_IsAnError(params string[] args)
+        {
+            Assert.IsFalse(LaunchArgs.Parse(args).IsValid);
+        }
+
+        [Test]
+        public void Metrics_OnServer()
+        {
+            var a = Parse("-server", "-metrics", "/tmp/m.jsonl");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual("/tmp/m.jsonl", a.MetricsPath);
+        }
+
+        [TestCase("-metrics", "/tmp/m.jsonl")]
+        [TestCase("-connect", "h", "-metrics", "/tmp/m.jsonl")]
+        [TestCase("-server", "-metrics")]
+        [TestCase("-server", "-metrics", "-batchmode")]
+        public void MetricsOutsideServerOrWithoutPath_IsAnError(params string[] args)
+        {
+            Assert.IsFalse(LaunchArgs.Parse(args).IsValid);
+        }
+
+        [Test]
         public void TwoModeFlags_AreAnError()
         {
             var a = Parse("-server", "-connect", "127.0.0.1");

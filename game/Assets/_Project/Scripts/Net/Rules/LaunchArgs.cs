@@ -15,6 +15,12 @@ namespace Worktown.Game.Net.Rules
         public string Address { get; private set; } = string.Empty;
         public ushort Port { get; private set; } = DefaultTugboatPort;
         public string SteamTarget { get; private set; } = string.Empty;
+        /// <summary><c>-bot</c>: drive the local player with a load-test bot (spec 004). Needs <c>-connect</c>.</summary>
+        public bool IsBot { get; private set; }
+        /// <summary><c>-seed n</c>: seed for the bot's random choices.</summary>
+        public int Seed { get; private set; }
+        /// <summary><c>-metrics path</c>: the server writes one JSON line per second there (spec 004).</summary>
+        public string MetricsPath { get; private set; } = string.Empty;
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -54,10 +60,28 @@ namespace Worktown.Game.Net.Rules
                         result.Mode = LaunchMode.ClientSteam;
                         result.SteamTarget = args[++i];
                         break;
+                    case "-bot":
+                        result.IsBot = true;
+                        break;
+                    case "-seed":
+                        if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int seed))
+                            return Fail("-seed needs an integer");
+                        result.Seed = seed;
+                        i++;
+                        break;
+                    case "-metrics":
+                        if (i + 1 >= args.Count || args[i + 1].StartsWith("-"))
+                            return Fail("-metrics needs a file path");
+                        result.MetricsPath = args[++i];
+                        break;
                 }
             }
 
             if (modeFlags > 1) return Fail("only one of -server, -host, -connect, -steam is allowed");
+            if (result.IsBot && result.Mode != LaunchMode.ClientTugboat)
+                return Fail("-bot needs -connect (bots use Tugboat)");
+            if (result.MetricsPath.Length > 0 && result.Mode != LaunchMode.Server)
+                return Fail("-metrics is only for -server");
             return result;
         }
 
