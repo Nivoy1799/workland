@@ -1,4 +1,5 @@
 using System;
+using FishNet.Connection;
 using FishNet.Managing;
 using FishNet.Transporting;
 using FishNet.Transporting.Multipass;
@@ -41,9 +42,10 @@ namespace Worktown.Game.Net
         private void Start()
         {
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
+            _networkManager.ServerManager.OnRemoteConnectionState += OnRemoteConnectionState;
             _networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
 
-            Args = LaunchArgs.Parse(Environment.GetCommandLineArgs());
+            Args =LaunchArgs.Parse(Environment.GetCommandLineArgs());
             if (!Args.IsValid)
                 Debug.LogError("[Net] bad command line: " + Args.Error);
 
@@ -76,6 +78,7 @@ namespace Worktown.Game.Net
         {
             if (_networkManager == null) return;
             _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
+            _networkManager.ServerManager.OnRemoteConnectionState -= OnRemoteConnectionState;
             _networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
         }
 
@@ -161,6 +164,20 @@ namespace Worktown.Game.Net
             {
                 Debug.Log("[Net] server stopped on " + transportName);
             }
+        }
+
+        /// <summary>Server log line per join/leave; FishNet logs these only in the Editor.
+        /// The format is stable so the spec 004 load test can count players from the log.</summary>
+        private void OnRemoteConnectionState(NetworkConnection connection, RemoteConnectionStateArgs args)
+        {
+            if (args.ConnectionState != RemoteConnectionState.Started && args.ConnectionState != RemoteConnectionState.Stopped)
+                return;
+            string verb = args.ConnectionState == RemoteConnectionState.Started ? "joined" : "left";
+            // The count is updated after this event for leaves, so adjust it here.
+            int players = _networkManager.ServerManager.Clients.Count
+                - (args.ConnectionState == RemoteConnectionState.Stopped && _networkManager.ServerManager.Clients.ContainsKey(connection.ClientId) ? 1 : 0);
+            Debug.Log("[Net] player " + connection.ClientId + " " + verb + " via " + TransportName(args.TransportIndex)
+                + ", players " + players);
         }
 
         private void OnClientConnectionState(ClientConnectionStateArgs args)
