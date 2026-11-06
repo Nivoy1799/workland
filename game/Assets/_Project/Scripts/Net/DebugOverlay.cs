@@ -44,7 +44,12 @@ namespace Worktown.Game.Net
                 + (_bootstrap.Steam.LocalSteamId != 0 ? "  id " + _bootstrap.Steam.LocalSteamId : string.Empty));
             GUILayout.Label(_simStatus);
 
-            if (nm.IsServerStarted || nm.IsClientStarted)
+            if (nm == null || nm.TimeManager == null)
+            {
+                // FishNet did not initialize (e.g. missing prefab collection); its own error explains why.
+                GUILayout.Label("NetworkManager not initialized, see log");
+            }
+            else if (nm.IsServerStarted || nm.IsClientStarted)
             {
                 GUILayout.Label("Server tick: " + nm.TimeManager.Tick);
                 if (nm.IsClientStarted)
