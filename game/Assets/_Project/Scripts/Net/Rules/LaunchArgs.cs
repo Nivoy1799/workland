@@ -10,7 +10,6 @@ namespace Worktown.Game.Net.Rules
     public sealed class LaunchArgs
     {
         public const ushort DefaultTugboatPort = 7770;
-        public const ushort DefaultSteamPort = 7771;
 
         public LaunchMode Mode { get; private set; } = LaunchMode.Menu;
         public string Address { get; private set; } = string.Empty;

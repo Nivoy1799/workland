@@ -45,6 +45,13 @@ namespace Worktown.Game.Net.Rules
             return _itemByClient.TryGetValue(clientId, out itemId);
         }
 
+        /// <summary>Forgets every claim, e.g. when the server stops.</summary>
+        public void Clear()
+        {
+            _holderByItem.Clear();
+            _itemByClient.Clear();
+        }
+
         /// <summary>Releases whatever the client holds, e.g. on disconnect. Returns false if nothing was held.</summary>
         public bool ReleaseAllFor(int clientId, out int releasedItemId)
         {

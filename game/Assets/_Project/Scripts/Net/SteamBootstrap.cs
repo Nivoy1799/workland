@@ -1,4 +1,6 @@
 using System;
+using FishNet;
+using FishNet.Managing;
 using Steamworks;
 using UnityEngine;
 
@@ -106,7 +108,26 @@ namespace Worktown.Game.Net
 #endif
         }
 
+        private void OnApplicationQuit()
+        {
+            // FishySteamworks still has sockets open at this point. Stop FishNet first so no
+            // transport calls into Steam after it is shut down, then shut Steam down.
+            NetworkManager networkManager = InstanceFinder.NetworkManager;
+            if (networkManager != null)
+            {
+                if (networkManager.IsClientStarted) networkManager.ClientManager.StopConnection();
+                if (networkManager.IsServerStarted) networkManager.ServerManager.StopConnection(true);
+            }
+            ShutdownSteam();
+        }
+
+        // Fallback when the object is destroyed without quitting (e.g. scene unload).
         private void OnDestroy()
+        {
+            ShutdownSteam();
+        }
+
+        private void ShutdownSteam()
         {
             if (!IsReady) return;
             IsReady = false;

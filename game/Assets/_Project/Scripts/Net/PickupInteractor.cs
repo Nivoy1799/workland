@@ -14,6 +14,10 @@ namespace Worktown.Game.Net
     public sealed class PickupInteractor : NetworkBehaviour
     {
         private const float ClientSearchRadius = 4f;
+        private const float MinRequestInterval = 0.2f;
+
+        // Server only: time of the last accepted pickup or drop request from this player.
+        private float _serverLastRequestTime = float.NegativeInfinity;
 
         [SerializeField] private Transform _holdPoint;
 
@@ -84,21 +88,33 @@ namespace Worktown.Game.Net
         [ServerRpc]
         private void RequestPickup(NetworkObject target)
         {
+            if (IsRateLimited()) return;
             PickupOutcome outcome = _service != null ? _service.TryPickup(this, target) : PickupOutcome.NotFound;
-            ReportResult(Owner, outcome, "pickup");
+            ReportResult(Owner, outcome, true);
         }
 
         [ServerRpc]
         private void RequestDrop()
         {
+            if (IsRateLimited()) return;
             PickupOutcome outcome = _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
-            ReportResult(Owner, outcome, "drop");
+            ReportResult(Owner, outcome, false);
+        }
+
+        /// <summary>Server: drop requests that come faster than a person can press E.
+        /// Spam then costs neither validation work nor reply bandwidth.</summary>
+        private bool IsRateLimited()
+        {
+            float now = Time.unscaledTime;
+            if (now - _serverLastRequestTime < MinRequestInterval) return true;
+            _serverLastRequestTime = now;
+            return false;
         }
 
         [TargetRpc]
-        private void ReportResult(NetworkConnection target, PickupOutcome outcome, string action)
+        private void ReportResult(NetworkConnection target, PickupOutcome outcome, bool wasPickup)
         {
-            LastResult = action + ": " + outcome;
+            LastResult = (wasPickup ? "pickup: " : "drop: ") + outcome;
             if (outcome != PickupOutcome.Ok)
                 Debug.Log("[Pickup] " + LastResult);
         }

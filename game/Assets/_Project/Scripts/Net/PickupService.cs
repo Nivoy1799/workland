@@ -22,12 +22,21 @@ namespace Worktown.Game.Net
         private void Start()
         {
             _networkManager.ServerManager.OnRemoteConnectionState += OnRemoteConnectionState;
+            _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
         }
 
         private void OnDestroy()
         {
-            if (_networkManager != null && _networkManager.ServerManager != null)
-                _networkManager.ServerManager.OnRemoteConnectionState -= OnRemoteConnectionState;
+            if (_networkManager == null || _networkManager.ServerManager == null) return;
+            _networkManager.ServerManager.OnRemoteConnectionState -= OnRemoteConnectionState;
+            _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
+        }
+
+        private void OnServerConnectionState(ServerConnectionStateArgs args)
+        {
+            // A server restart in the same process must not keep claims for despawned cubes.
+            if (args.ConnectionState == LocalConnectionState.Stopped && !_networkManager.ServerManager.IsAnyServerStarted())
+                _registry.Clear();
         }
 
         public PickupOutcome TryPickup(PickupInteractor player, NetworkObject target)
@@ -55,7 +64,7 @@ namespace Worktown.Game.Net
                 return PickupOutcome.NothingHeld;
 
             _registry.TryRelease(itemId, clientId);
-            Release(itemId, player.transform.forward);
+            Release(itemId, player.transform.position, player.transform.forward);
             return PickupOutcome.Ok;
         }
 
@@ -64,17 +73,19 @@ namespace Worktown.Game.Net
             // FishNet raises this before despawning the client's owned objects, so taking the
             // ownership back here keeps the held cube in the world.
             if (args.ConnectionState != RemoteConnectionState.Stopped) return;
-            if (_registry.ReleaseAllFor(connection.ClientId, out int itemId))
-                Release(itemId, Vector3.forward);
+            if (!_registry.ReleaseAllFor(connection.ClientId, out int itemId)) return;
+            // The leaving player's object may already be gone; drop below the cube itself.
+            if (_networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out NetworkObject item))
+                Release(itemId, item.transform.position, Vector3.forward);
         }
 
-        private void Release(int itemId, Vector3 dropForward)
+        private void Release(int itemId, Vector3 holderPosition, Vector3 dropForward)
         {
             if (!_networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out NetworkObject item))
                 return;
             item.RemoveOwnership();
             if (item.TryGetComponent(out Pickup pickup))
-                pickup.ServerDetach(dropForward);
+                pickup.ServerDetach(holderPosition, dropForward);
         }
     }
 }

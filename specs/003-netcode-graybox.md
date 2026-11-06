@@ -88,6 +88,9 @@ via Steam, walk around a graybox and pick up and drop objects, all server-author
   fixed for testing with `sudo ip link set dev eth0 mtu 1500` in WSL (or Tailscale off).
   Risk for players or bots on VPN or IPv6-tunnel paths (MTU 1280) using Tugboat; Steam
   transport fragments on its own. Check in spec 004; do not patch FishNet sources.
+- For the AC2b follow-up: the dedicated server runs as a Steam game server with
+  `eServerModeNoAuthentication`, so client SteamIDs are not verified. Real authentication
+  (Steam auth tickets) belongs in the follow-up spec before any SteamID is trusted.
 - FishNet logs only errors in `UNITY_SERVER` builds by default. The scene uses
   `FishNetLogging.asset` (headless: Common), and the server logs each join step
   (`[Net] player N joined / authenticated / spawned / loaded start scenes`).

@@ -169,7 +169,7 @@ MonoBehaviour:
   _isSpawnable: 1
   _isGlobal: 0
   _initializeOrder: 0
-  _preventDespawnOnDisconnect: 0
+  _preventDespawnOnDisconnect: 1
   _defaultDespawnType: 0
   _initializedTimestamp: 0
 --- !u!114 &2940117845291623438

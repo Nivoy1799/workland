@@ -81,7 +81,10 @@ namespace Worktown.Game.Editor.Build
                 return;
             }
 
-            CopySteamAppId(options.locationPathName);
+            // Spec 003: the 480 test App ID only ships with development builds; release builds
+            // get the real App ID from build configuration.
+            if ((options.options & BuildOptions.Development) != 0)
+                CopySteamAppId(options.locationPathName);
             Debug.Log("[Build] " + options.target + " succeeded: " + options.locationPathName
                 + " (" + summary.totalSize / (1024 * 1024) + " MB, " + summary.totalTime.TotalSeconds.ToString("0") + " s)");
         }

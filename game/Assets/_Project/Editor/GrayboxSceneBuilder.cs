@@ -121,7 +121,10 @@ namespace Worktown.Game.Editor
             cube.name = "PickupCube";
             cube.transform.localScale = Vector3.one * 0.5f;
             cube.GetComponent<MeshRenderer>().sharedMaterial = material;
-            cube.AddComponent<NetworkObject>();
+            NetworkObject nob = cube.AddComponent<NetworkObject>();
+            // The holder owns a carried cube. PickupService takes ownership back on disconnect;
+            // this is the safety net so a missed release never despawns a scene cube.
+            SetField(nob, "_preventDespawnOnDisconnect", true);
             AddServerAuthoritativeTransform(cube);
             cube.AddComponent<Pickup>();
 

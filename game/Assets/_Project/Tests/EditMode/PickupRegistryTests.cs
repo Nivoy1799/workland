@@ -78,6 +78,20 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void Clear_ForgetsAllClaims()
+        {
+            var registry = new PickupRegistry();
+            registry.TryClaim(Item, ClientA);
+            registry.TryClaim(8, ClientB);
+
+            registry.Clear();
+
+            Assert.AreEqual(PickupRegistry.NoHolder, registry.HolderOf(Item));
+            Assert.IsFalse(registry.TryGetHeldItem(ClientB, out _));
+            Assert.IsTrue(registry.TryClaim(Item, ClientB));
+        }
+
+        [Test]
         public void NegativeClientId_IsRefused()
         {
             Assert.IsFalse(new PickupRegistry().TryClaim(Item, -1));
