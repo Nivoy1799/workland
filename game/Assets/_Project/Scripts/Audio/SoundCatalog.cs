@@ -1,0 +1,43 @@
+using System;
+using UnityEngine;
+
+namespace Worktown.Game.Audio
+{
+    /// <summary>
+    /// Spec 023: maps <see cref="SoundKey"/> to a clip. The clips are synthesised once by
+    /// <see cref="ProceduralSounds"/> (deviation from the spec: no sound pack download, so this is a plain class, not
+    /// an asset). One master volume for everything.
+    /// </summary>
+    public sealed class SoundCatalog
+    {
+        /// <summary>The one master volume (0..1); every source multiplies it with its own gain.</summary>
+        public const float MasterVolume = 0.5f;
+
+        private readonly AudioClip[] _clips = new AudioClip[Enum.GetValues(typeof(SoundKey)).Length];
+
+        public bool TryGet(SoundKey key, out AudioClip clip)
+        {
+            int i = (int)key;
+            if (i < 0 || i >= _clips.Length)
+            {
+                clip = null;
+                return false;
+            }
+            if (_clips[i] == null) _clips[i] = ProceduralSounds.CreateClip(key);
+            clip = _clips[i];
+            return clip != null;
+        }
+
+        /// <summary>Per-key gain on top of the master volume (loops quieter than one-shots).</summary>
+        public static float GainOf(SoundKey key)
+        {
+            switch (key)
+            {
+                case SoundKey.Sizzle: return 0.6f;
+                case SoundKey.Bubble: return 0.7f;
+                case SoundKey.Tick: return 0.8f;
+                default: return 1f;
+            }
+        }
+    }
+}

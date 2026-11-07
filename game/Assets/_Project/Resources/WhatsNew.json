@@ -262,6 +262,25 @@
         "Serve a wrong dish on purpose: the customer leaves red, 'That's not what I ordered', and pays little",
         "Play until 14:00: the queue leaves, the summary shows your numbers for 15 s, then a new shift starts at 08:00"
       ]
+    },
+    {
+      "id": "2026-11-08-spec-023",
+      "date": "2026-11-08",
+      "title": "Kitchen polish: sounds, steam and real counters",
+      "items": [
+        "Chopping on the board makes a knife sound; picking up, putting down and the stove knobs tick softly",
+        "A pan on a burner that is on sizzles, a pot bubbles (the sounds are generated in code, nothing is downloaded)",
+        "Pans and pots with food on a hot burner give off steam",
+        "The worktops are kitchen cabinets now instead of grey boxes",
+        "The prompt under the dot sits on a dark rounded panel with white text, so it reads over the highlight"
+      ],
+      "test": [
+        "Cut a potato on the board: every stroke chops",
+        "Put the pan with food on a burner and switch it on: it sizzles and steams, switch it off and both fade",
+        "Do the same with the pot: it bubbles",
+        "Walk away from the stove: the sounds get quieter, nothing is too loud",
+        "Aim at a worktop and at something out of reach: the prompt is readable, the grey reason stays grey"
+      ]
     }
   ]
 }

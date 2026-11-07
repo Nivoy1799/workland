@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 6264324970404192185}
   - component: {fileID: 8858540662890188295}
   - component: {fileID: 8358067445085207327}
+  - component: {fileID: 8554449582869545827}
   m_Layer: 0
   m_Name: Pan
   m_TagString: Untagged
@@ -197,6 +198,20 @@ MonoBehaviour:
   _kind: 1
   _label: {fileID: 1027061079997027314}
   _visual: {fileID: 5637733369825570766}
+--- !u!114 &8554449582869545827
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5148122816654257470}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab159a7e98a7f8c4286de2334de155e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Art.VesselSteam
+  _material: {fileID: 2100000, guid: c3588bc0ca950fe4bbb9cab4d125a135, type: 2}
+  _steamHeight: 0.2
 --- !u!1 &8076878101549302738
 GameObject:
   m_ObjectHideFlags: 0

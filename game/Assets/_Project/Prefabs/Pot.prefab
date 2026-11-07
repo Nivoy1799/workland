@@ -200,6 +200,7 @@ GameObject:
   - component: {fileID: 3404964839428536895}
   - component: {fileID: 6081507613085337186}
   - component: {fileID: 6434436626810170321}
+  - component: {fileID: 3043519237093817417}
   m_Layer: 0
   m_Name: Pot
   m_TagString: Untagged
@@ -383,6 +384,20 @@ MonoBehaviour:
   _kind: 2
   _label: {fileID: 757604317998010492}
   _visual: {fileID: 421477484794017232}
+--- !u!114 &3043519237093817417
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6963344484837105295}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab159a7e98a7f8c4286de2334de155e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Art.VesselSteam
+  _material: {fileID: 2100000, guid: c3588bc0ca950fe4bbb9cab4d125a135, type: 2}
+  _steamHeight: 0.2
 --- !u!1001 &2169554173307887911
 PrefabInstance:
   m_ObjectHideFlags: 0

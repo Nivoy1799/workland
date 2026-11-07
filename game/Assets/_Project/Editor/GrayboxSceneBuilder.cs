@@ -21,6 +21,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Worktown.Game.Art;
+using Worktown.Game.Audio;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Sim.Economy;
@@ -56,6 +57,7 @@ namespace Worktown.Game.Editor
         private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.34f);
         private const float StationWidth = 1.2f;
         private const float WorktopGapMargin = 0.02f;
+        private const string SteamMaterialPath = Root + "/Settings/Steam.mat";
         private const string WorktopMaterialPath = Root + "/Settings/Worktop.mat";
         private const string PlaceMarkerMaterialPath = Root + "/Settings/PlaceMarker.mat";
         private const float FoodSize = 0.4f;
@@ -514,6 +516,8 @@ namespace Worktown.Game.Editor
             SetField(vessel, "_kind", (int)kind);
             SetField(vessel, "_label", label);
             SetField(vessel, "_visual", food);
+            if (kind == VesselKind.Pan || kind == VesselKind.Pot)
+                SetField(root.AddComponent<VesselSteam>(), "_material", CreateSteamMaterial());
 
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, VesselPrefabPath(kind));
             UnityEngine.Object.DestroyImmediate(root);
@@ -554,7 +558,8 @@ namespace Worktown.Game.Editor
         /// <paramref name="height"/> high (the stove top); its whole top is a place surface. Not scaled (PlaceSurface
         /// works in metres).
         /// </summary>
-        private static PlaceSurface CreateWorktop(Transform parent, float minX, float maxX, float height, int index, Material material)
+        private static PlaceSurface CreateWorktop(Transform parent, float minX, float maxX, float height, int index, Material material,
+            ArtCatalog catalog)
         {
             float width = maxX - minX;
             var root = new GameObject("Worktop " + index);
@@ -571,6 +576,15 @@ namespace Worktown.Game.Editor
             body.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
             body.transform.localScale = new Vector3(width, height, StationWidth);
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
+
+            // Spec 023: the Furniture Kit cabinet stretched to the worktop; the cube and collider stay as they were.
+            if (catalog != null && catalog.TryGet(ArtKey.Worktop, out GameObject wrapper))
+            {
+                UnityEngine.Object.DestroyImmediate(body.GetComponent<MeshRenderer>());
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                visual.transform.localPosition = Vector3.zero;
+                visual.transform.localScale = new Vector3(width, height, StationWidth);
+            }
             SetStaticRecursive(root);
 
             var surface = root.AddComponent<PlaceSurface>();
@@ -600,6 +614,30 @@ namespace Worktown.Game.Editor
             SetField(surface, "_size", size);
             SetField(surface, "_topY", top);
             return surface;
+        }
+
+        /// <summary>Spec 023: transparent URP particle material for the steam (texture and tint are set at runtime).</summary>
+        private static Material CreateSteamMaterial()
+        {
+            var material = AssetDatabase.LoadAssetAtPath<Material>(SteamMaterialPath);
+            Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Sprites/Default");
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, SteamMaterialPath);
+            }
+            else if (material.shader != shader) material.shader = shader;
+            material.SetColor("_BaseColor", Color.white);
+            material.SetFloat("_Surface", 1f); // transparent
+            material.SetFloat("_Blend", 0f);   // alpha
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_ZWrite", 0f);
+            material.SetOverrideTag("RenderType", "Transparent");
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            EditorUtility.SetDirty(material);
+            return material;
         }
 
         /// <summary>Spec 020: translucent green for the place marker disc (URP Unlit, transparent, no depth write).</summary>
@@ -745,15 +783,15 @@ namespace Worktown.Game.Editor
             float half = StationWidth * 0.5f + WorktopGapMargin;
             Material worktopMat = CreateMaterial(WorktopMaterialPath, new Color(0.78f, 0.74f, 0.66f));
             var surfaces = new List<PlaceSurface>();
-            PlaceSurface first = CreateWorktop(parent.transform, WorktopStartX, StoveAX - half, height, surfaces.Count, worktopMat);
+            PlaceSurface first = CreateWorktop(parent.transform, WorktopStartX, StoveAX - half, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(first);
             PlaceSurface[] burnersA = CreateStoveSurfaces(stoveA, surfaces);
-            surfaces.Add(CreateWorktop(parent.transform, StoveAX + half, StoveBX - half, height, surfaces.Count, worktopMat));
+            surfaces.Add(CreateWorktop(parent.transform, StoveAX + half, StoveBX - half, height, surfaces.Count, worktopMat, catalog));
             PlaceSurface[] burnersB = CreateStoveSurfaces(stoveB, surfaces);
-            surfaces.Add(CreateWorktop(parent.transform, StoveBX + half, CounterX - half, height, surfaces.Count, worktopMat));
-            PlaceSurface nearCounter = CreateWorktop(parent.transform, CounterX + half, PlateShelfX - half, height, surfaces.Count, worktopMat);
+            surfaces.Add(CreateWorktop(parent.transform, StoveBX + half, CounterX - half, height, surfaces.Count, worktopMat, catalog));
+            PlaceSurface nearCounter = CreateWorktop(parent.transform, CounterX + half, PlateShelfX - half, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(nearCounter);
-            PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, WorktopEndX, height, surfaces.Count, worktopMat);
+            PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, WorktopEndX, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(last);
             SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
             foreach (Station stove in new[] { stoveA, stoveB })
@@ -773,6 +811,8 @@ namespace Worktown.Game.Editor
             PlaceOnSpot(Prefab(VesselKind.Plate), nearCounter, SpotNear(nearCounter, -0.25f, -0.125f), "Plate 1");
             PlaceOnSpot(Prefab(VesselKind.Plate), nearCounter, SpotNear(nearCounter, 0.25f, -0.125f), "Plate 2");
             PlaceOnSpot(Prefab(VesselKind.Bowl), last, SpotNear(last, -0.5f, -0.125f), "Bowl");
+
+            new GameObject("KitchenSounds").AddComponent<KitchenSounds>(); // spec 023, client only
 
             var feedObject = new GameObject("ServeFeed");
             NetworkObject feedNob = feedObject.AddComponent<NetworkObject>();

@@ -29,7 +29,7 @@ namespace Worktown.Game.Editor
         /// <summary>Kenney furniture fronts face +Z; stations face the spawn at -Z.</summary>
         private const float StationYaw = 180f;
 
-        private enum Fit { Station, Height, Scale, Max }
+        private enum Fit { Station, Height, Scale, Max, Unit }
 
         private sealed class Def
         {
@@ -92,7 +92,10 @@ namespace Worktown.Game.Editor
 
             // Spec 019: the cutting board on the board station, the knife (its long side along Z, see AlongZ).
             new Def { Key = ArtKey.ToolCuttingBoard, Model = FoodKit + "cutting-board.fbx", Mode = Fit.Max, Value = 0.5f },
-            new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, Value = 0.3f, AlongZ = true }
+            new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, Value = 0.3f, AlongZ = true },
+
+            // Spec 023: the cabinet squeezed into a 1 x 1 x 1 m box; the scene builder scales the instance to each worktop.
+            new Def { Key = ArtKey.Worktop, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Unit, Yaw = StationYaw }
         };
 
         private static Def FoodDef(ArtKey key, string model, float maxSize) =>
@@ -164,6 +167,13 @@ namespace Worktown.Game.Editor
                         CenterOnBottom(extra);
                         extra.transform.localPosition += new Vector3(baseBounds.center.x, baseBounds.max.y, baseBounds.center.z);
                     }
+                    break;
+                }
+                case Fit.Unit:
+                {
+                    Bounds b = WorldBounds(model);
+                    model.transform.localScale = new Vector3(1f / b.size.x, 1f / b.size.y, 1f / b.size.z);
+                    CenterOnBottom(model);
                     break;
                 }
                 case Fit.Height:
