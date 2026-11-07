@@ -12,6 +12,7 @@ namespace Worktown.Game.Net
     /// CharacterControllerPrediction example: the owner sends intents (move, camera yaw, sprint,
     /// crouch, jump) through [Replicate], simulates them at once, and the server runs the same code as the
     /// authority and corrects the owner through [Reconcile]. All numbers come from MovementRules.
+    /// Spec 018: in first person the body faces the camera yaw (MoveData.FirstPerson, facing only).
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public sealed class PlayerController : TickNetworkBehaviour
@@ -24,15 +25,18 @@ namespace Worktown.Game.Net
             public bool Crouch;
             /// <summary>One-time input: true only on the tick the button was pressed.</summary>
             public bool Jump;
+            /// <summary>Spec 018: view hint for facing only (body faces the camera yaw). Changes no speed or reach.</summary>
+            public bool FirstPerson;
             private uint _tick;
 
-            public MoveData(Vector2 move, float cameraYaw, bool sprint, bool crouch, bool jump)
+            public MoveData(Vector2 move, float cameraYaw, bool sprint, bool crouch, bool jump, bool firstPerson)
             {
                 Move = move;
                 CameraYaw = cameraYaw;
                 Sprint = sprint;
                 Crouch = crouch;
                 Jump = jump;
+                FirstPerson = firstPerson;
                 _tick = 0;
             }
 
@@ -72,6 +76,8 @@ namespace Worktown.Game.Net
         [SerializeField] private Transform _graphic;
         [Tooltip("Visual body inside the graphic, squashed while crouching.")]
         [SerializeField] private Transform _body;
+        [Tooltip("Spec 018: first-person camera anchor inside the graphic; lowered while crouching.")]
+        [SerializeField] private Transform _eyes;
 
         private CharacterController _controller;
         private Vector3 _velocity;
@@ -80,6 +86,7 @@ namespace Worktown.Game.Net
         private bool _crouched;
         private MoveData _lastTicked;
         private PlayerInputReader _input;
+        private PlayerCameraRig _rig;
 
         public bool IsCrouched => IsOwner || IsServerStarted ? _crouched : CrouchedForOthers.Value;
 
@@ -107,7 +114,11 @@ namespace Worktown.Game.Net
                 return;
             }
             _input.Activate();
-            rig.Bind(_graphic != null ? _graphic : transform, _input);
+            _rig = rig;
+            rig.Bind(_graphic != null ? _graphic : transform, _eyes, _input);
+            // Spec 018: owner-only first-person visuals.
+            if (TryGetComponent(out FirstPersonBody body)) body.Activate(rig);
+            if (TryGetComponent(out HeldItemView held)) held.Activate(rig, GetComponent<PickupInteractor>());
         }
 
         public override void OnStopClient()
@@ -134,7 +145,8 @@ namespace Worktown.Game.Net
             if (!IsOwner || _input == null) return default;
             Camera cam = Camera.main;
             float cameraYaw = cam != null ? cam.transform.eulerAngles.y : _yaw;
-            return new MoveData(_input.Move, cameraYaw, _input.Sprint, _input.Crouch, _input.ConsumeJump());
+            bool firstPerson = _rig != null && _rig.IsFirstPerson;
+            return new MoveData(_input.Move, cameraYaw, _input.Sprint, _input.Crouch, _input.ConsumeJump(), firstPerson);
         }
 
         public override void CreateReconcile()
@@ -175,7 +187,8 @@ namespace Worktown.Game.Net
             Vector3 direction = MovementRules.WorldDirection(move, cameraYaw);
             Vector3 target = direction * MovementRules.MaxSpeed(md.Sprint, _crouched);
             _velocity = MovementRules.Accelerate(_velocity, target, delta);
-            _yaw = MovementRules.TurnTowards(_yaw, direction, delta);
+            // Spec 018: in first person the body faces the sanitized camera yaw; third person turns towards the move.
+            _yaw = MovementRules.FacingYaw(md.FirstPerson, _yaw, cameraYaw, direction, delta);
             transform.rotation = Quaternion.Euler(0f, _yaw, 0f);
 
             // Own probe, not CharacterController.isGrounded: that flag resets after every reconcile
@@ -242,6 +255,13 @@ namespace Worktown.Game.Net
 
         private void Update()
         {
+            if (_eyes != null)
+            {
+                // Spec 018: the first-person eyes follow the stance (visual only, like the squash below).
+                Vector3 eyes = _eyes.localPosition;
+                float eyeY = Mathf.MoveTowards(eyes.y, ViewRules.EyeHeightFor(IsCrouched), ViewRules.EyeHeightSpeed * Time.deltaTime);
+                if (!Mathf.Approximately(eyes.y, eyeY)) _eyes.localPosition = new Vector3(eyes.x, eyeY, eyes.z);
+            }
             if (_body == null) return;
             // Visual only: squash the capsule while crouched (others see it through the SyncVar).
             float scaleY = IsCrouched ? MovementRules.CrouchHeight / MovementRules.StandHeight : 1f;

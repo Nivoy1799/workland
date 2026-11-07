@@ -1,8 +1,11 @@
+using System.Collections.Generic;
 using FishNet.Connection;
 using FishNet.Object;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Worktown.Game.Cooking;
+using Worktown.Game.Net.Rules;
+using Worktown.Game.Player;
 
 namespace Worktown.Game.Net
 {
@@ -11,6 +14,8 @@ namespace Worktown.Game.Net
     /// The client only asks; the server decides (PickupService) and answers with the outcome.
     /// The client deliberately searches further than the allowed reach, so requests from
     /// 2.5 to 4 m reach the server and get refused there (spec 003 AC4, manual check).
+    /// Spec 018: in first person the target is what the camera centre looks at (AimRules), within the same
+    /// reach the server checks; the requests and their arguments are unchanged.
     /// </summary>
     public sealed class PickupInteractor : NetworkBehaviour
     {
@@ -27,6 +32,11 @@ namespace Worktown.Game.Net
         private Worktown.Game.Player.PlayerInputReader _inputReader;
         private Station[] _stations;
         private readonly Collider[] _hits = new Collider[16];
+        // Spec 018: first-person aim buffers (owner only).
+        private PlayerCameraRig _rig;
+        private readonly RaycastHit[] _rayHits = new RaycastHit[16];
+        private readonly List<AimHit> _aimHits = new List<AimHit>(16);
+        private readonly List<Component> _aimSources = new List<Component>(16);
 
         public Transform HoldPoint => _holdPoint;
 
@@ -61,6 +71,10 @@ namespace Worktown.Game.Net
         private void Update()
         {
             if (!IsOwner) return;
+            if (_rig == null) _rig = FindFirstObjectByType<PlayerCameraRig>();
+            // Spec 018: first person aims with the camera centre; third person keeps the nearest station.
+            Target = IsFirstPerson ? FindAimTarget() : FindNearestStation();
+
             // Keys belong to the menu or banner while one is open (review finding, spec 011).
             if (_inputReader == null) _inputReader = FindFirstObjectByType<Worktown.Game.Player.PlayerInputReader>();
             if (_inputReader != null && _inputReader.IsUiOpen) return;
@@ -69,15 +83,22 @@ namespace Worktown.Game.Net
             // Spec 012: while quick chat (T) or the emote wheel (G) is held, digits and E belong to them.
             if (keyboard.tKey.isPressed || keyboard.gKey.isPressed) return;
 
-            // Spec 007: near a station, E and 1-4 go to the kitchen.
-            Station station = FindNearestStation();
-            NearestStation = station;
+            // Spec 007: near a station, E and 1-4 go to the kitchen. Spec 018: in first person, the station you look at.
+            Station station = Target as Station;
             if (station != null && TryHandleStationKeys(keyboard, station)) return;
 
             if (!keyboard.eKey.wasPressedThisFrame) return;
             if (IsHoldingSomething())
             {
                 RequestDrop();
+                return;
+            }
+
+            if (IsFirstPerson)
+            {
+                // Spec 018: E picks up the food you look at; nothing else is in reach of your hands.
+                if (Target is Pickup aimed) RequestPickup(aimed.NetworkObject);
+                else SetLocalNote("nothing to use here");
                 return;
             }
 
@@ -95,8 +116,51 @@ namespace Worktown.Game.Net
             LastResult = note;
         }
 
-        /// <summary>Owner side: the station within reach, for keys and the overlay prompt. Null if none.</summary>
-        public Station NearestStation { get; private set; }
+        /// <summary>
+        /// Owner side, spec 018: what E and the digits act on. First person: the <see cref="Station"/> or free
+        /// <see cref="Pickup"/> under the crosshair (within reach, nothing in between), else null. Third person:
+        /// the nearest station within reach, as before.
+        /// </summary>
+        public Component Target { get; private set; }
+
+        /// <summary>Owner side: the target station, for keys and the overlay prompt. Null if none. Kept as an
+        /// alias of <see cref="Target"/> so older readers keep working.</summary>
+        public Station NearestStation => Target as Station;
+
+        /// <summary>Owner side: true while the local camera is in first person.</summary>
+        public bool IsFirstPerson => _rig != null && _rig.IsFirstPerson;
+
+        /// <summary>Spec 018: one ray from the camera centre, our own colliders and triggers ignored.</summary>
+        private Component FindAimTarget()
+        {
+            Camera cam = Camera.main;
+            if (cam == null) return null;
+            Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            int count = Physics.RaycastNonAlloc(ray, _rayHits, ViewRules.AimRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            _aimHits.Clear();
+            _aimSources.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                Collider hitCollider = _rayHits[i].collider;
+                if (hitCollider == null || hitCollider.transform.IsChildOf(transform)) continue;
+                Station station = hitCollider.GetComponentInParent<Station>();
+                Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
+                if (station != null)
+                    AddAimHit(_rayHits[i].distance, AimKind.Station, station);
+                else if (pickup != null && !pickup.IsHeld)
+                    AddAimHit(_rayHits[i].distance, AimKind.Pickup, pickup);
+                else
+                    AddAimHit(_rayHits[i].distance, AimKind.Other, null);
+            }
+            int picked = AimRules.Pick(_aimHits, transform.position);
+            return picked == AimRules.None ? null : _aimSources[picked];
+        }
+
+        private void AddAimHit(float distance, AimKind kind, Component source)
+        {
+            _aimHits.Add(new AimHit(distance, kind, source != null ? source.transform.position : Vector3.zero));
+            _aimSources.Add(source);
+        }
 
         private bool TryHandleStationKeys(Keyboard keyboard, Station station)
         {

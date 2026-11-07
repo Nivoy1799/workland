@@ -98,6 +98,14 @@ namespace Worktown.Game.Player
             return SanitizeYaw(Mathf.MoveTowardsAngle(currentYaw, targetYaw, TurnRate * delta));
         }
 
+        /// <summary>Spec 018: the body yaw after one step. First person faces the (sanitized) camera yaw, so the
+        /// player strafes and walks backwards; third person turns towards the move direction
+        /// (<see cref="TurnTowards"/>).</summary>
+        public static float FacingYaw(bool firstPerson, float currentYaw, float cameraYaw, Vector3 direction, float delta)
+        {
+            return firstPerson ? SanitizeYaw(cameraYaw) : TurnTowards(currentYaw, direction, delta);
+        }
+
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

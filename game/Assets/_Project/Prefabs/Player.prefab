@@ -284,6 +284,37 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &6781384692774440559
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2439131735417484194}
+  m_Layer: 0
+  m_Name: Eyes
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2439131735417484194
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6781384692774440559}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.6, z: 0.1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8469222778141176912}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &8224556957124909247
 GameObject:
   m_ObjectHideFlags: 0
@@ -347,6 +378,7 @@ Transform:
   m_Children:
   - {fileID: 8438297367136307697}
   - {fileID: 565380629727305919}
+  - {fileID: 2439131735417484194}
   m_Father: {fileID: 5353237548061338924}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &2465888853850800962
@@ -399,6 +431,8 @@ GameObject:
   - component: {fileID: 6653683087813653583}
   - component: {fileID: 851643907502631611}
   - component: {fileID: 1205110357671234405}
+  - component: {fileID: 6882486339157007149}
+  - component: {fileID: 4449510630803289957}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -524,6 +558,7 @@ MonoBehaviour:
   _tickCallbacks: 6
   _graphic: {fileID: 8469222778141176912}
   _body: {fileID: 8438297367136307697}
+  _eyes: {fileID: 2439131735417484194}
 --- !u!114 &6856198566309974492
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -586,3 +621,32 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 0}
   _pingPrefab: {fileID: 5765408234028918654, guid: c4c095943c44d244a90f0c49effdf335, type: 3}
   _bubble: {fileID: 851643907502631611}
+--- !u!114 &6882486339157007149
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9204124324090065605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96e9fa0aecfeaa3409ea0fe8ebf0871e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Player.FirstPersonBody
+  _body:
+  - {fileID: 7678679081952256211}
+  - {fileID: 5567498665743934982}
+  _overhead:
+  - {fileID: 7834316669290726451}
+--- !u!114 &4449510630803289957
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9204124324090065605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172d6bc9a22301e41ba9869fa79def4a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Player.HeldItemView

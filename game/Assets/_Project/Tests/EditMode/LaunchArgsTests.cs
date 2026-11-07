@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Worktown.Game.Net.Rules;
+using Worktown.Game.Player;
 
 namespace Worktown.Game.Tests
 {
@@ -84,6 +85,34 @@ namespace Worktown.Game.Tests
         public void BadLatency_IsAnError(params string[] args)
         {
             Assert.IsFalse(LaunchArgs.Parse(args).IsValid);
+        }
+
+        [TestCase("first", ViewMode.FirstPerson)]
+        [TestCase("third", ViewMode.ThirdPerson)]
+        public void View_Parses(string value, ViewMode expected)
+        {
+            var a = Parse("-connect", "127.0.0.1", "-view", value, "-screenshot", "shot.png");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual(expected, a.View);
+            Assert.AreEqual(LaunchMode.ClientTugboat, a.Mode);
+        }
+
+        [Test]
+        public void NoView_LeavesItUnset()
+        {
+            Assert.IsNull(Parse("-connect", "127.0.0.1").View);
+            Assert.IsNull(Parse("game.exe").View);
+        }
+
+        [TestCase("-view")]
+        [TestCase("-view", "sideways")]
+        [TestCase("-view", "-host")]
+        public void BadView_IsAnError(params string[] args)
+        {
+            var a = LaunchArgs.Parse(args);
+            Assert.IsFalse(a.IsValid);
+            Assert.AreEqual(LaunchMode.Menu, a.Mode);
+            Assert.IsNull(a.View);
         }
 
         [Test]

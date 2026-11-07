@@ -141,6 +141,11 @@ namespace Worktown.Game.Editor
             nose.transform.localPosition = new Vector3(0f, 1.5f, 0.45f);
             nose.transform.localScale = new Vector3(0.3f, 0.15f, 0.2f);
 
+            // Spec 018: first-person camera anchor inside the smoothed graphic, so the view is as smooth as the body.
+            var eyes = new GameObject("Eyes");
+            eyes.transform.SetParent(graphic.transform, false);
+            eyes.transform.localPosition = new Vector3(0f, ViewRules.EyeHeight, ViewRules.EyeForward);
+
             // Above the head, so a carried cube never blocks the CharacterController.
             var hold = new GameObject("HoldPoint");
             hold.transform.SetParent(root.transform, false);
@@ -157,6 +162,7 @@ namespace Worktown.Game.Editor
             var player = root.AddComponent<PlayerController>();
             SetField(player, "_graphic", graphic.transform);
             SetField(player, "_body", body.transform);
+            SetField(player, "_eyes", eyes.transform);
             var interactor = root.AddComponent<PickupInteractor>();
             root.AddComponent<Wallet>(); // spec 009
             SetField(interactor, "_holdPoint", hold.transform);
@@ -170,6 +176,12 @@ namespace Worktown.Game.Editor
             var social = root.AddComponent<SocialInteractor>();
             SetField(social, "_pingPrefab", pingPrefab);
             SetField(social, "_bubble", bubble);
+
+            // Spec 018: owner-only first-person visuals (own body shadows only, held food in view).
+            var firstPersonBody = root.AddComponent<FirstPersonBody>();
+            SetField(firstPersonBody, "_body", new Renderer[] { body.GetComponent<Renderer>(), nose.GetComponent<Renderer>() });
+            SetField(firstPersonBody, "_overhead", new Renderer[] { bubbleLabel.GetComponent<Renderer>() });
+            root.AddComponent<HeldItemView>();
 
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PlayerPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
@@ -485,12 +497,15 @@ namespace Worktown.Game.Editor
         /// Spec 010: the standard Cinemachine third-person rig. One camera in the scene; the local
         /// player binds it on spawn (PlayerCameraRig). Orbit, zoom range and wall avoidance here.
         /// </summary>
-        private static void CreatePlayerCamera()
+        private static void CreatePlayerCamera(Transform viewHold)
         {
             var go = new GameObject("PlayerCamera");
             go.transform.SetPositionAndRotation(new Vector3(0f, 6f, -10f), Quaternion.Euler(20f, 0f, 0f));
             var cam = go.AddComponent<CinemachineCamera>();
             cam.Lens.FieldOfView = 60f;
+            // Spec 018: the brain copies the live camera's lens, so both cameras carry the short near clip.
+            cam.Lens.NearClipPlane = ViewRules.NearClip;
+            cam.Priority = 11; // live before the local player binds (the menu view), as before spec 018
 
             var orbit = go.AddComponent<CinemachineOrbitalFollow>();
             orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
@@ -510,10 +525,41 @@ namespace Worktown.Game.Editor
             var deoccluder = go.AddComponent<CinemachineDeoccluder>();
             deoccluder.IgnoreTag = "Player";
 
+            CinemachineCamera firstPerson = CreateFirstPersonCamera();
+
             var input = new GameObject("PlayerInput");
             var reader = input.AddComponent<PlayerInputReader>();
             SetField(reader, "_actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath));
-            input.AddComponent<PlayerCameraRig>();
+            var rig = input.AddComponent<PlayerCameraRig>();
+            SetField(rig, "_thirdPerson", cam);
+            SetField(rig, "_firstPerson", firstPerson);
+            SetField(rig, "_viewHold", viewHold);
+        }
+
+        /// <summary>
+        /// Spec 018: first-person camera. Hard lock to the player's Eyes anchor (no damping), rotation from
+        /// pan (yaw) and tilt (pitch) in world axes, no deoccluder. PlayerCameraRig feeds the axes and the priority.
+        /// </summary>
+        private static CinemachineCamera CreateFirstPersonCamera()
+        {
+            var go = new GameObject("FirstPersonCamera");
+            go.transform.SetPositionAndRotation(new Vector3(0f, ViewRules.EyeHeight, -3f), Quaternion.identity);
+            var cam = go.AddComponent<CinemachineCamera>();
+            cam.Lens.FieldOfView = ViewRules.FieldOfView;
+            cam.Lens.NearClipPlane = ViewRules.NearClip;
+            cam.Priority = 10;
+
+            var follow = go.AddComponent<CinemachineHardLockToTarget>();
+            follow.Damping = 0f;
+
+            var panTilt = go.AddComponent<CinemachinePanTilt>();
+            panTilt.ReferenceFrame = CinemachinePanTilt.ReferenceFrames.World;
+            panTilt.PanAxis.Range = new Vector2(-180f, 180f);
+            panTilt.PanAxis.Wrap = true;
+            panTilt.TiltAxis.Range = new Vector2(ViewRules.MinPitch, ViewRules.MaxPitch);
+            panTilt.TiltAxis.Wrap = false;
+            panTilt.TiltAxis.Value = 0f;
+            return cam;
         }
 
         private static void AddServerAuthoritativeTransform(GameObject go)
@@ -543,11 +589,18 @@ namespace Worktown.Game.Editor
 
             var cam = new GameObject("Main Camera");
             cam.tag = "MainCamera";
-            cam.AddComponent<Camera>();
+            var unityCamera = cam.AddComponent<Camera>();
+            unityCamera.nearClipPlane = ViewRules.NearClip; // spec 018: held food and nearby counters do not clip
             cam.AddComponent<AudioListener>();
             cam.transform.SetPositionAndRotation(new Vector3(0f, 12f, -18f), Quaternion.Euler(30f, 0f, 0f));
-            cam.AddComponent<CinemachineBrain>();
-            CreatePlayerCamera();
+            var brain = cam.AddComponent<CinemachineBrain>();
+            // Spec 018 (open question 3): short ease between first and third person.
+            brain.DefaultBlend = new CinemachineBlendDefinition(CinemachineBlendDefinition.Styles.EaseInOut, ViewRules.BlendSeconds);
+            // Spec 018: where the held food is drawn in first person (lower right of the view).
+            var viewHold = new GameObject("ViewHold");
+            viewHold.transform.SetParent(cam.transform, false);
+            viewHold.transform.localPosition = ViewRules.ViewHoldOffset;
+            CreatePlayerCamera(viewHold.transform);
 
             GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";

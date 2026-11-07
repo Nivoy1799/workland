@@ -20,6 +20,7 @@ namespace Worktown.Game.Player
         private bool _active;
         private bool _crouchToggled;
         private bool _jumpPressed;
+        private bool _togglePressed;
         private int _uiOpenCount;
 
         /// <summary>Spec 011: a menu or banner is open, so the cursor stays free and clicks go to the UI.</summary>
@@ -45,6 +46,20 @@ namespace Worktown.Game.Player
             bool pressed = _jumpPressed;
             _jumpPressed = false;
             return _active && pressed;
+        }
+
+        /// <summary>Spec 018: true once per V (keyboard) or right stick press (gamepad). False while a menu or
+        /// banner is open, or while quick chat (T) or the emote wheel (G / LB) is held. Read once per frame.</summary>
+        public bool ConsumeToggleView()
+        {
+            bool pressed = _togglePressed;
+            _togglePressed = false;
+            if (!_active || !pressed || IsUiOpen || SuppressLook) return false;
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard != null && (keyboard.tKey.isPressed || keyboard.gKey.isPressed)) return false;
+            Gamepad gamepad = Gamepad.current;
+            if (gamepad != null && gamepad.leftShoulder.isPressed) return false;
+            return true;
         }
 
         /// <summary>Spec 011: menus call this when they open (true) and close (false).</summary>
@@ -84,6 +99,11 @@ namespace Worktown.Game.Player
             if (_jump.WasPressedThisFrame()) _jumpPressed = true;
 
             Keyboard keyboard = Keyboard.current;
+            Gamepad gamepad = Gamepad.current;
+            if ((keyboard != null && keyboard.vKey.wasPressedThisFrame)
+                || (gamepad != null && gamepad.rightStickButton.wasPressedThisFrame))
+                _togglePressed = true;
+
             if (keyboard != null && (keyboard.escapeKey.wasPressedThisFrame || keyboard.leftAltKey.wasPressedThisFrame))
                 LockCursor(false);
             else if (!IsUiOpen && Cursor.lockState != CursorLockMode.Locked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
