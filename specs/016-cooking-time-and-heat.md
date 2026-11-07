@@ -124,6 +124,28 @@ the existing guards (UI open, T or G held) apply.
 - AC6 with a second window or person.
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-07 by the main session (Opus), branch `spec/016-cooking-time-and-heat`.
+- Pure rules: `CookingTime` (ticks to sim seconds, clamp, too short, bucket id picked like the sim
+  picks buckets), `HeatSession` (immutable, server only), `PanSettings` (knob 120..220 C in 10 C
+  steps, start 170, fry/saute).
+- `KitchenState` now also gets the `OperationCatalog` (to read each op's time limits). New:
+  `PanOf`, `TryChangePan`, `TryPutOnHeat` (dry-runs the op at its max time, so food the sim would
+  refuse, e.g. a finished plate, stays in the hands), `TryPreviewHeatTake` + `ClearHeat` (hand over
+  first, clear on success, like the plating table), `DescribeHeat`. `Clear` resets pans and sessions.
+- The pan and pot have no instant presets any more (`TryApply` is board only).
+- Label: knob shown as "heat 6/11 · fry", a dial position rather than degrees (D21: no exact values).
+  While cooking: "+ potato sticks · warming up/short/medium/long" (the sim's time bucket ids).
+  `StationContents` got a `Status` SyncVar; `KitchenService.Update` (server) writes only on change.
+- No new RPC: E sends option 0, pan keys 1..3 reuse `RequestStation`. `RpcSurfaceTests` checks
+  by reflection that no cooking ServerRpc takes float, double, long, string or `Item`.
+- Older tests that used the pan presets cook through `HeatTestKit` with the same values
+  (light 180 C/40 s, golden 190/150, dark 200/400); the pinned fries hash is unchanged.
+- Verified: `verify.sh` PASS (Unity EditMode 186/186); scene regenerated; Linux server and Windows
+  client built; a client on the WSL dedicated server shows the pan label "heat 6/11 · fry" (synced
+  from the server), no server exceptions. AC6 (two people cooking over time) is still manual.
+- Review (reviewer subagent): approve with nits. Fixed: label refresh once per second or on change
+  instead of every frame, cached station lookups, name read before despawn, one time-param helper,
+  nullable pot temperature, `PanOptionCount`. Kept as is: E near the pan or pot always goes to the
+  station (same as the plating table). Open for the human: the knob display "heat 6/11" (see D21).
 
 ## Blockers

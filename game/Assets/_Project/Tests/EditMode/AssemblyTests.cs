@@ -25,7 +25,12 @@ namespace Worktown.Game.Tests
             return id;
         }
 
-        private int GoldenFries(KitchenState k) => Food(k, "potato", (StationKind.Board, 3), (StationKind.Pan, 2));
+        private int GoldenFries(KitchenState k)
+        {
+            int id = Food(k, "potato", (StationKind.Board, 3));
+            HeatTestKit.PanPreset(k, id, 2); // spec 016: the pan cooks over time
+            return id;
+        }
         private int TomatoSlices(KitchenState k) => Food(k, "tomato", (StationKind.Board, 2));
 
         [Test]

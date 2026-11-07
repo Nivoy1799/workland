@@ -27,6 +27,10 @@ namespace Worktown.Game.Cooking
         [SerializeField] private Station[] _stations = new Station[0];
 
         private readonly KitchenState _kitchen = KitchenState.CreateDemo();
+        // Spec 016: pan and pot labels, refreshed on change or once per second.
+        private (Station station, StationContents contents)[] _heatLabels;
+        private bool _labelsDirty = true;
+        private uint _lastLabelTick;
 
         // Start, not OnEnable: NetworkManager creates its ServerManager in its own Awake.
         private void Start()
@@ -46,7 +50,10 @@ namespace Worktown.Game.Cooking
             // old food entries must not attach to new objects (review finding, spec 007).
             if (args.ConnectionState == FishNet.Transporting.LocalConnectionState.Stopped
                 && !_networkManager.ServerManager.IsAnyServerStarted())
+            {
                 _kitchen.Clear(); // station labels reset with their SyncLists when FishNet despawns them
+                _labelsDirty = true;
+            }
         }
 
         public CookOutcome TryUseStation(PickupInteractor player, int stationIndex, int option)
@@ -63,8 +70,82 @@ namespace Worktown.Game.Cooking
                 case StationKind.Counter: return Serve(player);
                 case StationKind.PlatingTable:
                 case StationKind.Bowl: return Assemble(player, station);
+                case StationKind.Pan:
+                case StationKind.Pot: return Heat(player, station, option);
                 default: return Cook(player, station, option);
             }
+        }
+
+        // Spec 016: keep the pan and pot labels current (knob, mode, doneness bucket). Only changes are
+        // sent; the check runs once per second of ticks, not every frame (review nit).
+        private void Update()
+        {
+            if (!_networkManager.IsServerStarted) return;
+            uint tick = _networkManager.TimeManager.Tick;
+            double tickRate = _networkManager.TimeManager.TickRate;
+            if (_labelsDirty || CookingTime.ElapsedTicks(_lastLabelTick, tick) >= tickRate || tick < _lastLabelTick)
+            {
+                _labelsDirty = false;
+                _lastLabelTick = tick;
+                RefreshHeatLabels(tick, tickRate);
+            }
+        }
+
+        private void RefreshHeatLabels(uint tick, double tickRate)
+        {
+            if (_heatLabels == null)
+            {
+                var found = new System.Collections.Generic.List<(Station, StationContents)>();
+                foreach (Station station in _stations)
+                    if (station != null && StationRules.IsHeat(station.Kind) && station.TryGetComponent(out StationContents c))
+                        found.Add((station, c));
+                _heatLabels = found.ToArray();
+            }
+            foreach ((Station station, StationContents contents) in _heatLabels)
+            {
+                if (!contents.IsServerInitialized) continue;
+                string status = station.Kind == StationKind.Pan ? _kitchen.PanOf(station.Index).Describe() : string.Empty;
+                contents.ServerSetHeat(status, _kitchen.DescribeHeat(station.Index, tick, tickRate));
+            }
+        }
+
+        /// <summary>
+        /// Spec 016: E with food puts it in the pan or pot, E with empty hands takes it out cooked for the
+        /// time it was in. Pan options 1 to 3 change the knob and mode while the pan is empty.
+        /// </summary>
+        private CookOutcome Heat(PickupInteractor player, Station station, int option)
+        {
+            if (option != 0)
+            {
+                CookOutcome changed = _kitchen.TryChangePan(station.Index, station.Kind, option);
+                _labelsDirty = true;
+                return changed;
+            }
+
+            uint tick = _networkManager.TimeManager.Tick;
+            if (_pickups.TryGetHeld(player, out NetworkObject held))
+            {
+                if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
+                CookOutcome added = _kitchen.TryPutOnHeat(held.ObjectId, station.Index, station.Kind, food.Ingredient.Value, tick);
+                if (added != CookOutcome.Ok) return added;
+                string name = food.DisplayName.Value; // read before despawn (review nit)
+                _pickups.TakeAway(player, out _);
+                _networkManager.ServerManager.Despawn(held);
+                _labelsDirty = true;
+                Debug.Log("[Kitchen] player " + player.OwnerId + " put " + name + " in the " + station.DisplayName);
+                return CookOutcome.Ok;
+            }
+
+            // Hand the result over first, clear the station only on success (as on the plating table).
+            CookOutcome taken = _kitchen.TryPreviewHeatTake(station.Index, tick, _networkManager.TimeManager.TickRate,
+                out Item result, out byte color);
+            if (taken != CookOutcome.Ok && taken != CookOutcome.TooShort) return taken;
+            if (!SpawnFoodInHands(player, result, color)) return CookOutcome.SimRefused;
+            _kitchen.ClearHeat(station.Index);
+            _labelsDirty = true;
+            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " out of the "
+                + station.DisplayName + (taken == CookOutcome.TooShort ? " (too short, unchanged)" : " q=" + KitchenState.QualityOf(result).ToString("0.00")));
+            return taken;
         }
 
         private CookOutcome TakeIngredient(PickupInteractor player, Station crate)
@@ -139,6 +220,7 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
+        /// <summary>Instant station options (the board).</summary>
         private CookOutcome Cook(PickupInteractor player, Station station, int option)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return CookOutcome.NothingHeld;
