@@ -1,7 +1,7 @@
 ---
 id: 019
 title: Hands-on cutting and station buttons (first person without number keys)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -205,7 +205,7 @@ sim `cut` op's `shape` choices, so the result is exactly the item the digit keys
 - Human play-test (AC9).
 - Command: `bash scripts/verify.sh` (Windows, Editor closed, `UNITY_PATH` set).
 
-## Open questions (defaults in bold; the human answers before approval)
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. **Models:** copy `cutting-board` and `cooking-knife` from the already downloaded CC0 Food Kit?
    **Default: yes.**
 2. **Cutting gesture:** hold the left button and drag down for one stroke (a plain click does
