@@ -24,7 +24,7 @@ namespace Worktown.Game.Tests
             KitchenState kitchen = NewKitchenWithPotato(out Item potato);
 
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryApply(FoodId, StationKind.Board, 3, out _, out _));
-            Item fries = HeatTestKit.PanPreset(kitchen, FoodId, 2); // spec 016: 190 C for 150 sim s
+            Item fries = HeatTestKit.PanPreset(kitchen, FoodId, 2); // spec 016: pan switched on, 150 sim s at 190 C
 
             // Built directly with the sim, the way spec 005's tests build fries.
             var factory = new ItemFactory(new ItemCatalog(DemoIngredients.All), OperationCatalog.CreateDefault());

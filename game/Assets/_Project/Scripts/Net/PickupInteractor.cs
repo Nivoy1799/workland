@@ -119,7 +119,7 @@ namespace Worktown.Game.Net
                     return true;
                 case StationKind.Pan:
                 case StationKind.Pot:
-                    // Spec 016: E puts food in or takes it out; on the pan, 1-3 change heat and mode.
+                    // Spec 016: E puts food in or takes it out; 1 switches on/off, 2 the pan fry/saute.
                     if (keyboard.eKey.wasPressedThisFrame)
                     {
                         RequestStation(station.Index, 0);

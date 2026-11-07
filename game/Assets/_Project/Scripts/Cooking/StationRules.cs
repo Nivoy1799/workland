@@ -16,19 +16,18 @@ namespace Worktown.Game.Cooking
             Cut("halves"), Cut("slices"), Cut("sticks"), Cut("dice")
         };
 
-        /// <summary>Spec 016: pan option keys.</summary>
-        public const int PanHeatDown = 1;
-        public const int PanHeatUp = 2;
-        public const int PanToggleMode = 3;
-        public const int PanOptionCount = 3;
+        /// <summary>Spec 016: option 1 on the pan and pot is the on/off switch, option 2 the pan's fry/saute.</summary>
+        public const int StoveSwitch = 1;
+        public const int PanMode = 2;
 
         /// <summary>
         /// Number of option keys a station accepts (0 for stations that only use E). Spec 016: the pan
-        /// has three heat controls, the pot none; both cook over time with E.
+        /// has on/off and fry/saute, the pot on/off; both cook over time with E.
         /// </summary>
         public static int OptionCount(StationKind kind)
         {
-            if (kind == StationKind.Pan) return PanOptionCount;
+            if (kind == StationKind.Pan) return PanMode;
+            if (kind == StationKind.Pot) return StoveSwitch;
             StationAction[] actions = ActionsOf(kind);
             return actions == null ? 0 : actions.Length;
         }
@@ -44,7 +43,8 @@ namespace Worktown.Game.Cooking
         {
             int options = OptionCount(kind);
             if (options == 0) return "E";
-            return IsHeat(kind) ? "E · 1-" + options : "1-" + options;
+            if (!IsHeat(kind)) return "1-" + options;
+            return options == 1 ? "E · 1" : "E · 1-" + options;
         }
 
         /// <summary>The instant action for option 1..n (board only), or false for other stations and options.</summary>
@@ -72,8 +72,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Counter: return stationName + ": E sell";
                 case StationKind.PlatingTable: return stationName + ": E put food on / E (empty hands) take the plate";
                 case StationKind.Bowl: return stationName + ": E put food in / E (empty hands) take the mix";
-                case StationKind.Pan: return stationName + ": E put food in / E (empty hands) take it out, 1 heat down, 2 heat up, 3 fry/saute";
-                case StationKind.Pot: return stationName + ": E put food in / E (empty hands) take it out";
+                case StationKind.Pan: return stationName + ": E put food in / E (empty hands) take it out, 1 on/off, 2 fry/saute";
+                case StationKind.Pot: return stationName + ": E put food in / E (empty hands) take it out, 1 on/off";
             }
             StationAction[] actions = ActionsOf(kind);
             var parts = new List<string>(actions.Length);

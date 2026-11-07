@@ -44,8 +44,8 @@ namespace Worktown.Game.Tests
         public void OptionCounts()
         {
             Assert.AreEqual(4, StationRules.OptionCount(StationKind.Board));
-            Assert.AreEqual(3, StationRules.OptionCount(StationKind.Pan));
-            Assert.AreEqual(0, StationRules.OptionCount(StationKind.Pot));
+            Assert.AreEqual(2, StationRules.OptionCount(StationKind.Pan));
+            Assert.AreEqual(1, StationRules.OptionCount(StationKind.Pot));
             Assert.AreEqual(0, StationRules.OptionCount(StationKind.Crate));
             Assert.AreEqual(0, StationRules.OptionCount(StationKind.Counter));
         }
@@ -53,10 +53,10 @@ namespace Worktown.Game.Tests
         [Test]
         public void Prompt_ListsOptions()
         {
-            Assert.AreEqual("Pan: E put food in / E (empty hands) take it out, 1 heat down, 2 heat up, 3 fry/saute",
+            Assert.AreEqual("Pan: E put food in / E (empty hands) take it out, 1 on/off, 2 fry/saute",
                 StationRules.Prompt(StationKind.Pan, "Pan"));
-            Assert.AreEqual("E · 1-3", StationRules.KeysHint(StationKind.Pan));
-            Assert.AreEqual("E", StationRules.KeysHint(StationKind.Pot));
+            Assert.AreEqual("E · 1-2", StationRules.KeysHint(StationKind.Pan));
+            Assert.AreEqual("E · 1", StationRules.KeysHint(StationKind.Pot));
             Assert.AreEqual("1-4", StationRules.KeysHint(StationKind.Board));
             Assert.AreEqual("Board: 1 halves, 2 slices, 3 sticks, 4 cubes", StationRules.Prompt(StationKind.Board, "Board"));
             Assert.AreEqual("Counter: E sell", StationRules.Prompt(StationKind.Counter, "Counter"));

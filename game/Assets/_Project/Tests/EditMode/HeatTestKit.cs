@@ -7,7 +7,8 @@ namespace Worktown.Game.Tests
 {
     /// <summary>
     /// Spec 016 test helper: cooks a registered food in a pan or pot through KitchenState, the way the
-    /// game does (put in at one tick, take out later), and registers the result under the same id.
+    /// game does (switch on, put in at one tick, take out later), and registers the result under the
+    /// same id.
     /// </summary>
     internal static class HeatTestKit
     {
@@ -22,18 +23,16 @@ namespace Worktown.Game.Tests
             return (uint)Math.Round(simSeconds / CookingTime.TimeScale * TickRate);
         }
 
-        /// <summary>Turns the pan knob to <paramref name="tempC"/> (multiple of 10, 120..220).</summary>
-        public static void SetPan(KitchenState kitchen, int panIndex, int tempC)
+        /// <summary>Switches the stove on if it is off.</summary>
+        public static void SwitchOn(KitchenState kitchen, int stationIndex, StationKind kind, uint tick = StartTick)
         {
-            PanSettings pan = kitchen.PanOf(panIndex);
-            while (pan.TempC < tempC) Assert.AreEqual(CookOutcome.Ok, kitchen.TryChangePan(panIndex, StationKind.Pan, StationRules.PanHeatUp));
-            while (pan.TempC > tempC) Assert.AreEqual(CookOutcome.Ok, kitchen.TryChangePan(panIndex, StationKind.Pan, StationRules.PanHeatDown));
-            Assert.AreEqual(tempC, pan.TempC);
+            if (kitchen.StoveOf(stationIndex).IsOn) return;
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseStove(stationIndex, kind, StationRules.StoveSwitch, tick));
+            Assert.IsTrue(kitchen.StoveOf(stationIndex).IsOn);
         }
 
-        public static Item Fry(KitchenState kitchen, int foodId, int tempC, double simSeconds)
+        public static Item Fry(KitchenState kitchen, int foodId, double simSeconds)
         {
-            SetPan(kitchen, PanIndex, tempC);
             return Cook(kitchen, foodId, StationKind.Pan, PanIndex, simSeconds);
         }
 
@@ -42,20 +41,24 @@ namespace Worktown.Game.Tests
             return Cook(kitchen, foodId, StationKind.Pot, PotIndex, simSeconds);
         }
 
-        /// <summary>The old spec 007 pan presets: 1 light (180 C, 40 s), 2 golden (190, 150), 3 dark (200, 400).</summary>
+        /// <summary>
+        /// The old spec 007 pan presets by time at the fixed pan heat (190 C): 1 light (40 s), 2 golden
+        /// (150 s, the same item as before), 3 dark (400 s).
+        /// </summary>
         public static Item PanPreset(KitchenState kitchen, int foodId, int preset)
         {
             switch (preset)
             {
-                case 1: return Fry(kitchen, foodId, 180, 40);
-                case 2: return Fry(kitchen, foodId, 190, 150);
-                case 3: return Fry(kitchen, foodId, 200, 400);
+                case 1: return Fry(kitchen, foodId, 40);
+                case 2: return Fry(kitchen, foodId, 150);
+                case 3: return Fry(kitchen, foodId, 400);
                 default: throw new ArgumentOutOfRangeException(nameof(preset));
             }
         }
 
         private static Item Cook(KitchenState kitchen, int foodId, StationKind kind, int stationIndex, double simSeconds)
         {
+            SwitchOn(kitchen, stationIndex, kind);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(foodId, stationIndex, kind, 0, StartTick));
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(stationIndex, StartTick + TicksFor(simSeconds), TickRate,
                 out Item cooked, out _));

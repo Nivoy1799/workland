@@ -23,7 +23,7 @@ namespace Worktown.Game.Cooking
         StationEmpty,
         /// <summary>Spec 016: taken out before it started cooking; the food came back unchanged.</summary>
         TooShort,
-        /// <summary>Spec 016: the pan's heat and mode can only change while it is empty.</summary>
+        /// <summary>Spec 016: fry/saute can only change while the pan is empty.</summary>
         PanBusy
     }
 }

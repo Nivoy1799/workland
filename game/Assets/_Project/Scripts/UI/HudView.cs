@@ -161,7 +161,7 @@ namespace Worktown.Game.UI
                 case CookOutcome.AlreadyPlated: return "That is already a finished plate";
                 case CookOutcome.StationEmpty: return "Nothing there yet";
                 case CookOutcome.TooShort: return "Too short: it came back unchanged";
-                case CookOutcome.PanBusy: return "Take the food out before changing the pan";
+                case CookOutcome.PanBusy: return "Take the food out before switching fry/saute";
                 default: return outcome.ToString();
             }
         }

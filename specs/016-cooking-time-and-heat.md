@@ -1,12 +1,19 @@
 ---
 id: 016
-title: Cooking takes time; pan heat and fry/saute mode
+title: Cooking takes time; on/off stoves and fry/saute mode
 status: approved
 owner: architect
 builder: opus
 ---
 
-# 016: Cooking takes time; pan heat and fry/saute mode
+# 016: Cooking takes time; on/off stoves and fry/saute mode
+
+> **Changed by the human on 2026-11-07, after AC6 passed:** the 11-step heat knob is replaced by an
+> on/off switch ("let's start just with on/off"). Key 1 switches the pan or pot on and off, also with
+> food inside; food only cooks while it is on; stoves start off. The pan has one fixed heat (190 C,
+> the old "golden" preset). Key 2 is the pan's fry/saute (only while empty). This also settles the
+> D21 question about showing "heat 6/11": no heat level is shown any more. Sections below that talk
+> about the knob are kept for history; the implementation notes describe what was built.
 
 ## Goal
 Today the pan and pot cook instantly: hold food, press 1 to 3, done. This spec makes cooking feel
@@ -124,6 +131,16 @@ the existing guards (UI open, T or G held) apply.
 - AC6 with a second window or person.
 
 ## Implementation notes
+**On/off change (2026-11-07, human):** `PanSettings` (knob) removed, `StoveSettings` added (`IsOn`,
+`Saute`, fixed `PanTempC = 190`, starts off). `HeatSession` counts only ticks while the stove is on
+(`Start`/`Stop`/`CookedTicks`). `KitchenState.TryUseStove`: option 1 on/off for pan and pot (allowed
+with food inside, pauses cooking), option 2 fry/saute on the pan (only while empty, else `PanBusy`).
+Label: "on · fry", "off · saute", pot "on"/"off"; contents "potato sticks · raw" while off before the
+first bucket. Keys on the world label "E · 1-2" (pan) and "E · 1" (pot). `HeatTestKit` switches on
+before cooking; the old presets are now times at 190 C (light 40 s, golden 150 s, dark 400 s); the
+pinned golden-fries hash is unchanged. New tests: switch-off pauses cooking, new stoves are off.
+
+**First version (heat knob):**
 Built 2026-11-07 by the main session (Opus), branch `spec/016-cooking-time-and-heat`.
 - Pure rules: `CookingTime` (ticks to sim seconds, clamp, too short, bucket id picked like the sim
   picks buckets), `HeatSession` (immutable, server only), `PanSettings` (knob 120..220 C in 10 C

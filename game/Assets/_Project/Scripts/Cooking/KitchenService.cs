@@ -104,20 +104,20 @@ namespace Worktown.Game.Cooking
             foreach ((Station station, StationContents contents) in _heatLabels)
             {
                 if (!contents.IsServerInitialized) continue;
-                string status = station.Kind == StationKind.Pan ? _kitchen.PanOf(station.Index).Describe() : string.Empty;
+                string status = _kitchen.StoveOf(station.Index).Describe(station.Kind);
                 contents.ServerSetHeat(status, _kitchen.DescribeHeat(station.Index, tick, tickRate));
             }
         }
 
         /// <summary>
         /// Spec 016: E with food puts it in the pan or pot, E with empty hands takes it out cooked for the
-        /// time it was in. Pan options 1 to 3 change the knob and mode while the pan is empty.
+        /// time it cooked while switched on. Option 1 switches on/off, pan option 2 fry/saute (while empty).
         /// </summary>
         private CookOutcome Heat(PickupInteractor player, Station station, int option)
         {
             if (option != 0)
             {
-                CookOutcome changed = _kitchen.TryChangePan(station.Index, station.Kind, option);
+                CookOutcome changed = _kitchen.TryUseStove(station.Index, station.Kind, option, _networkManager.TimeManager.Tick);
                 _labelsDirty = true;
                 return changed;
             }
