@@ -1,7 +1,7 @@
 ---
 id: 018
 title: First-person view (switchable to third person, aim to interact)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -160,7 +160,7 @@ decides the outcome.
   `-view third`, `-screenshot`), then the human play-test (AC8).
 - Command: `bash scripts/verify.sh` (Windows, Editor closed, `UNITY_PATH` set).
 
-## Open questions (defaults in bold; the human answers before approval)
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. **Default view:** first person at the start? **Default: yes.**
 2. **Remember the view:** keep the last chosen view between game starts (PlayerPrefs, local only)?
    **Default: yes.**
