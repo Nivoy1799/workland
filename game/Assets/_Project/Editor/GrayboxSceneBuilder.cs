@@ -106,10 +106,10 @@ namespace Worktown.Game.Editor
             Material groundMat = CreateMaterial(GroundMaterialPath, new Color(0.45f, 0.48f, 0.45f));
             Material pickupMat = CreateMaterial(PickupMaterialPath, new Color(0.95f, 0.6f, 0.15f));
             PingMarker pingPrefab = CreatePingMarkerPrefab(pickupMat);
-            NetworkObject playerPrefab = CreatePlayerPrefab(pingPrefab);
+            NetworkObject playerPrefab = CreatePlayerPrefab(pingPrefab, builtCatalog);
             GameObject pickupPrefab = CreatePickupPrefab(pickupMat);
             NetworkObject foodPrefab = CreateFoodPrefab(pickupMat, builtCatalog);
-            NetworkObject customerPrefab = CreateCustomerPrefab(pickupMat);
+            NetworkObject customerPrefab = CreateCustomerPrefab(builtCatalog);
             NetworkObject knifePrefab = CreateKnifePrefab(builtCatalog); // spec 019
             List<NetworkObject> vesselPrefabs = CreateVesselPrefabs(builtCatalog); // spec 021
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
@@ -144,8 +144,9 @@ namespace Worktown.Game.Editor
         /// Spec 010: player with FishNet client-side prediction, structured like FishNet's
         /// CharacterControllerPrediction example: the root simulates (no NetworkTransform), the
         /// visible "Graphic" child is smoothed by a NetworkTickSmoother and followed by the camera.
+        /// Spec 024: the graphic shows a person (two variants, chosen by the owner id) instead of the capsule and nose.
         /// </summary>
-        private static NetworkObject CreatePlayerPrefab(PingMarker pingPrefab)
+        private static NetworkObject CreatePlayerPrefab(PingMarker pingPrefab, ArtCatalog catalog)
         {
             var root = new GameObject("Player");
             root.tag = "Player";
@@ -157,18 +158,8 @@ namespace Worktown.Game.Editor
             var graphic = new GameObject("Graphic");
             graphic.transform.SetParent(root.transform, false);
 
-            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            body.name = "Body";
-            UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
-            body.transform.SetParent(graphic.transform, false);
-            body.transform.localPosition = new Vector3(0f, 1f, 0f);
-
-            GameObject nose = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            nose.name = "Facing";
-            UnityEngine.Object.DestroyImmediate(nose.GetComponent<Collider>());
-            nose.transform.SetParent(graphic.transform, false);
-            nose.transform.localPosition = new Vector3(0f, 1.5f, 0.45f);
-            nose.transform.localScale = new Vector3(0.3f, 0.15f, 0.2f);
+            // Spec 024: the person replaces the spec 003 capsule and its nose (the controller capsule is unchanged).
+            Character character = CreateCharacter(catalog, graphic.transform, ArtCatalogRules.PlayerCharacterKeys());
 
             // Spec 018: first-person camera anchor inside the smoothed graphic, so the view is as smooth as the body.
             var eyes = new GameObject("Eyes");
@@ -190,7 +181,7 @@ namespace Worktown.Game.Editor
 
             var player = root.AddComponent<PlayerController>();
             SetField(player, "_graphic", graphic.transform);
-            SetField(player, "_body", body.transform);
+            // Spec 024: no _body any more: the crouch squash of the capsule is replaced by the crouch pose.
             SetField(player, "_eyes", eyes.transform);
             var interactor = root.AddComponent<PickupInteractor>();
             root.AddComponent<Wallet>(); // spec 009
@@ -201,16 +192,17 @@ namespace Worktown.Game.Editor
             bubbleLabel.color = new Color(1f, 0.9f, 0.4f);
             var bubble = root.AddComponent<EmoteBubble>();
             SetField(bubble, "_label", bubbleLabel);
-            SetField(bubble, "_body", body.transform);
+            SetField(bubble, "_body", character.Container); // spec 024: the person wobbles
             var social = root.AddComponent<SocialInteractor>();
             SetField(social, "_pingPrefab", pingPrefab);
             SetField(social, "_bubble", bubble);
 
             // Spec 018: owner-only first-person visuals (own body shadows only, held food in view).
             var firstPersonBody = root.AddComponent<FirstPersonBody>();
-            SetField(firstPersonBody, "_body", new Renderer[] { body.GetComponent<Renderer>(), nose.GetComponent<Renderer>() });
+            SetField(firstPersonBody, "_body", character.Renderers); // spec 024: every variant's renderers
             SetField(firstPersonBody, "_overhead", new Renderer[] { bubbleLabel.GetComponent<Renderer>() });
             root.AddComponent<HeldItemView>();
+            AddCharacterVisual(root, graphic.transform, true, character, player, firstPersonBody);
             // Spec 020: owner-only target glow with the place marker, and the first-person label fade.
             var highlight = root.AddComponent<InteractionHighlight>();
             SetField(highlight, "_markerMaterial", CreatePlaceMarkerMaterial());
@@ -239,29 +231,81 @@ namespace Worktown.Game.Editor
             return saved;
         }
 
-        /// <summary>Spec 014: NPC customer, moved by the server; no collider so it never blocks players.</summary>
-        private static NetworkObject CreateCustomerPrefab(Material material)
+        /// <summary>
+        /// Spec 014: NPC customer, moved by the server; no collider so it never blocks players.
+        /// Spec 024: a person (four variants, chosen by the object id) tinted with the wish colour.
+        /// </summary>
+        private static NetworkObject CreateCustomerPrefab(ArtCatalog catalog)
         {
             var root = new GameObject("Customer");
-            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            body.name = "Body";
-            UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
-            body.transform.SetParent(root.transform, false);
-            body.transform.localPosition = new Vector3(0f, 0.9f, 0f);
-            body.transform.localScale = new Vector3(0.8f, 0.9f, 0.8f);
-            var renderer = body.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = material;
+            Character character = CreateCharacter(catalog, root.transform, ArtCatalogRules.CustomerCharacterKeys());
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, 2.1f, 0f), 56, 0.045f);
 
             NetworkObject nob = root.AddComponent<NetworkObject>();
             AddServerAuthoritativeTransform(root);
             var customer = root.AddComponent<Customer>();
             SetField(customer, "_label", label);
-            SetField(customer, "_body", renderer);
+            SetField(customer, "_tinted", character.Renderers);
+            AddCharacterVisual(root, root.transform, false, character, null, null);
 
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, CustomerPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
+        }
+
+        /// <summary>Spec 024: the character variants under one container, in ArtCatalogRules variant order.</summary>
+        private sealed class Character
+        {
+            public Transform Container;
+            public GameObject[] Variants;
+            public Transform[] Hands;
+            public Renderer[] Renderers;
+        }
+
+        /// <summary>Spec 024: one catalog wrapper per key under a "Character" container; the first is active until spawn.</summary>
+        private static Character CreateCharacter(ArtCatalog catalog, Transform parent, ArtKey[] keys)
+        {
+            var container = new GameObject("Character");
+            container.transform.SetParent(parent, false);
+            var character = new Character
+            {
+                Container = container.transform,
+                Variants = new GameObject[keys.Length],
+                Hands = new Transform[keys.Length]
+            };
+            var renderers = new List<Renderer>();
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (catalog == null || !catalog.TryGet(keys[i], out GameObject wrapper))
+                    throw new InvalidOperationException("ArtCatalog has no " + keys[i]);
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, container.transform);
+                instance.SetActive(i == 0);
+                character.Variants[i] = instance;
+                character.Hands[i] = ArtCatalogBuilder.FindDeep(instance.transform, CharacterVisual.HandName);
+                if (character.Hands[i] == null) throw new InvalidOperationException(keys[i] + " has no " + CharacterVisual.HandName);
+                renderers.AddRange(instance.GetComponentsInChildren<Renderer>(true));
+            }
+            character.Renderers = renderers.ToArray();
+            return character;
+        }
+
+        /// <summary>Spec 024: wires the CharacterVisual (variants, hands, clips from the pack).</summary>
+        private static void AddCharacterVisual(GameObject root, Transform tracked, bool byOwner, Character character,
+            PlayerController player, FirstPersonBody firstPerson)
+        {
+            var visual = root.AddComponent<CharacterVisual>();
+            SetField(visual, "_variants", character.Variants);
+            SetField(visual, "_hands", character.Hands);
+            SetField(visual, "_container", character.Container);
+            SetField(visual, "_tracked", tracked);
+            SetField(visual, "_variantByOwner", byOwner);
+            if (player != null) SetField(visual, "_player", player);
+            if (firstPerson != null) SetField(visual, "_firstPerson", firstPerson);
+            SetField(visual, "_idle", ArtCatalogBuilder.CharacterClip("idle"));
+            SetField(visual, "_walk", ArtCatalogBuilder.CharacterClip("walk"));
+            SetField(visual, "_run", ArtCatalogBuilder.CharacterClip("sprint"));
+            SetField(visual, "_crouch", ArtCatalogBuilder.CharacterClip("crouch"));
+            SetField(visual, "_hold", ArtCatalogBuilder.CharacterClip("holding-right"));
         }
 
         /// <summary>Spec 014: street entry east of the kitchen and the queue in front of the counter.</summary>
@@ -270,10 +314,10 @@ namespace Worktown.Game.Editor
             var parent = new GameObject("Customers");
             var entry = new GameObject("StreetEntry");
             entry.transform.SetParent(parent.transform, false);
-            entry.transform.SetPositionAndRotation(new Vector3(24f, 0.1f, KitchenZ - 2.2f), Quaternion.Euler(0f, -90f, 0f));
+            entry.transform.SetPositionAndRotation(new Vector3(24f, 0f, KitchenZ - 2.2f), Quaternion.Euler(0f, -90f, 0f)); // spec 024: y 0 (was 0.1), feet on the ground
             var head = new GameObject("QueueHead");
             head.transform.SetParent(parent.transform, false);
-            head.transform.position = new Vector3(8.5f, 0.1f, KitchenZ - 2.2f); // in front of the counter
+            head.transform.position = new Vector3(8.5f, 0f, KitchenZ - 2.2f); // in front of the counter; spec 024: y 0
 
             var service = networkManager.gameObject.AddComponent<CustomerService>();
             SetField(service, "_networkManager", networkManager);

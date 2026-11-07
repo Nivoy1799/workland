@@ -52,6 +52,38 @@ namespace Worktown.Game.Art
             }
         }
 
+        /// <summary>Spec 024: the player characters, in variant order (index = <see cref="CharacterVariant"/> of the owner id).</summary>
+        public static ArtKey[] PlayerCharacterKeys() => new[] { ArtKey.CharacterMaleA, ArtKey.CharacterFemaleA };
+
+        /// <summary>Spec 024: the customer characters, in variant order (index = <see cref="CharacterVariant"/> of the object id).</summary>
+        public static ArtKey[] CustomerCharacterKeys() =>
+            new[] { ArtKey.CharacterMaleB, ArtKey.CharacterMaleC, ArtKey.CharacterFemaleB, ArtKey.CharacterFemaleC };
+
+        /// <summary>
+        /// Spec 024: which of <paramref name="count"/> character variants an id shows (owner client id for players, object
+        /// id for customers). Every client computes the same index from the same id; negative ids wrap too.
+        /// </summary>
+        public static int CharacterVariant(int id, int count)
+        {
+            if (count <= 0) return 0;
+            int index = id % count;
+            return index < 0 ? index + count : index;
+        }
+
+        /// <summary>Spec 024: the character of the player with this owner client id (even = MaleA, odd = FemaleA).</summary>
+        public static ArtKey PlayerCharacterKey(int ownerClientId)
+        {
+            ArtKey[] keys = PlayerCharacterKeys();
+            return keys[CharacterVariant(ownerClientId, keys.Length)];
+        }
+
+        /// <summary>Spec 024: the character of the customer with this network object id.</summary>
+        public static ArtKey CustomerCharacterKey(int objectId)
+        {
+            ArtKey[] keys = CustomerCharacterKeys();
+            return keys[CharacterVariant(objectId, keys.Length)];
+        }
+
         /// <summary>Keys from <paramref name="required"/> that have no assigned prefab.</summary>
         public static List<ArtKey> MissingKeys<T>(IReadOnlyList<(ArtKey Key, T Prefab)> entries,
             IEnumerable<ArtKey> required) where T : class

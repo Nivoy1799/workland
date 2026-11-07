@@ -11,6 +11,8 @@ namespace Worktown.Game.Npc
     /// color through SyncVars. Display only: customers never touch prices or payouts.
     /// Spec 022: the ordered dish id and the mood are SyncVars too; the label is the ticket (dish name) while it
     /// waits and what it says on the way out, coloured by mood.
+    /// Spec 024: the body is a low-poly person (a CharacterVisual on the same object picks one of four and animates it);
+    /// the wish colour is a light tint over the character's own colours.
     /// </summary>
     public sealed class Customer : NetworkBehaviour
     {
@@ -22,6 +24,8 @@ namespace Worktown.Game.Npc
         private static readonly Color OkColor = new Color(1f, 0.75f, 0.35f);
         private static readonly Color UnhappyColor = new Color(1f, 0.45f, 0.4f);
         private static readonly Color MissedColor = new Color(0.75f, 0.75f, 0.75f);
+        /// <summary>Spec 024: how far the character's colours are pulled towards the wish colour (0 = none).</summary>
+        public const float TintStrength = 0.4f;
 
         public readonly SyncVar<string> Wish = new SyncVar<string>(string.Empty);
         public readonly SyncVar<string> Bubble = new SyncVar<string>(string.Empty);
@@ -31,7 +35,8 @@ namespace Worktown.Game.Npc
         public readonly SyncVar<byte> Mood = new SyncVar<byte>(CustomerRules.MoodWaiting);
 
         [SerializeField] private TextMesh _label;
-        [SerializeField] private Renderer _body;
+        [Tooltip("Spec 024: every renderer of every character variant; tinted with the wish colour.")]
+        [SerializeField] private Renderer[] _tinted = new Renderer[0];
 
         private MaterialPropertyBlock _block;
 
@@ -112,11 +117,15 @@ namespace Worktown.Game.Npc
                 _label.text = Bubble.Value;
                 _label.color = MoodColor(Mood.Value);
             }
-            if (_body == null) return;
+            if (_tinted.Length == 0) return;
             _block ??= new MaterialPropertyBlock();
-            _block.SetColor("_BaseColor", ColorOf(Wish.Value));
-            _body.SetPropertyBlock(_block);
+            _block.SetColor("_BaseColor", TintOf(Wish.Value));
+            foreach (Renderer body in _tinted)
+                if (body != null) body.SetPropertyBlock(_block);
         }
+
+        /// <summary>Spec 024: white (the texture's own colours) pulled <see cref="TintStrength"/> towards the wish colour.</summary>
+        public static Color TintOf(string wish) => Color.Lerp(Color.white, ColorOf(wish), TintStrength);
 
         private static Color MoodColor(byte mood)
         {
