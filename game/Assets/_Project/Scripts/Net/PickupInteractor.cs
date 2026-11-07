@@ -11,19 +11,16 @@ using Worktown.Game.Player;
 namespace Worktown.Game.Net
 {
     /// <summary>
-    /// On the player. The owner presses E to pick up the nearest cube or drop the held one.
-    /// The client only asks; the server decides (PickupService) and answers with the outcome.
-    /// The client deliberately searches further than the allowed reach, so requests from
-    /// 2.5 to 4 m reach the server and get refused there (spec 003 AC4, manual check).
-    /// Spec 018: in first person the target is what the camera centre looks at (AimRules), within the same
-    /// reach the server checks; the requests and their arguments are unchanged.
-    /// Spec 019: first person has no digit keys. E presses the stove button you look at, puts food on the board
-    /// or takes it; holding a knife over a board with food, a downward mouse drag is one cut stroke and the right
-    /// button turns the food. All of it goes through the same RequestStation(stationIndex, option).
-    /// Spec 020: first person uses the mouse instead of E. One pure rule (InteractionRules) turns what you hold and
-    /// what the dot points at into the click's action; the prompt and the highlight show the same action. Putting
-    /// an item on a worktop spot is the only new request, RequestPlace(surface, spot): two ints, never a position.
-    /// Q drops. Third person keeps E, the digits and the nearest station.
+    /// On the player. The owner picks up, drops, places and uses things; the client only asks, the server decides
+    /// (PickupService, KitchenService) and answers with the outcome. The client deliberately searches further than the
+    /// allowed reach in third person, so requests from 2.5 to 4 m reach the server and get refused there (spec 003 AC4).
+    /// Spec 018: in first person the target is what the camera centre looks at (AimRules), within the same reach the
+    /// server checks. Spec 020: first person uses the mouse; one pure rule (InteractionRules) turns what you hold and
+    /// what the dot points at into the click's action, and the prompt and the highlight show the same action. Q drops.
+    /// Spec 021: the board, pan, pot, plates and bowl are cookware you carry. Using what you hold on a piece of
+    /// cookware (put food in, pour, take out, a knife stroke or turn) is the one new request, RequestUse(target,
+    /// action): an object and an int, never a value. Crates, the counter, the plate shelf and the stove knobs keep
+    /// RequestStation(station, option). Third person keeps E for pickups, crates, the counter and the shelf.
     /// </summary>
     public sealed class PickupInteractor : NetworkBehaviour
     {
@@ -31,10 +28,9 @@ namespace Worktown.Game.Net
         private const float MinRequestInterval = 0.2f;
         // Spec 019: the client waits a little longer than the server's limit, so no stroke is silently dropped.
         private const float ClientStrokeInterval = MinRequestInterval + 0.03f;
-        private const string DemoCutArg = "-demo-cut";
-        private const string DemoPlaceArg = "-demo-place";
+        private const string DemoCookwareArg = "-demo-cookware";
 
-        // Server only: time of the last accepted pickup or drop request from this player.
+        // Server only: time of the last accepted request from this player.
         private float _serverLastRequestTime = float.NegativeInfinity;
 
         [SerializeField] private Transform _holdPoint;
@@ -114,13 +110,9 @@ namespace Worktown.Game.Net
             if (TryGetComponent(out InteractionHighlight highlight)) highlight.Activate(this);
             if (TryGetComponent(out WorldLabelFade labels)) labels.Activate();
             if (!Debug.isDebugBuild) return;
-            string[] args = System.Environment.GetCommandLineArgs();
-            // Spec 019 AC8, development builds only: walk to the kitchen and send the normal requests in order.
-            if (System.Array.IndexOf(args, DemoCutArg) >= 0)
-                StartCoroutine(DemoCut());
-            // Spec 020 AC8, development builds only: aim, highlight and place with the normal requests.
-            else if (System.Array.IndexOf(args, DemoPlaceArg) >= 0)
-                StartCoroutine(DemoPlace());
+            // Spec 021 AC8, development builds only: move the pan, fill the pot, switch it on, with the normal requests.
+            if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), DemoCookwareArg) >= 0)
+                StartCoroutine(DemoCookware());
         }
 
         public override void OnStopClient()
@@ -145,7 +137,7 @@ namespace Worktown.Game.Net
             Gamepad gamepad = Gamepad.current;
             Mouse mouse = Mouse.current;
             bool locked = Cursor.lockState == CursorLockMode.Locked;
-            // Spec 012: while quick chat (T) or the emote wheel (G / LB) is held, digits and E belong to them; the
+            // Spec 012: while quick chat (T) or the emote wheel (G / LB) is held, the keys belong to them; the
             // wheel then owns the camera freeze, so the knife lets go of it without writing it.
             bool wheel = (keyboard != null && keyboard.gKey.isPressed) || (gamepad != null && gamepad.leftShoulder.isPressed);
             // Keys belong to the menu or banner while one is open (review finding, spec 011).
@@ -170,7 +162,7 @@ namespace Worktown.Game.Net
                 _gesture.Reset();
                 _click.Reset();
                 SetLookSuppressed(false);
-                // Spec 020 AC7: E and the digits act in third person only.
+                // Spec 020 AC7: E acts in third person only.
                 if (InteractionRules.KeysActInView(firstPerson)) HandleThirdPersonKeys(keyboard, held != null);
             }
             _lockedLastFrame = locked;
@@ -192,9 +184,9 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>
-        /// Spec 020, first person: the left click does <see cref="CurrentAction"/> (on release, see ClickGesture);
-        /// with the knife over a board with food the left button drags strokes instead and the right button turns
-        /// the food (spec 019). Q drops. Gamepad: right trigger click (or stroke), Y turn, X drop. No E, no digits.
+        /// Spec 020, first person: the left click does <see cref="CurrentAction"/> (on release, see ClickGesture); with
+        /// the knife over a board with food the left button drags strokes instead and the right button turns the food
+        /// (spec 019). Q drops. Gamepad: right trigger click (or stroke), Y turn, X drop. No E, no digits.
         /// </summary>
         private void UpdateFirstPerson(Keyboard keyboard, Gamepad gamepad, Mouse mouse, bool locked, Pickup held)
         {
@@ -213,11 +205,11 @@ namespace Worktown.Game.Net
             {
                 if (stroke) _click.Cancel();
                 if (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame) stroke = true;
-                Station board = Target as Station;
-                if (stroke) SendKnife(board, StationRules.KnifeStroke);
+                Vessel board = Target as Vessel;
+                if (stroke) SendKnife(board, VesselRules.ActionStroke);
                 bool turn = (mouse != null && locked && mouse.rightButton.wasPressedThisFrame)
                     || (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame);
-                if (turn) SendKnife(board, StationRules.KnifeTurn);
+                if (turn) SendKnife(board, VesselRules.ActionTurn);
             }
             else if (click || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame))
             {
@@ -228,7 +220,7 @@ namespace Worktown.Game.Net
             if (drop && InteractionRules.DropKeyActs(true) && held != null) SendDrop();
         }
 
-        /// <summary>Spec 020: sends the request for <see cref="CurrentAction"/> on <see cref="Target"/>. Nothing for None or Cut.</summary>
+        /// <summary>Spec 020/021: sends the request for <see cref="CurrentAction"/> on <see cref="Target"/>. Nothing for None or Cut.</summary>
         private void ExecuteAction()
         {
             switch (CurrentAction)
@@ -236,42 +228,47 @@ namespace Worktown.Game.Net
                 case InteractionAction.Press:
                     if (Target is StationButton button && button.Station != null) SendStation(button.Station.Index, button.Option);
                     break;
-                case InteractionAction.PutOnBoard:
                 case InteractionAction.PutInto:
+                case InteractionAction.Pour:
+                case InteractionAction.Take:
+                    if (Target is Vessel vessel) SendUse(vessel.NetworkObject, VesselRules.ActionUse);
+                    else if (Target is Station shelf) SendStation(shelf.Index, 0); // the plate shelf
+                    break;
                 case InteractionAction.Sell:
                 case InteractionAction.Buy:
-                case InteractionAction.Take:
                     if (Target is Station station) SendStation(station.Index, 0);
                     break;
                 case InteractionAction.Place:
                     if (Target is PlaceSurface surface && TargetSpot >= 0) SendPlace(surface.Index, TargetSpot);
                     break;
                 case InteractionAction.PickUp:
-                    if (Target is Pickup pickup) SendPickup(pickup.NetworkObject);
+                    if (Target is Vessel cookware) SendPickup(cookware.NetworkObject);
+                    else if (Target is Pickup pickup) SendPickup(pickup.NetworkObject);
                     break;
             }
         }
 
-        private void SendKnife(Station board, int option)
+        private void SendKnife(Vessel board, int action)
         {
             if (board == null) return;
             // The server ignores requests closer than 0.2 s; skip it here too, so the chop never lies.
             if (Time.unscaledTime - _lastSendTime < ClientStrokeInterval) return;
-            SendStation(board.Index, option);
-            if (option == StationRules.KnifeStroke && _heldView != null) _heldView.PlayChop();
+            SendUse(board.NetworkObject, action);
+            if (action == VesselRules.ActionStroke && _heldView != null) _heldView.PlayChop();
         }
 
-        /// <summary>Spec 020: the held item as InteractionRules sees it (synced name and coarse look only).</summary>
+        /// <summary>Spec 020/021: the held item as InteractionRules sees it (synced names and looks only).</summary>
         private static Held Describe(Pickup held)
         {
             if (held == null) return Held.Nothing;
             if (held.TryGetComponent(out Knife _)) return Held.Knife;
+            if (held.TryGetComponent(out Vessel vessel)) return Held.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value);
             if (held.TryGetComponent(out Food food))
                 return Held.Food(food.DisplayName.Value, food.Look.Value.Kind == FoodLook.KindPlated);
             return Held.Item("box");
         }
 
-        /// <summary>Spec 020: the target as InteractionRules sees it (what every client can see of it).</summary>
+        /// <summary>Spec 020/021: the target as InteractionRules sees it (what every client can see of it).</summary>
         private AimTarget Describe(Component target)
         {
             switch (target)
@@ -279,13 +276,12 @@ namespace Worktown.Game.Net
                 case StationButton button:
                     byte flags = button.Station != null && button.Station.TryGetComponent(out StationContents stove) ? stove.StoveFlags.Value : (byte)0;
                     return AimTarget.Button(button.Option, flags);
-                case PlaceSurface _:
-                    return AimTarget.Spot(TargetSpot);
+                case PlaceSurface surface:
+                    return AimTarget.Spot(TargetSpot, surface.IsBurner);
+                case Vessel vessel:
+                    return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value);
                 case Station station:
-                    if (station.Kind == StationKind.Crate) return DescribeCrate(station);
-                    if (!station.TryGetComponent(out StationContents contents)) return AimTarget.OnStation(station.Kind, 0, null);
-                    int count = Mathf.Max(contents.Names.Count, contents.Looks.Count);
-                    return AimTarget.OnStation(station.Kind, count, contents.Names.Count > 0 ? contents.Names[0] : null);
+                    return station.Kind == StationKind.Crate ? DescribeCrate(station) : AimTarget.OnStation(station.Kind);
                 case Pickup pickup:
                     if (pickup.TryGetComponent(out Knife _)) return AimTarget.Item("knife");
                     if (pickup.TryGetComponent(out Food food))
@@ -307,11 +303,11 @@ namespace Worktown.Game.Net
 
         private void HandleThirdPersonKeys(Keyboard keyboard, bool holding)
         {
-            // Spec 007: near a station, E and 1-4 go to the kitchen.
-            Station station = Target as Station;
-            if (station != null && TryHandleStationKeys(keyboard, station, holding)) return;
-
             if (!keyboard.eKey.wasPressedThisFrame) return;
+            // Spec 007/021: near a crate, the counter or the plate shelf, E goes to the kitchen.
+            Station station = Target as Station;
+            if (station != null && TryHandleStationKey(station, holding)) return;
+
             if (holding)
             {
                 SendDrop();
@@ -319,7 +315,7 @@ namespace Worktown.Game.Net
             }
             Pickup nearest = FindNearestFreePickup();
             if (nearest == null)
-                SetLocalNote("no cube within " + ClientSearchRadius + " m");
+                SetLocalNote("nothing to pick up within " + ClientSearchRadius + " m");
             else
                 SendPickup(nearest.NetworkObject);
         }
@@ -333,11 +329,11 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>
-        /// Owner side, spec 018: what the click (first person) or E and the digits (third person) act on. First
-        /// person: the <see cref="Station"/>, spec 019 <see cref="StationButton"/>, free <see cref="Pickup"/> or spec 020
-        /// <see cref="PlaceSurface"/> under the crosshair (nothing in between; beyond reach only with
-        /// <see cref="TargetTooFar"/>, then nothing can be done with it), else null. Third
-        /// person: the nearest station within reach, as before.
+        /// Owner side, spec 018: what the click (first person) or E (third person) acts on. First person: the
+        /// <see cref="Station"/>, spec 019 <see cref="StationButton"/>, spec 021 <see cref="Vessel"/>, free
+        /// <see cref="Pickup"/> or spec 020 <see cref="PlaceSurface"/> under the crosshair (nothing in between; beyond
+        /// reach only with <see cref="TargetTooFar"/>, then nothing can be done with it), else null. Third person: the
+        /// nearest station within reach, as before.
         /// </summary>
         public Component Target { get; private set; }
 
@@ -350,8 +346,9 @@ namespace Worktown.Game.Net
 
         /// <summary>
         /// Spec 018: one ray from the camera centre, our own colliders and triggers ignored. Spec 020: the top of a
-        /// place surface is a target too (with its nearest free spot to the hit point); with full hands pickups
-        /// do not block the ray (nothing could be picked up), so the spot or station behind them is found.
+        /// place surface is a target too (with its nearest free spot to the hit point); with full hands pickups do not
+        /// block the ray (nothing could be picked up), so the spot or station behind them is found. Spec 021: cookware
+        /// lying somewhere is always a target (food goes into it, a pan pours into it).
         /// </summary>
         private Component FindAimTarget(bool holding)
         {
@@ -368,14 +365,14 @@ namespace Worktown.Game.Net
                 Collider hitCollider = _rayHits[i].collider;
                 if (hitCollider == null || hitCollider.transform.IsChildOf(transform)) continue;
                 float distance = _rayHits[i].distance;
-                // Spec 019: a button on a station front; reach is measured to its station, like the server does.
+                // Spec 019: a knob or button on a stove front; reach is measured to its station, like the server does.
                 if (hitCollider.TryGetComponent(out StationButton button) && button.Station != null)
                 {
                     _aimHits.Add(AimHit.Button(distance, button.Station.transform.position, button.Station.Index, button.Option));
                     _aimSources.Add(button);
                     continue;
                 }
-                // Spec 020: a worktop top or the board station's free half (checked before its station).
+                // Spec 020: a worktop top, the stove top or a burner (checked before its station).
                 if (hitCollider.TryGetComponent(out PlaceSurface surface))
                 {
                     Vector3 point = _rayHits[i].point;
@@ -388,6 +385,8 @@ namespace Worktown.Game.Net
                 Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
                 if (station != null)
                     AddAimHit(distance, AimKind.Station, station);
+                else if (pickup != null && !pickup.IsHeld && pickup.TryGetComponent(out Vessel vessel))
+                    AddAimHit(distance, AimKind.Vessel, vessel); // spec 021
                 else if (pickup != null && !pickup.IsHeld)
                     AddAimHit(distance, AimKind.Pickup, pickup);
                 else
@@ -407,8 +406,8 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>
-        /// Spec 020: the free spot of <paramref name="surface"/> nearest to the hit point, or PlaceSpots.None. A spot
-        /// is taken when an item lies on it (what this client sees; the server checks its own table again).
+        /// Spec 020: the free spot of <paramref name="surface"/> nearest to the hit point, or PlaceSpots.None. A spot is
+        /// taken when an item lies on it (what this client sees; the server checks its own table again).
         /// </summary>
         private int NearestFreeSpot(PlaceSurface surface, Vector3 point, out Vector3 spotPosition)
         {
@@ -429,54 +428,23 @@ namespace Worktown.Game.Net
             _aimSources.Add(source);
         }
 
-        /// <summary>Third person (spec 007/016): E and the digits on the nearest station.</summary>
-        private bool TryHandleStationKeys(Keyboard keyboard, Station station, bool holding)
+        /// <summary>Third person (spec 007/021): E at a crate or the shelf with empty hands, at the counter holding something.</summary>
+        private bool TryHandleStationKey(Station station, bool holding)
         {
             switch (station.Kind)
             {
                 case StationKind.Crate:
-                    if (!keyboard.eKey.wasPressedThisFrame || holding) return false;
+                case StationKind.PlateShelf:
+                    if (holding) return false;
                     SendStation(station.Index, 0);
                     return true;
                 case StationKind.Counter:
-                    if (!keyboard.eKey.wasPressedThisFrame || !holding) return false;
+                    if (!holding) return false;
                     SendStation(station.Index, 0);
                     return true;
-                case StationKind.PlatingTable:
-                case StationKind.Bowl:
-                    // Spec 013: E puts the held food on/in it, or takes the result with empty hands.
-                    if (!keyboard.eKey.wasPressedThisFrame) return false;
-                    SendStation(station.Index, 0);
-                    return true;
-                case StationKind.Pan:
-                case StationKind.Pot:
-                    // Spec 016: E puts food in or takes it out; 1 switches on/off, 2 the pan fry/saute.
-                    if (keyboard.eKey.wasPressedThisFrame)
-                    {
-                        SendStation(station.Index, 0);
-                        return true;
-                    }
-                    goto default;
                 default:
-                    int option = StationRules.DigitOption(station.Kind, PressedDigit(keyboard), firstPerson: false);
-                    if (option == 0) return false;
-                    if (option > StationRules.OptionCount(station.Kind))
-                    {
-                        SetLocalNote(station.DisplayName + " has no option " + option);
-                        return true;
-                    }
-                    SendStation(station.Index, option);
-                    return true;
+                    return false;
             }
-        }
-
-        private static int PressedDigit(Keyboard keyboard)
-        {
-            if (keyboard.digit1Key.wasPressedThisFrame) return 1;
-            if (keyboard.digit2Key.wasPressedThisFrame) return 2;
-            if (keyboard.digit3Key.wasPressedThisFrame) return 3;
-            if (keyboard.digit4Key.wasPressedThisFrame) return 4;
-            return 0;
         }
 
         private Station FindNearestStation()
@@ -560,6 +528,12 @@ namespace Worktown.Game.Net
             RequestPlace(surfaceIndex, spotIndex);
         }
 
+        private void SendUse(NetworkObject target, int action)
+        {
+            _lastSendTime = Time.unscaledTime;
+            RequestUse(target, action);
+        }
+
         [ServerRpc]
         private void RequestPickup(NetworkObject target)
         {
@@ -578,8 +552,8 @@ namespace Worktown.Game.Net
 
         /// <summary>
         /// Spec 020: put the held item on spot <paramref name="spotIndex"/> of place surface
-        /// <paramref name="surfaceIndex"/>. Two ints, never a position: the server checks hands, surface, spot,
-        /// reach and the rate, and places the item itself (PickupService.TryPlace).
+        /// <paramref name="surfaceIndex"/> (spec 021: also a burner). Two ints, never a position: the server checks
+        /// hands, surface, spot, reach and the rate, and places the item itself (PickupService.TryPlace).
         /// </summary>
         [ServerRpc]
         private void RequestPlace(int surfaceIndex, int spotIndex)
@@ -600,13 +574,28 @@ namespace Worktown.Game.Net
                 Debug.Log("[Pickup] " + LastResult);
         }
 
-        /// <summary>Spec 007: take from a crate (option 0), cook at a station (1-4) or serve (0).
-        /// Spec 019: on the board also a knife stroke or turn (StationRules.KnifeStroke / KnifeTurn).</summary>
+        /// <summary>
+        /// Spec 007: take from a crate or sell at the counter (option 0). Spec 021: take a plate from the shelf (0), and
+        /// a stove knob or button (StationRules.StoveOption: burner and switch or mode).
+        /// </summary>
         [ServerRpc]
         private void RequestStation(int stationIndex, int option)
         {
             if (IsRateLimited()) return;
             CookOutcome outcome = _kitchen != null ? _kitchen.TryUseStation(this, stationIndex, option) : CookOutcome.UnknownStation;
+            ReportCook(Owner, outcome);
+        }
+
+        /// <summary>
+        /// Spec 021: use what you hold on the cookware <paramref name="target"/>: <paramref name="action"/> 0 use (put
+        /// into, pour, take out), 1 one knife stroke, 2 turn the food. An object and an int only: the server reads what
+        /// the player holds and the target's state, checks reach, hands, capacity and the sim, and decides.
+        /// </summary>
+        [ServerRpc]
+        private void RequestUse(NetworkObject target, int action)
+        {
+            if (IsRateLimited()) return;
+            CookOutcome outcome = _kitchen != null ? _kitchen.TryUseVessel(this, target, action) : CookOutcome.NotAVessel;
             ReportCook(Owner, outcome);
         }
 
@@ -620,7 +609,7 @@ namespace Worktown.Game.Net
                 Debug.Log("[Kitchen] " + LastResult);
         }
 
-        /// <summary>Server: drop requests that come faster than a person can press E.
+        /// <summary>Server: drop requests that come faster than a person can click.
         /// Spam then costs neither validation work nor reply bandwidth. Spec 019: this also limits knife
         /// strokes to one per 0.2 s per player; extra strokes are ignored, not errors.</summary>
         private bool IsRateLimited()
@@ -642,75 +631,140 @@ namespace Worktown.Game.Net
                 Debug.Log("[Pickup] " + LastResult);
         }
 
-        // ---- Spec 019 AC8: dev-only intent script for the screenshot run (development builds only) ----
+        // ---- Spec 021 AC8: dev-only intent script for the screenshot run (development builds only) ----
+
+        // PlayerCameraRig's mouse sensitivity (degrees per count); the aim loop below only needs it roughly.
+        private const float DemoDegreesPerCount = 0.12f;
 
         /// <summary>
-        /// <c>-demo-cut</c>: the owner walks to the potato crate with simulated W/A/S/D keys (batch clients get no
-        /// real input), then sends the normal requests in order: take a potato, put it on the board, take the
-        /// knife, two strokes (slices), and press the pan's switch. No server shortcut: the server checks reach,
-        /// rate and hands for every request as for a human. Expects the first spawn point (facing the kitchen).
+        /// <c>-demo-cookware</c>: the owner walks with simulated W/A/S/D keys and turns the first-person view with
+        /// simulated mouse movement (a screenshot run has no real input), and each step aims and does what a click
+        /// would do (<see cref="ExecuteAction"/>, so the normal RequestPickup / RequestPlace / RequestStation /
+        /// RequestUse go out; no server shortcut). Steps: pick up the pan from the first stove, put it on the second
+        /// stove's free burner, take a potato and put it on that stove's counter next to the pan, take a potato and an
+        /// onion and put both into the pot, switch the pot's burner on, then look at the stove for 40 s. If an aim
+        /// does not give the expected action in 3 s it logs a warning and sends the same request directly. Expects the
+        /// first spawn point; needs <c>-view first -skip-whatsnew</c> and window focus (one client only).
         /// </summary>
-        private System.Collections.IEnumerator DemoCut()
+        private System.Collections.IEnumerator DemoCookware()
         {
             yield return new WaitForSeconds(6f);
-            Station crate = null, board = null, pan = null;
+            Station potatoCrate = null, onionCrate = null;
+            var stoves = new List<Station>();
             foreach (Station s in FindObjectsByType<Station>(FindObjectsSortMode.None))
             {
-                if (s.Kind == StationKind.Crate && s.IngredientIndex == 0) crate = s;
-                else if (s.Kind == StationKind.Board) board = s;
-                else if (s.Kind == StationKind.Pan) pan = s;
+                if (s.Kind == StationKind.Crate && s.IngredientIndex == 0) potatoCrate = s;
+                else if (s.Kind == StationKind.Crate && s.IngredientIndex == 3) onionCrate = s;
+                else if (s.Kind == StationKind.Stove) stoves.Add(s);
             }
-            if (crate == null || board == null || pan == null)
+            stoves.Sort((a, b) => a.transform.position.x.CompareTo(b.transform.position.x));
+            Station stoveA = stoves.Count > 0 ? stoves[0] : null;
+            Station stoveB = stoves.Count > 1 ? stoves[1] : null;
+            Vessel pan = null, pot = null;
+            foreach (Vessel v in FindObjectsByType<Vessel>(FindObjectsSortMode.None))
             {
-                Debug.LogWarning("[Demo] crate, board or pan not found");
+                if (v.Kind == VesselKind.Pan) pan = v;
+                else if (v.Kind == VesselKind.Pot) pot = v;
+            }
+            if (potatoCrate == null || onionCrate == null || stoveA == null || stoveB == null || pan == null || pot == null)
+            {
+                Debug.LogWarning("[Demo] crates, two stoves, the pan or the pot not found");
                 yield break;
             }
-            float laneZ = board.transform.position.z - 1.7f;
-            float standX = (board.transform.position.x + pan.transform.position.x) * 0.5f;
-            Debug.Log("[Demo] walking to the potato crate");
+            PlaceSurface freeBurner = null, stoveTop = null;
+            foreach (PlaceSurface s in FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
+            {
+                if (s.GetComponentInParent<Station>() != stoveB) continue;
+                if (!s.IsBurner) stoveTop = s;
+                else if (Vector3.Distance(s.SpotWorldPosition(0), pot.transform.position) > 0.2f) freeBurner = s;
+            }
+            PlaceSurface potBurner = null;
+            foreach (PlaceSurface s in FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
+                if (s.IsBurner && Vector3.Distance(s.SpotWorldPosition(0), pot.transform.position) <= 0.2f) potBurner = s;
+            StationButton potSwitch = null;
+            foreach (StationButton b in FindObjectsByType<StationButton>(FindObjectsSortMode.None))
+                if (potBurner != null && b.Station != null && b.Station.Index == potBurner.StoveIndex
+                    && b.Option == StationRules.StoveOption(potBurner.Burner, StationRules.StoveSwitch)) potSwitch = b;
+            if (freeBurner == null || stoveTop == null || potSwitch == null)
+            {
+                Debug.LogWarning("[Demo] the second stove has no free burner, no stove top or no switch for the pot");
+                yield break;
+            }
+
+            float laneZ = stoveA.transform.position.z - 1.7f;
+            float standZ = stoveA.transform.position.z - 1.3f;
+            Vector3 atA = new Vector3(stoveA.transform.position.x, 0f, standZ);
+            Vector3 atB = new Vector3(stoveB.transform.position.x, 0f, standZ);
+            Debug.Log("[Demo] walking to the first stove (" + Time.time.ToString("0.0") + " s)");
             yield return DemoWalk(new Vector3(-1.75f, 0f, transform.position.z));
             yield return DemoWalk(new Vector3(-1.75f, 0f, laneZ));
-            yield return DemoWalk(new Vector3(crate.transform.position.x + 1f, 0f, laneZ));
-            yield return DemoStep("take a potato", crate.Index, 0, 1.5f);
-            Debug.Log("[Demo] walking to the board");
-            yield return DemoWalk(new Vector3(standX, 0f, laneZ));
-            yield return new WaitForSeconds(1f);
-            yield return DemoStep("put it on the board", board.Index, 0, 2.5f);
+            yield return DemoWalk(new Vector3(atA.x, 0f, laneZ));
+            yield return DemoWalk(atA);
+            NetworkObject panObject = pan.NetworkObject;
+            yield return DemoUse("pick up the pan", ContentPoint(pan), InteractionAction.PickUp, () => SendPickup(panObject));
 
-            Knife knife = null;
-            float best = float.MaxValue;
-            foreach (Knife k in FindObjectsByType<Knife>(FindObjectsSortMode.None))
+            yield return DemoLevelView();
+            yield return DemoWalk(atB);
+            Vector3 burnerSpot = freeBurner.SpotWorldPosition(0);
+            yield return DemoUse("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => SendPlace(freeBurner.Index, 0));
+            Debug.Log("[Demo] the pan is on the burner (" + Time.time.ToString("0.0") + " s)");
+
+            yield return DemoBuy("take a potato", potatoCrate, laneZ);
+            yield return DemoWalk(new Vector3(atB.x, 0f, laneZ));
+            yield return DemoWalk(atB);
+            int nextToPan = PlaceSpots.NearestFree(stoveTop.Size, stoveTop.ToTopPlane(burnerSpot), null);
+            yield return DemoUse("put the potato on the stove top next to the pan", stoveTop.SpotWorldPosition(nextToPan),
+                InteractionAction.Place, () => SendPlace(stoveTop.Index, nextToPan));
+            Debug.Log("[Demo] potato next to the pan (" + Time.time.ToString("0.0") + " s)");
+
+            NetworkObject potObject = pot.NetworkObject;
+            foreach (Station crate in new[] { potatoCrate, onionCrate })
             {
-                float d = (k.transform.position - board.transform.position).sqrMagnitude;
-                if (d < best && k.TryGetComponent(out Pickup p) && !p.IsHeld)
-                {
-                    best = d;
-                    knife = k;
-                }
+                yield return DemoBuy("take " + DemoIngredients.All[crate.IngredientIndex].Id, crate, laneZ);
+                yield return DemoWalk(new Vector3(atB.x, 0f, laneZ));
+                yield return DemoWalk(atB);
+                yield return DemoUse("put it into the pot", ContentPoint(pot), InteractionAction.PutInto,
+                    () => SendUse(potObject, VesselRules.ActionUse));
             }
-            if (knife == null)
-            {
-                Debug.LogWarning("[Demo] no free knife near the board");
-                yield break;
-            }
-            Debug.Log("[Demo] take the knife");
-            SendPickup(knife.GetComponent<NetworkObject>());
-            yield return new WaitForSeconds(1.5f);
-            for (int i = 0; i < 2; i++)
-            {
-                Debug.Log("[Demo] cut stroke " + (i + 1));
-                SendKnife(board, StationRules.KnifeStroke);
-                yield return new WaitForSeconds(i == 0 ? 0.8f : 2f);
-            }
-            yield return DemoStep("press the pan's switch", pan.Index, StationRules.StoveSwitch, 1f);
-            Debug.Log("[Demo] cut demo done");
+            yield return DemoUse("switch the pot's burner on", potSwitch.transform.position, InteractionAction.Press,
+                () => SendStation(potSwitch.Station.Index, potSwitch.Option));
+            Debug.Log("[Demo] cookware demo done (" + Time.time.ToString("0.0") + " s): pot holds " + pot.ContentCount + " ingredients");
+            yield return DemoAim((pan.transform.position + pot.transform.position) * 0.5f + Vector3.up * 0.1f, 40f, null);
         }
 
-        private System.Collections.IEnumerator DemoStep(string what, int stationIndex, int option, float wait)
+        /// <summary>Walks along the lane to the crate and takes one (aims at it, clicks; or sends the request directly).</summary>
+        private System.Collections.IEnumerator DemoBuy(string what, Station crate, float laneZ)
         {
-            Debug.Log("[Demo] " + what);
-            SendStation(stationIndex, option);
-            yield return new WaitForSeconds(wait);
+            yield return DemoLevelView();
+            yield return DemoWalk(new Vector3(transform.position.x, 0f, laneZ));
+            yield return DemoWalk(new Vector3(crate.transform.position.x + 1f, 0f, laneZ));
+            yield return DemoUse(what, crate.transform.position, InteractionAction.Buy, () => SendStation(crate.Index, 0));
+            yield return DemoLevelView();
+        }
+
+        /// <summary>Where a vessel draws its contents (inside the pot, on the board); its position if none.</summary>
+        private static Vector3 ContentPoint(Component vessel)
+        {
+            Transform anchor = vessel.transform.Find("Contents");
+            return anchor != null ? anchor.position : vessel.transform.position + Vector3.up * 0.05f;
+        }
+
+        /// <summary>Aims at <paramref name="point"/>, then does what a click would do (or sends the request directly).</summary>
+        private System.Collections.IEnumerator DemoUse(string what, Vector3 point, InteractionAction expected, System.Action fallback)
+        {
+            Debug.Log("[Demo] " + what + " (" + Time.time.ToString("0.0") + " s)");
+            yield return DemoAim(point, 3f, expected);
+            if (CurrentAction == expected)
+            {
+                Debug.Log("[Demo] click: '" + InteractionRules.PromptFor(CurrentHeld, CurrentAim) + "'");
+                ExecuteAction();
+            }
+            else
+            {
+                Debug.LogWarning("[Demo] aiming gave " + CurrentAction + " instead of " + expected + "; sending the request directly");
+                fallback();
+            }
+            yield return new WaitForSeconds(1.5f);
         }
 
         /// <summary>Holds the movement keys towards <paramref name="target"/> (relative to the camera) until there.</summary>
@@ -741,140 +795,12 @@ namespace Worktown.Game.Net
             yield return new WaitForSeconds(0.3f);
         }
 
-        // ---- Spec 020 AC8: dev-only intent script for the screenshot run (development builds only) ----
-
-        // PlayerCameraRig's mouse sensitivity (degrees per count); the aim loop below only needs it roughly.
-        private const float DemoDegreesPerCount = 0.12f;
-
-        /// <summary>
-        /// <c>-demo-place</c>: like <c>-demo-cut</c> the owner walks with simulated keys and turns the first-person
-        /// view with simulated mouse movement (no real input in a screenshot run). It takes a potato, aims at the
-        /// pot for 4 s holding it (green glow, "Click · put potato into the pot"), then aims at the board, the knife
-        /// and the worktop between board and pan and each time does what a click would do (the same
-        /// <see cref="ExecuteAction"/>, so the normal RequestStation / RequestPickup / RequestPlace go out). No
-        /// server shortcut. If an aim does not give the expected action in 3 s it logs a warning and sends the
-        /// same request directly. Expects the first spawn point; needs <c>-view first -skip-whatsnew</c>.
-        /// </summary>
-        private System.Collections.IEnumerator DemoPlace()
-        {
-            yield return new WaitForSeconds(6f);
-            Station crate = null, board = null, pan = null, pot = null;
-            foreach (Station s in FindObjectsByType<Station>(FindObjectsSortMode.None))
-            {
-                if (s.Kind == StationKind.Crate && s.IngredientIndex == 0) crate = s;
-                else if (s.Kind == StationKind.Board) board = s;
-                else if (s.Kind == StationKind.Pan) pan = s;
-                else if (s.Kind == StationKind.Pot) pot = s;
-            }
-            if (crate == null || board == null || pan == null || pot == null)
-            {
-                Debug.LogWarning("[Demo] crate, board, pan or pot not found");
-                yield break;
-            }
-            Vector3 between = (board.transform.position + pan.transform.position) * 0.5f;
-            PlaceSurface worktop = null;
-            float bestWorktop = float.MaxValue;
-            foreach (PlaceSurface s in FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
-            {
-                float d = (s.transform.position - between).sqrMagnitude;
-                if (s.GetComponentInParent<Station>() != null || d >= bestWorktop) continue;
-                bestWorktop = d;
-                worktop = s;
-            }
-            if (worktop == null)
-            {
-                Debug.LogWarning("[Demo] no worktop between the board and the pan");
-                yield break;
-            }
-
-            float laneZ = board.transform.position.z - 1.7f;
-            float standZ = board.transform.position.z - 1.3f;
-            Debug.Log("[Demo] walking to the potato crate");
-            yield return DemoWalk(new Vector3(-1.75f, 0f, transform.position.z));
-            yield return DemoWalk(new Vector3(-1.75f, 0f, laneZ));
-            yield return DemoWalk(new Vector3(crate.transform.position.x + 1f, 0f, laneZ));
-            yield return DemoStep("take a potato", crate.Index, 0, 1.5f);
-
-            // Right in front of the pot, about 1.3 m from it (well inside the 2.5 m reach).
-            Debug.Log("[Demo] walking to the pot");
-            Vector3 potStand = new Vector3(pot.transform.position.x, 0f, pot.transform.position.z - 1.2f);
-            yield return DemoWalk(new Vector3(potStand.x, 0f, laneZ));
-            yield return DemoWalk(potStand);
-            Debug.Log("[Demo] in front of the pot, " + Vector3.Distance(transform.position, pot.transform.position).ToString("0.00") + " m");
-            yield return DemoAim(ContentPoint(pot), 3f, InteractionAction.PutInto);
-            Debug.Log("[Demo] holding the potato over the pot (" + Time.time.ToString("0.0") + " s): " + CurrentAction
-                + " '" + InteractionRules.PromptFor(CurrentHeld, CurrentAim) + "'");
-            yield return DemoAim(ContentPoint(pot), 4f, null); // stay on it for the screenshot
-
-            Debug.Log("[Demo] walking to the board");
-            yield return DemoLevelView();
-            yield return DemoWalk(new Vector3(potStand.x, 0f, standZ));
-            yield return DemoWalk(new Vector3(between.x, 0f, standZ));
-            yield return DemoUse("put it on the board", ContentPoint(board), InteractionAction.PutOnBoard,
-                () => SendStation(board.Index, 0));
-
-            Knife knife = null;
-            float bestKnife = float.MaxValue;
-            foreach (Knife k in FindObjectsByType<Knife>(FindObjectsSortMode.None))
-            {
-                float d = (k.transform.position - board.transform.position).sqrMagnitude;
-                if (d < bestKnife && k.TryGetComponent(out Pickup p) && !p.IsHeld)
-                {
-                    bestKnife = d;
-                    knife = k;
-                }
-            }
-            if (knife == null)
-            {
-                Debug.LogWarning("[Demo] no free knife near the board");
-                yield break;
-            }
-            NetworkObject knifeObject = knife.GetComponent<NetworkObject>();
-            yield return DemoUse("take the knife", knife.transform.position, InteractionAction.PickUp,
-                () => SendPickup(knifeObject));
-
-            // The front middle spot of the worktop: closest to the player.
-            int frontSpot = PlaceSpots.NearestFree(worktop.Size, new Vector2(0f, -worktop.Size.y * 0.5f), null);
-            Vector3 spotPoint = worktop.SpotWorldPosition(frontSpot);
-            yield return DemoUse("put the knife on the worktop", spotPoint, InteractionAction.Place,
-                () => SendPlace(worktop.Index, frontSpot));
-            Debug.Log("[Demo] place demo done (" + Time.time.ToString("0.0") + " s)");
-            yield return DemoAim(spotPoint, 30f, null); // keep looking at the knife on the worktop
-        }
-
-        /// <summary>Where a station draws its contents (the cutting board, inside the pot); its centre if none.</summary>
-        private static Vector3 ContentPoint(Station station)
-        {
-            Transform anchor = station.transform.Find("Contents");
-            return anchor != null ? anchor.position : station.transform.position + Vector3.up * 0.5f;
-        }
-
-        /// <summary>Aims at <paramref name="point"/>, then does what a click would do (or sends the request directly).</summary>
-        private System.Collections.IEnumerator DemoUse(string what, Vector3 point, InteractionAction expected, System.Action fallback)
-        {
-            Debug.Log("[Demo] " + what);
-            yield return DemoAim(point, 3f, expected);
-            if (CurrentAction == expected)
-            {
-                Debug.Log("[Demo] click: '" + InteractionRules.PromptFor(CurrentHeld, CurrentAim) + "'");
-                ExecuteAction();
-            }
-            else
-            {
-                Debug.LogWarning("[Demo] aiming gave " + CurrentAction + " instead of " + expected + "; sending the request directly");
-                fallback();
-            }
-            yield return new WaitForSeconds(1.5f);
-        }
-
-        /// <summary>Looks straight ahead again before walking (the walk steers by the camera's forward).</summary>
+        /// <summary>Looks straight ahead (towards the kitchen, +Z) again before walking (the walk steers by the camera's forward).</summary>
         private System.Collections.IEnumerator DemoLevelView()
         {
             Camera cam = Camera.main;
             if (cam == null) yield break;
-            Vector3 ahead = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
-            if (ahead.sqrMagnitude < 0.01f) ahead = transform.forward;
-            yield return DemoAim(cam.transform.position + ahead.normalized * 5f, 1f, null);
+            yield return DemoAim(cam.transform.position + Vector3.forward * 5f, 1.5f, null);
         }
 
         /// <summary>

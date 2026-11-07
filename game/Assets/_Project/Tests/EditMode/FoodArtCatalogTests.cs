@@ -271,43 +271,34 @@ namespace Worktown.Game.Tests
             }
         }
 
-        [Test]
-        public void BuiltScene_AssemblyAndHeatStationsHaveAToolAndAContentAnchor()
+        /// <summary>
+        /// Spec 017, spec 021: the cookware (board, pan, pot, plate, bowl) are prefabs with their Food Kit model and a
+        /// content anchor whose FoodVisual draws what lies in them, above the bottom.
+        /// </summary>
+        [TestCase(VesselKind.Board, nameof(ArtKey.ToolCuttingBoard))]
+        [TestCase(VesselKind.Pan, nameof(ArtKey.FoodPan))]
+        [TestCase(VesselKind.Pot, nameof(ArtKey.FoodPot))]
+        [TestCase(VesselKind.Plate, nameof(ArtKey.FoodPlate))]
+        [TestCase(VesselKind.Bowl, nameof(ArtKey.FoodBowl))]
+        public void CookwarePrefabs_HaveTheirModelAndAContentAnchor(VesselKind kind, string model)
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
-            try
-            {
-                int found = 0;
-                foreach (GameObject root in scene.GetRootGameObjects())
-                {
-                    foreach (Station station in root.GetComponentsInChildren<Station>(true))
-                    {
-                        Component contents = station.GetComponent(typeof(StationContents));
-                        if (contents == null) continue;
-                        found++;
-                        var visual = new SerializedObject(contents).FindProperty("_visual").objectReferenceValue as FoodVisual;
-                        Assert.IsNotNull(visual, station.name + " has no content anchor");
-                        Assert.AreSame(station.transform, visual.transform.parent);
-                        Assert.IsNotNull(station.transform.Find("Tool_" + ToolKey(station.Kind)), station.name + " has no tool model");
-                        Assert.Greater(visual.transform.localPosition.y, 0f, station.name + " contents sit below the top");
-                    }
-                }
-                Assert.AreEqual(5, found, "board (spec 019), pan, pot, plating table, bowl");
-            }
-            finally { EditorSceneManager.CloseScene(scene, true); }
-        }
-
-        private static string ToolKey(StationKind kind)
-        {
-            switch (kind)
-            {
-                case StationKind.Board: return nameof(ArtKey.ToolCuttingBoard);
-                case StationKind.Pan: return nameof(ArtKey.FoodPan);
-                case StationKind.Pot: return nameof(ArtKey.FoodPot);
-                case StationKind.PlatingTable: return nameof(ArtKey.FoodPlate);
-                case StationKind.Bowl: return nameof(ArtKey.FoodBowl);
-                default: return "?";
-            }
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Prefabs/" + kind + ".prefab");
+            Assert.IsNotNull(prefab, kind + " prefab missing; run Worktown/Build Graybox Scene");
+            Component vessel = VesselTestKit.VesselOn(prefab);
+            Assert.IsNotNull(vessel, kind + " has no Vessel");
+            Assert.AreEqual(kind, VesselTestKit.KindOf(vessel));
+            Assert.AreEqual(ArtCatalogRules.VesselKey(kind).ToString(), model);
+            Transform visual = prefab.transform.Find("Visual");
+            Assert.IsNotNull(visual, kind + " has no Visual");
+            Assert.IsNotNull(visual.Find("Art_" + model), kind + " does not show " + model);
+            var anchor = new SerializedObject(vessel).FindProperty("_visual").objectReferenceValue as FoodVisual;
+            Assert.IsNotNull(anchor, kind + " has no content anchor");
+            Assert.AreSame(prefab.transform, anchor.transform.parent);
+            Assert.Greater(anchor.transform.localPosition.y, 0f, kind + " contents sit above the bottom");
+            var box = prefab.GetComponent<BoxCollider>();
+            Assert.IsNotNull(box, kind + " needs a collider to be clicked and carried");
+            Assert.AreEqual(box.size.y * 0.5f, box.center.y, 1e-4f, kind + ": pivot at the collider bottom (rests on a spot)");
+            Assert.GreaterOrEqual(box.size.y, 0.06f - 1e-4f, kind + " is thick enough for the aim ray");
         }
 
         private static int ActiveChildren(GameObject root)

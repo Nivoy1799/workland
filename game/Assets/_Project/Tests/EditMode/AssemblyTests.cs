@@ -14,24 +14,23 @@ namespace Worktown.Game.Tests
         private const int Bowl = 11;
         private int _nextId = 100;
 
-        /// <summary>Registers a food made by a chain of station options and returns its object id.</summary>
-        private int Food(KitchenState kitchen, string baseId, params (StationKind kind, int option)[] steps)
+        /// <summary>Registers a food cut by a chain of board options (HeatTestKit.Cut) and returns its object id.</summary>
+        private int Food(KitchenState kitchen, string baseId, params int[] cuts)
         {
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateIngredient(baseId, out Item item));
             int id = _nextId++;
             kitchen.Register(id, item);
-            foreach ((StationKind kind, int option) in steps)
-                Assert.AreEqual(CookOutcome.Ok, kitchen.TryApply(id, kind, option, out _, out _));
+            foreach (int option in cuts) HeatTestKit.Cut(kitchen, id, option); // spec 021: on a board vessel
             return id;
         }
 
         private int GoldenFries(KitchenState k)
         {
-            int id = Food(k, "potato", (StationKind.Board, 3));
+            int id = Food(k, "potato", 3);
             HeatTestKit.PanPreset(k, id, 2); // spec 016: the pan cooks over time
             return id;
         }
-        private int TomatoSlices(KitchenState k) => Food(k, "tomato", (StationKind.Board, 2));
+        private int TomatoSlices(KitchenState k) => Food(k, "tomato", 2);
 
         [Test]
         public void Plate_TakesAllItemsAsOnePlatedDish_AndEmptiesTheTable()
@@ -42,18 +41,18 @@ namespace Worktown.Game.Tests
             kitchen.TryGet(fries, out Item friesItem);
             kitchen.TryGet(tomato, out Item tomatoItem);
 
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(fries, Table, StationKind.PlatingTable));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(tomato, Table, StationKind.PlatingTable));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(fries, Table, VesselKind.Plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(tomato, Table, VesselKind.Plate));
             Assert.IsFalse(kitchen.TryGet(fries, out _), "food on the table is no longer a loose item");
-            Assert.AreEqual(2, kitchen.NamesOnStation(Table).Count);
+            Assert.AreEqual(2, kitchen.NamesIn(Table).Count);
 
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Table, StationKind.PlatingTable, out Item plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Table, VesselKind.Plate, out Item plate));
             var factory = new ItemFactory(new ItemCatalog(DemoIngredients.All), OperationCatalog.CreateDefault());
             Item expected = factory.Apply("plate", new[] { friesItem, tomatoItem }, new Dictionary<string, ParamValue>()).Item;
             Assert.AreEqual(expected.Hash, plate.Hash);
             Assert.IsTrue(AssemblyRules.IsPlated(plate));
             Assert.AreEqual(2, plate.Weight);
-            Assert.AreEqual(0, kitchen.NamesOnStation(Table).Count);
+            Assert.AreEqual(0, kitchen.NamesIn(Table).Count);
         }
 
         [Test]
@@ -61,9 +60,9 @@ namespace Worktown.Game.Tests
         {
             var kitchen = KitchenState.CreateDemo();
             for (int i = 0; i < CookingLimits.MaxPlateInputs; i++)
-                Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(TomatoSlices(kitchen), Table, StationKind.PlatingTable));
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(TomatoSlices(kitchen), Table, VesselKind.Plate));
             int extra = TomatoSlices(kitchen);
-            Assert.AreEqual(CookOutcome.StationFull, kitchen.TryAddToStation(extra, Table, StationKind.PlatingTable));
+            Assert.AreEqual(CookOutcome.VesselFull, kitchen.TryAddToVessel(extra, Table, VesselKind.Plate));
             Assert.IsTrue(kitchen.TryGet(extra, out _), "refused food stays in hand");
         }
 
@@ -71,11 +70,11 @@ namespace Worktown.Game.Tests
         public void PlatedDish_CannotGoOntoAnotherPlateOrIntoABowl()
         {
             var kitchen = KitchenState.CreateDemo();
-            kitchen.TryAddToStation(GoldenFries(kitchen), Table, StationKind.PlatingTable);
-            kitchen.TryTakeFromStation(Table, StationKind.PlatingTable, out Item plate);
+            kitchen.TryAddToVessel(GoldenFries(kitchen), Table, VesselKind.Plate);
+            kitchen.TryTakeFromVessel(Table, VesselKind.Plate, out Item plate);
             kitchen.Register(500, plate);
-            Assert.AreEqual(CookOutcome.AlreadyPlated, kitchen.TryAddToStation(500, Table, StationKind.PlatingTable));
-            Assert.AreEqual(CookOutcome.AlreadyPlated, kitchen.TryAddToStation(500, Bowl, StationKind.Bowl));
+            Assert.AreEqual(CookOutcome.AlreadyPlated, kitchen.TryAddToVessel(500, Table, VesselKind.Plate));
+            Assert.AreEqual(CookOutcome.AlreadyPlated, kitchen.TryAddToVessel(500, Bowl, VesselKind.Bowl));
         }
 
         [Test]
@@ -84,13 +83,13 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             int tomato = TomatoSlices(kitchen);
             kitchen.TryGet(tomato, out Item tomatoItem);
-            kitchen.TryAddToStation(tomato, Bowl, StationKind.Bowl);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item single));
+            kitchen.TryAddToVessel(tomato, Bowl, VesselKind.Bowl);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Bowl, VesselKind.Bowl, out Item single));
             Assert.AreEqual(tomatoItem.Hash, single.Hash);
 
-            kitchen.TryAddToStation(TomatoSlices(kitchen), Bowl, StationKind.Bowl);
-            kitchen.TryAddToStation(Food(kitchen, "onion", (StationKind.Board, 4)), Bowl, StationKind.Bowl);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item mix));
+            kitchen.TryAddToVessel(TomatoSlices(kitchen), Bowl, VesselKind.Bowl);
+            kitchen.TryAddToVessel(Food(kitchen, "onion", 4), Bowl, VesselKind.Bowl);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Bowl, VesselKind.Bowl, out Item mix));
             Assert.AreEqual("mix", mix.OperationId);
             Assert.IsFalse(AssemblyRules.IsPlated(mix));
         }
@@ -102,16 +101,16 @@ namespace Worktown.Game.Tests
             // is 7 inputs. That must be refused while the item is still in hand.
             var kitchen = KitchenState.CreateDemo();
             for (int i = 0; i < CookingLimits.MaxMixInputs; i++)
-                Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(TomatoSlices(kitchen), Bowl, StationKind.Bowl));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item fullMix));
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(TomatoSlices(kitchen), Bowl, VesselKind.Bowl));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Bowl, VesselKind.Bowl, out Item fullMix));
             kitchen.Register(700, fullMix);
 
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(700, Bowl, StationKind.Bowl), "a single mix goes in");
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(700, Bowl, VesselKind.Bowl), "a single mix goes in");
             int extra = TomatoSlices(kitchen);
-            Assert.AreEqual(CookOutcome.SimRefused, kitchen.TryAddToStation(extra, Bowl, StationKind.Bowl));
+            Assert.AreEqual(CookOutcome.SimRefused, kitchen.TryAddToVessel(extra, Bowl, VesselKind.Bowl));
             Assert.IsTrue(kitchen.TryGet(extra, out _), "the refused item stays in hand");
 
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item back));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Bowl, VesselKind.Bowl, out Item back));
             Assert.AreEqual(fullMix.Hash, back.Hash, "the bowl is not locked");
         }
 
@@ -119,30 +118,30 @@ namespace Worktown.Game.Tests
         public void PreviewTake_DoesNotEmptyTheStation()
         {
             var kitchen = KitchenState.CreateDemo();
-            kitchen.TryAddToStation(GoldenFries(kitchen), Table, StationKind.PlatingTable);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTake(Table, StationKind.PlatingTable, out _));
-            Assert.AreEqual(1, kitchen.NamesOnStation(Table).Count);
-            kitchen.ClearStation(Table);
-            Assert.AreEqual(0, kitchen.NamesOnStation(Table).Count);
+            kitchen.TryAddToVessel(GoldenFries(kitchen), Table, VesselKind.Plate);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTake(Table, VesselKind.Plate, out _));
+            Assert.AreEqual(1, kitchen.NamesIn(Table).Count);
+            kitchen.ClearVessel(Table);
+            Assert.AreEqual(0, kitchen.NamesIn(Table).Count);
         }
 
         [Test]
         public void EmptyStation_IsRefused_AndOtherStationsAreNotAssemblies()
         {
             var kitchen = KitchenState.CreateDemo();
-            Assert.AreEqual(CookOutcome.StationEmpty, kitchen.TryTakeFromStation(Table, StationKind.PlatingTable, out _));
-            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryTakeFromStation(Table, StationKind.Pan, out _));
-            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryAddToStation(TomatoSlices(kitchen), Table, StationKind.Board));
-            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryAddToStation(999, Table, StationKind.PlatingTable));
+            Assert.AreEqual(CookOutcome.StationEmpty, kitchen.TryTakeFromVessel(Table, VesselKind.Plate, out _));
+            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryTakeFromVessel(Table, VesselKind.Pan, out _));
+            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryAddToVessel(TomatoSlices(kitchen), Table, VesselKind.Board));
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryAddToVessel(999, Table, VesselKind.Plate));
         }
 
         [Test]
         public void TryPlate_SellsAPlatedDishAsItIs()
         {
             var kitchen = KitchenState.CreateDemo();
-            kitchen.TryAddToStation(GoldenFries(kitchen), Table, StationKind.PlatingTable);
-            kitchen.TryAddToStation(TomatoSlices(kitchen), Table, StationKind.PlatingTable);
-            kitchen.TryTakeFromStation(Table, StationKind.PlatingTable, out Item plate);
+            kitchen.TryAddToVessel(GoldenFries(kitchen), Table, VesselKind.Plate);
+            kitchen.TryAddToVessel(TomatoSlices(kitchen), Table, VesselKind.Plate);
+            kitchen.TryTakeFromVessel(Table, VesselKind.Plate, out Item plate);
             kitchen.Register(600, plate);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPlate(600, out Item forSale));
             Assert.AreEqual(plate.Hash, forSale.Hash, "no plate of a plate");
@@ -156,9 +155,9 @@ namespace Worktown.Game.Tests
             int friesOnly = GoldenFries(kitchen);
             kitchen.TryPlate(friesOnly, out Item snack);
 
-            kitchen.TryAddToStation(GoldenFries(kitchen), Table, StationKind.PlatingTable);
-            kitchen.TryAddToStation(TomatoSlices(kitchen), Table, StationKind.PlatingTable);
-            kitchen.TryTakeFromStation(Table, StationKind.PlatingTable, out Item meal);
+            kitchen.TryAddToVessel(GoldenFries(kitchen), Table, VesselKind.Plate);
+            kitchen.TryAddToVessel(TomatoSlices(kitchen), Table, VesselKind.Plate);
+            kitchen.TryTakeFromVessel(Table, VesselKind.Plate, out Item meal);
 
             TownEconomy forSnack = TownEconomy.CreateDemo();
             TownEconomy forMeal = TownEconomy.CreateDemo();

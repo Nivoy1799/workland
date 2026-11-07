@@ -24,7 +24,7 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             kitchen.TryCreateIngredient("potato", out Item potato);
             kitchen.Register(1, potato);
-            kitchen.TryApply(1, StationKind.Board, 3, out _, out _);
+            HeatTestKit.Cut(kitchen, 1, 3); // spec 021: sticks on a board vessel
             HeatTestKit.PanPreset(kitchen, 1, panOption); // spec 016: the pan cooks over time
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPlate(1, out Item plated));
             return plated;

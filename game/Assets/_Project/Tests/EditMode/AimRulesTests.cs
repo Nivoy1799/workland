@@ -198,5 +198,24 @@ namespace Worktown.Game.Tests
             var hits = new List<AimHit> { new AimHit(0.9f, AimKind.Other, Vector3.zero), AimHit.Spot(1.2f, Near, 1, 4) };
             Assert.AreEqual(AimRules.None, AimRules.Pick(hits, Player, pickupsTransparent: true));
         }
+
+        // ---- spec 021: cookware ----
+
+        [Test]
+        public void FullHands_CookwareStaysATarget_AndBlocksTheSpotBehind()
+        {
+            var hits = new List<AimHit> { new AimHit(1.1f, AimKind.Vessel, Near), AimHit.Spot(1.2f, Near, 1, 4) };
+            Assert.AreEqual(0, AimRules.Pick(hits, Player, pickupsTransparent: true), "food goes into the pot in front");
+            Assert.AreEqual(0, AimRules.Pick(hits, Player, pickupsTransparent: false), "empty hands pick it up");
+            var pickupThenPot = new List<AimHit> { new AimHit(0.8f, AimKind.Pickup, Near), new AimHit(1.1f, AimKind.Vessel, Near2) };
+            Assert.AreEqual(1, AimRules.Pick(pickupThenPot, Player, pickupsTransparent: true), "a loose item in front does not hide the pot");
+        }
+
+        [Test]
+        public void CookwareOutOfReach_IsReported()
+        {
+            Assert.AreEqual(AimRules.None, AimRules.Pick(new List<AimHit> { new AimHit(2.6f, AimKind.Vessel, Far) }, Player, true, out int far));
+            Assert.AreEqual(0, far);
+        }
     }
 }

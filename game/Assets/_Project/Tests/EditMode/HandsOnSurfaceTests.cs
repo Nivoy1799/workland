@@ -8,7 +8,7 @@ namespace Worktown.Game.Tests
 {
     /// <summary>
     /// Spec 019 AC6: the cut progress is bytes only, the stove lights sync one byte, and the knife and buttons
-    /// add no request: every hands-on intent goes through RequestStation(int, int). Found by reflection and
+    /// add no request of their own (spec 021: the stove buttons use RequestStation(int, int), cookware RequestUse). Found by reflection and
     /// attribute name, so this test assembly needs no FishNet reference (like RpcSurfaceTests).
     /// </summary>
     public class HandsOnSurfaceTests
@@ -47,6 +47,8 @@ namespace Worktown.Game.Tests
         [TestCase(typeof(Knife))]
         [TestCase(typeof(StationButton))]
         [TestCase(typeof(CutRules))]
+        [TestCase(typeof(Vessel))]
+        [TestCase(typeof(VesselRules))]
         public void HandsOnTypes_HaveNoRpcs(Type type)
         {
             string[] rpcs = type.GetMethods(Declared)

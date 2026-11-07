@@ -13,8 +13,8 @@ using Object = UnityEngine.Object;
 namespace Worktown.Game.Tests
 {
     /// <summary>
-    /// Spec 020: the generated scene has worktops between the kitchen stations and a place surface on the board
-    /// station's free half, all known to the PickupService by index; the knife starts on a spot; the world labels
+    /// Spec 020/021: the generated scene has worktops between the kitchen stations, stove tops and burners as place surfaces, all
+    /// known to the PickupService by index; the knife and the cookware start on spots; the world labels
     /// show no keys; the player prefab has the highlight and the label fade. Also the highlight and fade helpers.
     /// </summary>
     public class PlaceSceneTests
@@ -36,9 +36,10 @@ namespace Worktown.Game.Tests
             try
             {
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(6, surfaces.Count, "the board's free half and five worktops");
+                Assert.AreEqual(11, surfaces.Count, "spec 021: five worktops, and per stove its top and two burners");
                 SerializedProperty list = new SerializedObject(All<PickupService>(scene)[0]).FindProperty("_surfaces");
                 Assert.AreEqual(surfaces.Count, list.arraySize);
+                int burners = 0;
                 for (int i = 0; i < list.arraySize; i++)
                 {
                     var surface = (PlaceSurface)list.GetArrayElementAtIndex(i).objectReferenceValue;
@@ -46,12 +47,22 @@ namespace Worktown.Game.Tests
                     Assert.AreEqual(i, surface.Index, surface.name);
                     Assert.IsNotNull(surface.GetComponent<BoxCollider>(), surface.name + " needs a collider for the aim ray");
                     Assert.AreEqual(Vector3.one, surface.transform.lossyScale, surface.name + " must not be scaled");
-                    Assert.Greater(surface.SpotCount, 1, surface.name);
+                    if (surface.IsBurner)
+                    {
+                        burners++;
+                        Assert.AreEqual(1, surface.SpotCount, surface.name + ": a burner has one spot");
+                        Station stove = surface.GetComponentInParent<Station>();
+                        Assert.IsNotNull(stove, surface.name);
+                        Assert.AreEqual(StationKind.Stove, stove.Kind);
+                        Assert.AreEqual(stove.Index, surface.StoveIndex, surface.name);
+                    }
+                    else Assert.Greater(surface.SpotCount, 1, surface.name);
                     float y = surface.SpotWorldPosition(0).y;
                     Assert.That(y, Is.InRange(0.7f, 1.3f), surface.name + " top at station height");
                     Bounds box = surface.GetComponent<BoxCollider>().bounds;
                     Assert.GreaterOrEqual(box.max.y, y - 0.001f, surface.name + ": the ray hits the top, not air");
                 }
+                Assert.AreEqual(4, burners, "two stoves with two burners each");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }
@@ -66,7 +77,7 @@ namespace Worktown.Game.Tests
                 int worktops = 0;
                 foreach (PlaceSurface surface in All<PlaceSurface>(scene))
                 {
-                    if (surface.GetComponentInParent<Station>() != null) continue; // the board's own half
+                    if (surface.GetComponentInParent<Station>() != null) continue; // a stove's top or burner
                     worktops++;
                     Bounds top = surface.GetComponent<BoxCollider>().bounds;
                     foreach (Station station in stations)
@@ -82,26 +93,38 @@ namespace Worktown.Game.Tests
             finally { EditorSceneManager.CloseScene(scene, true); }
         }
 
+        /// <summary>Spec 021: the knife and every piece of cookware start on a spot (their home); the pan and the pot on burners.</summary>
         [Test]
-        public void BuiltScene_KnifeStartsOnASpotOfItsBoard()
+        public void BuiltScene_KnifeAndCookwareStartOnSpots_PanAndPotOnBurners()
         {
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
             try
             {
-                Knife knife = All<Knife>(scene)[0];
-                Station board = All<Station>(scene).Find(s => s.Index == knife.BoardIndex);
-                PlaceSurface surface = board.GetComponentInChildren<PlaceSurface>();
-                Assert.IsNotNull(surface, "the board station has a place surface");
-                bool onSpot = false;
-                for (int i = 0; i < surface.SpotCount; i++)
+                List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
+                var items = new List<Component>();
+                items.AddRange(All<Knife>(scene));
+                items.AddRange(VesselTestKit.AllOf(scene, VesselTestKit.VesselType));
+                Assert.AreEqual(1 + 6, items.Count, "knife, board, pan, pot, bowl and two plates");
+                foreach (Component item in items)
                 {
-                    Vector3 spot = surface.SpotWorldPosition(i);
-                    Vector3 offset = knife.transform.position - spot;
-                    if (new Vector2(offset.x, offset.z).magnitude < 0.001f && offset.y > 0f && offset.y < 0.1f) onSpot = true;
+                    PlaceSurface on = SurfaceUnder(surfaces, item.transform.position);
+                    Assert.IsNotNull(on, item.name + " lies on no spot (" + item.transform.position + ")");
+                    bool heat = !(item is Knife) && VesselRules.IsHeat(VesselTestKit.KindOf(item));
+                    Assert.AreEqual(heat, on.IsBurner, item.name + " on " + on.name);
                 }
-                Assert.IsTrue(onSpot, "the knife lies on its home spot (" + knife.transform.position + ")");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
+        }
+
+        private static PlaceSurface SurfaceUnder(List<PlaceSurface> surfaces, Vector3 position)
+        {
+            foreach (PlaceSurface surface in surfaces)
+                for (int i = 0; i < surface.SpotCount; i++)
+                {
+                    Vector3 offset = position - surface.SpotWorldPosition(i);
+                    if (new Vector2(offset.x, offset.z).magnitude < 0.001f && offset.y >= -0.001f && offset.y < 0.1f) return surface;
+                }
+            return null;
         }
 
         [Test]
@@ -137,7 +160,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionHighlight.TakeColor, InteractionHighlight.ColorFor(InteractionAction.PickUp, false));
             Assert.AreEqual(InteractionHighlight.TakeColor, InteractionHighlight.ColorFor(InteractionAction.Take, false));
             Assert.AreEqual(InteractionHighlight.TakeColor, InteractionHighlight.ColorFor(InteractionAction.Buy, false));
-            foreach (InteractionAction use in new[] { InteractionAction.PutInto, InteractionAction.PutOnBoard, InteractionAction.Place,
+            foreach (InteractionAction use in new[] { InteractionAction.PutInto, InteractionAction.Pour, InteractionAction.Place,
                          InteractionAction.Sell, InteractionAction.Press, InteractionAction.Cut })
                 Assert.AreEqual(InteractionHighlight.UseColor, InteractionHighlight.ColorFor(use, false), use.ToString());
             Assert.AreEqual(InteractionHighlight.RefuseColor, InteractionHighlight.ColorFor(InteractionAction.None, true));

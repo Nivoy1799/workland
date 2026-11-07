@@ -82,10 +82,15 @@ namespace Worktown.Game.Tests
             foreach (StationKind kind in Enum.GetValues(typeof(StationKind)))
             {
                 ArtKey key = ArtCatalogRules.StationKey(kind);
-                Assert.AreEqual("Station" + kind, key.ToString());
+                StringAssert.StartsWith("Station", key.ToString(), kind.ToString());
                 Assert.IsTrue(seen.Add(key), "duplicate key for " + kind);
             }
             Assert.Throws<ArgumentOutOfRangeException>(() => ArtCatalogRules.StationKey((StationKind)200));
+            // Spec 021: explicit, the stove keeps the spec 015 stove model, the shelf the plain cabinet.
+            Assert.AreEqual(ArtKey.StationPan, ArtCatalogRules.StationKey(StationKind.Stove));
+            Assert.AreEqual(ArtKey.StationPlatingTable, ArtCatalogRules.StationKey(StationKind.PlateShelf));
+            Assert.AreEqual(ArtKey.StationCounter, ArtCatalogRules.StationKey(StationKind.Counter));
+            Assert.AreEqual(ArtKey.StationCrate, ArtCatalogRules.StationKey(StationKind.Crate));
         }
 
         // AC4
@@ -110,7 +115,7 @@ namespace Worktown.Game.Tests
             try
             {
                 var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>(CatalogPath);
-                float[] fixedX = { 0.5f, 3f, 5.5f, 8.5f, 11f, 13.5f }; // after the crates, in index order
+                float[] fixedX = { 3f, 5.5f, 8.5f, 11f }; // spec 021: two stoves, counter, plate shelf after the crates
                 int crates = DemoIngredients.All.Count;
                 int count = 0;
                 foreach (GameObject root in scene.GetRootGameObjects())
@@ -131,7 +136,7 @@ namespace Worktown.Game.Tests
                         Assert.AreEqual(0f, Vector3.Distance(expected, colliderCenter), 0.001f, station.name + " moved");
                         Assert.IsNull(body.GetComponent<MeshRenderer>(), station.name + " still shows the cube");
 
-                        Transform visual = station.transform.Find("Art_Station" + station.Kind);
+                        Transform visual = station.transform.Find("Art_" + ArtCatalogRules.StationKey(station.Kind));
                         Assert.IsNotNull(visual, station.name + " has no catalog visual");
                         Assert.IsTrue(catalog.TryGet(ArtCatalogRules.StationKey(station.Kind), out GameObject expectedPrefab));
                         Assert.AreSame(expectedPrefab, PrefabUtility.GetCorrespondingObjectFromSource(visual.gameObject),
@@ -144,7 +149,7 @@ namespace Worktown.Game.Tests
                         Assert.AreEqual(colliderCenter.z, b.center.z, 0.05f, station.name + " visual off centre in Z");
                     }
                 }
-                Assert.AreEqual(DemoIngredients.All.Count + 6, count, "crates plus board, pan, pot, counter, plating table, bowl");
+                Assert.AreEqual(DemoIngredients.All.Count + 4, count, "crates plus two stoves, the counter and the plate shelf");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

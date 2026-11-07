@@ -1,65 +1,53 @@
 using NUnit.Framework;
 using UnityEngine;
 using Worktown.Game.Cooking;
-using Worktown.Sim.Cooking;
 
 namespace Worktown.Game.Tests
 {
-    /// <summary>Spec 007 AC1 (station mapping) and AC4 (stars).</summary>
+    /// <summary>
+    /// Spec 007 AC1 (station mapping) and AC4 (stars). Spec 021: the board, pan and pot are carried cookware now (see
+    /// VesselRulesTests, BoardSessionTests, HeatSessionTests); the stations are crates, the counter, the stoves and the
+    /// plate shelf, and a stove's options are its burners' knobs and buttons.
+    /// </summary>
     public class CookingRulesTests
     {
-        [TestCase(StationKind.Board, 1, "cut", "halves")]
-        [TestCase(StationKind.Board, 2, "cut", "slices")]
-        [TestCase(StationKind.Board, 3, "cut", "sticks")]
-        [TestCase(StationKind.Board, 4, "cut", "dice")]
-        public void Board_MapsToCutShape(StationKind kind, int option, string op, string shape)
+        [TestCase(0, StationRules.StoveSwitch, 1)]
+        [TestCase(0, StationRules.PanMode, 2)]
+        [TestCase(1, StationRules.StoveSwitch, 3)]
+        [TestCase(1, StationRules.PanMode, 4)]
+        public void StoveOption_PerBurner_AndBack(int burner, int button, int option)
         {
-            Assert.IsTrue(StationRules.TryGetAction(kind, option, out StationAction action));
-            Assert.AreEqual(op, action.OperationId);
-            Assert.AreEqual(ParamValue.Choice(shape), action.Parameters["shape"]);
+            Assert.AreEqual(option, StationRules.StoveOption(burner, button));
+            Assert.IsTrue(StationRules.TryParseStoveOption(option, out int b, out int k));
+            Assert.AreEqual(burner, b);
+            Assert.AreEqual(button, k);
         }
 
-        [TestCase(StationKind.Pan)]
-        [TestCase(StationKind.Pot)]
-        public void PanAndPot_HaveNoInstantPresets_Spec016(StationKind kind)
+        [TestCase(0)]
+        [TestCase(5)]
+        [TestCase(-1)]
+        [TestCase(99)]
+        public void UnknownStoveOption_IsRejected(int option)
         {
-            for (int option = 1; option <= 4; option++)
-                Assert.IsFalse(StationRules.TryGetAction(kind, option, out _), "option " + option);
-            Assert.IsTrue(StationRules.IsHeat(kind));
-        }
-
-        [TestCase(StationKind.Board, 0)]
-        [TestCase(StationKind.Board, 5)]
-        [TestCase(StationKind.Pan, 4)]
-        [TestCase(StationKind.Pot, -1)]
-        [TestCase(StationKind.Crate, 1)]
-        [TestCase(StationKind.Counter, 1)]
-        [TestCase((StationKind)99, 1)]
-        public void UnknownStationOrOption_IsRejected(StationKind kind, int option)
-        {
-            Assert.IsFalse(StationRules.TryGetAction(kind, option, out _));
+            Assert.IsFalse(StationRules.TryParseStoveOption(option, out int burner, out _));
+            Assert.AreEqual(-1, burner);
         }
 
         [Test]
-        public void OptionCounts()
+        public void Prompt_ForEveryStation()
         {
-            Assert.AreEqual(4, StationRules.OptionCount(StationKind.Board));
-            Assert.AreEqual(2, StationRules.OptionCount(StationKind.Pan));
-            Assert.AreEqual(1, StationRules.OptionCount(StationKind.Pot));
-            Assert.AreEqual(0, StationRules.OptionCount(StationKind.Crate));
-            Assert.AreEqual(0, StationRules.OptionCount(StationKind.Counter));
-        }
-
-        [Test]
-        public void Prompt_ListsOptions()
-        {
-            Assert.AreEqual("Pan: E put food in / E (empty hands) take it out, 1 on/off, 2 fry/saute",
-                StationRules.Prompt(StationKind.Pan, "Pan"));
-            Assert.AreEqual("E · 1-2", StationRules.KeysHint(StationKind.Pan));
-            Assert.AreEqual("E · 1", StationRules.KeysHint(StationKind.Pot));
-            Assert.AreEqual("1-4", StationRules.KeysHint(StationKind.Board));
-            Assert.AreEqual("Board: 1 halves, 2 slices, 3 sticks, 4 cubes", StationRules.Prompt(StationKind.Board, "Board"));
             Assert.AreEqual("Counter: E sell", StationRules.Prompt(StationKind.Counter, "Counter"));
+            Assert.AreEqual("Potato crate: E take one", StationRules.Prompt(StationKind.Crate, "Potato crate"));
+            Assert.AreEqual("Plates: E take a plate", StationRules.Prompt(StationKind.PlateShelf, "Plates"));
+            foreach (StationKind kind in System.Enum.GetValues(typeof(StationKind)))
+                Assert.IsNotEmpty(StationRules.Prompt(kind, "X"), kind.ToString());
+        }
+
+        [Test]
+        public void StationKinds_AreTheSpec021Furniture()
+        {
+            CollectionAssert.AreEquivalent(new[] { StationKind.Crate, StationKind.Counter, StationKind.Stove, StationKind.PlateShelf },
+                System.Enum.GetValues(typeof(StationKind)));
         }
 
         [Test]

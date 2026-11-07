@@ -6,7 +6,8 @@ using Worktown.Game.Net.Rules;
 namespace Worktown.Game.Net
 {
     /// <summary>
-    /// A cube that can be carried. The server moves it to the holder's hold point every tick;
+    /// A cube that can be carried (spec 021: also every piece of cookware, with a Vessel). The server moves it to the
+    /// holder's hold point every tick;
     /// NetworkTransform (server-authoritative) replicates the position.
     /// While held, the holder OWNS this object (PickupService gives ownership so the client can
     /// find its held cube). Do not add [ServerRpc] methods here without RequireOwnership = false
@@ -86,8 +87,12 @@ namespace Worktown.Game.Net
             Vector3 atFeet = holderPosition;
             atFeet.y = RestHeight;
 
-            // Spec 020: lies the way it rests (a knife flat), yaw reset as before.
-            transform.SetPositionAndRotation(IsFree(inFront) ? inFront : atFeet, PlaceSpots.RestRotation(_restTilt, Quaternion.identity));
+            // Spec 020: lies the way it rests (a knife flat), yaw reset as before. Spec 021: the free-space check stays at
+            // the old height; the item then rests with its collider bottom on the floor (cookware has its pivot at the
+            // bottom, food and boxes at the centre).
+            Vector3 rest = IsFree(inFront) ? inFront : atFeet;
+            rest.y = BottomOffset;
+            transform.SetPositionAndRotation(rest, PlaceSpots.RestRotation(_restTilt, Quaternion.identity));
             _serverHoldPoint = null;
             HolderClientId.Value = PickupRegistry.NoHolder;
         }

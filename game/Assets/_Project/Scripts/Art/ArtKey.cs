@@ -1,8 +1,9 @@
 namespace Worktown.Game.Art
 {
     /// <summary>
-    /// Visual slots of the swap layer (spec 015). The first seven values mirror
-    /// <c>StationKind</c> in the same order (a test checks this); new values are appended.
+    /// Visual slots of the swap layer (spec 015). The first seven values are the spec 015 station models;
+    /// <c>ArtCatalogRules.StationKey</c> maps each station kind to one explicitly (spec 021: the stove uses
+    /// StationPan, the plate shelf StationPlatingTable). New values are appended.
     /// </summary>
     public enum ArtKey : byte
     {

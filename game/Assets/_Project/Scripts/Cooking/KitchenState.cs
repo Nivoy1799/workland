@@ -4,21 +4,28 @@ using Worktown.Sim.Cooking;
 namespace Worktown.Game.Cooking
 {
     /// <summary>
-    /// Server-side kitchen state (spec 007): which sim <see cref="Item"/> each food object is.
-    /// Pure: the caller (KitchenService) owns networking, positions and spawning. Clients never
-    /// send item data; they only pick a station option, and this class applies the sim operation.
+    /// Server-side kitchen state (spec 007): which sim <see cref="Item"/> each food object is, and (spec 021) what lies
+    /// in each piece of cookware, keyed by the vessel's object id: food on a board and how far it is cut, food cooking
+    /// in a pan or pot, the parts on a plate or in a bowl. Also the burners (on/off, fry/saute) keyed by the burner's
+    /// place surface index, and which burner each pan or pot stands on. Pure: the caller (KitchenService) owns
+    /// networking, positions and spawning. Clients never send item data; this class applies the sim operations.
     /// </summary>
     public sealed class KitchenState
     {
+        /// <summary>A vessel that stands on no burner.</summary>
+        public const int NoBurner = -1;
+
         private readonly ItemFactory _factory;
         private readonly OperationCatalog _operations;
-        // Spec 016: food cooking in a pan or pot, and each stove's switch and mode, per station index.
-        private readonly Dictionary<int, HeatSession> _heat = new Dictionary<int, HeatSession>();
-        private readonly Dictionary<int, StoveSettings> _stoves = new Dictionary<int, StoveSettings>();
         private readonly Dictionary<int, Item> _items = new Dictionary<int, Item>();
-        // Spec 013: contents of plating tables and bowls, per station index, in the order added.
-        private readonly Dictionary<int, List<AssemblyEntry>> _stations = new Dictionary<int, List<AssemblyEntry>>();
-        // Spec 019: food lying on a cutting board and how far it is cut, per board station index.
+        // Spec 016/021: food cooking in a pan (one) or a pot (up to four, each with its own clock), per vessel id.
+        private readonly Dictionary<int, List<HeatSession>> _heat = new Dictionary<int, List<HeatSession>>();
+        // Spec 021: each burner's switch and mode (per burner id), and the burner a pan or pot stands on.
+        private readonly Dictionary<int, StoveSettings> _burners = new Dictionary<int, StoveSettings>();
+        private readonly Dictionary<int, int> _burnerOf = new Dictionary<int, int>();
+        // Spec 013/021: parts on a plate or in a bowl, per vessel id, in the order added.
+        private readonly Dictionary<int, List<AssemblyEntry>> _assembly = new Dictionary<int, List<AssemblyEntry>>();
+        // Spec 019/021: food lying on a cutting board and how far it is cut, per board vessel id.
         private readonly Dictionary<int, Item> _boardFood = new Dictionary<int, Item>();
         private readonly Dictionary<int, CutProgress> _boardCut = new Dictionary<int, CutProgress>();
 
@@ -33,6 +40,10 @@ namespace Worktown.Game.Cooking
             OperationCatalog operations = OperationCatalog.CreateDefault();
             return new KitchenState(new ItemFactory(new ItemCatalog(DemoIngredients.All), operations), operations);
         }
+
+        private static readonly IReadOnlyDictionary<string, ParamValue> NoParams = new Dictionary<string, ParamValue>();
+
+        // ---- food objects ----
 
         /// <summary>Creates a raw ingredient. Register it under its object id once spawned.</summary>
         public CookOutcome TryCreateIngredient(string baseId, out Item item)
@@ -54,27 +65,8 @@ namespace Worktown.Game.Cooking
             return _items.TryGetValue(objectId, out item);
         }
 
-        /// <summary>Applies the station option to the food. On failure nothing changes.</summary>
-        public CookOutcome TryApply(int objectId, StationKind station, int option, out Item result, out OperationError simError)
-        {
-            result = null;
-            simError = OperationError.None;
-            if (!_items.TryGetValue(objectId, out Item item)) return CookOutcome.NotFood;
-            if (!StationRules.TryGetAction(station, option, out StationAction action)) return CookOutcome.InvalidOption;
-
-            OperationResult applied = _factory.Apply(action.OperationId, new[] { item }, action.Parameters);
-            if (!applied.Ok || applied.Item == null)
-            {
-                simError = applied.Error;
-                return CookOutcome.SimRefused;
-            }
-            _items[objectId] = applied.Item;
-            result = applied.Item;
-            return CookOutcome.Ok;
-        }
-
         /// <summary>
-        /// Spec 009: the plated version of the food, for selling. Does not change the stored item,
+        /// Spec 009: the plated version of loose food, for selling at the counter. Does not change the stored item,
         /// so a refused sale leaves the food as it was.
         /// </summary>
         public CookOutcome TryPlate(int objectId, out Item plated)
@@ -83,7 +75,7 @@ namespace Worktown.Game.Cooking
             if (!_items.TryGetValue(objectId, out Item item)) return CookOutcome.NotFood;
             if (AssemblyRules.IsPlated(item))
             {
-                plated = item; // spec 013: built on a plating table, sell it as it is
+                plated = item; // already a finished plate: sell it as it is
                 return CookOutcome.Ok;
             }
             OperationResult result = _factory.Apply("plate", new[] { item }, NoParams);
@@ -91,8 +83,6 @@ namespace Worktown.Game.Cooking
             plated = result.Item;
             return CookOutcome.Ok;
         }
-
-        private static readonly IReadOnlyDictionary<string, ParamValue> NoParams = new Dictionary<string, ParamValue>();
 
         /// <summary>Removes the food (it was served or despawned).</summary>
         public bool TryRemove(int objectId, out Item item)
@@ -102,77 +92,217 @@ namespace Worktown.Game.Cooking
             return true;
         }
 
+        /// <summary>Everything goes: food, contents, burners (switched off) and positions.</summary>
         public void Clear()
         {
             _items.Clear();
-            _stations.Clear();
+            _assembly.Clear();
             _heat.Clear();
-            _stoves.Clear();
+            _burners.Clear();
+            _burnerOf.Clear();
             _boardFood.Clear();
             _boardCut.Clear();
+        }
+
+        /// <summary>Spec 021: a vessel left the world (sold plate, lost cookware): its contents and position go with it.</summary>
+        public void RemoveVessel(int vesselId)
+        {
+            _heat.Remove(vesselId);
+            _burnerOf.Remove(vesselId);
+            _assembly.Remove(vesselId);
+            ClearBoard(vesselId);
+        }
+
+        // ---- spec 021: any cookware ----
+
+        /// <summary>How many things lie in the vessel.</summary>
+        public int ContentCount(int vesselId, VesselKind kind)
+        {
+            switch (kind)
+            {
+                case VesselKind.Board: return _boardFood.ContainsKey(vesselId) ? 1 : 0;
+                case VesselKind.Pan:
+                case VesselKind.Pot: return HeatCount(vesselId);
+                default: return CountIn(vesselId);
+            }
+        }
+
+        /// <summary>
+        /// Puts the held food into the vessel (board, pan, pot, plate, bowl). On success the food no longer exists as
+        /// an item in the world (the caller despawns its object). Refusals change nothing: NotFood, AlreadyPlated,
+        /// VesselFull, SimRefused (the sim would refuse to cut, heat or combine it).
+        /// </summary>
+        public CookOutcome TryPutInto(int foodObjectId, int vesselId, VesselKind kind, uint tick)
+        {
+            switch (kind)
+            {
+                case VesselKind.Board: return TryPutOnBoard(foodObjectId, vesselId);
+                case VesselKind.Pan:
+                case VesselKind.Pot: return TryPutOnHeat(foodObjectId, vesselId, kind, tick);
+                default: return TryAddToVessel(foodObjectId, vesselId, kind);
+            }
+        }
+
+        /// <summary>
+        /// What empty hands take out, without changing the vessel: the board's food cut as far as it is, the pan's
+        /// food cooked (or TooShort, unchanged), the bowl's mix. A pot is poured (PourInstead), a plate is picked up
+        /// and sold (InvalidOption). The caller hands the result over first, then calls <see cref="ClearContents"/>.
+        /// </summary>
+        public CookOutcome TryPreviewTakeOut(int vesselId, VesselKind kind, uint tick, double tickRate, out Item result)
+        {
+            result = null;
+            switch (kind)
+            {
+                case VesselKind.Board: return TryPreviewBoardTake(vesselId, out result);
+                case VesselKind.Pan: return TryPreviewHeatTake(vesselId, tick, tickRate, out result);
+                case VesselKind.Bowl: return TryPreviewTake(vesselId, kind, out result);
+                case VesselKind.Pot: return HeatCount(vesselId) > 0 ? CookOutcome.PourInstead : CookOutcome.StationEmpty;
+                default: return CookOutcome.InvalidOption;
+            }
+        }
+
+        public void ClearContents(int vesselId, VesselKind kind)
+        {
+            switch (kind)
+            {
+                case VesselKind.Board: ClearBoard(vesselId); break;
+                case VesselKind.Pan:
+                case VesselKind.Pot: ClearHeat(vesselId); break;
+                default: ClearVessel(vesselId); break;
+            }
+        }
+
+        /// <summary>
+        /// Holding <paramref name="sourceId"/> (pan, pot or bowl with food), pours it onto the plate or into the bowl
+        /// <paramref name="targetId"/>: the server applies the heat or mix ops now, exactly like a take, and adds the
+        /// result as one part. Everything is checked before anything changes: CannotPour, StationEmpty (nothing to
+        /// pour), AlreadyPlated, VesselFull, SimRefused (the target's sim op would refuse it). Ok or TooShort
+        /// (poured unchanged) on success; then the source is empty.
+        /// </summary>
+        public CookOutcome TryPour(int sourceId, VesselKind sourceKind, int targetId, VesselKind targetKind, uint tick,
+            double tickRate, out Item poured)
+        {
+            poured = null;
+            if (sourceId == targetId || !VesselRules.CanPour(sourceKind, targetKind)) return CookOutcome.CannotPour;
+            CookOutcome made = VesselRules.IsHeat(sourceKind)
+                ? TryPreviewHeatTake(sourceId, tick, tickRate, out Item result)
+                : TryPreviewTake(sourceId, sourceKind, out result);
+            if (made != CookOutcome.Ok && made != CookOutcome.TooShort) return made;
+
+            CookOutcome fits = CanAddItem(targetId, targetKind, result);
+            if (fits != CookOutcome.Ok) return fits;
+            AssemblyOf(targetId).Add(new AssemblyEntry(result));
+            ClearContents(sourceId, sourceKind);
+            poured = result;
+            return made;
+        }
+
+        /// <summary>
+        /// Name of what taking, pouring or selling the contents gives now ("crispy fried potato sticks", the plated
+        /// dish's name); null when empty or when the sim would refuse.
+        /// </summary>
+        public string ResultName(int vesselId, VesselKind kind, uint tick, double tickRate)
+        {
+            Item result;
+            CookOutcome outcome;
+            switch (kind)
+            {
+                case VesselKind.Board: return BoardName(vesselId);
+                case VesselKind.Pan:
+                case VesselKind.Pot: outcome = TryPreviewHeatTake(vesselId, tick, tickRate, out result); break;
+                default: outcome = TryPreviewTake(vesselId, kind, out result); break;
+            }
+            return (outcome == CookOutcome.Ok || outcome == CookOutcome.TooShort) && result != null ? NameOf(result) : null;
+        }
+
+        /// <summary>Label lines of the contents, in order ("potato sticks · medium" while cooking).</summary>
+        public IReadOnlyList<string> ContentNames(int vesselId, VesselKind kind, uint tick, double tickRate)
+        {
+            switch (kind)
+            {
+                case VesselKind.Board:
+                    string name = BoardName(vesselId);
+                    return name == null ? new string[0] : new[] { name };
+                case VesselKind.Pan:
+                case VesselKind.Pot: return HeatNames(vesselId, tick, tickRate);
+                default: return NamesIn(vesselId);
+            }
+        }
+
+        /// <summary>Spec 017 looks of the contents, in the same order as the names.</summary>
+        public IReadOnlyList<FoodLook> ContentLooks(int vesselId, VesselKind kind, uint tick, double tickRate)
+        {
+            switch (kind)
+            {
+                case VesselKind.Board:
+                    FoodLook? look = BoardLook(vesselId);
+                    return look.HasValue ? new[] { look.Value } : new FoodLook[0];
+                case VesselKind.Pan:
+                case VesselKind.Pot: return HeatLooks(vesselId, tick, tickRate);
+                default: return LooksIn(vesselId);
+            }
         }
 
         // ---- Spec 019: cutting by hand on the board ----
 
         /// <summary>
-        /// Puts the food on the cutting board, whole and not turned. On success the food no longer exists as an
-        /// item in the world (the caller despawns its object). A full board gives StationFull; plated food, or
-        /// food the sim would not cut, gives SimRefused; in both cases the food stays in the hands.
+        /// Puts the food on the cutting board, whole and not turned. On success the food no longer exists as an item in
+        /// the world. A full board gives VesselFull, plated food AlreadyPlated, food the sim would not cut SimRefused;
+        /// in all cases the food stays in the hands.
         /// </summary>
-        public CookOutcome TryPutOnBoard(int foodObjectId, int boardIndex)
+        public CookOutcome TryPutOnBoard(int foodObjectId, int boardId)
         {
             if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
-            if (_boardFood.ContainsKey(boardIndex)) return CookOutcome.StationFull;
-            if (AssemblyRules.IsPlated(item) || !CanCut(item, FoodLook.ShapeHalves)) return CookOutcome.SimRefused;
+            CookOutcome fits = VesselRules.CanPutIn(VesselKind.Board, _boardFood.ContainsKey(boardId) ? 1 : 0, AssemblyRules.IsPlated(item));
+            if (fits != CookOutcome.Ok) return fits;
+            if (!CanCut(item, FoodLook.ShapeHalves)) return CookOutcome.SimRefused;
 
-            _boardFood[boardIndex] = item;
-            _boardCut[boardIndex] = CutProgress.Whole;
+            _boardFood[boardId] = item;
+            _boardCut[boardId] = CutProgress.Whole;
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
         }
 
         /// <summary>
-        /// One knife stroke on the board (<see cref="CutRules.Stroke"/>). NothingToCut on an empty board. A new
-        /// shape the sim would refuse is refused now (SimRefused, nothing changes), so taking always works.
-        /// The caller checks the knife and the reach.
+        /// One knife stroke on the board (<see cref="CutRules.Stroke"/>). NothingToCut on an empty board. A new shape the
+        /// sim would refuse is refused now (SimRefused, nothing changes), so taking always works.
         /// </summary>
-        public CookOutcome TryBoardStroke(int boardIndex)
+        public CookOutcome TryBoardStroke(int boardId)
         {
-            if (!_boardFood.TryGetValue(boardIndex, out Item item)) return CookOutcome.NothingToCut;
-            CutProgress current = _boardCut[boardIndex];
+            if (!_boardFood.TryGetValue(boardId, out Item item)) return CookOutcome.NothingToCut;
+            CutProgress current = _boardCut[boardId];
             CutProgress next = CutRules.Stroke(current);
             if (next.Shape != current.Shape && !CanCut(item, next.Shape)) return CookOutcome.SimRefused;
-            _boardCut[boardIndex] = next;
+            _boardCut[boardId] = next;
             return CookOutcome.Ok;
         }
 
         /// <summary>Turns the food on the board 90 degrees (<see cref="CutRules.Turn"/>). NothingToCut on an empty board.</summary>
-        public CookOutcome TryBoardTurn(int boardIndex)
+        public CookOutcome TryBoardTurn(int boardId)
         {
-            if (!_boardFood.ContainsKey(boardIndex)) return CookOutcome.NothingToCut;
-            _boardCut[boardIndex] = CutRules.Turn(_boardCut[boardIndex]);
+            if (!_boardFood.ContainsKey(boardId)) return CookOutcome.NothingToCut;
+            _boardCut[boardId] = CutRules.Turn(_boardCut[boardId]);
             return CookOutcome.Ok;
         }
 
         /// <summary>How far the food on the board is cut; false on an empty board.</summary>
-        public bool TryGetBoard(int boardIndex, out Item food, out CutProgress progress)
+        public bool TryGetBoard(int boardId, out Item food, out CutProgress progress)
         {
             progress = default;
-            if (!_boardFood.TryGetValue(boardIndex, out food)) return false;
-            progress = _boardCut[boardIndex];
+            if (!_boardFood.TryGetValue(boardId, out food)) return false;
+            progress = _boardCut[boardId];
             return true;
         }
 
         /// <summary>
-        /// What taking the food from the board gives, without changing the board: uncut food unchanged, else the
-        /// sim cut op with the shape reached (the same item the board's digit keys make). StationEmpty on an
-        /// empty board. The caller hands the result over first, then calls <see cref="ClearBoard"/>.
+        /// What taking the food from the board gives, without changing the board: uncut food unchanged, else the sim cut
+        /// op with the shape reached. StationEmpty on an empty board.
         /// </summary>
-        public CookOutcome TryPreviewBoardTake(int boardIndex, out Item result)
+        public CookOutcome TryPreviewBoardTake(int boardId, out Item result)
         {
             result = null;
-            if (!_boardFood.TryGetValue(boardIndex, out Item item)) return CookOutcome.StationEmpty;
-            string shape = CutRules.ShapeId(_boardCut[boardIndex].Shape);
+            if (!_boardFood.TryGetValue(boardId, out Item item)) return CookOutcome.StationEmpty;
+            string shape = CutRules.ShapeId(_boardCut[boardId].Shape);
             if (shape == null)
             {
                 result = item;
@@ -184,26 +314,26 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        public void ClearBoard(int boardIndex)
+        public void ClearBoard(int boardId)
         {
-            _boardFood.Remove(boardIndex);
-            _boardCut.Remove(boardIndex);
+            _boardFood.Remove(boardId);
+            _boardCut.Remove(boardId);
         }
 
         /// <summary>The look of the food on the board with the shape cut so far; null on an empty board.</summary>
-        public FoodLook? BoardLook(int boardIndex)
+        public FoodLook? BoardLook(int boardId)
         {
-            if (!_boardFood.TryGetValue(boardIndex, out Item item)) return null;
+            if (!_boardFood.TryGetValue(boardId, out Item item)) return null;
             FoodLook look = FoodLookRules.From(item);
-            byte shape = _boardCut[boardIndex].Shape;
-            // Food that was cut before (third-person digits) keeps its shape until the knife changes it.
+            byte shape = _boardCut[boardId].Shape;
+            // Food that was cut before keeps its shape until the knife changes it.
             return shape == FoodLook.ShapeWhole ? look : FoodLookRules.WithShape(look, shape);
         }
 
         /// <summary>Name of what taking the food would give, e.g. "potato slices"; null on an empty board.</summary>
-        public string BoardName(int boardIndex)
+        public string BoardName(int boardId)
         {
-            return TryPreviewBoardTake(boardIndex, out Item result) == CookOutcome.Ok ? NameOf(result) : null;
+            return TryPreviewBoardTake(boardId, out Item result) == CookOutcome.Ok ? NameOf(result) : null;
         }
 
         private bool CanCut(Item item, byte shape)
@@ -217,81 +347,177 @@ namespace Worktown.Game.Cooking
             return new Dictionary<string, ParamValue> { ["shape"] = ParamValue.Choice(shape) };
         }
 
-        // ---- Spec 016: cooking over time in the pan and pot ----
+        // ---- Spec 021: burners ----
 
-        /// <summary>The stove's switch and mode (created switched off, frying, on first use).</summary>
-        public StoveSettings StoveOf(int stationIndex)
+        /// <summary>The burner's switch and mode (created switched off, frying, on first use).</summary>
+        public StoveSettings BurnerOf(int burnerId)
         {
-            if (!_stoves.TryGetValue(stationIndex, out StoveSettings stove))
+            if (!_burners.TryGetValue(burnerId, out StoveSettings burner))
             {
-                stove = new StoveSettings();
-                _stoves[stationIndex] = stove;
+                burner = new StoveSettings();
+                _burners[burnerId] = burner;
             }
-            return stove;
+            return burner;
         }
 
         /// <summary>
-        /// Option 1 switches the pan or pot on or off, also with food inside (cooking pauses while off).
-        /// Option 2 switches the pan between fry and saute, only while it is empty.
+        /// Button <see cref="StationRules.StoveSwitch"/> switches the burner on or off, also with a pan or pot on it
+        /// (cooking pauses while off). <see cref="StationRules.PanMode"/> switches fry and saute, refused (PanBusy) while
+        /// a pan with food stands on it (the fry or saute op was chosen when the food went in). Anything else InvalidOption.
         /// </summary>
-        public CookOutcome TryUseStove(int stationIndex, StationKind kind, int option, uint tick)
+        public CookOutcome TryUseBurner(int burnerId, int button, uint tick)
         {
-            if (!StationRules.IsHeat(kind) || option < 1 || option > StationRules.OptionCount(kind)) return CookOutcome.InvalidOption;
-            StoveSettings stove = StoveOf(stationIndex);
-            _heat.TryGetValue(stationIndex, out HeatSession session);
-            if (option == StationRules.StoveSwitch)
+            StoveSettings burner = BurnerOf(burnerId);
+            if (button == StationRules.StoveSwitch)
             {
-                stove.Toggle();
-                if (session != null)
-                {
-                    if (stove.IsOn) session.Start(tick);
-                    else session.Stop(tick);
-                }
+                burner.Toggle();
+                foreach (KeyValuePair<int, int> standing in _burnerOf)
+                    if (standing.Value == burnerId) SetRunning(standing.Key, burner.IsOn, tick);
                 return CookOutcome.Ok;
             }
-            if (session != null) return CookOutcome.PanBusy;
-            stove.ToggleMode();
+            if (button != StationRules.PanMode) return CookOutcome.InvalidOption;
+            foreach (KeyValuePair<int, int> standing in _burnerOf)
+                if (standing.Value == burnerId && IsPanWithFood(standing.Key)) return CookOutcome.PanBusy;
+            burner.ToggleMode();
             return CookOutcome.Ok;
         }
 
-        public bool TryGetHeat(int stationIndex, out HeatSession session)
+        /// <summary>
+        /// The pan or pot now stands on <paramref name="burnerId"/> (<see cref="NoBurner"/>: picked up, on a worktop, on
+        /// the floor). Its food cooks only while it stands on a burner that is on; picking it up stops the clocks,
+        /// putting it back continues them.
+        /// </summary>
+        public void SetVesselBurner(int vesselId, int burnerId, uint tick)
         {
-            return _heat.TryGetValue(stationIndex, out session);
+            if (burnerId < 0) _burnerOf.Remove(vesselId);
+            else _burnerOf[vesselId] = burnerId;
+            SetRunning(vesselId, IsCooking(vesselId), tick);
+        }
+
+        /// <summary>The burner the vessel stands on, or <see cref="NoBurner"/>.</summary>
+        public int BurnerUnder(int vesselId)
+        {
+            return _burnerOf.TryGetValue(vesselId, out int burner) ? burner : NoBurner;
+        }
+
+        /// <summary>True while the vessel stands on a burner that is on.</summary>
+        public bool IsCooking(int vesselId)
+        {
+            return _burnerOf.TryGetValue(vesselId, out int burner) && BurnerOf(burner).IsOn;
         }
 
         /// <summary>
-        /// Puts the food into the pan or pot; it cooks from <paramref name="tick"/> if the stove is on. On success the
-        /// food no longer exists as an item in the world (the caller despawns its object). Food the sim
-        /// would refuse to heat (e.g. a finished plate) is refused now, while it is still in the hands.
+        /// Spec 021: the pan mode shown on the pan: its food's op while it has food, else the mode of the burner it
+        /// stands on (fry when on none).
         /// </summary>
-        public CookOutcome TryPutOnHeat(int foodObjectId, int stationIndex, StationKind kind, uint tick)
+        public bool PanIsSaute(int vesselId)
         {
-            if (!StationRules.IsHeat(kind)) return CookOutcome.InvalidOption;
+            if (_heat.TryGetValue(vesselId, out List<HeatSession> sessions) && sessions.Count > 0)
+                return sessions[0].OperationId == "saute";
+            return _burnerOf.TryGetValue(vesselId, out int burner) && BurnerOf(burner).Saute;
+        }
+
+        private bool IsPanWithFood(int vesselId)
+        {
+            return _heat.TryGetValue(vesselId, out List<HeatSession> sessions) && sessions.Count > 0 && sessions[0].TempC.HasValue;
+        }
+
+        private void SetRunning(int vesselId, bool running, uint tick)
+        {
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions)) return;
+            foreach (HeatSession session in sessions)
+            {
+                if (running) session.Start(tick);
+                else session.Stop(tick);
+            }
+        }
+
+        // ---- Spec 016/021: cooking over time in the pan and pot ----
+
+        /// <summary>
+        /// Puts the food into the pan or pot; it cooks from <paramref name="tick"/> while the vessel stands on a burner
+        /// that is on. The pan takes one food (fry or saute: the mode of its burner, fry when on none); the pot up to
+        /// <see cref="VesselRules.PotCapacity"/>, each counting its own on-ticks. Food the sim would refuse to heat, or
+        /// a pot whose pour the sim would refuse to mix, is refused now while it is still in the hands.
+        /// </summary>
+        public CookOutcome TryPutOnHeat(int foodObjectId, int vesselId, VesselKind kind, uint tick)
+        {
+            if (!VesselRules.IsHeat(kind)) return CookOutcome.InvalidOption;
             if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
-            if (_heat.ContainsKey(stationIndex)) return CookOutcome.StationFull;
+            List<HeatSession> sessions = HeatOf(vesselId);
+            CookOutcome fits = VesselRules.CanPutIn(kind, sessions.Count, AssemblyRules.IsPlated(item));
+            if (fits != CookOutcome.Ok) return fits;
 
-            StoveSettings stove = StoveOf(stationIndex);
-            string opId = stove.OperationIdFor(kind);
-            int? tempC = kind == StationKind.Pan ? StoveSettings.PanTempC : (int?)null;
+            int burner = BurnerUnder(vesselId);
+            string opId = burner == NoBurner ? new StoveSettings().OperationIdFor(kind) : BurnerOf(burner).OperationIdFor(kind);
+            int? tempC = kind == VesselKind.Pan ? StoveSettings.PanTempC : (int?)null;
             if (!TryGetTimeParam(opId, out ParamDef time)) return CookOutcome.SimRefused;
-            if (!_factory.Apply(opId, new[] { item }, HeatParams(tempC, time.Max)).Ok) return CookOutcome.SimRefused;
+            OperationResult dry = _factory.Apply(opId, new[] { item }, HeatParams(tempC, time.Max));
+            if (!dry.Ok || dry.Item == null) return CookOutcome.SimRefused;
+            if (sessions.Count > 0)
+            {
+                // Dry run of the pour: every ingredient at its longest time, mixed (fewer cooked steps only make it simpler).
+                var inputs = new List<Item>(sessions.Count + 1);
+                foreach (HeatSession s in sessions)
+                {
+                    if (!TryGetTimeParam(s.OperationId, out ParamDef t)) return CookOutcome.SimRefused;
+                    OperationResult longest = _factory.Apply(s.OperationId, new[] { s.Food }, HeatParams(s.TempC, t.Max));
+                    if (!longest.Ok || longest.Item == null) return CookOutcome.SimRefused;
+                    inputs.Add(longest.Item);
+                }
+                inputs.Add(dry.Item);
+                if (!_factory.Apply("mix", inputs, NoParams).Ok) return CookOutcome.SimRefused;
+            }
 
-            _heat[stationIndex] = new HeatSession(item, opId, tempC, stove.IsOn, tick);
+            sessions.Add(new HeatSession(item, opId, tempC, IsCooking(vesselId), tick));
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
         }
 
+        /// <summary>How many ingredients are in the pan or pot.</summary>
+        public int HeatCount(int vesselId)
+        {
+            return _heat.TryGetValue(vesselId, out List<HeatSession> sessions) ? sessions.Count : 0;
+        }
+
+        /// <summary>The cooking session of ingredient <paramref name="index"/> (in the order put in).</summary>
+        public bool TryGetHeat(int vesselId, int index, out HeatSession session)
+        {
+            session = null;
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions) || index < 0 || index >= sessions.Count) return false;
+            session = sessions[index];
+            return true;
+        }
+
         /// <summary>
-        /// What taking the food out at <paramref name="tick"/> gives, without changing the station. Ok: the
-        /// cooked item. TooShort: the food came out before the op's minimum time and is handed back
-        /// unchanged. The caller hands the result over first, then calls <see cref="ClearHeat"/>.
+        /// What taking (or pouring) the contents out at <paramref name="tick"/> gives, without changing the vessel. One
+        /// ingredient: the cooked item, or TooShort when it came out before the op's minimum time (handed back unchanged).
+        /// Several (pot): each cooked for its own time (unchanged if too short), then mixed (sim mix, canonical order): Ok.
+        /// StationEmpty when empty. The caller hands the result over first, then calls <see cref="ClearHeat"/>.
         /// </summary>
-        public CookOutcome TryPreviewHeatTake(int stationIndex, uint tick, double tickRate, out Item result)
+        public CookOutcome TryPreviewHeatTake(int vesselId, uint tick, double tickRate, out Item result)
         {
             result = null;
-            if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return CookOutcome.StationEmpty;
-            if (!TryGetTimeParam(session.OperationId, out ParamDef time)) return CookOutcome.SimRefused;
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions) || sessions.Count == 0) return CookOutcome.StationEmpty;
+            if (sessions.Count == 1) return CookOne(sessions[0], tick, tickRate, out result);
 
+            var cooked = new List<Item>(sessions.Count);
+            foreach (HeatSession session in sessions)
+            {
+                CookOutcome one = CookOne(session, tick, tickRate, out Item item);
+                if (one != CookOutcome.Ok && one != CookOutcome.TooShort) return one;
+                cooked.Add(item);
+            }
+            OperationResult mixed = _factory.Apply("mix", cooked, NoParams);
+            if (!mixed.Ok || mixed.Item == null) return CookOutcome.SimRefused;
+            result = mixed.Item;
+            return CookOutcome.Ok;
+        }
+
+        private CookOutcome CookOne(HeatSession session, uint tick, double tickRate, out Item result)
+        {
+            result = null;
+            if (!TryGetTimeParam(session.OperationId, out ParamDef time)) return CookOutcome.SimRefused;
             double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
             if (CookingTime.IsTooShort(time, seconds))
             {
@@ -305,31 +531,50 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        public void ClearHeat(int stationIndex)
+        public void ClearHeat(int vesselId)
         {
-            _heat.Remove(stationIndex);
+            _heat.Remove(vesselId);
         }
 
         /// <summary>
-        /// Label line for what is in the pan or pot, e.g. "potato sticks · medium". Before the first doneness
-        /// bucket: "warming up" while the stove is on, "raw" while it is off. Null if it is empty.
+        /// Label lines for what is in the pan or pot, e.g. "potato sticks · medium". Before the first doneness bucket:
+        /// "warming up" while it cooks, "raw" while it does not.
         /// </summary>
-        public string DescribeHeat(int stationIndex, uint tick, double tickRate)
+        public IReadOnlyList<string> HeatNames(int vesselId, uint tick, double tickRate)
         {
-            if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return null;
-            string bucket = CurrentBucket(session, tick, tickRate);
-            if (bucket.Length == 0) bucket = session.IsRunning ? "warming up" : "raw";
-            return NameOf(session.Food) + " · " + bucket;
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions)) return new string[0];
+            var names = new List<string>(sessions.Count);
+            foreach (HeatSession session in sessions)
+            {
+                string bucket = CurrentBucket(session, tick, tickRate);
+                if (bucket.Length == 0) bucket = session.IsRunning ? "warming up" : "raw";
+                names.Add(NameOf(session.Food) + " · " + bucket);
+            }
+            return names;
         }
 
-        /// <summary>
-        /// Spec 017: the look of what is in the pan or pot, with the doneness bucket reached so far (the same
-        /// bucket the label shows). Null if it is empty.
-        /// </summary>
-        public FoodLook? HeatLook(int stationIndex, uint tick, double tickRate)
+        /// <summary>All label lines joined with " + "; null if the vessel is empty.</summary>
+        public string DescribeHeat(int vesselId, uint tick, double tickRate)
         {
-            if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return null;
-            return FoodLookRules.Cooking(session.Food, session.OperationId, CurrentBucket(session, tick, tickRate));
+            IReadOnlyList<string> names = HeatNames(vesselId, tick, tickRate);
+            return names.Count == 0 ? null : string.Join(" + ", names);
+        }
+
+        /// <summary>Spec 017: the looks of what is in the pan or pot, with the doneness bucket reached so far.</summary>
+        public IReadOnlyList<FoodLook> HeatLooks(int vesselId, uint tick, double tickRate)
+        {
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions)) return new FoodLook[0];
+            var looks = new List<FoodLook>(sessions.Count);
+            foreach (HeatSession session in sessions)
+                looks.Add(FoodLookRules.Cooking(session.Food, session.OperationId, CurrentBucket(session, tick, tickRate)));
+            return looks;
+        }
+
+        /// <summary>The look of the first ingredient in the pan or pot; null if it is empty.</summary>
+        public FoodLook? HeatLook(int vesselId, uint tick, double tickRate)
+        {
+            IReadOnlyList<FoodLook> looks = HeatLooks(vesselId, tick, tickRate);
+            return looks.Count == 0 ? (FoodLook?)null : looks[0];
         }
 
         /// <summary>The doneness bucket id reached so far ("short", "medium", "long"), empty before the first.</summary>
@@ -353,58 +598,70 @@ namespace Worktown.Game.Cooking
             return parameters;
         }
 
+        private List<HeatSession> HeatOf(int vesselId)
+        {
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions))
+            {
+                sessions = new List<HeatSession>();
+                _heat[vesselId] = sessions;
+            }
+            return sessions;
+        }
+
+        // ---- Spec 013/021: plate and bowl ----
+
         /// <summary>
-        /// Spec 013: moves a food item onto a plating table or into a bowl. On success the food no
-        /// longer exists as an item in the world (the caller despawns its object).
+        /// Moves a food item onto a plate or into a bowl. On success the food no longer exists as an item in the world
+        /// (the caller despawns its object). AlreadyPlated, VesselFull or SimRefused change nothing.
         /// </summary>
-        public CookOutcome TryAddToStation(int foodObjectId, int stationIndex, StationKind kind)
+        public CookOutcome TryAddToVessel(int foodObjectId, int vesselId, VesselKind kind)
         {
             if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
-            List<AssemblyEntry> contents = ContentsOf(stationIndex);
-            CookOutcome allowed = AssemblyRules.CanAdd(kind, contents.Count, item);
+            CookOutcome allowed = CanAddItem(vesselId, kind, item);
             if (allowed != CookOutcome.Ok) return allowed;
-
-            // Dry run: the sim flattens nested mixes and has depth/component limits, so the entry
-            // count alone does not tell whether "take" will work. Refuse now, while the food is
-            // still in the player's hands, instead of locking the station later (review blocker).
-            // A first item in a bowl is handed back unchanged, so it needs no mix check.
-            bool singleInBowl = kind == StationKind.Bowl && contents.Count == 0;
-            if (!singleInBowl)
-            {
-                var inputs = new List<Item>(contents.Count + 1);
-                foreach (AssemblyEntry entry in contents) inputs.Add(entry.Item);
-                inputs.Add(item);
-                if (!_factory.Apply(AssemblyRules.OperationFor(kind), inputs, NoParams).Ok)
-                    return CookOutcome.SimRefused;
-            }
-            contents.Add(new AssemblyEntry(item));
+            AssemblyOf(vesselId).Add(new AssemblyEntry(item));
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
         }
 
         /// <summary>
-        /// Spec 013: takes everything from the station as one item (plate or mix of all, in order).
-        /// A bowl with a single item gives it back unchanged. On failure the contents stay.
+        /// Whether the item may go onto the plate or into the bowl. Dry run: the sim flattens nested mixes and has
+        /// depth/component limits, so the count alone does not tell whether taking will work; refuse now instead of
+        /// locking the vessel later (spec 013 review blocker). A first item in a bowl comes back unchanged, no mix check.
         /// </summary>
-        public CookOutcome TryTakeFromStation(int stationIndex, StationKind kind, out Item result)
+        private CookOutcome CanAddItem(int vesselId, VesselKind kind, Item item)
         {
-            CookOutcome outcome = TryPreviewTake(stationIndex, kind, out result);
-            if (outcome == CookOutcome.Ok) ClearStation(stationIndex);
+            List<AssemblyEntry> contents = AssemblyOf(vesselId);
+            CookOutcome allowed = AssemblyRules.CanAdd(kind, contents.Count, item);
+            if (allowed != CookOutcome.Ok) return allowed;
+            bool singleInBowl = kind == VesselKind.Bowl && contents.Count == 0;
+            if (singleInBowl) return CookOutcome.Ok;
+            var inputs = new List<Item>(contents.Count + 1);
+            foreach (AssemblyEntry entry in contents) inputs.Add(entry.Item);
+            inputs.Add(item);
+            return _factory.Apply(AssemblyRules.OperationFor(kind), inputs, NoParams).Ok ? CookOutcome.Ok : CookOutcome.SimRefused;
+        }
+
+        /// <summary>Takes everything from the plate or bowl as one item. On failure the contents stay.</summary>
+        public CookOutcome TryTakeFromVessel(int vesselId, VesselKind kind, out Item result)
+        {
+            CookOutcome outcome = TryPreviewTake(vesselId, kind, out result);
+            if (outcome == CookOutcome.Ok) ClearVessel(vesselId);
             return outcome;
         }
 
         /// <summary>
-        /// What "take" would produce, without changing the station. The caller hands the result over
-        /// first and then calls <see cref="ClearStation"/>, so a failed hand-over loses nothing.
+        /// What the plate (sim plate of all parts: the dish that is sold) or the bowl (sim mix; a single item comes back
+        /// unchanged) gives, without changing it. The caller hands it over (or sells it) first, then clears.
         /// </summary>
-        public CookOutcome TryPreviewTake(int stationIndex, StationKind kind, out Item result)
+        public CookOutcome TryPreviewTake(int vesselId, VesselKind kind, out Item result)
         {
             result = null;
             if (!AssemblyRules.IsAssembly(kind)) return CookOutcome.InvalidOption;
-            List<AssemblyEntry> contents = ContentsOf(stationIndex);
+            List<AssemblyEntry> contents = AssemblyOf(vesselId);
             if (contents.Count == 0) return CookOutcome.StationEmpty;
 
-            if (kind == StationKind.Bowl && contents.Count == 1)
+            if (kind == VesselKind.Bowl && contents.Count == 1)
             {
                 result = contents[0].Item;
                 return CookOutcome.Ok;
@@ -418,35 +675,41 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        public void ClearStation(int stationIndex)
+        public void ClearVessel(int vesselId)
         {
-            ContentsOf(stationIndex).Clear();
+            _assembly.Remove(vesselId);
         }
 
-        /// <summary>Display names of what is on the station, in order.</summary>
-        public IReadOnlyList<string> NamesOnStation(int stationIndex)
+        /// <summary>How many parts lie on the plate or in the bowl.</summary>
+        public int CountIn(int vesselId)
         {
-            List<AssemblyEntry> contents = ContentsOf(stationIndex);
+            return _assembly.TryGetValue(vesselId, out List<AssemblyEntry> contents) ? contents.Count : 0;
+        }
+
+        /// <summary>Display names of what is on the plate or in the bowl, in order.</summary>
+        public IReadOnlyList<string> NamesIn(int vesselId)
+        {
+            if (!_assembly.TryGetValue(vesselId, out List<AssemblyEntry> contents)) return new string[0];
             var names = new List<string>(contents.Count);
             foreach (AssemblyEntry entry in contents) names.Add(NameOf(entry.Item));
             return names;
         }
 
-        /// <summary>Spec 017: looks of what is on the station, in order (same order as the names).</summary>
-        public IReadOnlyList<FoodLook> LooksOnStation(int stationIndex)
+        /// <summary>Spec 017: looks of what is on the plate or in the bowl, in order (same order as the names).</summary>
+        public IReadOnlyList<FoodLook> LooksIn(int vesselId)
         {
-            List<AssemblyEntry> contents = ContentsOf(stationIndex);
+            if (!_assembly.TryGetValue(vesselId, out List<AssemblyEntry> contents)) return new FoodLook[0];
             var looks = new List<FoodLook>(contents.Count);
             foreach (AssemblyEntry entry in contents) looks.Add(FoodLookRules.From(entry.Item));
             return looks;
         }
 
-        private List<AssemblyEntry> ContentsOf(int stationIndex)
+        private List<AssemblyEntry> AssemblyOf(int vesselId)
         {
-            if (!_stations.TryGetValue(stationIndex, out List<AssemblyEntry> contents))
+            if (!_assembly.TryGetValue(vesselId, out List<AssemblyEntry> contents))
             {
                 contents = new List<AssemblyEntry>();
-                _stations[stationIndex] = contents;
+                _assembly[vesselId] = contents;
             }
             return contents;
         }

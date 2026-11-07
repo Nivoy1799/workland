@@ -28,6 +28,8 @@ namespace Worktown.Game.Net.Rules
         /// Spec 020: a <see cref="AimKind.Spot"/> (the top of a place surface) is a target, reach measured to the
         /// chosen spot. With <paramref name="pickupsTransparent"/> (the hands are full, so nothing can be picked
         /// up) pickups neither are targets nor block: the ray finds the spot or station behind them.
+        /// Spec 021: a <see cref="AimKind.Vessel"/> (cookware) is never transparent: with full hands it is where food
+        /// goes in or a pan pours into; reach is measured to the vessel, as the server does.
         /// </summary>
         public static int Pick(IReadOnlyList<AimHit> hits, Vector3 playerPosition, bool pickupsTransparent)
         {

@@ -217,6 +217,28 @@
         "Hold a finished plate over the pan: grey 'can't go in there', the click does nothing",
         "Press Q to drop what you hold; ask another player whether they see your knife on the worktop"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-021",
+      "date": "2026-11-07",
+      "title": "Cookware you can carry: pans, pots, plates, the board and the bowl",
+      "items": [
+        "The kitchen is worktops, two stoves with two burners each, the counter and a plate shelf",
+        "The cutting board, pan, pot, bowl and plates lie on top and can be picked up and put anywhere",
+        "Put a pan or pot on a burner and switch that burner on with its knob; it only cooks while it stands there",
+        "A pot takes up to four ingredients; each one cooks for its own time, and they are mixed when you pour",
+        "Holding a pan, pot or bowl with food, click a plate (or a bowl) to pour it in; sell the plate at the counter",
+        "Take clean plates from the shelf (at most 8 in the kitchen); lost cookware comes back to its spot"
+      ],
+      "test": [
+        "With empty hands click the pan: you pick it up. Click the free burner on the other stove: the pan stands there",
+        "Buy a potato and click the stove top behind the pan: the potato lies there next to it",
+        "Buy a potato, cut it on the board, click the pot: it goes in. Buy an onion and put it in the pot too",
+        "Click the knob under the pot's burner: it lights green and the burner ring glows; the label shows both ingredients cooking",
+        "After a while pick up the pot (empty hands), click a plate: the pot's mix lies on the plate",
+        "Pick up the plate and click the counter: it sells with stars and the plate is gone",
+        "Ask another player: they see the pan move, the pot's contents and the plate in your hands"
+      ]
     }
   ]
 }

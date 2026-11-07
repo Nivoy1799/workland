@@ -52,18 +52,29 @@ namespace Worktown.Game.Editor
         private const string CustomerPrefabPath = Root + "/Prefabs/Customer.prefab";
         private const string KnifePrefabPath = Root + "/Prefabs/Knife.prefab";
         private const string StoveButtonMaterialPath = Root + "/Settings/StoveButton.mat";
-        // Spec 019: the knife's pickup collider (long side along Z, like its model) and where it lies.
+        // Spec 019: the knife's pickup collider (long side along Z, like its model).
         private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.34f);
-        // Spec 019 knife position on the board station; spec 020: the knife's home is the board surface spot nearest to it.
-        private static readonly Vector3 KnifeSpot = new Vector3(0.42f, 0f, -0.1f);
-        // Spec 020: the board station's free half (next to the cutting board) is a place surface from here to its edge.
-        private const float BoardSurfaceMinX = 0.08f;
         private const float StationWidth = 1.2f;
         private const float WorktopGapMargin = 0.02f;
         private const string WorktopMaterialPath = Root + "/Settings/Worktop.mat";
         private const string PlaceMarkerMaterialPath = Root + "/Settings/PlaceMarker.mat";
-        private const float CuttingBoardOffsetX = -0.12f;
         private const float FoodSize = 0.4f;
+        // Spec 021: the kitchen row after the crates. Stations keep the spec 015 grid (3, 5.5, 8.5, 11); worktops fill
+        // the gaps and both ends (from WorktopStartX to the first stove, from the shelf to WorktopEndX).
+        private const float StoveAX = 3f;
+        private const float StoveBX = 5.5f;
+        private const float CounterX = 8.5f;
+        private const float PlateShelfX = 11f;
+        private const float WorktopStartX = -0.1f;
+        private const float WorktopEndX = 14.1f;
+        // Spec 021: burners on the stove top (local x, z), one spot each; the stove top behind them is a place surface.
+        private static readonly float[] BurnerX = { -0.3f, 0.3f };
+        private const float BurnerZ = -0.12f;
+        private const float BurnerSize = 0.42f;
+        private const float BurnerRingDiameter = 0.3f;
+        private const float StoveTopMinZ = 0.09f;
+        private const float MinVesselColliderHeight = 0.06f;
+        private const int PlateStackCount = 5;
         private const float StationHeight = 1f;
         private const float KitchenZ = 13f;
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
@@ -98,6 +109,7 @@ namespace Worktown.Game.Editor
             NetworkObject foodPrefab = CreateFoodPrefab(pickupMat, builtCatalog);
             NetworkObject customerPrefab = CreateCustomerPrefab(pickupMat);
             NetworkObject knifePrefab = CreateKnifePrefab(builtCatalog); // spec 019
+            List<NetworkObject> vesselPrefabs = CreateVesselPrefabs(builtCatalog); // spec 021
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
             AssetDatabase.SaveAssets();
@@ -114,7 +126,7 @@ namespace Worktown.Game.Editor
             Transform[] spawns = CreateSpawnPoints();
             CreatePickups(pickupPrefab);
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
-            CreateKitchen(networkManager, foodPrefab, knifePrefab, catalog);
+            CreateKitchen(networkManager, foodPrefab, knifePrefab, vesselPrefabs, catalog);
             CreateCustomers(networkManager, customerPrefab);
             CreateBootstrap(networkManager);
 
@@ -365,56 +377,120 @@ namespace Worktown.Game.Editor
             return saved.GetComponent<NetworkObject>();
         }
 
-        /// <summary>
-        /// Spec 019: one knife per board, a scene object lying on the board station next to the cutting board.
-        /// Spec 020: it lies on its home spot of the board's place surface (the spot nearest the spec 019 position),
-        /// which is also where KitchenService puts a replacement for a lost knife (its start position).
-        /// </summary>
-        private static void CreateBoardKnife(NetworkObject knifePrefab, Station board, PlaceSurface boardSurface)
+        // ---- spec 021: cookware prefabs ----
+
+        private const string VesselPrefabFolder = Root + "/Prefabs";
+
+        private static string VesselPrefabPath(VesselKind kind) => VesselPrefabFolder + "/" + kind + ".prefab";
+
+        /// <summary>Spec 021: how deep contents sit in each kind of cookware (fraction of its height), part scale and radius.</summary>
+        private static (float fill, float partScale, float partRadius) VesselContents(VesselKind kind)
         {
-            var instance = (GameObject)PrefabUtility.InstantiatePrefab(knifePrefab.gameObject);
-            instance.name = "Knife (" + board.DisplayName + ")";
-            Vector3 knifeWorld = board.transform.TransformPoint(KnifeSpot);
-            int home = PlaceSpots.NearestFree(boardSurface.Size, boardSurface.ToTopPlane(knifeWorld), null);
-            Vector3 spot = boardSurface.SpotWorldPosition(home);
-            instance.transform.SetPositionAndRotation(spot + Vector3.up * (KnifeColliderSize.y * 0.5f), boardSurface.transform.rotation);
-            SetField(instance.GetComponent<Knife>(), "_boardIndex", board.Index);
+            switch (kind)
+            {
+                case VesselKind.Board: return (BoardFill, 1f, 0.06f);
+                case VesselKind.Pan: return (PanFill, 0.65f, 0.06f);
+                case VesselKind.Pot: return (PotFill, 0.6f, 0.05f);
+                case VesselKind.Plate: return (PlateFill, 0.5f, 0.075f);
+                default: return (BowlFill, 0.45f, 0.06f);
+            }
+        }
+
+        private static List<NetworkObject> CreateVesselPrefabs(ArtCatalog catalog)
+        {
+            var prefabs = new List<NetworkObject>();
+            foreach (VesselKind kind in new[] { VesselKind.Board, VesselKind.Pan, VesselKind.Pot, VesselKind.Plate, VesselKind.Bowl })
+                prefabs.Add(CreateVesselPrefab(catalog, kind));
+            return prefabs;
         }
 
         /// <summary>
-        /// Spec 020: the free half of the board station as a place surface: a thin collider just above the station's
-        /// body (so the aim ray hits it before the body), items resting on the furniture top.
+        /// Spec 021: a piece of cookware, a normal pickup (carried like the knife) with a Vessel. The spec 017/019 model is
+        /// the "Visual" child with its pivot at the bottom centre; the box collider wraps the model (at least 6 cm high so
+        /// the aim ray and the spot probe find a flat board or plate); "Contents" draws what lies in it.
         /// </summary>
-        private static PlaceSurface CreateBoardSurface(Station board, int index)
+        private static NetworkObject CreateVesselPrefab(ArtCatalog catalog, VesselKind kind)
         {
-            float top = StationTop(board);
-            float colliderTop = Mathf.Max(top, StationHeight * 0.5f) + 0.005f;
-            float minX = BoardSurfaceMinX;
-            float maxX = StationWidth * 0.5f;
-            var go = new GameObject("PlaceSurface");
-            go.transform.SetParent(board.transform, false);
-            go.transform.localPosition = new Vector3((minX + maxX) * 0.5f, 0f, 0f);
-            var box = go.AddComponent<BoxCollider>();
-            box.size = new Vector3(maxX - minX, 0.02f, StationWidth);
-            box.center = new Vector3(0f, colliderTop - 0.01f, 0f);
-            go.isStatic = true;
-            var surface = go.AddComponent<PlaceSurface>();
-            SetField(surface, "_index", index);
-            SetField(surface, "_size", new Vector2(maxX - minX, StationWidth));
-            SetField(surface, "_topY", top);
-            return surface;
+            var root = new GameObject(kind.ToString());
+            Bounds model = new Bounds(Vector3.zero, new Vector3(0.3f, 0.05f, 0.3f));
+            var visual = new GameObject("Visual");
+            visual.transform.SetParent(root.transform, false);
+            if (catalog != null && catalog.TryGet(ArtCatalogRules.VesselKey(kind), out GameObject wrapper))
+            {
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, visual.transform);
+                model = LocalBounds(root, instance);
+            }
+            else Debug.LogError("[Graybox] no model for " + kind + " in the art catalog");
+
+            float height = Mathf.Max(model.max.y, MinVesselColliderHeight);
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = new Vector3(model.size.x, height, model.size.z);
+            collider.center = new Vector3(model.center.x, height * 0.5f, model.center.z);
+
+            (float fill, float partScale, float partRadius) = VesselContents(kind);
+            var anchor = new GameObject("Contents");
+            anchor.transform.SetParent(root.transform, false);
+            anchor.transform.localPosition = new Vector3(0f, model.max.y * fill, 0f);
+            var food = anchor.AddComponent<FoodVisual>();
+            SetField(food, "_catalog", catalog);
+            SetField(food, "_partScale", partScale);
+            SetField(food, "_partRadius", partRadius);
+
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, height + 0.22f, 0f), 40, 0.03f);
+            label.text = string.Empty;
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            // Like the scene cubes and the knife: a missed release on disconnect must never despawn cookware.
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            AddServerAuthoritativeTransform(root);
+            root.AddComponent<Pickup>();
+            var vessel = root.AddComponent<Vessel>();
+            SetField(vessel, "_kind", (int)kind);
+            SetField(vessel, "_label", label);
+            SetField(vessel, "_visual", food);
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, VesselPrefabPath(kind));
+            UnityEngine.Object.DestroyImmediate(root);
+            return saved.GetComponent<NetworkObject>();
+        }
+
+        /// <summary>Bounds of the model's renderers in the root's space (the root sits at the origin).</summary>
+        private static Bounds LocalBounds(GameObject root, GameObject model)
+        {
+            Renderer[] renderers = model.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return new Bounds(Vector3.zero, Vector3.one * 0.1f);
+            Bounds b = renderers[0].bounds;
+            foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
+            b.center -= root.transform.position;
+            return b;
+        }
+
+        /// <summary>Spec 021: a scene instance of a prefab (cookware, the knife) resting on a spot of a place surface.</summary>
+        private static GameObject PlaceOnSpot(NetworkObject prefab, PlaceSurface surface, int spot, string name)
+        {
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab.gameObject);
+            instance.name = name;
+            float bottom = 0f;
+            var box = instance.GetComponent<BoxCollider>();
+            if (box != null) bottom = box.size.y * 0.5f - box.center.y; // the same offset Pickup.BottomOffset uses
+            instance.transform.SetPositionAndRotation(surface.SpotWorldPosition(spot) + Vector3.up * bottom, surface.transform.rotation);
+            return instance;
+        }
+
+        /// <summary>The spot of the surface nearest to a point in its top plane given in metres from its centre.</summary>
+        private static int SpotNear(PlaceSurface surface, float x, float z)
+        {
+            return PlaceSpots.NearestFree(surface.Size, new Vector2(x, z), null);
         }
 
         /// <summary>
-        /// Spec 020: a plain worktop filling the gap between two neighbouring stations, as high as the left one's
-        /// top, as deep as the stations; its whole top is a place surface. Not scaled (PlaceSurface works in metres).
+        /// Spec 020/021: a plain worktop from <paramref name="minX"/> to <paramref name="maxX"/>, as deep as the stations,
+        /// <paramref name="height"/> high (the stove top); its whole top is a place surface. Not scaled (PlaceSurface
+        /// works in metres).
         /// </summary>
-        private static PlaceSurface CreateWorktop(Transform parent, Station left, Station right, int index, Material material)
+        private static PlaceSurface CreateWorktop(Transform parent, float minX, float maxX, float height, int index, Material material)
         {
-            float minX = left.transform.position.x + StationWidth * 0.5f + WorktopGapMargin;
-            float maxX = right.transform.position.x - StationWidth * 0.5f - WorktopGapMargin;
             float width = maxX - minX;
-            float height = left.transform.position.y + StationTop(left);
             var root = new GameObject("Worktop " + index);
             root.transform.SetParent(parent, false);
             root.transform.position = new Vector3((minX + maxX) * 0.5f, 0f, KitchenZ);
@@ -435,6 +511,28 @@ namespace Worktown.Game.Editor
             SetField(surface, "_index", index);
             SetField(surface, "_size", new Vector2(width, StationWidth));
             SetField(surface, "_topY", height);
+            return surface;
+        }
+
+        /// <summary>
+        /// Spec 021: a place surface on top of a station (a burner or the stove top behind the burners): a thin collider
+        /// just above the station's body, so the aim ray hits it first; items rest on the furniture top.
+        /// </summary>
+        private static PlaceSurface CreateTopSurface(Station station, string name, Vector2 centre, Vector2 size, int index)
+        {
+            float top = StationTop(station);
+            float colliderTop = Mathf.Max(top, StationHeight * 0.5f) + 0.005f;
+            var go = new GameObject(name);
+            go.transform.SetParent(station.transform, false);
+            go.transform.localPosition = new Vector3(centre.x, 0f, centre.y);
+            var box = go.AddComponent<BoxCollider>();
+            box.size = new Vector3(size.x, 0.02f, size.y);
+            box.center = new Vector3(0f, colliderTop - 0.01f, 0f);
+            go.isStatic = true;
+            var surface = go.AddComponent<PlaceSurface>();
+            SetField(surface, "_index", index);
+            SetField(surface, "_size", size);
+            SetField(surface, "_topY", top);
             return surface;
         }
 
@@ -465,10 +563,11 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>
-        /// Spec 019: the stove's switch (pan and pot) and the pan's fry/saute button: small colliders on the front
-        /// with a StationButton, coloured from the synced stove flags by a StoveButtonVisual.
+        /// Spec 019/021: per burner an on/off knob and a fry/sauté button, small colliders on the stove's front with a
+        /// StationButton (option = StationRules.StoveOption(burner, button)), and a flat ring on the burner; all coloured
+        /// from the synced stove flags by a StoveButtonVisual.
         /// </summary>
-        private static void AddStoveButtons(Station station, bool modeButton)
+        private static void AddStoveButtons(Station station, PlaceSurface[] burners)
         {
             Material material = CreateMaterial(StoveButtonMaterialPath, Color.white);
             material.EnableKeyword("_EMISSION");
@@ -476,13 +575,25 @@ namespace Worktown.Game.Editor
             var visual = station.gameObject.AddComponent<StoveButtonVisual>();
             SetField(visual, "_contents", station.GetComponent<StationContents>());
 
-            Renderer power = CreateButton(station, "Switch", new Vector3(-0.3f, 0.3f, -0.64f), StationRules.StoveSwitch, material);
-            SetField(visual, "_switch", power);
-            CreateButtonLabel(station, "SwitchLabel", new Vector3(-0.3f, 0.39f, -0.68f), "on/off");
-            if (!modeButton) return;
-            Renderer mode = CreateButton(station, "ModeButton", new Vector3(0.3f, 0.3f, -0.64f), StationRules.PanMode, material);
-            SetField(visual, "_modeButton", mode);
-            SetField(visual, "_modeLabel", CreateButtonLabel(station, "ModeLabel", new Vector3(0.3f, 0.39f, -0.68f), "fry"));
+            var switches = new List<UnityEngine.Object>();
+            var modes = new List<UnityEngine.Object>();
+            var labels = new List<UnityEngine.Object>();
+            var rings = new List<UnityEngine.Object>();
+            for (int b = 0; b < burners.Length; b++)
+            {
+                float x = BurnerX[b];
+                switches.Add(CreateButton(station, "Switch " + b, new Vector3(x - 0.09f, 0.3f, -0.64f),
+                    StationRules.StoveOption(b, StationRules.StoveSwitch), material));
+                CreateButtonLabel(station, "SwitchLabel " + b, new Vector3(x - 0.09f, 0.39f, -0.68f), "on/off");
+                modes.Add(CreateButton(station, "ModeButton " + b, new Vector3(x + 0.09f, 0.3f, -0.64f),
+                    StationRules.StoveOption(b, StationRules.PanMode), material));
+                labels.Add(CreateButtonLabel(station, "ModeLabel " + b, new Vector3(x + 0.09f, 0.39f, -0.68f), "fry"));
+                rings.Add(CreateBurnerRing(burners[b], material));
+            }
+            SetField(visual, "_switches", switches);
+            SetField(visual, "_modeButtons", modes);
+            SetField(visual, "_modeLabels", labels);
+            SetField(visual, "_rings", rings);
         }
 
         private static Renderer CreateButton(Station station, string name, Vector3 localPosition, int option, Material material)
@@ -503,20 +614,39 @@ namespace Worktown.Game.Editor
         private static TextMesh CreateButtonLabel(Station station, string name, Vector3 localPosition, string text)
         {
             TextMesh label = CreateLabel(station.transform, localPosition, 40, 0.02f);
-            label.gameObject.name = name; // not "Label": StationContents finds the station label by that name
+            label.gameObject.name = name; // not "Label": WorldLabelFade finds the station label by that name
             label.text = text;
             return label;
+        }
+
+        /// <summary>Spec 021: a flat ring on the burner (no collider), dark while off and glowing while on.</summary>
+        private static Renderer CreateBurnerRing(PlaceSurface burner, Material material)
+        {
+            GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            ring.name = "Ring";
+            UnityEngine.Object.DestroyImmediate(ring.GetComponent<Collider>());
+            ring.transform.SetParent(burner.transform, false);
+            ring.transform.localPosition = new Vector3(0f, burner.TopY + 0.003f, 0f);
+            ring.transform.localScale = new Vector3(BurnerRingDiameter, 0.003f, BurnerRingDiameter);
+            var renderer = ring.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return renderer;
         }
 
         /// <summary>Spec 017/019: top of the station's furniture model in station space (the root sits at half height).</summary>
         private static float StationTop(Station station)
         {
-            Transform art = station.transform.Find("Art_Station" + station.Kind);
+            Transform art = station.transform.Find("Art_" + ArtCatalogRules.StationKey(station.Kind));
             return art != null ? ArtCatalogBuilder.BaseTopOf(art.gameObject) + art.localPosition.y : StationHeight * 0.5f;
         }
 
-        /// <summary>Spec 007: a row of stations north of the spawn, the serve feed and the kitchen service.</summary>
-        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab, ArtCatalog catalog)
+        /// <summary>
+        /// Spec 007/021: the kitchen row north of the spawn: crates, worktops, two stoves (two burners each), the counter
+        /// and the plate shelf; the cookware lying on top; the serve feed and the kitchen service.
+        /// </summary>
+        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab,
+            List<NetworkObject> vesselPrefabs, ArtCatalog catalog)
         {
             var parent = new GameObject("Kitchen");
             var stations = new List<Station>();
@@ -532,44 +662,51 @@ namespace Worktown.Game.Editor
                 stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
                     char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -8.5f + i * 2f, mat, i));
             }
-            Station cuttingBoard = CreateStation(catalog, parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
-                CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0);
-            // Spec 019: the cutting board shows the food on it; the knife lies next to it.
-            AddStationContents(catalog, cuttingBoard, ArtKey.ToolCuttingBoard, CuttingBoardOffsetX, BoardFill, 1f, 0.06f);
-            var surfaces = new List<PlaceSurface> { CreateBoardSurface(cuttingBoard, 0) }; // spec 020
-            CreateBoardKnife(knifePrefab, cuttingBoard, surfaces[0]);
-            stations.Add(cuttingBoard);
-            // Spec 016: pan and pot cook over time; their label (knob, what is cooking) is networked.
-            Station pan = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
-                CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f)), 0);
-            AddStationContents(catalog, pan, ArtKey.FoodPan, 0f, PanFill, 0.65f, 0.06f);
-            AddStoveButtons(pan, modeButton: true); // spec 019
-            stations.Add(pan);
-            Station pot = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
-                CreateMaterial(Root + "/Settings/Station_Pot.mat", new Color(0.4f, 0.5f, 0.65f)), 0);
-            AddStationContents(catalog, pot, ArtKey.FoodPot, 0f, PotFill, 0.6f, 0.05f);
-            AddStoveButtons(pot, modeButton: false); // spec 019
-            stations.Add(pot);
-            stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
+            Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f));
+            Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, stoveMat, 0);
+            stations.Add(stoveA);
+            Station stoveB = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 2", StoveBX, stoveMat, 0);
+            stations.Add(stoveB);
+            stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", CounterX,
                 CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
-
-            // Spec 013: combine stations next to the counter; their contents are networked.
-            Station plating = CreateStation(catalog, parent.transform, stations.Count, StationKind.PlatingTable, "Plating table", 11f,
+            Station shelf = CreateStation(catalog, parent.transform, stations.Count, StationKind.PlateShelf, "Plates", PlateShelfX,
                 CreateMaterial(Root + "/Settings/Station_Plating.mat", new Color(0.86f, 0.84f, 0.72f)), 0);
-            AddStationContents(catalog, plating, ArtKey.FoodPlate, 0f, PlateFill, 0.5f, 0.075f);
-            stations.Add(plating);
-            Station bowl = CreateStation(catalog, parent.transform, stations.Count, StationKind.Bowl, "Bowl", 13.5f,
-                CreateMaterial(Root + "/Settings/Station_Bowl.mat", new Color(0.55f, 0.75f, 0.62f)), 0);
-            // The bowl stands next to the blender of the spec 015 bowl station.
-            AddStationContents(catalog, bowl, ArtKey.FoodBowl, -0.32f, BowlFill, 0.45f, 0.06f);
-            stations.Add(bowl);
+            CreatePlateStack(catalog, shelf);
+            stations.Add(shelf);
 
-            // Spec 020: plain worktops in the gaps between board, pan, pot, counter, plating table and bowl.
+            // Worktops at the stove top's height: before the first stove, between the stations, after the shelf.
+            float height = stoveA.transform.position.y + StationTop(stoveA);
+            float half = StationWidth * 0.5f + WorktopGapMargin;
             Material worktopMat = CreateMaterial(WorktopMaterialPath, new Color(0.78f, 0.74f, 0.66f));
-            int firstWorktop = stations.IndexOf(cuttingBoard);
-            for (int i = firstWorktop; i < stations.Count - 1; i++)
-                surfaces.Add(CreateWorktop(parent.transform, stations[i], stations[i + 1], surfaces.Count, worktopMat));
+            var surfaces = new List<PlaceSurface>();
+            PlaceSurface first = CreateWorktop(parent.transform, WorktopStartX, StoveAX - half, height, surfaces.Count, worktopMat);
+            surfaces.Add(first);
+            PlaceSurface[] burnersA = CreateStoveSurfaces(stoveA, surfaces);
+            surfaces.Add(CreateWorktop(parent.transform, StoveAX + half, StoveBX - half, height, surfaces.Count, worktopMat));
+            PlaceSurface[] burnersB = CreateStoveSurfaces(stoveB, surfaces);
+            surfaces.Add(CreateWorktop(parent.transform, StoveBX + half, CounterX - half, height, surfaces.Count, worktopMat));
+            PlaceSurface nearCounter = CreateWorktop(parent.transform, CounterX + half, PlateShelfX - half, height, surfaces.Count, worktopMat);
+            surfaces.Add(nearCounter);
+            PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, WorktopEndX, height, surfaces.Count, worktopMat);
+            surfaces.Add(last);
             SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
+            foreach (Station stove in new[] { stoveA, stoveB })
+            {
+                stove.gameObject.AddComponent<NetworkObject>();
+                stove.gameObject.AddComponent<StationContents>();
+            }
+            AddStoveButtons(stoveA, burnersA);
+            AddStoveButtons(stoveB, burnersB);
+
+            // Spec 021: the cookware lying on top at the start (each one's home spot, where a lost one comes back).
+            NetworkObject Prefab(VesselKind kind) => vesselPrefabs.Find(p => p.GetComponent<Vessel>().Kind == kind);
+            PlaceOnSpot(Prefab(VesselKind.Board), first, SpotNear(first, 0f, -0.125f), "Cutting board");
+            PlaceOnSpot(knifePrefab, first, SpotNear(first, 0.5f, -0.125f), "Knife");
+            PlaceOnSpot(Prefab(VesselKind.Pan), burnersA[0], 0, "Pan");
+            PlaceOnSpot(Prefab(VesselKind.Pot), burnersB[0], 0, "Pot");
+            PlaceOnSpot(Prefab(VesselKind.Plate), nearCounter, SpotNear(nearCounter, -0.25f, -0.125f), "Plate 1");
+            PlaceOnSpot(Prefab(VesselKind.Plate), nearCounter, SpotNear(nearCounter, 0.25f, -0.125f), "Plate 2");
+            PlaceOnSpot(Prefab(VesselKind.Bowl), last, SpotNear(last, -0.5f, -0.125f), "Bowl");
 
             var feedObject = new GameObject("ServeFeed");
             NetworkObject feedNob = feedObject.AddComponent<NetworkObject>();
@@ -584,6 +721,7 @@ namespace Worktown.Game.Editor
             SetField(kitchen, "_feed", feed);
             SetField(kitchen, "_stations", stations);
             SetField(kitchen, "_knifePrefab", knifePrefab); // spec 019: replaces a lost knife
+            SetField(kitchen, "_vesselPrefabs", vesselPrefabs); // spec 021: respawns and the plate shelf
 
             // Spec 009: market board (global, like the feed) and the server-side economy.
             var boardObject = new GameObject("MarketBoard");
@@ -594,6 +732,46 @@ namespace Worktown.Game.Editor
             SetField(economy, "_networkManager", networkManager);
             SetField(economy, "_board", board);
             SetField(kitchen, "_economy", economy);
+        }
+
+        /// <summary>
+        /// Spec 021: a stove's two burners (one spot each, the burner flag) and the stove top behind them (a normal place
+        /// surface), appended to <paramref name="surfaces"/> in that order: stove top, burner 0, burner 1.
+        /// </summary>
+        private static PlaceSurface[] CreateStoveSurfaces(Station stove, List<PlaceSurface> surfaces)
+        {
+            float back = StationWidth * 0.5f;
+            surfaces.Add(CreateTopSurface(stove, "StoveTop", new Vector2(0f, (StoveTopMinZ + back) * 0.5f),
+                new Vector2(StationWidth, back - StoveTopMinZ), surfaces.Count));
+            var burners = new PlaceSurface[StationRules.BurnersPerStove];
+            for (int b = 0; b < burners.Length; b++)
+            {
+                PlaceSurface burner = CreateTopSurface(stove, "Burner " + b, new Vector2(BurnerX[b], BurnerZ),
+                    new Vector2(BurnerSize, BurnerSize), surfaces.Count);
+                SetField(burner, "_isBurner", true);
+                SetField(burner, "_stoveIndex", stove.Index);
+                SetField(burner, "_burner", b);
+                surfaces.Add(burner);
+                burners[b] = burner;
+            }
+            return burners;
+        }
+
+        /// <summary>Spec 021: a static stack of plate models on the plate shelf (the shelf gives the real plates).</summary>
+        private static void CreatePlateStack(ArtCatalog catalog, Station shelf)
+        {
+            if (catalog == null || !catalog.TryGet(ArtKey.FoodPlate, out GameObject plate)) return;
+            float top = StationTop(shelf);
+            float step = Mathf.Max(ArtCatalogBuilder.HeightOf(plate) * 0.6f, 0.015f);
+            var stack = new GameObject("PlateStack");
+            stack.transform.SetParent(shelf.transform, false);
+            stack.transform.localPosition = new Vector3(0f, top, -0.1f);
+            for (int i = 0; i < PlateStackCount; i++)
+            {
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(plate, stack.transform);
+                instance.transform.localPosition = new Vector3(0f, i * step, 0f);
+            }
+            SetStaticRecursive(stack);
         }
 
         private static Station CreateStation(ArtCatalog catalog, Transform parent, int index, StationKind kind, string displayName,
@@ -639,40 +817,6 @@ namespace Worktown.Game.Editor
             SetField(station, "_displayName", displayName);
             SetField(station, "_ingredientIndex", ingredientIndex);
             return station;
-        }
-
-        /// <summary>
-        /// Spec 013: scene network object that syncs what lies on the station to its label. Spec 017: a static
-        /// tool model (plate, bowl, pan, pot) on top of the station and a content anchor with a FoodVisual that
-        /// draws the contents inside it, at <paramref name="fill"/> of the tool's height.
-        /// </summary>
-        private static void AddStationContents(ArtCatalog catalog, Station station, ArtKey tool, float offsetX, float fill,
-            float partScale, float partRadius)
-        {
-            station.gameObject.AddComponent<NetworkObject>();
-            var contents = station.gameObject.AddComponent<StationContents>();
-            SetField(contents, "_label", station.transform.Find("Label").GetComponent<TextMesh>());
-
-            // Top of the furniture in station space (the root sits at half the station height).
-            float top = StationTop(station);
-            float contentY = top;
-            if (catalog != null && catalog.TryGet(tool, out GameObject toolPrefab))
-            {
-                var toolInstance = (GameObject)PrefabUtility.InstantiatePrefab(toolPrefab, station.transform);
-                toolInstance.name = "Tool_" + tool;
-                toolInstance.transform.localPosition = new Vector3(offsetX, top, 0f);
-                SetStaticRecursive(toolInstance);
-                contentY = top + ArtCatalogBuilder.HeightOf(toolPrefab) * fill;
-            }
-
-            var anchor = new GameObject("Contents");
-            anchor.transform.SetParent(station.transform, false);
-            anchor.transform.localPosition = new Vector3(offsetX, contentY, 0f);
-            var visual = anchor.AddComponent<FoodVisual>();
-            SetField(visual, "_catalog", catalog);
-            SetField(visual, "_partScale", partScale);
-            SetField(visual, "_partRadius", partRadius);
-            SetField(contents, "_visual", visual);
         }
 
         // Spec 017: how deep contents sit in their container, as a fraction of its height.

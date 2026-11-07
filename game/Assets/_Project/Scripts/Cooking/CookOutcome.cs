@@ -28,6 +28,16 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 019: a cut stroke or turn needs a knife in the hands.</summary>
         NoKnife,
         /// <summary>Spec 019: a cut stroke or turn on a board with no food on it.</summary>
-        NothingToCut
+        NothingToCut,
+        /// <summary>Spec 021: the board, pan, pot, plate or bowl has no room for more.</summary>
+        VesselFull,
+        /// <summary>Spec 021: the target of a use request is no cookware (or someone holds it).</summary>
+        NotAVessel,
+        /// <summary>Spec 021: this cookware cannot be poured into that one (e.g. a plate into a pan).</summary>
+        CannotPour,
+        /// <summary>Spec 021: a pot is poured onto a plate or into a bowl, not emptied by hand.</summary>
+        PourInstead,
+        /// <summary>Spec 021: the plate shelf gives no more plates while the world has the maximum.</summary>
+        NoPlatesLeft
     }
 }
