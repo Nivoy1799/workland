@@ -122,6 +122,19 @@ namespace Worktown.Game.Tests
             Assert.IsNotNull(entry, "spec 022 AC9");
             Assert.AreEqual("2026-11-08", entry.date);
             Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 023 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec023Entry_WithTestSteps_AsTheNewest()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-08-spec-023") entry = e;
+            Assert.IsNotNull(entry, "spec 023 AC6");
+            Assert.AreEqual("2026-11-08", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
             Assert.AreSame(entry, WhatsNewRules.Newest(entries), "the newest entry, so the banner shows it");
         }
     }

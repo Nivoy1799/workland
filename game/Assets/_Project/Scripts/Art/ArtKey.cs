@@ -53,6 +53,9 @@ namespace Worktown.Game.Art
 
         // Spec 019: the cutting board on the board station and the knife (Food Kit).
         ToolCuttingBoard,
-        ToolKnife
+        ToolKnife,
+
+        // Spec 023: the kitchen cabinet fitted to a 1 x 1 x 1 m box (the scene builder stretches it to the worktop size).
+        Worktop
     }
 }

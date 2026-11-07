@@ -44,6 +44,7 @@ namespace Worktown.Game.UI
         private static readonly Color PromptReason = new Color(0.72f, 0.72f, 0.72f, 1f);
         private VisualElement _crosshair;
         private Label _aimPrompt;
+        private VisualElement _aimPromptRow;
         private PlayerInputReader _input;
         private readonly List<(VisualElement element, float until)> _activeToasts = new List<(VisualElement, float)>();
 
@@ -214,19 +215,33 @@ namespace Worktown.Game.UI
             dot.backgroundColor = CrosshairIdle;
             _root.Add(_crosshair);
 
+            // Spec 023: a full-width row centres a label with a dark rounded background, so the text reads over any glow.
+            _aimPromptRow = new VisualElement { name = "aim-prompt-row", pickingMode = PickingMode.Ignore };
+            IStyle row = _aimPromptRow.style;
+            row.position = Position.Absolute;
+            row.left = 0;
+            row.right = 0;
+            row.top = Length.Percent(50);
+            row.marginTop = 12;
+            row.flexDirection = FlexDirection.Row;
+            row.justifyContent = Justify.Center;
+            _root.Add(_aimPromptRow);
+
             _aimPrompt = new Label { name = "aim-prompt", pickingMode = PickingMode.Ignore };
             IStyle prompt = _aimPrompt.style;
-            prompt.fontSize = 18;
-            prompt.position = Position.Absolute;
-            prompt.left = 0;
-            prompt.right = 0;
-            prompt.top = Length.Percent(50);
-            prompt.marginTop = 12;
-            prompt.unityTextAlign = TextAnchor.UpperCenter;
+            prompt.fontSize = 16;
+            prompt.unityTextAlign = TextAnchor.MiddleCenter;
             prompt.color = Color.white;
-            prompt.unityTextOutlineColor = new Color(0f, 0f, 0f, 0.85f);
-            prompt.unityTextOutlineWidth = 1f;
-            _root.Add(_aimPrompt);
+            prompt.backgroundColor = new Color(0.04f, 0.04f, 0.06f, 0.8f);
+            prompt.paddingLeft = 12;
+            prompt.paddingRight = 12;
+            prompt.paddingTop = 4;
+            prompt.paddingBottom = 4;
+            prompt.borderTopLeftRadius = 8;
+            prompt.borderTopRightRadius = 8;
+            prompt.borderBottomLeftRadius = 8;
+            prompt.borderBottomRightRadius = 8;
+            _aimPromptRow.Add(_aimPrompt);
         }
 
         private void UpdateResultToast(PickupInteractor player)
