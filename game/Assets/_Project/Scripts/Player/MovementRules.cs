@@ -52,10 +52,25 @@ namespace Worktown.Game.Player
             return sprint ? SprintSpeed : WalkSpeed;
         }
 
-        /// <summary>Take-off speed that reaches <see cref="JumpHeight"/> under the given gravity (positive, m/s²).</summary>
-        public static float JumpSpeed(float gravity)
+        /// <summary>Gravity while rising (m/s², positive). Stronger than real gravity: real gravity
+        /// makes game jumps feel floaty (play-test 2026-11-07).</summary>
+        public const float RiseGravity = 9.81f * 2f;
+        /// <summary>Gravity while falling: stronger again, so landings are quick (common genre tuning).</summary>
+        public const float FallGravity = 9.81f * 3f;
+        public const float MaxFallSpeed = 30f;
+
+        /// <summary>Take-off speed that reaches <see cref="JumpHeight"/> under <see cref="RiseGravity"/>.</summary>
+        public static float JumpSpeed()
         {
-            return Mathf.Sqrt(2f * Mathf.Abs(gravity) * JumpHeight);
+            return Mathf.Sqrt(2f * RiseGravity * JumpHeight);
+        }
+
+        /// <summary>Next vertical velocity after one step: rise gravity going up, fall gravity coming down,
+        /// capped at <see cref="MaxFallSpeed"/>.</summary>
+        public static float ApplyGravity(float verticalVelocity, float delta)
+        {
+            float gravity = verticalVelocity > 0f ? RiseGravity : FallGravity;
+            return Mathf.Max(verticalVelocity - gravity * delta, -MaxFallSpeed);
         }
 
         /// <summary>Jumping needs ground under the feet and a standing stance.</summary>

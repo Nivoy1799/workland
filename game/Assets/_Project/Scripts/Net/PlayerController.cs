@@ -181,9 +181,9 @@ namespace Worktown.Game.Net
             if (grounded && _verticalVelocity < 0f)
                 _verticalVelocity = -2f;
             else
-                _verticalVelocity = Mathf.Max(_verticalVelocity + Physics.gravity.y * delta, -40f);
+                _verticalVelocity = MovementRules.ApplyGravity(_verticalVelocity, delta);
             if (MovementRules.CanJump(md.Jump, grounded, _crouched))
-                _verticalVelocity = MovementRules.JumpSpeed(Physics.gravity.y);
+                _verticalVelocity = MovementRules.JumpSpeed();
 
             _controller.Move((_velocity + Vector3.up * _verticalVelocity) * delta);
 

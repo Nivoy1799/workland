@@ -58,10 +58,24 @@ namespace Worktown.Game.Tests
         [Test]
         public void Jump_ReachesConfiguredHeight()
         {
-            float g = 9.81f;
-            float v = MovementRules.JumpSpeed(g);
-            Assert.AreEqual(MovementRules.JumpHeight, v * v / (2f * g), 0.001f);
-            Assert.AreEqual(v, MovementRules.JumpSpeed(-g), 0.001f, "sign of gravity does not matter");
+            float v = MovementRules.JumpSpeed();
+            Assert.AreEqual(MovementRules.JumpHeight, v * v / (2f * MovementRules.RiseGravity), 0.001f);
+        }
+
+        [Test]
+        public void Falling_IsFasterThanRising()
+        {
+            float delta = 1f / 30f;
+            float up = 5f - MovementRules.ApplyGravity(5f, delta);
+            float down = -1f - MovementRules.ApplyGravity(-1f, delta);
+            Assert.Greater(down, up, "fall gravity is stronger than rise gravity");
+            Assert.Greater(MovementRules.RiseGravity, 9.81f, "not floaty real gravity");
+        }
+
+        [Test]
+        public void FallSpeed_IsCapped()
+        {
+            Assert.AreEqual(-MovementRules.MaxFallSpeed, MovementRules.ApplyGravity(-MovementRules.MaxFallSpeed, 1f), 0.001f);
         }
 
         [TestCase(true, true, false, true)]
