@@ -1,7 +1,7 @@
 ---
 id: 006
 title: AI gateway skeleton (C# ASP.NET, item names via OpenRouter)
-status: draft
+status: approved
 owner: architect
 builder: sonnet
 ---
@@ -49,7 +49,7 @@ Only `/ai-gateway`, plus `scripts/verify.sh`, `.env.example` and one line in `do
 - Postgres or any persistent cache. O4 is OPEN; only `IContentCache` plus the in-memory version.
 - Real moderation. O6 is OPEN; ship only the placeholder below.
 - Other content types (npc_line, recipe text). Streaming. Single-flight dedup of concurrent misses.
-- The game-side client and `IItemNameSource` implementation (spec 007). Any change in `/sim` or `/game`.
+- The game-side client and `IItemNameSource` implementation (own follow-up spec; spec 007 shipped without it). Any change in `/sim` or `/game`.
 - Metrics/Prometheus, cost budgets, upstream concurrency caps.
 
 ## Design
@@ -210,11 +210,11 @@ Remove the npm/pytest branches (D25). If `ai-gateway/Gateway.sln` exists and `do
 `run "ai-gateway: dotnet test" dotnet test ai-gateway/Gateway.sln --nologo --verbosity quiet`, else
 skip ("dotnet not installed or not working" / "not created yet"), mirroring section 1.
 
-### Later use from the game (spec 007, note only)
+### Later use from the game (follow-up spec, note only)
 The /game server owns a `GatewayItemNameSource : IItemNameSource` (hash to name). On the first
 creation of an unknown hash it fires an async request, off the tick thread and never awaited by /sim.
 `ItemNaming.Resolve` returns the fallback until the result arrives. Failures are remembered per
-session. Readable mix-name order (spec 005 follow-up) is a separate /sim spec (Open question 9).
+session. Spec 007 is already built without this, so the game-side client gets its own spec. Readable mix-name order (spec 005 follow-up) is a separate /sim spec (Open question 9).
 
 ## Acceptance criteria
 - [ ] AC1: `bash scripts/verify.sh` passes and shows `PASS ai-gateway: dotnet test`, plus all
@@ -225,7 +225,7 @@ session. Readable mix-name order (spec 005 follow-up) is a separate /sim spec (O
       identical call returns `cacheHit: true`, the same name and description, and the stub count is
       still 1.
 - [ ] AC4: `CacheKey.Compute("item_name",1,1,"qwen/test-model", 64 x "a")` equals a literal pinned
-      from `printf '%s' 'gw1|item_name|1|1|qwen/test-model|aaaa...a' | shasum -a 256`. Changing any
+      from `printf '%s' 'gw1|item_name|1|1|qwen/test-model|aaaa...a' | sha256sum` (or `shasum -a 256` on macOS). Changing any
       one input changes the key.
 - [ ] AC5: Schema-invalid output (missing field, extra field, name 41 chars, `http://` in the
       description, fenced JSON) returns 502 `upstream_invalid_output` after exactly 2 stub calls. The
@@ -261,7 +261,7 @@ session. Readable mix-name order (spec 005 follow-up) is a separate /sim spec (O
 - Put a real OpenRouter key in `.env`, run locally, curl one request; confirm which providers give
   strict JSON for `qwen/qwen3.8-27b` and set `GATEWAY_OPENROUTER_PROVIDERS`.
 
-## Open questions (recommended defaults in brackets)
+## Open questions (answered 2026-11-07: human approved all recommended defaults)
 1. Typed content endpoint, not an OpenAI-compatible inbound API; reword architecture.md. [yes]
 2. Text limits: name 3..40, description 10..160, English ASCII only. [yes]
 3. Rate limit 120/min, burst 30 per server id; timeout 20 s; 2 attempts. [yes]
@@ -271,7 +271,7 @@ session. Readable mix-name order (spec 005 follow-up) is a separate /sim spec (O
 7. No Sim reference now; a later /sim spec makes hash-from-tree public for verification. [yes]
 8. Moderation stays a placeholder; O6 stays OPEN, decide before Early Access. [yes]
 9. Readable mix/plate input order (alphabetical, hash unchanged) in a separate /sim spec. [yes]
-10. No negative cache in the gateway; the game remembers failures per session (spec 007). [yes]
+10. No negative cache in the gateway; the game remembers failures per session (game-side follow-up spec). [yes]
 
 ## Implementation notes
 (Builder fills this in.)
