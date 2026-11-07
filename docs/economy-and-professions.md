@@ -11,8 +11,8 @@ acceptance criteria) when the human picks it. Written 2026-11-07 from the human'
   goods. The past is part of the culture: NPCs talk about it, schools teach it, people joke about the
   absurd things "the old ones" did (dry, self-aware humour about the past, never jokes at the
   animals' expense).
-- How directly the game compares that past to real historical atrocities is **OPEN (O9)**; see the
-  note at the end.
+- The past is told only through the game's own fictional history (D28): no names of or comparisons
+  to real atrocities.
 - Consequences for content and AI:
   - The AI gateway's schemas and moderation reject animal-product names and descriptions; the
     prompt rules say the world is vegan (AGENTS.md AI guardrails, `ai-gateway/schemas`).
@@ -90,10 +90,5 @@ all scraps ─► composter ─► farms
 7. **Asia store** (imports + kimchi/dumplings production), baker, composter.
 
 ## Open
-- **O9: references to real history.** The human described the past era as "like the holocaust".
-  Recommendation: keep the game's own history (a named past era, museums, NPC memories) and do not
-  name or directly compare to the Holocaust or other real atrocities in game text. Direct comparisons
-  hurt many players, would likely cause review and moderation problems on Steam, and the AI gateway's
-  moderation would have to allow it. The human decides.
 - Prices, shelf lives and lead times: numbers come with each spec and are balanced with load and play
   tests.
