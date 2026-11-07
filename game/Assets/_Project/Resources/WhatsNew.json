@@ -59,6 +59,21 @@
         "Near a station the hint at the bottom shows its keys",
         "Selling a dish shows a toast on the right"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-012",
+      "date": "2026-11-07",
+      "title": "Talk without voice: emotes, pings, quick chat",
+      "items": [
+        "Hold G (gamepad LB), move the mouse to an emote, release: it shows above your head",
+        "Middle mouse (gamepad RB) pings where you look; double-click marks danger",
+        "Hold T and press 1-6 for quick chat lines (gamepad D-pad)"
+      ],
+      "test": [
+        "The other window sees your emote bubble and the ping pillar",
+        "Quick chat appears as a toast for nearby players",
+        "Spamming G or middle mouse gets limited after a few tries"
+      ]
     }
   ]
 }
