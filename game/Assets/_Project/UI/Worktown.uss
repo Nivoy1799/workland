@@ -1,0 +1,159 @@
+/* Spec 011: HUD, debug menu and What's-new banner. Dark translucent panels, light text. */
+.panel {
+    background-color: rgba(12, 14, 18, 0.78);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.panel Label {
+    color: rgb(238, 238, 238);
+    font-size: 15px;
+    white-space: normal;
+}
+
+.hud-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.wallet-box {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+}
+
+.panel .wallet {
+    font-size: 30px;
+    color: rgb(255, 213, 74);
+    -unity-font-style: bold;
+}
+
+.panel .clock {
+    font-size: 15px;
+    color: rgb(190, 200, 210);
+}
+
+.prompt-box {
+    position: absolute;
+    bottom: 40px;
+    left: 30%;
+    right: 30%;
+    align-items: center;
+}
+
+.panel .prompt {
+    font-size: 20px;
+    -unity-text-align: middle-center;
+}
+
+.held-box {
+    position: absolute;
+    left: 16px;
+    bottom: 40px;
+}
+
+.panel .held {
+    font-size: 18px;
+}
+
+.toast-column {
+    position: absolute;
+    right: 16px;
+    top: 30%;
+    width: 380px;
+}
+
+.toast {
+    margin-bottom: 6px;
+}
+
+.panel .toast-text {
+    font-size: 16px;
+}
+
+.panel .toast-bad {
+    color: rgb(255, 140, 120);
+}
+
+.debug-box {
+    position: absolute;
+    left: 16px;
+    top: 110px;
+    width: 470px;
+}
+
+.panel .debug-line {
+    font-size: 13px;
+    color: rgb(200, 210, 200);
+}
+
+.debug-title {
+    -unity-font-style: bold;
+}
+
+.debug-row {
+    flex-direction: row;
+    margin-top: 4px;
+}
+
+.debug-row TextField {
+    flex-grow: 1;
+}
+
+.banner-backdrop {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.35);
+}
+
+.banner {
+    width: 620px;
+    padding-left: 22px;
+    padding-right: 22px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+}
+
+.panel .banner-kicker {
+    font-size: 13px;
+    color: rgb(255, 213, 74);
+    -unity-font-style: bold;
+}
+
+.panel .banner-title {
+    font-size: 24px;
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+}
+
+.panel .banner-heading {
+    font-size: 16px;
+    -unity-font-style: bold;
+    margin-top: 10px;
+    color: rgb(160, 210, 255);
+}
+
+.panel .banner-item {
+    font-size: 15px;
+    margin-left: 8px;
+}
+
+.panel .banner-footer {
+    font-size: 12px;
+    color: rgb(170, 170, 170);
+    margin-top: 14px;
+}

@@ -1,0 +1,64 @@
+{
+  "entries": [
+    {
+      "id": "2026-11-06-spec-007",
+      "date": "2026-11-06",
+      "title": "Kitchen: cook with the real cooking model",
+      "items": [
+        "Kitchen row north of the spawn: 4 ingredient crates, board, pan, pot, counter",
+        "Names and star ratings come from the server's cooking simulation",
+        "Labels above food update live for every player"
+      ],
+      "test": [
+        "Potato crate (E), board 3 (sticks), pan 2 (golden): 'crispy fried potato sticks' with 4 stars",
+        "Pan 3 (dark) gives fewer stars than pan 2",
+        "Both players cook at the same time"
+      ]
+    },
+    {
+      "id": "2026-11-06-spec-009",
+      "date": "2026-11-06",
+      "title": "Money: buy, cook, sell",
+      "items": [
+        "Everyone starts with $500; crates charge the grocer price",
+        "The counter plates and sells to NPC demand; better cooking pays more",
+        "One in-game hour per minute: demand refills, prices move"
+      ],
+      "test": [
+        "Golden fries sell for more than dark fries",
+        "A raw potato cannot be sold",
+        "Sell many of the same dish: the price drops, the next hour demand returns"
+      ]
+    },
+    {
+      "id": "2026-11-07-spec-010",
+      "date": "2026-11-07",
+      "title": "Controls: third-person camera, sprint, sneak, jump",
+      "items": [
+        "Mouse turns the camera (cursor locked); Esc or Alt frees the cursor",
+        "WASD moves where the camera looks; Shift sprints, C sneaks, Space jumps",
+        "Your own movement is predicted, so it feels instant even with lag"
+      ],
+      "test": [
+        "Camera does not go through boxes or stations",
+        "Jump while carrying something: no bump at the top",
+        "Gamepad: sticks move and look, A/cross jumps, B/circle sneaks"
+      ]
+    },
+    {
+      "id": "2026-11-07-spec-011",
+      "date": "2026-11-07",
+      "title": "New HUD, F1 debug menu, this banner",
+      "items": [
+        "Clean HUD: wallet, time of day, what you hold, station hints, sales toasts",
+        "All technical details moved to the debug menu: press F1",
+        "This banner shows what is new in each build; F2 opens it again"
+      ],
+      "test": [
+        "F1 toggles the debug menu, F2 reopens this banner, Enter closes it",
+        "Near a station the hint at the bottom shows its keys",
+        "Selling a dish shows a toast on the right"
+      ]
+    }
+  ]
+}

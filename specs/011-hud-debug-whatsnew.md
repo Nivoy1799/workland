@@ -51,14 +51,14 @@ Only `game/` (branch stacked on `spec/010-player-controls`), plus one line in `d
   playing); closing them locks it again.
 
 ## Acceptance criteria
-- [ ] AC1: `WhatsNewRules` (EditMode tests): parses the JSON, picks the newest entry by date,
+- [x] AC1: `WhatsNewRules` (EditMode tests): parses the JSON, picks the newest entry by date,
       "show on start" is true for an unseen build id and false after it was closed; bad JSON gives an
       empty list instead of an exception.
-- [ ] AC2: The shipped `WhatsNew.json` parses and has entries for 007, 009 and 010 (EditMode test).
-- [ ] AC3: In the game, the HUD shows wallet, clock, held item and prompt; F1 toggles the debug menu;
+- [x] AC2: The shipped `WhatsNew.json` parses and has entries for 007, 009 and 010 (EditMode test).
+- [~] AC3: In the game, the HUD shows wallet, clock, held item and prompt; F1 toggles the debug menu;
       the banner opens on first start, closes with Enter and reopens with F2 (manual).
-- [ ] AC4: Spec 003, 007, 009 and 010 tests pass; nothing in the HUD shows technical text (manual).
-- [ ] AC5: `bash scripts/verify.sh` passes with `UNITY_PATH` set.
+- [x] AC4: Spec 003, 007, 009 and 010 tests pass; nothing in the HUD shows technical text (manual).
+- [x] AC5: `bash scripts/verify.sh` passes with `UNITY_PATH` set.
 
 ## Test plan
 - EditMode tests for the pure What's-new logic and the shipped JSON.
@@ -74,7 +74,19 @@ Only `game/` (branch stacked on `spec/010-player-controls`), plus one line in `d
 - Approve, answer the open questions, play it and say if the HUD is clear enough.
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-07 on `spec/011-hud-debug-whatsnew` (stacked on spec 010).
+- UI Toolkit with the tree built in C# (`HudView`, `DebugMenuView`, `WhatsNewView`) and one
+  stylesheet `UI/Worktown.uss` plus theme `UI/WorktownTheme.tss`; no UXML files (simpler to
+  generate and review). `PanelSettings` scales with screen size from 1280x720.
+- AC1, AC2: `WhatsNewTests` (parse, bad JSON, newest, show once per build, shipped file has entries
+  for 007, 009, 010, 011 with items and tests).
+- AC3 (partly): screenshot from a Windows client on the WSL server shows the HUD (wallet, clock) and
+  the banner on first start. F1, F2, Enter, the station prompt and toasts need a human at the keys.
+- AC4/AC5: verify.sh PASS, Unity EditMode 125/125, /sim 191/191.
+- Dev tool `-screenshot path [-screenshot-after s] [-screenshot-every s]` (`DevScreenshot`) so agents
+  can check the UI without seeing the screen.
+- Found by the screenshot check: crate labels overlapped; labels shortened and crates spaced 2 m.
+- `docs/workflow.md`: What's-new entry rule.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

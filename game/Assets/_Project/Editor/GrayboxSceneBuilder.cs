@@ -25,6 +25,8 @@ using Worktown.Game.Economy;
 using Worktown.Sim.Economy;
 using Worktown.Game.Net;
 using Worktown.Game.Player;
+using Worktown.Game.UI;
+using UnityEngine.UIElements;
 using Unity.Cinemachine;
 using UnityEngine.InputSystem;
 
@@ -46,6 +48,9 @@ namespace Worktown.Game.Editor
         private const float StationHeight = 1f;
         private const float KitchenZ = 13f;
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
+        private const string UiThemePath = Root + "/UI/WorktownTheme.tss";
+        private const string UiStylePath = Root + "/UI/Worktown.uss";
+        private const string UiPanelPath = Root + "/UI/WorktownPanel.asset";
         private static readonly EconomyCatalog GrocerPrices = EconomyCatalog.CreateDefault();
         private const string DistanceConditionPath = Root + "/Settings/DistanceCondition40m.asset";
         private const string LoggingConfigurationPath = Root + "/Settings/FishNetLogging.asset";
@@ -212,7 +217,7 @@ namespace Worktown.Game.Editor
                 string id = DemoIngredients.All[i].Id;
                 Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", crateColors[i]);
                 stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Crate,
-                    char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -7f + i * 1.5f, mat, i));
+                    char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -8.5f + i * 2f, mat, i));
             }
             stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
                 CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0));
@@ -267,7 +272,9 @@ namespace Worktown.Game.Editor
             if (kind == StationKind.Crate
                 && GrocerPrices.TryGetGrocerPrice(DemoIngredients.All[ingredientIndex].Id, out long dollars))
                 price = " " + EconomyRules.Money(dollars);
-            label.text = displayName + price + "\n" + keys;
+            // Short labels so neighbouring stations do not overlap (spec 011 screenshot check).
+            string shortName = kind == StationKind.Crate ? displayName.Replace(" crate", string.Empty) : displayName;
+            label.text = shortName + "\n" + (price.Length > 0 ? price.Trim() + " · " : string.Empty) + keys;
 
             var station = root.AddComponent<Station>();
             SetField(station, "_index", index);
@@ -503,8 +510,44 @@ namespace Worktown.Game.Editor
             var bootstrap = go.AddComponent<NetBootstrap>();
             SetField(bootstrap, "_networkManager", networkManager);
             SetField(bootstrap, "_steam", steam);
-            var overlay = go.AddComponent<DebugOverlay>();
-            SetField(overlay, "_bootstrap", bootstrap);
+            CreateUi(bootstrap);
+        }
+
+        /// <summary>
+        /// Spec 011: one UI Toolkit document with the HUD, the F1 debug menu and the What's-new
+        /// banner. The panel settings and the theme are assets so they stay reviewable.
+        /// </summary>
+        private static void CreateUi(NetBootstrap bootstrap)
+        {
+            var theme = AssetDatabase.LoadAssetAtPath<ThemeStyleSheet>(UiThemePath);
+            var style = AssetDatabase.LoadAssetAtPath<StyleSheet>(UiStylePath);
+            if (theme == null || style == null)
+                throw new InvalidOperationException("UI theme or stylesheet missing: " + UiThemePath + ", " + UiStylePath);
+
+            var panel = AssetDatabase.LoadAssetAtPath<PanelSettings>(UiPanelPath);
+            if (panel == null)
+            {
+                panel = ScriptableObject.CreateInstance<PanelSettings>();
+                AssetDatabase.CreateAsset(panel, UiPanelPath);
+            }
+            panel.themeStyleSheet = theme;
+            panel.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            panel.referenceResolution = new Vector2Int(1280, 720);
+            panel.match = 0.5f;
+            EditorUtility.SetDirty(panel);
+
+            var go = new GameObject("UI");
+            var document = go.AddComponent<UIDocument>();
+            document.panelSettings = panel;
+            var hud = go.AddComponent<HudView>();
+            SetField(hud, "_bootstrap", bootstrap);
+            SetField(hud, "_style", style);
+            var debug = go.AddComponent<DebugMenuView>();
+            SetField(debug, "_bootstrap", bootstrap);
+            SetField(debug, "_style", style);
+            var whatsNew = go.AddComponent<WhatsNewView>();
+            SetField(whatsNew, "_style", style);
+            go.AddComponent<DevScreenshot>();
         }
 
         /// <summary>

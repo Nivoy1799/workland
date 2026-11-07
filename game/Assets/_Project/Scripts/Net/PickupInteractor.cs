@@ -30,7 +30,19 @@ namespace Worktown.Game.Net
         public Transform HoldPoint => _holdPoint;
 
         /// <summary>Owner side: last answer from the server, for the debug overlay.</summary>
-        public string LastResult { get; private set; } = string.Empty;
+        public string LastResult
+        {
+            get => _lastResult;
+            private set
+            {
+                _lastResult = value;
+                ResultVersion++;
+            }
+        }
+        private string _lastResult = string.Empty;
+
+        /// <summary>Owner side: increases with every result, so the HUD can toast repeats (spec 011).</summary>
+        public int ResultVersion { get; private set; }
 
         public override void OnStartServer()
         {
