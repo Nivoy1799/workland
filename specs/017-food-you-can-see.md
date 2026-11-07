@@ -1,7 +1,7 @@
 ---
 id: 017
 title: Food you can see (3D food models for every cooking state)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -102,7 +102,7 @@ struct FoodLook {
 - Screenshot run with server and two clients; manual play-test by the human.
 - Command: `bash scripts/verify.sh` (Windows, Editor closed, `UNITY_PATH` set).
 
-## Open questions
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. **Download the Kenney Food Kit (CC0, 4.6 MB)?** Default: yes, the orchestrator downloads it and
    copies only the used models.
 2. **Cut shapes:** per-ingredient cut models where the kit has them, generic tinted pieces
