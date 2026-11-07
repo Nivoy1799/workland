@@ -30,6 +30,24 @@ namespace Worktown.Game.Art
         PropDumpster,
         PropTrashcan,
         PropFence,
-        PropAwning
+        PropAwning,
+
+        // Spec 017: food models (whole, per-ingredient cuts, generic tinted pieces) and containers.
+        FoodPotato,
+        FoodApple,
+        FoodTomato,
+        FoodOnion,
+        FoodAppleHalf,
+        FoodOnionHalf,
+        FoodTomatoSlice,
+        FoodFries,
+        FoodPieceHalf,
+        FoodPieceSlice,
+        FoodPieceStick,
+        FoodPieceCube,
+        FoodPlate,
+        FoodBowl,
+        FoodPan,
+        FoodPot
     }
 }

@@ -75,13 +75,13 @@ namespace Worktown.Game.Editor
             EnsureFolder(Root + "/Scenes");
             EnsureFolder(Root + "/Settings");
 
-            ArtCatalogBuilder.Build(); // spec 015: wrappers and catalog first
+            ArtCatalog builtCatalog = ArtCatalogBuilder.Build(); // spec 015: wrappers and catalog first
             Material groundMat = CreateMaterial(GroundMaterialPath, new Color(0.45f, 0.48f, 0.45f));
             Material pickupMat = CreateMaterial(PickupMaterialPath, new Color(0.95f, 0.6f, 0.15f));
             PingMarker pingPrefab = CreatePingMarkerPrefab(pickupMat);
             NetworkObject playerPrefab = CreatePlayerPrefab(pingPrefab);
             GameObject pickupPrefab = CreatePickupPrefab(pickupMat);
-            NetworkObject foodPrefab = CreateFoodPrefab(pickupMat);
+            NetworkObject foodPrefab = CreateFoodPrefab(pickupMat, builtCatalog);
             NetworkObject customerPrefab = CreateCustomerPrefab(pickupMat);
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
@@ -261,8 +261,9 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>Spec 007: a food item. Root holds the network components and the collider;
-        /// the visual cube and the label are children so their scale does not affect each other.</summary>
-        private static NetworkObject CreateFoodPrefab(Material material)
+        /// the visual cube and the label are children so their scale does not affect each other.
+        /// Spec 017: a FoodVisual child draws the model; the cube stays as its fallback.</summary>
+        private static NetworkObject CreateFoodPrefab(Material material, ArtCatalog catalog)
         {
             var root = new GameObject("Food");
             var collider = root.AddComponent<BoxCollider>();
@@ -278,13 +279,25 @@ namespace Worktown.Game.Editor
 
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, 0.55f, 0f), 40, 0.035f);
 
+            // Models stand on the bottom of the pickup collider (wrapper pivots are bottom centre).
+            var visualObject = new GameObject("Visual");
+            visualObject.transform.SetParent(root.transform, false);
+            visualObject.transform.localPosition = new Vector3(0f, -FoodSize * 0.5f, 0f);
+            var visual = visualObject.AddComponent<FoodVisual>();
+            SetField(visual, "_catalog", catalog);
+            SetField(visual, "_fallback", renderer);
+            SetField(visual, "_partScale", 0.5f);
+            SetField(visual, "_partRadius", 0.075f);
+            SetField(visual, "_plateContentHeight", ContentHeight(catalog, ArtKey.FoodPlate, PlateFill));
+            SetField(visual, "_bowlContentHeight", ContentHeight(catalog, ArtKey.FoodBowl, BowlFill));
+
             NetworkObject nob = root.AddComponent<NetworkObject>();
             SetField(nob, "_preventDespawnOnDisconnect", true);
             AddServerAuthoritativeTransform(root);
             root.AddComponent<Pickup>();
             var food = root.AddComponent<Food>();
             SetField(food, "_label", label);
-            SetField(food, "_renderer", renderer);
+            SetField(food, "_visual", visual);
 
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, FoodPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
@@ -313,11 +326,11 @@ namespace Worktown.Game.Editor
             // Spec 016: pan and pot cook over time; their label (knob, what is cooking) is networked.
             Station pan = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
                 CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f)), 0);
-            AddStationContents(pan);
+            AddStationContents(catalog, pan, ArtKey.FoodPan, 0f, PanFill, 0.65f, 0.06f);
             stations.Add(pan);
             Station pot = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
                 CreateMaterial(Root + "/Settings/Station_Pot.mat", new Color(0.4f, 0.5f, 0.65f)), 0);
-            AddStationContents(pot);
+            AddStationContents(catalog, pot, ArtKey.FoodPot, 0f, PotFill, 0.6f, 0.05f);
             stations.Add(pot);
             stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
                 CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
@@ -325,11 +338,12 @@ namespace Worktown.Game.Editor
             // Spec 013: combine stations next to the counter; their contents are networked.
             Station plating = CreateStation(catalog, parent.transform, stations.Count, StationKind.PlatingTable, "Plating table", 11f,
                 CreateMaterial(Root + "/Settings/Station_Plating.mat", new Color(0.86f, 0.84f, 0.72f)), 0);
-            AddStationContents(plating);
+            AddStationContents(catalog, plating, ArtKey.FoodPlate, 0f, PlateFill, 0.5f, 0.075f);
             stations.Add(plating);
             Station bowl = CreateStation(catalog, parent.transform, stations.Count, StationKind.Bowl, "Bowl", 13.5f,
                 CreateMaterial(Root + "/Settings/Station_Bowl.mat", new Color(0.55f, 0.75f, 0.62f)), 0);
-            AddStationContents(bowl);
+            // The bowl stands next to the blender of the spec 015 bowl station.
+            AddStationContents(catalog, bowl, ArtKey.FoodBowl, -0.32f, BowlFill, 0.45f, 0.06f);
             stations.Add(bowl);
 
             var feedObject = new GameObject("ServeFeed");
@@ -401,12 +415,53 @@ namespace Worktown.Game.Editor
             return station;
         }
 
-        /// <summary>Spec 013: scene network object that syncs what lies on the station to its label.</summary>
-        private static void AddStationContents(Station station)
+        /// <summary>
+        /// Spec 013: scene network object that syncs what lies on the station to its label. Spec 017: a static
+        /// tool model (plate, bowl, pan, pot) on top of the station and a content anchor with a FoodVisual that
+        /// draws the contents inside it, at <paramref name="fill"/> of the tool's height.
+        /// </summary>
+        private static void AddStationContents(ArtCatalog catalog, Station station, ArtKey tool, float offsetX, float fill,
+            float partScale, float partRadius)
         {
             station.gameObject.AddComponent<NetworkObject>();
             var contents = station.gameObject.AddComponent<StationContents>();
             SetField(contents, "_label", station.transform.Find("Label").GetComponent<TextMesh>());
+
+            // Top of the furniture in station space (the root sits at half the station height).
+            Transform art = station.transform.Find("Art_Station" + station.Kind);
+            float top = art != null
+                ? ArtCatalogBuilder.BaseTopOf(art.gameObject) + art.localPosition.y
+                : StationHeight * 0.5f;
+            float contentY = top;
+            if (catalog != null && catalog.TryGet(tool, out GameObject toolPrefab))
+            {
+                var toolInstance = (GameObject)PrefabUtility.InstantiatePrefab(toolPrefab, station.transform);
+                toolInstance.name = "Tool_" + tool;
+                toolInstance.transform.localPosition = new Vector3(offsetX, top, 0f);
+                SetStaticRecursive(toolInstance);
+                contentY = top + ArtCatalogBuilder.HeightOf(toolPrefab) * fill;
+            }
+
+            var anchor = new GameObject("Contents");
+            anchor.transform.SetParent(station.transform, false);
+            anchor.transform.localPosition = new Vector3(offsetX, contentY, 0f);
+            var visual = anchor.AddComponent<FoodVisual>();
+            SetField(visual, "_catalog", catalog);
+            SetField(visual, "_partScale", partScale);
+            SetField(visual, "_partRadius", partRadius);
+            SetField(contents, "_visual", visual);
+        }
+
+        // Spec 017: how deep contents sit in their container, as a fraction of its height.
+        private const float PlateFill = 0.4f;
+        private const float BowlFill = 0.3f;
+        private const float PanFill = 0.35f;
+        private const float PotFill = 0.75f;
+
+        private static float ContentHeight(ArtCatalog catalog, ArtKey container, float fill)
+        {
+            if (catalog == null || !catalog.TryGet(container, out GameObject prefab)) return 0.02f;
+            return ArtCatalogBuilder.HeightOf(prefab) * fill;
         }
 
         private static TextMesh CreateLabel(Transform parent, Vector3 localPosition, int fontSize, float characterSize)

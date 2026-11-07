@@ -154,7 +154,7 @@ namespace Worktown.Game.Cooking
         /// food no longer exists as an item in the world (the caller despawns its object). Food the sim
         /// would refuse to heat (e.g. a finished plate) is refused now, while it is still in the hands.
         /// </summary>
-        public CookOutcome TryPutOnHeat(int foodObjectId, int stationIndex, StationKind kind, byte color, uint tick)
+        public CookOutcome TryPutOnHeat(int foodObjectId, int stationIndex, StationKind kind, uint tick)
         {
             if (!StationRules.IsHeat(kind)) return CookOutcome.InvalidOption;
             if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
@@ -166,7 +166,7 @@ namespace Worktown.Game.Cooking
             if (!TryGetTimeParam(opId, out ParamDef time)) return CookOutcome.SimRefused;
             if (!_factory.Apply(opId, new[] { item }, HeatParams(tempC, time.Max)).Ok) return CookOutcome.SimRefused;
 
-            _heat[stationIndex] = new HeatSession(item, color, opId, tempC, stove.IsOn, tick);
+            _heat[stationIndex] = new HeatSession(item, opId, tempC, stove.IsOn, tick);
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
         }
@@ -176,12 +176,10 @@ namespace Worktown.Game.Cooking
         /// cooked item. TooShort: the food came out before the op's minimum time and is handed back
         /// unchanged. The caller hands the result over first, then calls <see cref="ClearHeat"/>.
         /// </summary>
-        public CookOutcome TryPreviewHeatTake(int stationIndex, uint tick, double tickRate, out Item result, out byte color)
+        public CookOutcome TryPreviewHeatTake(int stationIndex, uint tick, double tickRate, out Item result)
         {
             result = null;
-            color = 0;
             if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return CookOutcome.StationEmpty;
-            color = session.Color;
             if (!TryGetTimeParam(session.OperationId, out ParamDef time)) return CookOutcome.SimRefused;
 
             double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
@@ -209,11 +207,26 @@ namespace Worktown.Game.Cooking
         public string DescribeHeat(int stationIndex, uint tick, double tickRate)
         {
             if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return null;
-            string bucket = string.Empty;
-            if (TryGetTimeParam(session.OperationId, out ParamDef time))
-                bucket = CookingTime.BucketId(time, CookingTime.SimSeconds(session.CookedTicks(tick), tickRate));
+            string bucket = CurrentBucket(session, tick, tickRate);
             if (bucket.Length == 0) bucket = session.IsRunning ? "warming up" : "raw";
             return NameOf(session.Food) + " · " + bucket;
+        }
+
+        /// <summary>
+        /// Spec 017: the look of what is in the pan or pot, with the doneness bucket reached so far (the same
+        /// bucket the label shows). Null if it is empty.
+        /// </summary>
+        public FoodLook? HeatLook(int stationIndex, uint tick, double tickRate)
+        {
+            if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return null;
+            return FoodLookRules.Cooking(session.Food, session.OperationId, CurrentBucket(session, tick, tickRate));
+        }
+
+        /// <summary>The doneness bucket id reached so far ("short", "medium", "long"), empty before the first.</summary>
+        private string CurrentBucket(HeatSession session, uint tick, double tickRate)
+        {
+            if (!TryGetTimeParam(session.OperationId, out ParamDef time)) return string.Empty;
+            return CookingTime.BucketId(time, CookingTime.SimSeconds(session.CookedTicks(tick), tickRate));
         }
 
         private bool TryGetTimeParam(string opId, out ParamDef time)
@@ -234,7 +247,7 @@ namespace Worktown.Game.Cooking
         /// Spec 013: moves a food item onto a plating table or into a bowl. On success the food no
         /// longer exists as an item in the world (the caller despawns its object).
         /// </summary>
-        public CookOutcome TryAddToStation(int foodObjectId, int stationIndex, StationKind kind, byte color)
+        public CookOutcome TryAddToStation(int foodObjectId, int stationIndex, StationKind kind)
         {
             if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
             List<AssemblyEntry> contents = ContentsOf(stationIndex);
@@ -254,7 +267,7 @@ namespace Worktown.Game.Cooking
                 if (!_factory.Apply(AssemblyRules.OperationFor(kind), inputs, NoParams).Ok)
                     return CookOutcome.SimRefused;
             }
-            contents.Add(new AssemblyEntry(item, color));
+            contents.Add(new AssemblyEntry(item));
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
         }
@@ -263,9 +276,9 @@ namespace Worktown.Game.Cooking
         /// Spec 013: takes everything from the station as one item (plate or mix of all, in order).
         /// A bowl with a single item gives it back unchanged. On failure the contents stay.
         /// </summary>
-        public CookOutcome TryTakeFromStation(int stationIndex, StationKind kind, out Item result, out byte color)
+        public CookOutcome TryTakeFromStation(int stationIndex, StationKind kind, out Item result)
         {
-            CookOutcome outcome = TryPreviewTake(stationIndex, kind, out result, out color);
+            CookOutcome outcome = TryPreviewTake(stationIndex, kind, out result);
             if (outcome == CookOutcome.Ok) ClearStation(stationIndex);
             return outcome;
         }
@@ -274,14 +287,12 @@ namespace Worktown.Game.Cooking
         /// What "take" would produce, without changing the station. The caller hands the result over
         /// first and then calls <see cref="ClearStation"/>, so a failed hand-over loses nothing.
         /// </summary>
-        public CookOutcome TryPreviewTake(int stationIndex, StationKind kind, out Item result, out byte color)
+        public CookOutcome TryPreviewTake(int stationIndex, StationKind kind, out Item result)
         {
             result = null;
-            color = 0;
             if (!AssemblyRules.IsAssembly(kind)) return CookOutcome.InvalidOption;
             List<AssemblyEntry> contents = ContentsOf(stationIndex);
             if (contents.Count == 0) return CookOutcome.StationEmpty;
-            color = contents[0].Color;
 
             if (kind == StationKind.Bowl && contents.Count == 1)
             {
@@ -309,6 +320,15 @@ namespace Worktown.Game.Cooking
             var names = new List<string>(contents.Count);
             foreach (AssemblyEntry entry in contents) names.Add(NameOf(entry.Item));
             return names;
+        }
+
+        /// <summary>Spec 017: looks of what is on the station, in order (same order as the names).</summary>
+        public IReadOnlyList<FoodLook> LooksOnStation(int stationIndex)
+        {
+            List<AssemblyEntry> contents = ContentsOf(stationIndex);
+            var looks = new List<FoodLook>(contents.Count);
+            foreach (AssemblyEntry entry in contents) looks.Add(FoodLookRules.From(entry.Item));
+            return looks;
         }
 
         private List<AssemblyEntry> ContentsOf(int stationIndex)

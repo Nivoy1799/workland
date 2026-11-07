@@ -116,6 +116,64 @@ struct FoodLook {
 - Play-test AC5.
 
 ## Implementation notes
-(Builder fills this in.)
+- Built: `Cooking/FoodLook.cs`, `FoodLookRules.cs`, `FoodLookSerializer.cs` (explicit FishNet writer/reader,
+  6 bytes; the compiled assembly uses it, no codegen fallback), `Art/FoodArtRules.cs` (pure: model, pile,
+  tint, layout), `Art/FoodPiece.cs`, `Art/FoodVisual.cs`; 16 new `ArtKey`s (`Food*`), 16 wrappers in
+  `Prefabs/Art/`, `Art/FoodPiece.mat`. Tests: `FoodLookRulesTests`, `FoodLookSurfaceTests`,
+  `FoodArtCatalogTests` (32 new, 228 total, all green).
+- Food Kit: 12 models unmodified (egg, apple, tomato, onion, apple-half, onion-half, tomato-slice, fries,
+  plate, bowl, frying-pan, pot), `Textures/colormap.png`, `License.txt`; manifest row added.
+- Mapping (ingredient x shape; "generic" = Unity primitive with a white material, tinted with the
+  ingredient colour; own = kit colours):
+
+  | | whole | halves | slices | sticks | cubes |
+  |---|---|---|---|---|---|
+  | potato | egg, tinted (stand-in) | generic half x2 | generic slice x4 | generic stick x5; fries (own) once fried to medium or longer | generic cube x6 |
+  | apple | apple (own) | apple-half x2 (own) | generic slice x4 | generic stick x5 | generic cube x6 |
+  | tomato | tomato (own) | generic half x2 | tomato-slice x3 (own) | generic stick x5 | generic cube x6 |
+  | onion | onion (own) | onion-half x2 (own) | generic slice x4 | generic stick x5 | generic cube x6 |
+
+  Generic half = flattened sphere, slice = flat cylinder, stick = long box, cube = box. Plated: plate
+  (0.35 m) + up to 4 parts at half size; mixed: bowl (0.3 m) + parts. Whole food 0.16 to 0.18 m, fries
+  0.22 m. `HandHeldPiles_FitTheFootprint` builds every ingredient x shape (raw and fried long) with
+  `FoodVisual` and checks the drawn bounds stay under 0.25 m, and a full plate under 0.35 m.
+- Stand-in: the kit has no potato; the egg tinted potato brown is used for the whole potato.
+- Potato sticks are generic potato-tinted sticks while raw, boiled or lightly fried, and become the
+  kit's fries model only once fried (fry or saute) to the medium bucket or longer (`FoodArtRules.IsFries`),
+  so raw sticks never look like finished fries. The fries model then gets the normal darkening (25 / 45 %).
+- `egg-half.fbx` was considered for potato halves and not used: it is a cracked egg shell with a jagged
+  rim and a yolk, which reads as an egg cup even when tinted. Potato halves stay the flattened sphere.
+- Deviation: `FoodLook` has a sixth byte `Heat` (0 none, 1 fried/sauteed, 2 boiled). The spec's five
+  bytes cannot tell fried from boiled, which the golden shift (open question 3) needs. Still bytes only.
+- Stations: the builder places a static tool model on top of the furniture (`Tool_FoodPlate`,
+  `Tool_FoodBowl`, `Tool_FoodPan`, `Tool_FoodPot`) and a `Contents` anchor with a `FoodVisual` that draws
+  the parts. The bowl stands at x -0.32 next to the spec 015 blender. The pan/pot content look follows
+  the doneness bucket while cooking (`KitchenState.HeatLook`, the same bucket the label already shows).
+- `FoodVisual` rebuilds only when a look changes (dirty flag, applied in `LateUpdate`), pools instances
+  per prefab, caches catalog lookups, and is skipped on a server-only instance (dedicated server draws
+  nothing). Unknown ingredient or missing model shows the old coloured cube (now the fallback renderer).
+- Ingredient of a plate or mix is the first sim component (sorted by base id). The old colour byte
+  plumbing was removed (review L1): `AssemblyEntry.Color`, `HeatSession.Color`, the `color` parameters of
+  `TryAddToStation` / `TryPutOnHeat` and the `color` out params of the take methods; tests adjusted (the two
+  colour asserts went with the feature). "Input order" for parts is the item's `Inputs` order, which the
+  sim sorts canonically (by hash) for plate and mix: fries + tomato slices come out tomato first; the
+  station keeps the order added. Tests assert the concrete looks in that order.
+- Mixes (review M1): a mix that was not cut as a whole takes its first part's shape, so it never draws as a
+  whole ingredient (in the hand as a part, in the pan or pot, on a plate). Heat on the whole mix is carried
+  onto each part when it is more done than the part, so a fried mix shows fried parts. A mix on a plate is
+  one part (Kind mixed) drawn as a pile of its first ingredient in that shape, with the fried tint.
+- D21 (review M2): `Food.Quality` (synced float) was removed; clients get only `Stars`. The server keeps
+  using `KitchenState.QualityOf` for stars, logs and selling. No client code read the float.
+  `FoodLookSurfaceTests` now allows only string, int and `FoodLook` in synced members of `Food` and
+  `StationContents`.
+- Spawning (review L5): `SpawnFoodInHands` publishes name, stars and look before `Spawn`, then registers the
+  item and hands it over (unchanged failure path), so the values arrive with the spawn and a pooled object
+  never shows its old model or the cube for a tick.
+- Batch build: FishNet logs its known "same assetPath hash of 0" errors while prefabs are saved; the full
+  refresh right after fixes them (unchanged behaviour). The `DefaultPrefabObjects.asset` reorder was reverted.
+- Needs the visual check (AC5): orientation of apple-half / onion-half / tomato-slice and the pan handle,
+  whether the pan and pot sit on the stove tops (bounds may include a backsplash), the egg stand-in tint,
+  darkening on textured models, food sizes in the hand, bowl next to the blender. All are single numbers
+  in `ArtCatalogBuilder.Defs`, `FoodArtRules` or `GrayboxSceneBuilder.AddStationContents` calls.
 
 ## Blockers

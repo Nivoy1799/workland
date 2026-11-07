@@ -63,7 +63,7 @@ namespace Worktown.Game.Tests
         {
             var kitchen = KitchenState.CreateDemo();
             Assert.AreEqual(CookOutcome.NotFood, kitchen.TryApply(1, StationKind.Board, 2, out _, out _));
-            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutOnHeat(1, HeatTestKit.PanIndex, StationKind.Pan, 0, 0));
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutOnHeat(1, HeatTestKit.PanIndex, StationKind.Pan, 0));
         }
 
         [TestCase(StationKind.Pan, 2)]

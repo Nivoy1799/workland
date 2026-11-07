@@ -11,3 +11,4 @@ grows past 100 MB. Pack files are kept unmodified, only the files that are used.
 | Kenney/CityKitSuburban | City Kit (Suburban) | Kenney | CC0-1.0 | https://kenney.nl/assets/city-kit-suburban | 2026-11-07 |
 | Kenney/CityKitCommercial | City Kit (Commercial) | Kenney | CC0-1.0 | https://kenney.nl/assets/city-kit-commercial | 2026-11-07 |
 | Kenney/CityKitRoads | City Kit (Roads) | Kenney | CC0-1.0 | https://kenney.nl/assets/city-kit-roads | 2026-11-07 |
+| Kenney/FoodKit | Food Kit | Kenney | CC0-1.0 | https://kenney.nl/assets/food-kit | 2026-11-07 |

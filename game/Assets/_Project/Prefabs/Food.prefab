@@ -36,6 +36,7 @@ Transform:
   m_Children:
   - {fileID: 5228155914122306726}
   - {fileID: 6537980373492287716}
+  - {fileID: 8024044072780084396}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &6718684950471728493
@@ -194,7 +195,7 @@ MonoBehaviour:
   _addedNetworkObject: {fileID: 1698876027610052551}
   _networkObjectCache: {fileID: 0}
   _label: {fileID: 3779689391742051835}
-  _renderer: {fileID: 7055529193940710884}
+  _visual: {fileID: 1857873916777271491}
 --- !u!1 &6422350447290439885
 GameObject:
   m_ObjectHideFlags: 0
@@ -299,6 +300,56 @@ TextMesh:
   m_Color:
     serializedVersion: 2
     rgba: 4294967295
+--- !u!1 &6745556903774800666
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8024044072780084396}
+  - component: {fileID: 1857873916777271491}
+  m_Layer: 0
+  m_Name: Visual
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8024044072780084396
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6745556903774800666}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0.2, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1720595472073781188}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1857873916777271491
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6745556903774800666}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09c7b8db200665b4cb1611de85012d6e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Art.FoodVisual
+  _catalog: {fileID: 11400000, guid: 210566b6c6918bf4f96ab353bce5ce68, type: 2}
+  _fallback: {fileID: 7055529193940710884}
+  _partScale: 0.5
+  _partRadius: 0.075
+  _plateContentHeight: 0.014129141
+  _bowlContentHeight: 0.03568717
 --- !u!1 &7908056985291405050
 GameObject:
   m_ObjectHideFlags: 0

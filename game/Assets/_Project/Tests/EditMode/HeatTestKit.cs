@@ -59,9 +59,9 @@ namespace Worktown.Game.Tests
         private static Item Cook(KitchenState kitchen, int foodId, StationKind kind, int stationIndex, double simSeconds)
         {
             SwitchOn(kitchen, stationIndex, kind);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(foodId, stationIndex, kind, 0, StartTick));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(foodId, stationIndex, kind, StartTick));
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(stationIndex, StartTick + TicksFor(simSeconds), TickRate,
-                out Item cooked, out _));
+                out Item cooked));
             kitchen.ClearHeat(stationIndex);
             kitchen.Register(foodId, cooked);
             return cooked;
