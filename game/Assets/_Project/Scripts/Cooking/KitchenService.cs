@@ -455,7 +455,8 @@ namespace Worktown.Game.Cooking
         /// <summary>
         /// Spec 009: sell what the player holds. Loose food is plated by the counter as before; spec 021: a plate with
         /// food is sold as the plate op on its parts, and the plate goes away with the meal. A refused sale keeps
-        /// everything in the hands.
+        /// everything in the hands. Spec 022: a sale to NPC demand goes to a waiting customer (first exact order match,
+        /// else the first in line) and pays the match's share of the sim price.
         /// </summary>
         private CookOutcome Serve(PickupInteractor player)
         {
@@ -476,31 +477,45 @@ namespace Worktown.Game.Cooking
 
             string name = KitchenState.NameOf(item);
             float quality = KitchenState.QualityOf(item);
-            string stars = StarRating.Format(StarRating.Stars(quality));
+            int starCount = StarRating.Stars(quality);
+            string stars = StarRating.Format(starCount);
             string entry;
-            string soldMarket = null;
+            bool served = false;
+            int customerId = 0;
+            Worktown.Game.Npc.OrderMatch match = Worktown.Game.Npc.OrderMatch.Wrong;
             long soldPayout = 0;
 
             if (_economy != null)
             {
                 Item plated = item;
                 if (plate == null && _kitchen.TryPlate(held.ObjectId, out plated) != CookOutcome.Ok) return CookOutcome.CannotSell;
-                SaleResult sale = _economy.TrySell(player.NetworkObject, plated);
+                // Spec 022: which waiting customer gets it and the share of the price they pay (a pure read; a failure
+                // here only means "no customer", the sale then pays the full sim price as before).
+                bool forCustomer = false;
+                byte dish = Worktown.Game.Npc.Menu.None;
+                int payPermille = EconomyRules.FullPayPermille;
+                if (_customers != null)
+                {
+                    try { forCustomer = _customers.TryPick(plated, starCount, out customerId, out dish, out match, out payPermille); }
+                    catch (System.Exception e) { Debug.LogException(e); forCustomer = false; }
+                    if (!forCustomer) payPermille = EconomyRules.FullPayPermille;
+                }
+                SaleResult sale = _economy.TrySell(player.NetworkObject, plated, payPermille);
                 if (!sale.Ok)
                 {
                     Debug.Log("[Economy] player " + player.OwnerId + " could not sell " + name + ": " + sale.Error);
                     return CookOutcome.CannotSell;
                 }
                 string where = sale.Channel == SaleChannel.NpcDemand ? sale.MarketId : "wholesaler";
-                if (sale.Channel == SaleChannel.NpcDemand)
-                {
-                    soldMarket = sale.MarketId;
-                    soldPayout = sale.Payout;
-                }
+                served = forCustomer && sale.Channel == SaleChannel.NpcDemand;
+                soldPayout = sale.Payout;
                 entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
                     + EconomyRules.Money(sale.Payout) + " (" + where + ")";
+                if (served)
+                    entry += " · " + Worktown.Game.Npc.Menu.NameOf(dish) + " order: " + Worktown.Game.Npc.OrderRules.Describe(match);
                 Debug.Log("[Economy] player " + player.OwnerId + " sold " + name + " for " + EconomyRules.Money(sale.Payout)
-                    + " to " + where + " q=" + quality.ToString("0.00"));
+                    + " to " + where + " q=" + quality.ToString("0.00")
+                    + (served ? " (" + Worktown.Game.Npc.OrderRules.Describe(match) + ", " + payPermille + " permille)" : string.Empty));
             }
             else
             {
@@ -517,11 +532,11 @@ namespace Worktown.Game.Cooking
             }
             if (_feed != null) _feed.ServerAdd(entry);
 
-            // Spec 014, after the sale is complete: customers are display only and must never be able
-            // to break the money transaction (review blocker).
-            if (soldMarket != null && _customers != null)
+            // Spec 014, after the sale is complete: customers must never be able to break the money transaction
+            // (review blocker). Spec 022: the picked customer leaves with what they paid.
+            if (served && _customers != null)
             {
-                try { _customers.OnSale(soldMarket, soldPayout); }
+                try { _customers.OnServed(customerId, match, soldPayout, starCount); }
                 catch (System.Exception e) { Debug.LogException(e); }
             }
             return CookOutcome.Ok;

@@ -18,6 +18,19 @@ namespace Worktown.Game.Economy
         /// <summary>Seed for the economy RNG; same seed, same demand curve.</summary>
         public const ulong Seed = 1;
 
+        /// <summary>Spec 022: a pay share of 100 % (no order factor).</summary>
+        public const int FullPayPermille = 1000;
+
+        /// <summary>
+        /// Spec 022: <paramref name="payout"/> times <paramref name="permille"/> / 1000 in whole dollars, rounded half up;
+        /// never below 0. Used for the customer's order factor on a sale (no new money source: it scales a sim sale).
+        /// </summary>
+        public static long ApplyPermille(long payout, int permille)
+        {
+            if (payout <= 0 || permille <= 0) return 0;
+            return (payout * permille + 500) / 1000;
+        }
+
         public static string AccountId(int clientId)
         {
             return "p" + clientId;
