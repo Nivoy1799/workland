@@ -22,19 +22,33 @@ namespace Worktown.Game.Art
             return false;
         }
 
-        /// <summary>The catalog slot of a kitchen station. Explicit, so enum order never matters.</summary>
+        /// <summary>
+        /// The catalog slot of a kitchen station. Explicit, so enum order never matters. Spec 021: the stove uses the
+        /// spec 015 stove model (old pan station slot), the plate shelf the plain cabinet (old plating table slot).
+        /// </summary>
         public static ArtKey StationKey(StationKind kind)
         {
             switch (kind)
             {
                 case StationKind.Crate: return ArtKey.StationCrate;
-                case StationKind.Board: return ArtKey.StationBoard;
-                case StationKind.Pan: return ArtKey.StationPan;
-                case StationKind.Pot: return ArtKey.StationPot;
                 case StationKind.Counter: return ArtKey.StationCounter;
-                case StationKind.PlatingTable: return ArtKey.StationPlatingTable;
-                case StationKind.Bowl: return ArtKey.StationBowl;
+                case StationKind.Stove: return ArtKey.StationPan;
+                case StationKind.PlateShelf: return ArtKey.StationPlatingTable;
                 default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for station kind");
+            }
+        }
+
+        /// <summary>Spec 021: the spec 017/019 model of each kind of cookware.</summary>
+        public static ArtKey VesselKey(VesselKind kind)
+        {
+            switch (kind)
+            {
+                case VesselKind.Board: return ArtKey.ToolCuttingBoard;
+                case VesselKind.Pan: return ArtKey.FoodPan;
+                case VesselKind.Pot: return ArtKey.FoodPot;
+                case VesselKind.Plate: return ArtKey.FoodPlate;
+                case VesselKind.Bowl: return ArtKey.FoodBowl;
+                default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for cookware");
             }
         }
 

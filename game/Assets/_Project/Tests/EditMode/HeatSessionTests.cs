@@ -6,14 +6,17 @@ using Worktown.Sim.Cooking;
 namespace Worktown.Game.Tests
 {
     /// <summary>
-    /// Spec 016 AC3 and AC4: pan and pot cook over time through KitchenState, only while switched on
-    /// (on/off stove, changed by the human on 2026-11-07).
+    /// Spec 016 AC3 and AC4: pan and pot cook over time through KitchenState, only while switched on (on/off stove,
+    /// changed by the human on 2026-11-07). Spec 021 AC4: keyed by the vessel's object id, cooking only while the vessel
+    /// stands on a burner that is on; the hashes are the same as the station versions gave.
     /// </summary>
     public class HeatSessionTests
     {
         private const int FoodId = 42;
         private const int Pan = HeatTestKit.PanIndex;
         private const int Pot = HeatTestKit.PotIndex;
+        private const int PanBurner = HeatTestKit.PanBurner;
+        private const int PotBurner = HeatTestKit.PotBurner;
         private const uint Start = HeatTestKit.StartTick;
         private const double Rate = HeatTestKit.TickRate;
 
@@ -27,7 +30,7 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             kitchen.TryCreateIngredient("potato", out Item potato);
             kitchen.Register(FoodId, potato);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryApply(FoodId, StationKind.Board, 3, out sticks, out _));
+            sticks = HeatTestKit.Cut(kitchen, FoodId, 3);
             return kitchen;
         }
 
@@ -42,26 +45,27 @@ namespace Worktown.Game.Tests
         public void Fry750TicksSwitchedOn_MatchesTheSimDirectly()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
-            HeatTestKit.SwitchOn(kitchen, Pan, StationKind.Pan);
+            HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
 
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start));
             Assert.IsFalse(kitchen.TryGet(FoodId, out _), "the food is in the pan, not in the world");
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 750, Rate, out Item fries));
 
             Item expected = NewFactory().Apply("fry", new[] { sticks }, Heat(StoveSettings.PanTempC, 150f)).Item;
             Assert.AreEqual(expected.Hash, fries.Hash);
             Assert.AreEqual("crispy fried potato sticks", KitchenState.NameOf(fries));
-            Assert.IsTrue(kitchen.TryGetHeat(Pan, out _), "preview does not empty the pan");
+            Assert.AreEqual(1, kitchen.HeatCount(Pan), "preview does not empty the pan");
             kitchen.ClearHeat(Pan);
-            Assert.IsFalse(kitchen.TryGetHeat(Pan, out _));
+            Assert.AreEqual(0, kitchen.HeatCount(Pan));
         }
 
         [Test]
-        public void NewStove_IsOff_AndFoodInItDoesNotCook()
+        public void NewBurner_IsOff_AndFoodOnItDoesNotCook()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
-            Assert.IsFalse(kitchen.StoveOf(Pan).IsOn);
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);
+            Assert.IsFalse(kitchen.BurnerOf(PanBurner).IsOn);
+            kitchen.SetVesselBurner(Pan, PanBurner, Start);
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             Assert.AreEqual(CookOutcome.TooShort, kitchen.TryPreviewHeatTake(Pan, Start + 9000, Rate, out Item back));
             Assert.AreEqual(sticks.Hash, back.Hash);
             Assert.AreEqual("potato sticks · raw", kitchen.DescribeHeat(Pan, Start + 9000, Rate));
@@ -71,10 +75,11 @@ namespace Worktown.Game.Tests
         public void SwitchingOffWithFoodInside_PausesCooking()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);           // off: nothing yet
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseStove(Pan, StationKind.Pan, StationRules.StoveSwitch, Start + 100));  // on
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseStove(Pan, StationKind.Pan, StationRules.StoveSwitch, Start + 500));  // off: 400 ticks
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseStove(Pan, StationKind.Pan, StationRules.StoveSwitch, Start + 2000)); // on
+            kitchen.SetVesselBurner(Pan, PanBurner, Start);
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);                                               // off: nothing yet
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start + 100));  // on
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start + 500));  // off: 400 ticks
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start + 2000)); // on
             // + 350 ticks = 750 ticks on in total = 150 sim s
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 2350, Rate, out Item fries));
             Item expected = NewFactory().Apply("fry", new[] { sticks }, Heat(StoveSettings.PanTempC, 150f)).Item;
@@ -85,8 +90,8 @@ namespace Worktown.Game.Tests
         public void TakenOutTooEarly_ComesBackUnchanged()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
-            HeatTestKit.SwitchOn(kitchen, Pan, StationKind.Pan);
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);
+            HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             // 45 ticks = 9 sim s, below the fry minimum of 10 s
             Assert.AreEqual(CookOutcome.TooShort, kitchen.TryPreviewHeatTake(Pan, Start + 45, Rate, out Item back));
             Assert.AreEqual(sticks.Hash, back.Hash);
@@ -96,50 +101,51 @@ namespace Worktown.Game.Tests
         public void LongFry_IsClampedToTheMaximum()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
-            HeatTestKit.SwitchOn(kitchen, Pan, StationKind.Pan);
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);
+            HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 9000, Rate, out Item burnt));
             Item expected = NewFactory().Apply("fry", new[] { sticks }, Heat(StoveSettings.PanTempC, 600f)).Item;
             Assert.AreEqual(expected.Hash, burnt.Hash);
         }
 
         [Test]
-        public void BusyPan_RefusesASecondItem_AndModeChange_ButNotTheSwitch()
+        public void BusyPan_RefusesASecondItem_AndItsBurnersModeChange_ButNotTheSwitch()
         {
             KitchenState kitchen = KitchenWithSticks(out _);
             kitchen.TryCreateIngredient("tomato", out Item tomato);
             kitchen.Register(7, tomato);
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);
+            kitchen.SetVesselBurner(Pan, PanBurner, Start);
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
 
-            Assert.AreEqual(CookOutcome.StationFull, kitchen.TryPutOnHeat(7, Pan, StationKind.Pan, Start));
+            Assert.AreEqual(CookOutcome.VesselFull, kitchen.TryPutOnHeat(7, Pan, VesselKind.Pan, Start), "a pan takes one food");
             Assert.IsTrue(kitchen.TryGet(7, out _), "the refused tomato stays in the hands");
-            Assert.AreEqual(CookOutcome.PanBusy, kitchen.TryUseStove(Pan, StationKind.Pan, StationRules.PanMode, Start));
-            Assert.IsFalse(kitchen.StoveOf(Pan).Saute);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseStove(Pan, StationKind.Pan, StationRules.StoveSwitch, Start));
-            Assert.IsTrue(kitchen.StoveOf(Pan).IsOn);
+            Assert.AreEqual(CookOutcome.PanBusy, kitchen.TryUseBurner(PanBurner, StationRules.PanMode, Start));
+            Assert.IsFalse(kitchen.BurnerOf(PanBurner).Saute);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start));
+            Assert.IsTrue(kitchen.BurnerOf(PanBurner).IsOn);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PotBurner, StationRules.PanMode, Start), "another burner is free");
         }
 
         [Test]
-        public void Options_AreCheckedPerStation()
+        public void Buttons_AreCheckedPerBurner()
         {
             var kitchen = KitchenState.CreateDemo();
-            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryUseStove(Pan, StationKind.Pan, 3, Start));
-            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryUseStove(Pan, StationKind.Pan, 0, Start));
-            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryUseStove(Pot, StationKind.Pot, StationRules.PanMode, Start));
-            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryUseStove(1, StationKind.Board, 1, Start));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseStove(Pot, StationKind.Pot, StationRules.StoveSwitch, Start));
-            Assert.AreEqual("on", kitchen.StoveOf(Pot).Describe(StationKind.Pot));
+            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryUseBurner(PanBurner, 3, Start));
+            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryUseBurner(PanBurner, 0, Start));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PotBurner, StationRules.StoveSwitch, Start));
+            Assert.AreEqual("on · fry", kitchen.BurnerOf(PotBurner).Describe());
+            Assert.AreEqual("off · fry", kitchen.BurnerOf(PanBurner).Describe());
         }
 
         [Test]
-        public void SauteMode_GivesASauteResult()
+        public void SauteBurner_GivesASauteResult()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
-            Assert.AreEqual("off · fry", kitchen.StoveOf(Pan).Describe(StationKind.Pan));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseStove(Pan, StationKind.Pan, StationRules.PanMode, Start));
-            HeatTestKit.SwitchOn(kitchen, Pan, StationKind.Pan);
-            Assert.AreEqual("on · saute", kitchen.StoveOf(Pan).Describe(StationKind.Pan));
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.PanMode, Start));
+            HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
+            Assert.AreEqual("on · saute", kitchen.BurnerOf(PanBurner).Describe());
+            Assert.IsTrue(kitchen.PanIsSaute(Pan), "an empty pan shows its burner's mode");
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             kitchen.TryPreviewHeatTake(Pan, Start + 750, Rate, out Item sauteed);
             Item expected = NewFactory().Apply("saute", new[] { sticks }, Heat(StoveSettings.PanTempC, 150f)).Item;
             Assert.AreEqual(expected.Hash, sauteed.Hash);
@@ -162,9 +168,10 @@ namespace Worktown.Game.Tests
             KitchenState kitchen = KitchenWithSticks(out _);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPlate(FoodId, out Item plated));
             kitchen.Register(8, plated);
-            Assert.AreEqual(CookOutcome.SimRefused, kitchen.TryPutOnHeat(8, Pan, StationKind.Pan, Start));
+            Assert.AreEqual(CookOutcome.AlreadyPlated, kitchen.TryPutOnHeat(8, Pan, VesselKind.Pan, Start));
+            Assert.AreEqual(CookOutcome.AlreadyPlated, kitchen.TryPutOnHeat(8, Pot, VesselKind.Pot, Start));
             Assert.IsTrue(kitchen.TryGet(8, out _));
-            Assert.IsFalse(kitchen.TryGetHeat(Pan, out _));
+            Assert.AreEqual(0, kitchen.HeatCount(Pan));
         }
 
         [Test]
@@ -173,27 +180,29 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             Assert.AreEqual(CookOutcome.StationEmpty, kitchen.TryPreviewHeatTake(Pan, Start, Rate, out _));
             Assert.IsNull(kitchen.DescribeHeat(Pan, Start, Rate));
+            Assert.IsEmpty(kitchen.HeatNames(Pan, Start, Rate));
         }
 
         [Test]
         public void Label_ShowsTheDonenessBucket()
         {
             KitchenState kitchen = KitchenWithSticks(out _);
-            HeatTestKit.SwitchOn(kitchen, Pan, StationKind.Pan);
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);
+            HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             Assert.AreEqual("potato sticks · warming up", kitchen.DescribeHeat(Pan, Start + 10, Rate));
             Assert.AreEqual("potato sticks · medium", kitchen.DescribeHeat(Pan, Start + 750, Rate));
         }
 
         [Test]
-        public void Clear_EmptiesPansAndSwitchesStovesOff()
+        public void Clear_EmptiesPansAndSwitchesBurnersOff()
         {
             KitchenState kitchen = KitchenWithSticks(out _);
-            HeatTestKit.SwitchOn(kitchen, Pan, StationKind.Pan);
-            kitchen.TryPutOnHeat(FoodId, Pan, StationKind.Pan, Start);
+            HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
+            kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             kitchen.Clear();
-            Assert.IsFalse(kitchen.TryGetHeat(Pan, out _));
-            Assert.IsFalse(kitchen.StoveOf(Pan).IsOn);
+            Assert.AreEqual(0, kitchen.HeatCount(Pan));
+            Assert.IsFalse(kitchen.BurnerOf(PanBurner).IsOn);
+            Assert.AreEqual(KitchenState.NoBurner, kitchen.BurnerUnder(Pan));
         }
     }
 }

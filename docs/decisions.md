@@ -33,6 +33,8 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D24 | Cloud LLM provider (was O2) | OpenRouter, with pinned providers that support strict JSON output | 2026-11-05 | One key, easy model comparison; switching is a config change (D3) |
 | D25 | Gateway language (was O3) | C# / ASP.NET on .NET 10 | 2026-11-05 | One language and toolchain for the project; can reuse /sim (item hash, process tree) without a second implementation |
 | D26 | Asset packs (was O8) | Start with free CC0 packs, Kenney first; KayKit/Quaternius only to fill gaps. Art sits behind a swap layer (spec 015). Paid packs (e.g. Synty POLYGON) only if the project heads to release, and then bought outright; no subscription-licensed assets in the project | 2026-11-07 | Project is a playground for now: $0 and no licence risk. Synty's subscription licence requires an active subscription for any further development after cancelling |
+| D27 | World rule: native vegan | The game world is native vegan: no animal products exist as goods, ingredients, recipes, items or generated text. Society is post non-vegan: it remembers a dark past of animal farming, people and animals now live together, and NPCs talk and joke about the past | 2026-11-07 | Decided by the human; core identity of the game. See docs/economy-and-professions.md |
+| D28 | How the dark past is referenced (was O9) | Only the game's own fictional history (a named past era, museums, NPC memories); no names of or direct comparisons to the Holocaust or other real atrocities in game text or AI-generated text | 2026-11-07 | Decided by the human; avoids hurting players and Steam/moderation problems |
 
 ## OPEN
 

@@ -5,7 +5,7 @@ namespace Worktown.Game.Cooking
     /// <summary>
     /// Spec 017: the coarse look of a food that clients may know: which ingredient, which cut, how long
     /// it was heated (bucket only), plated or mixed. Bytes only (D21): no stats, quality or exact times.
-    /// Pure value type; synced on Food and StationContents.
+    /// Pure value type; synced on Food and (spec 021) Vessel.
     /// </summary>
     public struct FoodLook : IEquatable<FoodLook>
     {

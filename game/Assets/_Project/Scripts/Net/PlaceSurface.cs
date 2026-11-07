@@ -4,7 +4,8 @@ using Worktown.Game.Net.Rules;
 namespace Worktown.Game.Net
 {
     /// <summary>
-    /// Spec 020: the top of a worktop (or of the board station's free half) that items can be put on. Static scene
+    /// Spec 020: the top of a worktop (spec 021: also of a stove outside its burners, and each burner as a surface with
+    /// one spot and the burner flag) that items can be put on. Static scene
     /// object, the same on server and clients; requests refer to it by <see cref="Index"/>. Data only: the spot
     /// grid comes from <see cref="PlaceSpots"/>, the server (PickupService) decides who may put what where.
     /// Sits on the object with the collider the aim ray hits; the top is at local height <see cref="TopY"/>,
@@ -17,11 +18,20 @@ namespace Worktown.Game.Net
         [SerializeField] private Vector2 _size = new Vector2(1f, 0.6f);
         [Tooltip("Local height of the top, where items rest.")]
         [SerializeField] private float _topY;
+        [Tooltip("Spec 021: a burner of a stove (one spot); a pan or pot on it cooks while its knob is on.")]
+        [SerializeField] private bool _isBurner;
+        [Tooltip("Spec 021, burners: station index of the stove.")]
+        [SerializeField] private int _stoveIndex = -1;
+        [Tooltip("Spec 021, burners: which burner of that stove (0 or 1).")]
+        [SerializeField] private int _burner = -1;
 
         public int Index => _index;
         public Vector2 Size => _size;
         public float TopY => _topY;
         public int SpotCount => PlaceSpots.Count(_size);
+        public bool IsBurner => _isBurner;
+        public int StoveIndex => _stoveIndex;
+        public int Burner => _burner;
 
         /// <summary>World position of a spot on the top (where the item's bottom rests).</summary>
         public Vector3 SpotWorldPosition(int spot)

@@ -11,6 +11,7 @@ namespace Worktown.Game.Tests
     /// FirstPerson, and no request gained an argument (the client still sends only intents). Found by
     /// name and attribute name, so this test assembly needs no FishNet reference (like RpcSurfaceTests).
     /// Spec 020 AC6 (changed on purpose): one new request, RequestPlace(int surface, int spot); MoveData unchanged.
+    /// Spec 021 AC7 (changed on purpose): one more request, RequestUse(NetworkObject target, int action).
     /// </summary>
     public class MoveDataSurfaceTests
     {
@@ -47,6 +48,7 @@ namespace Worktown.Game.Tests
         [TestCase("RequestDrop", 0)]
         [TestCase("RequestStation", 2)]
         [TestCase("RequestPlace", 2)]
+        [TestCase("RequestUse", 2)]
         public void InteractorRequests_KeepTheirArguments(string rpc, int parameters)
         {
             MethodInfo method = Find(InteractorType)
@@ -67,14 +69,27 @@ namespace Worktown.Game.Tests
                 "surface and spot index only, never a position");
         }
 
+        /// <summary>Spec 021 AC7: the use request names an object and an action number, never a value or an item.</summary>
         [Test]
-        public void Interactor_HasExactlyTheSpec020ServerRpcs()
+        public void RequestUse_TakesOnlyANetworkObjectAndAnInt()
+        {
+            MethodInfo method = Find(InteractorType)
+                .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly)
+                .Single(m => m.Name == "RequestUse" && m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"));
+            ParameterInfo[] parameters = method.GetParameters();
+            Assert.AreEqual(2, parameters.Length);
+            Assert.AreEqual("FishNet.Object.NetworkObject", parameters[0].ParameterType.FullName, "the target cookware");
+            Assert.AreEqual(typeof(int), parameters[1].ParameterType, "0 use, 1 stroke, 2 turn");
+        }
+
+        [Test]
+        public void Interactor_HasExactlyTheSpec021ServerRpcs()
         {
             string[] rpcs = Find(InteractorType)
                 .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly)
                 .Where(m => m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"))
                 .Select(m => m.Name).OrderBy(n => n).ToArray();
-            CollectionAssert.AreEqual(new[] { "RequestDrop", "RequestPickup", "RequestPlace", "RequestStation" }, rpcs, string.Join(", ", rpcs));
+            CollectionAssert.AreEqual(new[] { "RequestDrop", "RequestPickup", "RequestPlace", "RequestStation", "RequestUse" }, rpcs, string.Join(", ", rpcs));
         }
     }
 }

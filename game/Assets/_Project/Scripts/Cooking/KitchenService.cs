@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FishNet.Managing;
 using FishNet.Object;
 using UnityEngine;
@@ -9,9 +10,13 @@ using Worktown.Sim.Economy;
 namespace Worktown.Game.Cooking
 {
     /// <summary>
-    /// Server-side authority for the kitchen (spec 007). Validates the station, the distance and
-    /// what the player holds, applies the sim operation through KitchenState, and publishes the
-    /// result on the Food object. Lives next to the NetworkManager; does nothing on pure clients.
+    /// Server-side authority for the kitchen (spec 007). Validates the target, the distance and what the player holds,
+    /// applies the sim operations through KitchenState, and publishes the results on the Food and Vessel objects.
+    /// Spec 021: the board, pan, pot, plates and bowl are carried cookware (<see cref="Vessel"/>); clients send "use
+    /// what I hold on that vessel" (RequestUse) and the server decides: put food in, pour, take out, cut. Pans and pots
+    /// cook only while they stand on a burner that is on (PickupService reports every move). Lost cookware comes back
+    /// at its home spot like the knife; plates come from the shelf (at most <see cref="VesselRules.MaxPlatesInWorld"/>).
+    /// Lives next to the NetworkManager; does nothing on pure clients.
     /// </summary>
     public sealed class KitchenService : MonoBehaviour
     {
@@ -25,38 +30,45 @@ namespace Worktown.Game.Cooking
         [SerializeField] private Worktown.Game.Npc.CustomerService _customers;
         [Tooltip("Index in this array = Station.Index.")]
         [SerializeField] private Station[] _stations = new Station[0];
-        [Tooltip("Spec 019: knife prefab for replacing a board's lost knife (the scene knives are instances of it).")]
+        [Tooltip("Spec 019: knife prefab for replacing a lost knife (the scene knife is an instance of it).")]
         [SerializeField] private NetworkObject _knifePrefab;
+        [Tooltip("Spec 021: one prefab per kind of cookware (board, pan, pot, plate, bowl), for respawns and the plate shelf.")]
+        [SerializeField] private NetworkObject[] _vesselPrefabs = new NetworkObject[0];
 
-        private const float KnifeCheckInterval = 0.5f;
+        private const float HomeCheckInterval = 0.5f;
+        private const int MaxInitAttempts = 300;
 
         private readonly KitchenState _kitchen = KitchenState.CreateDemo();
-        // Spec 019: one knife per board; where it lies at the start and when it went missing. Null until the
-        // server runs (built from the scene knives on the first server frame).
-        private System.Collections.Generic.List<KnifeSlot> _knifeSlots;
-        private float _nextKnifeCheck;
-
-        private sealed class KnifeSlot
-        {
-            public int Board;
-            public Vector3 Position;
-            public Quaternion Rotation;
-            public NetworkObject Knife;
-            public float LostSince = -1f;
-        }
-        // Spec 016: pan and pot labels, refreshed on change or once per second.
-        private (Station station, StationContents contents)[] _heatLabels;
+        // Server only, built on the first server frame: every spawned piece of cookware, the knife and the cookware
+        // with a home spot, and which place surface is burner b of stove s.
+        private List<Vessel> _vessels;
+        private List<HomeSlot> _homes;
+        private readonly Dictionary<long, int> _burnerSurface = new Dictionary<long, int>();
+        private float _nextHomeCheck;
+        private bool _initialized;
+        private int _initAttempts;
         private bool _labelsDirty = true;
         private uint _lastLabelTick;
+
+        private sealed class HomeSlot
+        {
+            public NetworkObject Prefab;
+            public Vector3 Position;
+            public Quaternion Rotation;
+            public NetworkObject Item;
+            public float LostSince = -1f;
+        }
 
         // Start, not OnEnable: NetworkManager creates its ServerManager in its own Awake.
         private void Start()
         {
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
+            if (_pickups != null) _pickups.ItemMoved += OnItemMoved;
         }
 
         private void OnDestroy()
         {
+            if (_pickups != null) _pickups.ItemMoved -= OnItemMoved;
             if (_networkManager != null && _networkManager.ServerManager != null)
                 _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
         }
@@ -64,15 +76,24 @@ namespace Worktown.Game.Cooking
         private void OnServerConnectionState(FishNet.Transporting.ServerConnectionStateArgs args)
         {
             // FishNet despawns everything and reuses object ids on a restart in the same process;
-            // old food entries must not attach to new objects (review finding, spec 007).
+            // old entries must not attach to new objects (review finding, spec 007).
             if (args.ConnectionState == FishNet.Transporting.LocalConnectionState.Stopped
                 && !_networkManager.ServerManager.IsAnyServerStarted())
             {
-                _kitchen.Clear(); // station labels reset with their SyncLists when FishNet despawns them
+                _kitchen.Clear();
                 _labelsDirty = true;
-                _knifeSlots = null; // spec 019: rebuilt from the scene knives on the next start
+                _vessels = null; // spec 021: rebuilt from the scene on the next start
+                _homes = null;
+                _initialized = false;
+                _initAttempts = 0;
+                _burnerSurface.Clear();
             }
         }
+
+        private uint Tick => _networkManager.TimeManager.Tick;
+        private double TickRate => _networkManager.TimeManager.TickRate;
+
+        // ---- stations: crates, counter, stoves, plate shelf (RequestStation) ----
 
         public CookOutcome TryUseStation(PickupInteractor player, int stationIndex, int option)
         {
@@ -81,201 +102,304 @@ namespace Worktown.Game.Cooking
             Station station = _stations[stationIndex];
             if (!StationRules.IsInReach(player.transform.position, station.transform.position))
                 return CookOutcome.TooFar;
+            EnsureInitialized();
 
             switch (station.Kind)
             {
                 case StationKind.Crate: return TakeIngredient(player, station);
                 case StationKind.Counter: return Serve(player);
-                case StationKind.PlatingTable:
-                case StationKind.Bowl: return Assemble(player, station);
-                case StationKind.Pan:
-                case StationKind.Pot: return Heat(player, station, option);
-                case StationKind.Board: return Board(player, station, option);
-                default: return Cook(player, station, option);
+                case StationKind.Stove: return UseBurner(station, option);
+                case StationKind.PlateShelf: return TakePlate(player);
+                default: return CookOutcome.UnknownStation;
             }
         }
 
-        /// <summary>
-        /// Spec 019: E with food puts it on the board, E with empty hands takes it (cut as far as it was cut).
-        /// KnifeStroke and KnifeTurn need a knife in the hands. Digits 1-4 (third person) still cut the food in
-        /// the hands at once (spec 007). Strokes are limited by the interactor's request rate (one per 0.2 s).
-        /// </summary>
-        private CookOutcome Board(PickupInteractor player, Station station, int option)
+        /// <summary>Spec 021: a burner knob (on/off) or button (fry/saute) on the stove's front.</summary>
+        private CookOutcome UseBurner(Station stove, int option)
         {
-            if (option == StationRules.KnifeStroke || option == StationRules.KnifeTurn)
+            if (!StationRules.TryParseStoveOption(option, out int burner, out int button)) return CookOutcome.InvalidOption;
+            if (!_burnerSurface.TryGetValue(BurnerKey(stove.Index, burner), out int burnerId)) return CookOutcome.InvalidOption;
+            CookOutcome changed = _kitchen.TryUseBurner(burnerId, button, Tick);
+            if (changed == CookOutcome.Ok)
             {
-                if (!_pickups.TryGetHeld(player, out NetworkObject tool) || !tool.TryGetComponent(out Knife _))
-                    return CookOutcome.NoKnife;
-                CookOutcome cut = option == StationRules.KnifeStroke
-                    ? _kitchen.TryBoardStroke(station.Index)
-                    : _kitchen.TryBoardTurn(station.Index);
-                if (cut == CookOutcome.Ok) RefreshBoard(station);
-                return cut;
+                RefreshStove(stove);
+                foreach (Vessel vessel in _vessels)
+                    if (vessel != null && _kitchen.BurnerUnder(vessel.ObjectId) == burnerId) RefreshVessel(vessel);
+                Debug.Log("[Kitchen] " + stove.DisplayName + " burner " + burner + ": " + _kitchen.BurnerOf(burnerId).Describe());
             }
-            if (option != 0) return Cook(player, station, option);
+            return changed;
+        }
 
-            if (_pickups.TryGetHeld(player, out NetworkObject held))
-            {
-                if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
-                CookOutcome put = _kitchen.TryPutOnBoard(held.ObjectId, station.Index);
-                if (put != CookOutcome.Ok) return put;
-                string name = food.DisplayName.Value; // read before despawn
-                _pickups.TakeAway(player, out _);
-                _networkManager.ServerManager.Despawn(held);
-                RefreshBoard(station);
-                Debug.Log("[Kitchen] player " + player.OwnerId + " put " + name + " on the " + station.DisplayName);
-                return CookOutcome.Ok;
-            }
+        // ---- cookware (RequestUse) ----
 
-            // Hand the result over first, clear the board only on success (spec 016 order).
-            CookOutcome taken = _kitchen.TryPreviewBoardTake(station.Index, out Item result);
-            if (taken != CookOutcome.Ok) return taken;
-            if (!SpawnFoodInHands(player, result)) return CookOutcome.SimRefused;
-            _kitchen.ClearBoard(station.Index);
-            RefreshBoard(station);
-            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " from the "
-                + station.DisplayName + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
+        /// <summary>
+        /// Spec 021: use what the player holds on the cookware <paramref name="target"/>. Action 0: food goes in, a pan,
+        /// pot or bowl is poured into it, or empty hands take the food out; 1 one knife stroke, 2 turn (knife in the
+        /// hands, a board). Checked before anything changes: the target is spawned cookware nobody holds, within reach
+        /// (2.5 m), the hands, capacity and the sim. Hand over first, clear only on success.
+        /// </summary>
+        public CookOutcome TryUseVessel(PickupInteractor player, NetworkObject target, int action)
+        {
+            if (target == null || !target.IsSpawned || !target.TryGetComponent(out Vessel vessel)
+                || !target.TryGetComponent(out Pickup pickup) || pickup.IsHeld)
+                return CookOutcome.NotAVessel;
+            if (!StationRules.IsInReach(player.transform.position, target.transform.position)) return CookOutcome.TooFar;
+            EnsureInitialized();
+
+            if (action == VesselRules.ActionStroke || action == VesselRules.ActionTurn) return Cut(player, vessel, action);
+            if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
+
+            if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
+            if (held.TryGetComponent(out Vessel source)) return Pour(player, source, vessel);
+            if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
+
+            CookOutcome put = _kitchen.TryPutInto(held.ObjectId, vessel.ObjectId, vessel.Kind, Tick);
+            if (put != CookOutcome.Ok) return put;
+            string name = food.DisplayName.Value; // read before despawn
+            _pickups.TakeAway(player, out _);
+            _networkManager.ServerManager.Despawn(held);
+            RefreshVessel(vessel);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " put " + name + " into the " + VesselRules.Name(vessel.Kind));
             return CookOutcome.Ok;
         }
 
-        /// <summary>Spec 019: the board's label line, the food on it and its look (shape cut so far).</summary>
-        private void RefreshBoard(Station station)
+        /// <summary>Spec 019: a knife stroke or turn on a board; the knife must be in the hands.</summary>
+        private CookOutcome Cut(PickupInteractor player, Vessel board, int action)
         {
-            if (!station.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
-            bool turned = _kitchen.TryGetBoard(station.Index, out _, out CutProgress progress) && progress.Turned != 0;
-            contents.ServerSetHeat(turned ? "turned" : string.Empty, _kitchen.BoardName(station.Index), _kitchen.BoardLook(station.Index));
+            if (!_pickups.TryGetHeld(player, out NetworkObject tool) || !tool.TryGetComponent(out Knife _))
+                return CookOutcome.NoKnife;
+            if (board.Kind != VesselKind.Board) return CookOutcome.InvalidOption;
+            CookOutcome cut = action == VesselRules.ActionStroke
+                ? _kitchen.TryBoardStroke(board.ObjectId)
+                : _kitchen.TryBoardTurn(board.ObjectId);
+            if (cut == CookOutcome.Ok) RefreshVessel(board);
+            return cut;
+        }
+
+        /// <summary>Empty hands: the board's food (cut so far), the pan's food (cooked so far) or the bowl's mix.</summary>
+        private CookOutcome TakeOut(PickupInteractor player, Vessel vessel)
+        {
+            CookOutcome taken = _kitchen.TryPreviewTakeOut(vessel.ObjectId, vessel.Kind, Tick, TickRate, out Item result);
+            if (taken != CookOutcome.Ok && taken != CookOutcome.TooShort) return taken;
+            if (!SpawnFoodInHands(player, result)) return CookOutcome.SimRefused;
+            _kitchen.ClearContents(vessel.ObjectId, vessel.Kind);
+            RefreshVessel(vessel);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " from the "
+                + VesselRules.Name(vessel.Kind) + (taken == CookOutcome.TooShort ? " (too short, unchanged)" : " q=" + KitchenState.QualityOf(result).ToString("0.00")));
+            return taken;
+        }
+
+        /// <summary>Holding a pan, pot or bowl: pour its finished food onto the plate or into the bowl.</summary>
+        private CookOutcome Pour(PickupInteractor player, Vessel source, Vessel target)
+        {
+            CookOutcome poured = _kitchen.TryPour(source.ObjectId, source.Kind, target.ObjectId, target.Kind, Tick, TickRate, out Item result);
+            if (poured != CookOutcome.Ok && poured != CookOutcome.TooShort) return poured;
+            RefreshVessel(source);
+            RefreshVessel(target);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " poured " + KitchenState.NameOf(result) + " from the "
+                + VesselRules.Name(source.Kind) + " into the " + VesselRules.Name(target.Kind));
+            return poured;
+        }
+
+        /// <summary>Spec 021: empty hands at the shelf get a clean plate, while the world has fewer than the maximum.</summary>
+        private CookOutcome TakePlate(PickupInteractor player)
+        {
+            if (_pickups.TryGetHeld(player, out _)) return CookOutcome.HandsFull;
+            int plates = 0;
+            foreach (Vessel vessel in _vessels)
+                if (vessel != null && vessel.IsSpawned && vessel.Kind == VesselKind.Plate) plates++;
+            if (plates >= VesselRules.MaxPlatesInWorld) return CookOutcome.NoPlatesLeft;
+            NetworkObject prefab = VesselPrefab(VesselKind.Plate);
+            if (prefab == null) return CookOutcome.UnknownStation;
+
+            NetworkObject plate = _networkManager.GetPooledInstantiated(prefab, true);
+            plate.transform.SetPositionAndRotation(player.HoldPoint.position, player.HoldPoint.rotation);
+            _networkManager.ServerManager.Spawn(plate);
+            Vessel fresh = plate.GetComponent<Vessel>();
+            _kitchen.RemoveVessel(plate.ObjectId); // a reused object id starts empty
+            _vessels.Add(fresh);
+            RefreshVessel(fresh);
+            if (_pickups.HandTo(player, plate)) return CookOutcome.Ok;
+            Debug.LogError("[Kitchen] could not hand a plate to player " + player.OwnerId);
+            DespawnVessel(fresh);
+            return CookOutcome.SimRefused;
+        }
+
+        // ---- spec 021: cookware moving on and off burners ----
+
+        private void OnItemMoved(NetworkObject item, PlaceSurface surface)
+        {
+            if (item == null || !_networkManager.IsServerStarted || !item.TryGetComponent(out Vessel vessel)) return;
+            if (!VesselRules.IsHeat(vessel.Kind)) return;
+            int burner = surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner;
+            _kitchen.SetVesselBurner(vessel.ObjectId, burner, Tick);
+            RefreshVessel(vessel);
+        }
+
+        /// <summary>Server: the vessel's synced contents, the name of what it gives, the pan mode.</summary>
+        private void RefreshVessel(Vessel vessel)
+        {
+            if (vessel == null || !vessel.IsServerInitialized) return;
+            uint tick = Tick;
+            double rate = TickRate;
+            int id = vessel.ObjectId;
+            vessel.ServerSet(_kitchen.ContentNames(id, vessel.Kind, tick, rate), _kitchen.ContentLooks(id, vessel.Kind, tick, rate),
+                _kitchen.ResultName(id, vessel.Kind, tick, rate), vessel.Kind == VesselKind.Pan && _kitchen.PanIsSaute(id));
+        }
+
+        /// <summary>Server: the stove's knob and button lights (two bits per burner).</summary>
+        private void RefreshStove(Station stove)
+        {
+            if (!stove.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            byte flags = 0;
+            for (int b = 0; b < StationRules.BurnersPerStove; b++)
+            {
+                if (!_burnerSurface.TryGetValue(BurnerKey(stove.Index, b), out int burnerId)) continue;
+                StoveSettings settings = _kitchen.BurnerOf(burnerId);
+                flags |= StationRules.BurnerFlags(b, settings.IsOn, settings.Saute);
+            }
+            contents.ServerSetStoveFlags(flags);
+        }
+
+        private static long BurnerKey(int stoveIndex, int burner) => ((long)stoveIndex << 8) | (uint)burner;
+
+        /// <summary>
+        /// First server frame: every spawned cookware, the burners, the home spots of the knife and the cookware
+        /// (where they lie at the start), and which pan or pot already stands on a burner.
+        /// </summary>
+        private void EnsureInitialized()
+        {
+            if (_vessels != null && _initialized) return;
+            // Scene objects should be spawned by the first server frame; if none is yet, look again next frame (for a
+            // while), so the cookware is never missed.
+            _initAttempts++;
+            _vessels = new List<Vessel>();
+            _homes = new List<HomeSlot>();
+            _burnerSurface.Clear();
+            for (int i = 0; i < _pickups.SurfaceCount; i++)
+            {
+                PlaceSurface surface = _pickups.SurfaceAt(i);
+                if (surface != null && surface.IsBurner) _burnerSurface[BurnerKey(surface.StoveIndex, surface.Burner)] = surface.Index;
+            }
+            foreach (Vessel vessel in FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+            {
+                if (!vessel.IsSpawned) continue;
+                _vessels.Add(vessel);
+                if (VesselRules.RespawnsAtHome(vessel.Kind)) _homes.Add(Home(vessel.NetworkObject, VesselPrefab(vessel.Kind)));
+                PlaceOnBurnerIfThere(vessel);
+                RefreshVessel(vessel);
+            }
+            foreach (Knife knife in FindObjectsByType<Knife>(FindObjectsSortMode.None))
+                if (knife.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _knifePrefab));
+            foreach (Station station in _stations)
+                if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
+            _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
+        }
+
+        private static HomeSlot Home(NetworkObject item, NetworkObject prefab)
+        {
+            return new HomeSlot { Prefab = prefab, Position = item.transform.position, Rotation = item.transform.rotation, Item = item };
+        }
+
+        private void PlaceOnBurnerIfThere(Vessel vessel)
+        {
+            if (!VesselRules.IsHeat(vessel.Kind)) return;
+            PlaceSurface surface = _pickups.SurfaceUnder(vessel.transform.position);
+            _kitchen.SetVesselBurner(vessel.ObjectId, surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner, Tick);
+        }
+
+        private NetworkObject VesselPrefab(VesselKind kind)
+        {
+            foreach (NetworkObject prefab in _vesselPrefabs)
+                if (prefab != null && prefab.TryGetComponent(out Vessel v) && v.Kind == kind) return prefab;
+            return null;
         }
 
         /// <summary>
-        /// Spec 019 (open question 5): a board's knife that has been gone, or below the world, for 5 s is replaced
-        /// by a new one where the knife lay at the start. Never more knives than boards: the lost one is
-        /// despawned first.
+        /// Spec 019/021: the knife or a piece of cookware that has been gone, or below the world, for 5 s is replaced by
+        /// a new one at its home spot (its contents are lost). Never more than one per home: the lost one is despawned
+        /// first. A lost plate is only removed (the shelf gives new ones).
         /// </summary>
-        private void WatchKnives()
+        private void WatchHomes()
         {
             float now = Time.unscaledTime;
-            if (now < _nextKnifeCheck) return;
-            _nextKnifeCheck = now + KnifeCheckInterval;
-            if (_knifeSlots == null) _knifeSlots = FindKnifeSlots();
+            if (now < _nextHomeCheck) return;
+            _nextHomeCheck = now + HomeCheckInterval;
 
-            foreach (KnifeSlot slot in _knifeSlots)
+            for (int i = _vessels.Count - 1; i >= 0; i--)
             {
-                NetworkObject knife = slot.Knife;
-                bool exists = knife != null && knife.IsSpawned;
-                if (!CutRules.IsKnifeLost(exists, exists ? knife.transform.position.y : 0f))
+                Vessel vessel = _vessels[i];
+                if (vessel == null || !vessel.IsSpawned)
+                {
+                    _vessels.RemoveAt(i); // its id may be reused; KitchenState entries were removed when it went
+                    continue;
+                }
+                if (vessel.Kind == VesselKind.Plate && VesselRules.IsLost(true, vessel.transform.position.y))
+                {
+                    Debug.Log("[Kitchen] a plate fell out of the world");
+                    DespawnVessel(vessel);
+                }
+            }
+
+            foreach (HomeSlot slot in _homes)
+            {
+                NetworkObject item = slot.Item;
+                bool exists = item != null && item.IsSpawned;
+                if (!VesselRules.IsLost(exists, exists ? item.transform.position.y : 0f))
                 {
                     slot.LostSince = -1f;
                     continue;
                 }
                 if (slot.LostSince < 0f) slot.LostSince = now;
-                if (!CutRules.ShouldRespawnKnife(slot.LostSince, now) || _knifePrefab == null) continue;
+                if (!VesselRules.ShouldRespawn(slot.LostSince, now) || slot.Prefab == null) continue;
 
-                if (exists) _networkManager.ServerManager.Despawn(knife);
-                NetworkObject fresh = _networkManager.GetPooledInstantiated(_knifePrefab, true);
-                fresh.transform.SetPositionAndRotation(slot.Position, slot.Rotation);
-                if (fresh.TryGetComponent(out Knife marker)) marker.BoardIndex = slot.Board;
-                _networkManager.ServerManager.Spawn(fresh);
-                slot.Knife = fresh;
-                slot.LostSince = -1f;
-                Debug.Log("[Kitchen] the knife of board " + slot.Board + " was lost; a new one lies next to it");
-            }
-        }
-
-        private System.Collections.Generic.List<KnifeSlot> FindKnifeSlots()
-        {
-            var slots = new System.Collections.Generic.List<KnifeSlot>();
-            Knife[] knives = FindObjectsByType<Knife>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            foreach (Station station in _stations)
-            {
-                if (station == null || station.Kind != StationKind.Board) continue;
-                foreach (Knife knife in knives)
+                if (exists)
                 {
-                    if (knife.BoardIndex != station.Index || !knife.TryGetComponent(out NetworkObject nob)) continue;
-                    slots.Add(new KnifeSlot
-                    {
-                        Board = station.Index, Position = knife.transform.position, Rotation = knife.transform.rotation, Knife = nob
-                    });
-                    break; // one knife per board
+                    if (item.TryGetComponent(out Vessel lost)) DespawnVessel(lost);
+                    else _networkManager.ServerManager.Despawn(item);
                 }
+                NetworkObject fresh = _networkManager.GetPooledInstantiated(slot.Prefab, true);
+                fresh.transform.SetPositionAndRotation(slot.Position, slot.Rotation);
+                _networkManager.ServerManager.Spawn(fresh);
+                slot.Item = fresh;
+                slot.LostSince = -1f;
+                if (fresh.TryGetComponent(out Vessel vessel))
+                {
+                    _kitchen.RemoveVessel(fresh.ObjectId);
+                    _vessels.Add(vessel);
+                    PlaceOnBurnerIfThere(vessel);
+                    RefreshVessel(vessel);
+                }
+                Debug.Log("[Kitchen] " + fresh.name + " was lost; a new one lies at its home spot");
             }
-            return slots;
         }
 
-        // Spec 016: keep the pan and pot labels current (knob, mode, doneness bucket). Only changes are
-        // sent; the check runs once per second of ticks, not every frame (review nit).
+        private void DespawnVessel(Vessel vessel)
+        {
+            _kitchen.RemoveVessel(vessel.ObjectId);
+            _vessels.Remove(vessel);
+            if (vessel.IsSpawned) _networkManager.ServerManager.Despawn(vessel.NetworkObject);
+        }
+
+        // Spec 016/021: keep the cooking labels current (doneness bucket). Only changes are sent; the check runs once
+        // per second of ticks, not every frame (review nit).
         private void Update()
         {
             if (!_networkManager.IsServerStarted) return;
-            uint tick = _networkManager.TimeManager.Tick;
-            double tickRate = _networkManager.TimeManager.TickRate;
+            EnsureInitialized();
+            uint tick = Tick;
+            double tickRate = TickRate;
             if (_labelsDirty || CookingTime.ElapsedTicks(_lastLabelTick, tick) >= tickRate || tick < _lastLabelTick)
             {
                 _labelsDirty = false;
                 _lastLabelTick = tick;
-                RefreshHeatLabels(tick, tickRate);
+                foreach (Vessel vessel in _vessels)
+                    if (vessel != null && VesselRules.IsHeat(vessel.Kind) && _kitchen.HeatCount(vessel.ObjectId) > 0) RefreshVessel(vessel);
             }
-            WatchKnives(); // spec 019
+            WatchHomes();
         }
 
-        private void RefreshHeatLabels(uint tick, double tickRate)
-        {
-            if (_heatLabels == null)
-            {
-                var found = new System.Collections.Generic.List<(Station, StationContents)>();
-                foreach (Station station in _stations)
-                    if (station != null && StationRules.IsHeat(station.Kind) && station.TryGetComponent(out StationContents c))
-                        found.Add((station, c));
-                _heatLabels = found.ToArray();
-            }
-            foreach ((Station station, StationContents contents) in _heatLabels)
-            {
-                if (!contents.IsServerInitialized) continue;
-                StoveSettings stove = _kitchen.StoveOf(station.Index);
-                contents.ServerSetStoveFlags(StationRules.StoveFlags(stove.IsOn, stove.Saute)); // spec 019 button lights
-                string status = stove.Describe(station.Kind);
-                contents.ServerSetHeat(status, _kitchen.DescribeHeat(station.Index, tick, tickRate),
-                    _kitchen.HeatLook(station.Index, tick, tickRate));
-            }
-        }
-
-        /// <summary>
-        /// Spec 016: E with food puts it in the pan or pot, E with empty hands takes it out cooked for the
-        /// time it cooked while switched on. Option 1 switches on/off, pan option 2 fry/saute (while empty).
-        /// </summary>
-        private CookOutcome Heat(PickupInteractor player, Station station, int option)
-        {
-            if (option != 0)
-            {
-                CookOutcome changed = _kitchen.TryUseStove(station.Index, station.Kind, option, _networkManager.TimeManager.Tick);
-                _labelsDirty = true;
-                return changed;
-            }
-
-            uint tick = _networkManager.TimeManager.Tick;
-            if (_pickups.TryGetHeld(player, out NetworkObject held))
-            {
-                if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
-                CookOutcome added = _kitchen.TryPutOnHeat(held.ObjectId, station.Index, station.Kind, tick);
-                if (added != CookOutcome.Ok) return added;
-                string name = food.DisplayName.Value; // read before despawn (review nit)
-                _pickups.TakeAway(player, out _);
-                _networkManager.ServerManager.Despawn(held);
-                _labelsDirty = true;
-                Debug.Log("[Kitchen] player " + player.OwnerId + " put " + name + " in the " + station.DisplayName);
-                return CookOutcome.Ok;
-            }
-
-            // Hand the result over first, clear the station only on success (as on the plating table).
-            CookOutcome taken = _kitchen.TryPreviewHeatTake(station.Index, tick, _networkManager.TimeManager.TickRate,
-                out Item result);
-            if (taken != CookOutcome.Ok && taken != CookOutcome.TooShort) return taken;
-            if (!SpawnFoodInHands(player, result)) return CookOutcome.SimRefused;
-            _kitchen.ClearHeat(station.Index);
-            _labelsDirty = true;
-            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " out of the "
-                + station.DisplayName + (taken == CookOutcome.TooShort ? " (too short, unchanged)" : " q=" + KitchenState.QualityOf(result).ToString("0.00")));
-            return taken;
-        }
+        // ---- crates and the counter (spec 007/009) ----
 
         private CookOutcome TakeIngredient(PickupInteractor player, Station crate)
         {
@@ -321,55 +445,6 @@ namespace Worktown.Game.Cooking
             return false;
         }
 
-        /// <summary>
-        /// Spec 013: with food in hand, put it on the plating table / in the bowl; with empty hands,
-        /// take everything as one plated dish / mix.
-        /// </summary>
-        private CookOutcome Assemble(PickupInteractor player, Station station)
-        {
-            StationContents contents = station.GetComponent<StationContents>();
-            if (_pickups.TryGetHeld(player, out NetworkObject held))
-            {
-                if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
-                CookOutcome added = _kitchen.TryAddToStation(held.ObjectId, station.Index, station.Kind);
-                if (added != CookOutcome.Ok) return added;
-                _pickups.TakeAway(player, out _);
-                _networkManager.ServerManager.Despawn(held);
-                if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index), _kitchen.LooksOnStation(station.Index));
-                Debug.Log("[Kitchen] player " + player.OwnerId + " put " + food.DisplayName.Value + " on " + station.DisplayName);
-                return CookOutcome.Ok;
-            }
-
-            // Hand the result over first, clear the station only on success (review finding).
-            CookOutcome taken = _kitchen.TryPreviewTake(station.Index, station.Kind, out Item result);
-            if (taken != CookOutcome.Ok) return taken;
-            if (!SpawnFoodInHands(player, result)) return CookOutcome.SimRefused;
-            _kitchen.ClearStation(station.Index);
-            if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index), _kitchen.LooksOnStation(station.Index));
-            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result)
-                + " from " + station.DisplayName + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
-            return CookOutcome.Ok;
-        }
-
-        /// <summary>Instant station options (the board).</summary>
-        private CookOutcome Cook(PickupInteractor player, Station station, int option)
-        {
-            if (!_pickups.TryGetHeld(player, out NetworkObject held)) return CookOutcome.NothingHeld;
-            if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
-
-            CookOutcome outcome = _kitchen.TryApply(held.ObjectId, station.Kind, option, out Item result, out OperationError error);
-            if (outcome != CookOutcome.Ok)
-            {
-                if (outcome == CookOutcome.SimRefused)
-                    Debug.Log("[Kitchen] sim refused " + station.Kind + " " + option + ": " + error);
-                return outcome;
-            }
-            Publish(food, result);
-            Debug.Log("[Kitchen] player " + player.OwnerId + " made " + KitchenState.NameOf(result)
-                + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
-            return CookOutcome.Ok;
-        }
-
         /// <summary>Server: name, rating and (spec 017) the coarse look of the item on its food object.</summary>
         private static void Publish(Food food, Item item)
         {
@@ -377,10 +452,27 @@ namespace Worktown.Game.Cooking
                 FoodLookRules.From(item), FoodLookRules.PartsOf(item));
         }
 
+        /// <summary>
+        /// Spec 009: sell what the player holds. Loose food is plated by the counter as before; spec 021: a plate with
+        /// food is sold as the plate op on its parts, and the plate goes away with the meal. A refused sale keeps
+        /// everything in the hands.
+        /// </summary>
         private CookOutcome Serve(PickupInteractor player)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return CookOutcome.NothingHeld;
-            if (!held.TryGetComponent(out Food _) || !_kitchen.TryGet(held.ObjectId, out Item item)) return CookOutcome.NotFood;
+            Vessel plate = null;
+            Item item;
+            if (held.TryGetComponent(out Vessel vessel))
+            {
+                if (vessel.Kind != VesselKind.Plate) return CookOutcome.NotFood;
+                CookOutcome dish = _kitchen.TryPreviewTake(held.ObjectId, VesselKind.Plate, out item);
+                if (dish != CookOutcome.Ok) return dish;
+                plate = vessel;
+            }
+            else if (!held.TryGetComponent(out Food _) || !_kitchen.TryGet(held.ObjectId, out item))
+            {
+                return CookOutcome.NotFood;
+            }
 
             string name = KitchenState.NameOf(item);
             float quality = KitchenState.QualityOf(item);
@@ -391,8 +483,8 @@ namespace Worktown.Game.Cooking
 
             if (_economy != null)
             {
-                // Spec 009: plate and sell. A refused sale keeps the food in the player's hands.
-                if (_kitchen.TryPlate(held.ObjectId, out Item plated) != CookOutcome.Ok) return CookOutcome.CannotSell;
+                Item plated = item;
+                if (plate == null && _kitchen.TryPlate(held.ObjectId, out plated) != CookOutcome.Ok) return CookOutcome.CannotSell;
                 SaleResult sale = _economy.TrySell(player.NetworkObject, plated);
                 if (!sale.Ok)
                 {
@@ -416,9 +508,13 @@ namespace Worktown.Game.Cooking
                 Debug.Log("[Kitchen] player " + player.OwnerId + " served " + name + " q=" + quality.ToString("0.00"));
             }
 
-            _kitchen.TryRemove(held.ObjectId, out _);
             _pickups.TakeAway(player, out _);
-            _networkManager.ServerManager.Despawn(held);
+            if (plate != null) DespawnVessel(plate);
+            else
+            {
+                _kitchen.TryRemove(held.ObjectId, out _);
+                _networkManager.ServerManager.Despawn(held);
+            }
             if (_feed != null) _feed.ServerAdd(entry);
 
             // Spec 014, after the sale is complete: customers are display only and must never be able

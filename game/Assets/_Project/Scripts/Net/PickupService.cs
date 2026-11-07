@@ -26,6 +26,13 @@ namespace Worktown.Game.Net
         // An occupant further than this from its spot (horizontally) no longer lies there.
         private const float SpotTolerance = 0.1f;
 
+        /// <summary>
+        /// Spec 021, server: an item was picked up, handed over, put on a spot, dropped or taken away. The surface is
+        /// the one it now lies on (null: in the hands, on the floor or gone), so the kitchen knows when a pan or pot
+        /// stands on a burner.
+        /// </summary>
+        public event System.Action<NetworkObject, PlaceSurface> ItemMoved;
+
         private readonly PickupRegistry _registry = new PickupRegistry();
         private readonly PlaceSpots _spots = new PlaceSpots();
         private readonly Collider[] _probe = new Collider[8];
@@ -70,6 +77,7 @@ namespace Worktown.Game.Net
             target.GiveOwnership(player.Owner);
             pickup.ServerAttach(player.HoldPoint, clientId);
             _spots.Free(target.ObjectId); // spec 020: picking it up frees its spot
+            ItemMoved?.Invoke(target, null);
             return PickupOutcome.Ok;
         }
 
@@ -103,6 +111,7 @@ namespace Worktown.Game.Net
             Quaternion rest = PlaceSpots.RestRotation(pickup.RestTilt, surface.transform.rotation);
             pickup.ServerPlaceAt(spot + surface.transform.up * pickup.BottomOffset, rest);
             _spots.TryTake(surfaceIndex, spotIndex, itemId);
+            ItemMoved?.Invoke(item, surface);
             return PickupOutcome.Ok;
         }
 
@@ -163,6 +172,8 @@ namespace Worktown.Game.Net
             if (!_registry.TryClaim(target.ObjectId, clientId)) return false;
             target.GiveOwnership(player.Owner);
             pickup.ServerAttach(player.HoldPoint, clientId);
+            _spots.Free(target.ObjectId);
+            ItemMoved?.Invoke(target, null);
             return true;
         }
 
@@ -173,6 +184,7 @@ namespace Worktown.Game.Net
             if (!TryGetHeld(player, out taken)) return false;
             _registry.TryRelease(taken.ObjectId, player.Owner.ClientId);
             taken.RemoveOwnership();
+            ItemMoved?.Invoke(taken, null);
             return true;
         }
 
@@ -194,6 +206,35 @@ namespace Worktown.Game.Net
             item.RemoveOwnership();
             if (item.TryGetComponent(out Pickup pickup))
                 pickup.ServerDetach(holderPosition, dropForward);
+            ItemMoved?.Invoke(item, null);
+        }
+
+        /// <summary>Spec 021, server: the place surface by index, or null.</summary>
+        public PlaceSurface SurfaceAt(int surfaceIndex)
+        {
+            return surfaceIndex >= 0 && surfaceIndex < _surfaces.Length ? _surfaces[surfaceIndex] : null;
+        }
+
+        public int SurfaceCount => _surfaces.Length;
+
+        /// <summary>
+        /// Spec 021: the surface whose spot an item's pivot lies on (within 0.1 m horizontally, at most 0.3 m above the
+        /// top), or null. Used for cookware lying on a burner at the start or after a respawn.
+        /// </summary>
+        public PlaceSurface SurfaceUnder(Vector3 position)
+        {
+            foreach (PlaceSurface surface in _surfaces)
+            {
+                if (surface == null) continue;
+                for (int i = 0; i < surface.SpotCount; i++)
+                {
+                    Vector3 offset = position - surface.SpotWorldPosition(i);
+                    if (Vector3.ProjectOnPlane(offset, Vector3.up).sqrMagnitude <= SpotTolerance * SpotTolerance
+                        && offset.y > -0.05f && offset.y < 0.3f)
+                        return surface;
+                }
+            }
+            return null;
         }
     }
 }

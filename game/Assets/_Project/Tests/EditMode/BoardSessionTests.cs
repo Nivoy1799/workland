@@ -13,7 +13,7 @@ namespace Worktown.Game.Tests
     {
         private const int FoodId = 42;
         private const int OtherId = 43;
-        private const int Board = 4;
+        private const int Board = 4; // spec 021: the board vessel's object id
 
         private static ItemFactory NewFactory()
         {
@@ -40,7 +40,7 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(kitchen.TryGet(FoodId, out _), "the food lies on the board, not in the hands");
             foreach (int option in options)
             {
-                CookOutcome outcome = option == StationRules.KnifeStroke ? kitchen.TryBoardStroke(Board) : kitchen.TryBoardTurn(Board);
+                CookOutcome outcome = option == VesselRules.ActionStroke ? kitchen.TryBoardStroke(Board) : kitchen.TryBoardTurn(Board);
                 Assert.AreEqual(CookOutcome.Ok, outcome);
             }
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewBoardTake(Board, out Item taken));
@@ -50,8 +50,8 @@ namespace Worktown.Game.Tests
             return taken;
         }
 
-        private const int S = StationRules.KnifeStroke;
-        private const int T = StationRules.KnifeTurn;
+        private const int S = VesselRules.ActionStroke;
+        private const int T = VesselRules.ActionTurn;
 
         [Test]
         public void PutTwoStrokesTake_IsTheSimSlices()
@@ -70,16 +70,16 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void SlicesTurnStroke_IsTheSimSticks_SameAsTheDigitKey()
+        public void SlicesTurnStroke_IsTheSimSticks_OnAnyBoard()
         {
             KitchenState kitchen = KitchenWith("potato", FoodId, out Item potato);
             Item sticks = CutAndTake(kitchen, S, S, T, S);
             Assert.AreEqual(CutDirectly(potato, "sticks").Hash, sticks.Hash);
 
-            // Third-person digit 3 on the board makes the very same item.
-            KitchenState digits = KitchenWith("potato", FoodId, out _);
-            Assert.AreEqual(CookOutcome.Ok, digits.TryApply(FoodId, StationKind.Board, 3, out Item byKey, out _));
-            Assert.AreEqual(byKey.Hash, sticks.Hash);
+            // Spec 021: keyed by the board vessel's id; another board makes the very same item.
+            KitchenState other = KitchenWith("potato", FoodId, out _);
+            Item byOther = HeatTestKit.Cut(other, FoodId, 3);
+            Assert.AreEqual(byOther.Hash, sticks.Hash);
         }
 
         [Test]
@@ -118,7 +118,7 @@ namespace Worktown.Game.Tests
             kitchen.TryCreateIngredient("onion", out Item onion);
             kitchen.Register(OtherId, onion);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnBoard(FoodId, Board));
-            Assert.AreEqual(CookOutcome.StationFull, kitchen.TryPutOnBoard(OtherId, Board));
+            Assert.AreEqual(CookOutcome.VesselFull, kitchen.TryPutOnBoard(OtherId, Board));
             Assert.IsTrue(kitchen.TryGet(OtherId, out Item still));
             Assert.AreEqual(onion.Hash, still.Hash);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnBoard(OtherId, Board + 1), "another board is free");
@@ -128,10 +128,10 @@ namespace Worktown.Game.Tests
         public void PlatedFood_IsRefused_AndStaysInTheHands()
         {
             KitchenState kitchen = KitchenWith("potato", FoodId, out _);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(FoodId, 9, StationKind.PlatingTable));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(9, StationKind.PlatingTable, out Item plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(FoodId, 9, VesselKind.Plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(9, VesselKind.Plate, out Item plate));
             kitchen.Register(OtherId, plate);
-            Assert.AreEqual(CookOutcome.SimRefused, kitchen.TryPutOnBoard(OtherId, Board));
+            Assert.AreEqual(CookOutcome.AlreadyPlated, kitchen.TryPutOnBoard(OtherId, Board), "spec 021: plated food never fits");
             Assert.IsTrue(kitchen.TryGet(OtherId, out _));
             Assert.IsFalse(kitchen.TryGetBoard(Board, out _, out _));
         }
@@ -166,7 +166,7 @@ namespace Worktown.Game.Tests
         public void AlreadyCutFood_KeepsItsLookUntilTheKnifeChangesIt()
         {
             KitchenState kitchen = KitchenWith("potato", FoodId, out _);
-            kitchen.TryApply(FoodId, StationKind.Board, 3, out Item sticks, out _); // third-person digit 3
+            Item sticks = HeatTestKit.Cut(kitchen, FoodId, 3); // cut on another board before
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnBoard(FoodId, Board));
             Assert.AreEqual(FoodLook.ShapeSticks, kitchen.BoardLook(Board).Value.Shape);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewBoardTake(Board, out Item back));

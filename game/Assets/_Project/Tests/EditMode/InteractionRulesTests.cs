@@ -5,41 +5,33 @@ using Worktown.Game.Net.Rules;
 namespace Worktown.Game.Tests
 {
     /// <summary>
-    /// Spec 020 AC2: the one rule for first person. Every row of the spec's table: held item + target gives the
-    /// click's action and the prompt under the dot (or a grey reason).
+    /// Spec 020 AC2, spec 021 AC6: the one rule for first person. Every row of the spec 021 table: held item + target
+    /// gives the click's action and the prompt under the dot (or a grey reason).
     /// </summary>
     public class InteractionRulesTests
     {
         private static readonly Held Nothing = Held.Nothing;
         private static readonly Held Potato = Held.Food("potato", plated: false);
-        private static readonly Held Plate = Held.Food("potato plate", plated: true);
+        private static readonly Held Plated = Held.Food("potato plate", plated: true);
         private static readonly Held Knife = Held.Knife;
         private static readonly Held Box = Held.Item("box");
 
-        private static AimTarget Empty(StationKind kind) => AimTarget.OnStation(kind, 0, null);
-        private static AimTarget With(StationKind kind, string food, int count = 1) => AimTarget.OnStation(kind, count, food);
+        private static AimTarget Empty(VesselKind kind) => AimTarget.Cookware(kind, 0, null);
+        private static AimTarget With(VesselKind kind, string food, int count = 1) => AimTarget.Cookware(kind, count, food);
+        private static Held Holding(VesselKind kind, string food = null, int count = 0) => Held.Cookware(kind, count, food);
 
         private static InteractionAction Act(Held held, AimTarget target) => InteractionRules.ActionFor(held, target);
 
-        // ---- row 1: anything + button = Press ----
+        // ---- row 1: anything + knob / button = Press ----
 
         [Test]
         public void Button_BeatsEverything()
         {
-            AimTarget button = AimTarget.Button(StationRules.StoveSwitch, 0);
-            foreach (Held held in new[] { Nothing, Potato, Plate, Knife, Box })
+            AimTarget button = AimTarget.Button(StationRules.StoveOption(1, StationRules.StoveSwitch), 0);
+            foreach (Held held in new[] { Nothing, Potato, Plated, Knife, Box, Holding(VesselKind.Pan, "potato", 1) })
                 Assert.AreEqual(InteractionAction.Press, Act(held, button), held.Name);
-        }
-
-        [Test]
-        public void ButtonPrompts_SayWhatPressingDoes()
-        {
-            byte off = StationRules.StoveFlags(false, false);
-            byte onSaute = StationRules.StoveFlags(true, true);
-            Assert.AreEqual("Click · switch on", InteractionRules.PromptFor(Nothing, AimTarget.Button(StationRules.StoveSwitch, off)));
-            Assert.AreEqual("Click · switch off", InteractionRules.PromptFor(Potato, AimTarget.Button(StationRules.StoveSwitch, onSaute)));
-            Assert.AreEqual("Click · fry → sauté", InteractionRules.PromptFor(Nothing, AimTarget.Button(StationRules.PanMode, off)));
-            Assert.AreEqual("Click · sauté → fry", InteractionRules.PromptFor(Nothing, AimTarget.Button(StationRules.PanMode, onSaute)));
+            Assert.AreEqual("Click · burner on", InteractionRules.PromptFor(Nothing, button));
+            Assert.AreEqual("Click · fry → sauté", InteractionRules.PromptFor(Nothing, AimTarget.Button(StationRules.StoveOption(0, StationRules.PanMode), 0)));
         }
 
         // ---- row 2: knife + board with food = Cut ----
@@ -47,89 +39,151 @@ namespace Worktown.Game.Tests
         [Test]
         public void KnifeAndBoardWithFood_IsCut()
         {
-            Assert.AreEqual(InteractionAction.Cut, Act(Knife, With(StationKind.Board, "potato")));
-            Assert.AreEqual("Drag down · cut   Right click · turn", InteractionRules.PromptFor(Knife, With(StationKind.Board, "potato")));
+            Assert.AreEqual(InteractionAction.Cut, Act(Knife, With(VesselKind.Board, "potato")));
+            Assert.AreEqual("Drag down · cut   Right click · turn", InteractionRules.PromptFor(Knife, With(VesselKind.Board, "potato")));
         }
 
         [Test]
-        public void KnifeAndEmptyBoard_IsNone_WithAReason()
+        public void KnifeAndEmptyBoard_IsNone_WithAReason_KnifeInAPan_Silent()
         {
-            Assert.AreEqual(InteractionAction.None, Act(Knife, Empty(StationKind.Board)));
-            Assert.AreEqual("Put food on the board to cut", InteractionRules.Reason(Knife, Empty(StationKind.Board)));
+            Assert.AreEqual(InteractionAction.None, Act(Knife, Empty(VesselKind.Board)));
+            Assert.AreEqual("Put food on the board to cut", InteractionRules.Reason(Knife, Empty(VesselKind.Board)));
+            Assert.AreEqual(InteractionAction.None, Act(Knife, With(VesselKind.Pan, "potato")));
+            Assert.IsNull(InteractionRules.PromptFor(Knife, Empty(VesselKind.Pan)), "a knife in the pan");
         }
 
-        // ---- row 3: food + empty board = PutOnBoard ----
+        // ---- row 3: food that fits + cookware with room = PutInto ----
 
         [Test]
-        public void FoodAndEmptyBoard_IsPutOnBoard()
+        public void PotatoAndPotWithRoom_IsPutInto()
         {
-            Assert.AreEqual(InteractionAction.PutOnBoard, Act(Potato, Empty(StationKind.Board)));
-            Assert.AreEqual("Click · put potato on the board", InteractionRules.PromptFor(Potato, Empty(StationKind.Board)));
-        }
-
-        [Test]
-        public void FoodAndFullBoard_IsNone_WithAReason()
-        {
-            Assert.AreEqual(InteractionAction.None, Act(Potato, With(StationKind.Board, "apple")));
-            Assert.AreEqual("potato can't go in there", InteractionRules.PromptFor(Potato, With(StationKind.Board, "apple")));
-        }
-
-        // ---- rows 4 and 5: food that fits + pan / pot / plating table / bowl = PutInto ----
-
-        [Test]
-        public void FoodThatFits_AndEmptyPot_IsPutInto()
-        {
-            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, Empty(StationKind.Pot)));
-            Assert.AreEqual("Click · put potato into the pot", InteractionRules.PromptFor(Potato, Empty(StationKind.Pot)));
-            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, Empty(StationKind.Pan)));
-            Assert.AreEqual("Click · put potato into the pan", InteractionRules.PromptFor(Potato, Empty(StationKind.Pan)));
+            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, Empty(VesselKind.Pot)));
+            Assert.AreEqual("Click · put potato into the pot", InteractionRules.PromptFor(Potato, Empty(VesselKind.Pot)));
+            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, With(VesselKind.Pot, "onion", VesselRules.PotCapacity - 1)),
+                "several ingredients in a pot");
         }
 
         [Test]
-        public void FoodThatFits_AndPlateOrBowl_IsPutInto()
+        public void FoodThatFits_IntoEveryKind()
         {
-            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, Empty(StationKind.PlatingTable)));
-            Assert.AreEqual("Click · put potato on the plate", InteractionRules.PromptFor(Potato, Empty(StationKind.PlatingTable)));
-            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, With(StationKind.Bowl, "apple")));
-            Assert.AreEqual("Click · put potato into the bowl", InteractionRules.PromptFor(Potato, With(StationKind.Bowl, "apple")));
+            Assert.AreEqual("Click · put potato on the board", InteractionRules.PromptFor(Potato, Empty(VesselKind.Board)));
+            Assert.AreEqual("Click · put potato into the pan", InteractionRules.PromptFor(Potato, Empty(VesselKind.Pan)));
+            Assert.AreEqual("Click · put potato on the plate", InteractionRules.PromptFor(Potato, With(VesselKind.Plate, "x")));
+            Assert.AreEqual("Click · put potato into the bowl", InteractionRules.PromptFor(Potato, With(VesselKind.Bowl, "apple")));
         }
 
         [Test]
-        public void PlateAndBowl_TakeUpToTheServersLimit()
+        public void EveryKind_TakesUpToTheServersCapacity()
         {
-            int plateMax = AssemblyRules.MaxItems(StationKind.PlatingTable);
-            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, With(StationKind.PlatingTable, "x", plateMax - 1)));
-            Assert.AreEqual(InteractionAction.None, Act(Potato, With(StationKind.PlatingTable, "x", plateMax)));
-            int bowlMax = AssemblyRules.MaxItems(StationKind.Bowl);
-            Assert.AreEqual(InteractionAction.None, Act(Potato, With(StationKind.Bowl, "x", bowlMax)));
+            foreach (VesselKind kind in new[] { VesselKind.Board, VesselKind.Pan, VesselKind.Pot, VesselKind.Plate, VesselKind.Bowl })
+            {
+                int max = VesselRules.Capacity(kind);
+                Assert.AreEqual(InteractionAction.PutInto, Act(Potato, With(kind, "x", max - 1)), kind.ToString());
+                Assert.AreEqual(InteractionAction.None, Act(Potato, With(kind, "x", max)), kind + " full");
+            }
         }
 
-        // ---- row 6: food + counter = Sell ----
+        // ---- row 4: food that does not fit + cookware = None (grey) ----
 
         [Test]
-        public void FoodAndCounter_IsSell()
+        public void FullPot_IsNone_PotIsFull()
         {
-            Assert.AreEqual(InteractionAction.Sell, Act(Plate, Empty(StationKind.Counter)));
-            Assert.AreEqual("Click · sell potato plate", InteractionRules.PromptFor(Plate, Empty(StationKind.Counter)));
-            // The counter plates unplated food itself (spec 009), so the server sells it too.
-            Assert.AreEqual(InteractionAction.Sell, Act(Potato, Empty(StationKind.Counter)));
+            AimTarget full = With(VesselKind.Pot, "x", VesselRules.PotCapacity);
+            Assert.AreEqual(InteractionAction.None, Act(Potato, full));
+            Assert.AreEqual("Pot is full", InteractionRules.PromptFor(Potato, full));
+            Assert.AreEqual("Board is full", InteractionRules.PromptFor(Potato, With(VesselKind.Board, "apple")));
         }
 
-        // ---- row 7: anything + free spot = Place ----
+        [Test]
+        public void PlatedFood_GoesIntoNoCookware()
+        {
+            foreach (VesselKind kind in new[] { VesselKind.Board, VesselKind.Pan, VesselKind.Pot, VesselKind.Plate, VesselKind.Bowl })
+            {
+                Assert.AreEqual(InteractionAction.None, Act(Plated, Empty(kind)), kind.ToString());
+                Assert.AreEqual("potato plate can't go in there", InteractionRules.Reason(Plated, Empty(kind)), kind.ToString());
+                Assert.IsFalse(InteractionRules.Fits(Plated, Empty(kind)));
+            }
+        }
+
+        // ---- row 5: pan / pot / bowl with food + plate / bowl with room = Pour ----
 
         [Test]
-        public void KnifeAndFreeSpot_IsPlace()
+        public void PanWithFood_AndPlate_IsPour()
         {
-            Assert.AreEqual(InteractionAction.Place, Act(Knife, AimTarget.Spot(3)));
-            Assert.AreEqual("Click · put knife here", InteractionRules.PromptFor(Knife, AimTarget.Spot(3)));
+            Held pan = Holding(VesselKind.Pan, "crispy fried potato sticks", 1);
+            Assert.AreEqual(InteractionAction.Pour, Act(pan, Empty(VesselKind.Plate)));
+            Assert.AreEqual("Click · pour into the plate", InteractionRules.PromptFor(pan, Empty(VesselKind.Plate)));
+            Assert.AreEqual(InteractionAction.Pour, Act(pan, With(VesselKind.Bowl, "x")));
+        }
+
+        [Test]
+        public void PotIntoBowl_AndBowlOntoPlate_ArePour_ButNotTheOtherWay()
+        {
+            Assert.AreEqual(InteractionAction.Pour, Act(Holding(VesselKind.Pot, "mix", 2), Empty(VesselKind.Bowl)));
+            Assert.AreEqual(InteractionAction.Pour, Act(Holding(VesselKind.Bowl, "mix", 2), Empty(VesselKind.Plate)));
+            Assert.AreEqual(InteractionAction.None, Act(Holding(VesselKind.Bowl, "mix", 2), Empty(VesselKind.Bowl)));
+            Assert.AreEqual(InteractionAction.None, Act(Holding(VesselKind.Plate, "plate", 1), Empty(VesselKind.Pan)));
+            Assert.AreEqual(InteractionAction.None, Act(Holding(VesselKind.Pan, "x", 1), Empty(VesselKind.Pot)));
+        }
+
+        [Test]
+        public void PourIntoAFullPlate_IsNone_PlateIsFull_AndAnEmptyPanPoursNothing()
+        {
+            Held pan = Holding(VesselKind.Pan, "fries", 1);
+            AimTarget full = With(VesselKind.Plate, "x", VesselRules.Capacity(VesselKind.Plate));
+            Assert.AreEqual(InteractionAction.None, Act(pan, full));
+            Assert.AreEqual("Plate is full", InteractionRules.PromptFor(pan, full));
+            Assert.AreEqual(InteractionAction.None, Act(Holding(VesselKind.Pan), Empty(VesselKind.Plate)));
+            Assert.IsNull(InteractionRules.PromptFor(Holding(VesselKind.Pan), Empty(VesselKind.Plate)));
+        }
+
+        // ---- row 6: plate with food + counter = Sell (loose food still sells) ----
+
+        [Test]
+        public void PlateWithFood_AndCounter_IsSell()
+        {
+            Held plate = Holding(VesselKind.Plate, "plate of crispy fried potato sticks", 2);
+            AimTarget counter = AimTarget.OnStation(StationKind.Counter);
+            Assert.AreEqual(InteractionAction.Sell, Act(plate, counter));
+            Assert.AreEqual("Click · sell plate of crispy fried potato sticks", InteractionRules.PromptFor(plate, counter));
+            Assert.AreEqual(InteractionAction.Sell, Act(Potato, counter), "the counter plates loose food (spec 009)");
+            Assert.AreEqual("Click · sell potato", InteractionRules.PromptFor(Potato, counter));
+        }
+
+        [Test]
+        public void EmptyPlateOrFullPan_AtTheCounter_IsNone_WithAReason()
+        {
+            AimTarget counter = AimTarget.OnStation(StationKind.Counter);
+            Assert.AreEqual(InteractionAction.None, Act(Holding(VesselKind.Plate), counter));
+            Assert.AreEqual("Put food on the plate first", InteractionRules.PromptFor(Holding(VesselKind.Plate), counter));
+            Assert.AreEqual("Pour it onto a plate first", InteractionRules.PromptFor(Holding(VesselKind.Pan, "fries", 1), counter));
+            Assert.IsNull(InteractionRules.PromptFor(Nothing, counter), "empty hands at the counter");
+            Assert.AreEqual(InteractionAction.None, Act(Box, counter));
+        }
+
+        // ---- row 7: anything + free spot or free burner = Place ----
+
+        [Test]
+        public void PotatoAndFreeStoveTopSpot_IsPlace()
+        {
+            Assert.AreEqual(InteractionAction.Place, Act(Potato, AimTarget.Spot(3)));
+            Assert.AreEqual("Click · put potato here", InteractionRules.PromptFor(Potato, AimTarget.Spot(3)));
+        }
+
+        [Test]
+        public void PanAndFreeBurner_IsPlace_OnTheBurner()
+        {
+            Held pan = Holding(VesselKind.Pan);
+            Assert.AreEqual(InteractionAction.Place, Act(pan, AimTarget.Spot(0, burner: true)));
+            Assert.AreEqual("Click · put pan on the burner", InteractionRules.PromptFor(pan, AimTarget.Spot(0, burner: true)));
         }
 
         [Test]
         public void AnythingHeld_AndFreeSpot_IsPlace()
         {
-            foreach (Held held in new[] { Potato, Plate, Knife, Box })
+            foreach (Held held in new[] { Potato, Plated, Knife, Box, Holding(VesselKind.Pot, "x", 2), Holding(VesselKind.Board) })
                 Assert.AreEqual(InteractionAction.Place, Act(held, AimTarget.Spot(0)), held.Name);
-            Assert.AreEqual("Click · put potato here", InteractionRules.PromptFor(Potato, AimTarget.Spot(0)));
+            Assert.AreEqual("Click · put knife here", InteractionRules.PromptFor(Knife, AimTarget.Spot(0)));
         }
 
         [Test]
@@ -142,24 +196,51 @@ namespace Worktown.Game.Tests
             Assert.IsNull(InteractionRules.PromptFor(Nothing, AimTarget.Spot(2)));
         }
 
-        // ---- row 8: nothing + free item = PickUp ----
+        // ---- row 8: nothing + board / pan / bowl with food = Take ----
 
         [Test]
-        public void EmptyHands_AndFreeItem_IsPickUp()
+        public void EmptyHands_AndBoardPanOrBowlWithFood_IsTake()
+        {
+            Assert.AreEqual(InteractionAction.Take, Act(Nothing, With(VesselKind.Board, "potato sticks")));
+            Assert.AreEqual("Click · take potato sticks", InteractionRules.PromptFor(Nothing, With(VesselKind.Board, "potato sticks")));
+            Assert.AreEqual(InteractionAction.Take, Act(Nothing, With(VesselKind.Pan, "crispy fried potato sticks")));
+            Assert.AreEqual("Click · take the mix", InteractionRules.PromptFor(Nothing, With(VesselKind.Bowl, "potato", 2)));
+            Assert.AreEqual("Click · take potato", InteractionRules.PromptFor(Nothing, With(VesselKind.Bowl, "potato", 1)));
+        }
+
+        // ---- row 9: nothing + pot with food = PickUp ----
+
+        [Test]
+        public void EmptyHands_AndPotWithFood_IsPickUp()
+        {
+            AimTarget pot = With(VesselKind.Pot, "mix", 2);
+            Assert.AreEqual(InteractionAction.PickUp, Act(Nothing, pot));
+            Assert.AreEqual("Click · pick up the pot", InteractionRules.PromptFor(Nothing, pot));
+            Assert.AreEqual(InteractionAction.PickUp, Act(Nothing, With(VesselKind.Plate, "fries")), "a plate is carried to the counter");
+        }
+
+        // ---- row 10: nothing + any free item or empty cookware = PickUp ----
+
+        [Test]
+        public void EmptyHands_AndEmptyPan_IsPickUp()
+        {
+            Assert.AreEqual(InteractionAction.PickUp, Act(Nothing, Empty(VesselKind.Pan)));
+            Assert.AreEqual("Click · pick up the pan", InteractionRules.PromptFor(Nothing, Empty(VesselKind.Pan)));
+            foreach (VesselKind kind in new[] { VesselKind.Board, VesselKind.Pot, VesselKind.Plate, VesselKind.Bowl })
+                Assert.AreEqual(InteractionAction.PickUp, Act(Nothing, Empty(kind)), kind.ToString());
+        }
+
+        [Test]
+        public void EmptyHands_AndFreeItem_IsPickUp_FullHandsNone()
         {
             Assert.AreEqual(InteractionAction.PickUp, Act(Nothing, AimTarget.Item("knife")));
             Assert.AreEqual("Click · pick up knife", InteractionRules.PromptFor(Nothing, AimTarget.Item("knife")));
-            Assert.AreEqual("Click · pick up potato", InteractionRules.PromptFor(Nothing, AimTarget.Item("potato")));
-        }
-
-        [Test]
-        public void FullHands_AndItem_IsNone()
-        {
             Assert.AreEqual(InteractionAction.None, Act(Potato, AimTarget.Item("knife")));
             Assert.AreEqual(InteractionAction.None, Act(Knife, AimTarget.Item("potato")));
+            Assert.AreEqual(InteractionAction.None, Act(Box, Empty(VesselKind.Pot)), "a box goes into nothing");
         }
 
-        // ---- row 9: nothing + crate = Buy ----
+        // ---- row 11: nothing + crate / plate shelf = Buy / Take ----
 
         [Test]
         public void EmptyHands_AndCrate_IsBuy_WithThePrice()
@@ -170,50 +251,14 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionAction.None, Act(Potato, AimTarget.Crate("potato", 60)), "hands full");
         }
 
-        // ---- row 10: nothing + station with food = Take ----
-
         [Test]
-        public void EmptyHands_AndPanWithFood_IsTake()
+        public void EmptyHands_AndPlateShelf_IsTakeAPlate()
         {
-            AimTarget pan = With(StationKind.Pan, "potato sticks · medium");
-            Assert.AreEqual(InteractionAction.Take, Act(Nothing, pan));
-            Assert.AreEqual("Click · take potato sticks · medium", InteractionRules.PromptFor(Nothing, pan));
-        }
-
-        [Test]
-        public void EmptyHands_TakeFromEveryFoodStation()
-        {
-            foreach (StationKind kind in new[] { StationKind.Pan, StationKind.Pot, StationKind.Board, StationKind.PlatingTable, StationKind.Bowl })
-            {
-                Assert.AreEqual(InteractionAction.Take, Act(Nothing, With(kind, "potato")), kind.ToString());
-                Assert.AreEqual(InteractionAction.None, Act(Nothing, Empty(kind)), kind + " empty");
-                Assert.IsNull(InteractionRules.PromptFor(Nothing, Empty(kind)), kind + " empty");
-            }
-            Assert.AreEqual("Click · take the plate", InteractionRules.PromptFor(Nothing, With(StationKind.PlatingTable, "potato")));
-            Assert.AreEqual("Click · take the mix", InteractionRules.PromptFor(Nothing, With(StationKind.Bowl, "potato", 2)));
-            Assert.AreEqual("Click · take potato", InteractionRules.PromptFor(Nothing, With(StationKind.Bowl, "potato", 1)));
-        }
-
-        // ---- row 11: food that does not fit + pan / pot / plate / bowl = None with a reason ----
-
-        [Test]
-        public void PlatedFoodAndPan_IsNone_WithAReason()
-        {
-            Assert.AreEqual(InteractionAction.None, Act(Plate, Empty(StationKind.Pan)));
-            Assert.AreEqual("potato plate can't go in there", InteractionRules.PromptFor(Plate, Empty(StationKind.Pan)));
-            Assert.IsFalse(InteractionRules.Fits(Plate, Empty(StationKind.Pan)));
-        }
-
-        [Test]
-        public void FoodThatDoesNotFit_IsNone_WithAReason()
-        {
-            Assert.AreEqual(InteractionAction.None, Act(Potato, With(StationKind.Pot, "apple")), "a full pot takes nothing more");
-            Assert.IsNotNull(InteractionRules.Reason(Potato, With(StationKind.Pot, "apple")));
-            foreach (StationKind kind in new[] { StationKind.Pot, StationKind.PlatingTable, StationKind.Bowl, StationKind.Board })
-            {
-                Assert.AreEqual(InteractionAction.None, Act(Plate, Empty(kind)), kind.ToString());
-                Assert.AreEqual("potato plate can't go in there", InteractionRules.Reason(Plate, Empty(kind)), kind.ToString());
-            }
+            AimTarget shelf = AimTarget.OnStation(StationKind.PlateShelf);
+            Assert.AreEqual(InteractionAction.Take, Act(Nothing, shelf));
+            Assert.AreEqual("Click · take a plate", InteractionRules.PromptFor(Nothing, shelf));
+            Assert.AreEqual(InteractionAction.None, Act(Potato, shelf));
+            Assert.AreEqual(InteractionAction.None, Act(Nothing, AimTarget.OnStation(StationKind.Stove)), "the stove body does nothing");
         }
 
         // ---- spec 020 review: beyond reach ----
@@ -221,26 +266,26 @@ namespace Worktown.Game.Tests
         [Test]
         public void TooFar_IsNone_WithTheReasonTooFar()
         {
-            AimTarget farPot = Empty(StationKind.Pot).TooFar();
+            AimTarget farPot = Empty(VesselKind.Pot).TooFar();
             Assert.IsTrue(farPot.IsTooFar);
             Assert.AreEqual(InteractionAction.None, Act(Potato, farPot));
             Assert.AreEqual("Too far", InteractionRules.PromptFor(Potato, farPot));
-            Assert.AreEqual("Too far", InteractionRules.PromptFor(Nothing, AimTarget.Button(StationRules.StoveSwitch, 0).TooFar()));
-            Assert.AreEqual("Too far", InteractionRules.PromptFor(Nothing, AimTarget.Item("knife").TooFar()));
+            Assert.AreEqual("Too far", InteractionRules.PromptFor(Nothing, farPot), "empty hands would pick up the pot");
+            Assert.AreEqual("Too far", InteractionRules.PromptFor(Nothing, AimTarget.Button(1, 0).TooFar()));
             Assert.AreEqual("Too far", InteractionRules.PromptFor(Knife, AimTarget.Spot(2).TooFar()));
-            Assert.AreEqual("Too far", InteractionRules.PromptFor(Plate, Empty(StationKind.Pan).TooFar()), "would be grey anyway");
+            Assert.AreEqual("Too far", InteractionRules.PromptFor(Plated, Empty(VesselKind.Pan).TooFar()), "would be grey anyway");
         }
 
         [Test]
         public void TooFar_WhereNothingWouldHappen_StaysSilent()
         {
-            Assert.IsNull(InteractionRules.PromptFor(Nothing, Empty(StationKind.Pan).TooFar()), "empty hands, empty pan");
             Assert.IsNull(InteractionRules.PromptFor(Nothing, AimTarget.Spot(2).TooFar()), "empty hands, worktop");
-            Assert.IsFalse(Empty(StationKind.Pot).TooFar().InReach().IsTooFar);
-            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, Empty(StationKind.Pot).TooFar().InReach()));
+            Assert.IsNull(InteractionRules.PromptFor(Knife, Empty(VesselKind.Pan).TooFar()), "a knife at a far pan");
+            Assert.IsFalse(Empty(VesselKind.Pot).TooFar().InReach().IsTooFar);
+            Assert.AreEqual(InteractionAction.PutInto, Act(Potato, Empty(VesselKind.Pot).TooFar().InReach()));
         }
 
-        // ---- row 12: anything else = None, no prompt ----
+        // ---- anything else = None, no prompt ----
 
         [Test]
         public void AnythingElse_IsNone_WithoutPrompt()
@@ -248,10 +293,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionAction.None, Act(Nothing, AimTarget.Nothing));
             Assert.IsNull(InteractionRules.PromptFor(Nothing, AimTarget.Nothing));
             Assert.IsNull(InteractionRules.PromptFor(Potato, AimTarget.Nothing));
-            Assert.IsNull(InteractionRules.PromptFor(Nothing, Empty(StationKind.Counter)), "empty hands at the counter");
-            Assert.IsNull(InteractionRules.PromptFor(Knife, Empty(StationKind.Pan)), "a knife in the pan");
-            Assert.IsNull(InteractionRules.PromptFor(Box, Empty(StationKind.Pot)), "a box in the pot");
-            Assert.AreEqual(InteractionAction.None, Act(Box, Empty(StationKind.Counter)));
+            Assert.IsNull(InteractionRules.PromptFor(Box, Empty(VesselKind.Pot)), "a box in the pot");
         }
 
         [Test]
@@ -259,10 +301,12 @@ namespace Worktown.Game.Tests
         {
             var cases = new (Held, AimTarget)[]
             {
-                (Nothing, AimTarget.Button(StationRules.StoveSwitch, 0)), (Knife, With(StationKind.Board, "potato")),
-                (Potato, Empty(StationKind.Board)), (Potato, Empty(StationKind.Pot)), (Plate, Empty(StationKind.Counter)),
-                (Knife, AimTarget.Spot(1)), (Nothing, AimTarget.Item("knife")), (Nothing, AimTarget.Crate("potato", 60)),
-                (Nothing, With(StationKind.Pan, "potato"))
+                (Nothing, AimTarget.Button(1, 0)), (Knife, With(VesselKind.Board, "potato")), (Potato, Empty(VesselKind.Board)),
+                (Potato, Empty(VesselKind.Pot)), (Holding(VesselKind.Pan, "fries", 1), Empty(VesselKind.Plate)),
+                (Holding(VesselKind.Plate, "plate of fries", 1), AimTarget.OnStation(StationKind.Counter)),
+                (Knife, AimTarget.Spot(1)), (Holding(VesselKind.Pan), AimTarget.Spot(0, true)), (Nothing, AimTarget.Item("knife")),
+                (Nothing, AimTarget.Crate("potato", 60)), (Nothing, With(VesselKind.Pan, "potato")), (Nothing, Empty(VesselKind.Pan)),
+                (Nothing, AimTarget.OnStation(StationKind.PlateShelf))
             };
             foreach ((Held held, AimTarget target) in cases)
             {

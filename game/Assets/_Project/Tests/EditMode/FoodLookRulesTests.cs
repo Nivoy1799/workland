@@ -24,7 +24,7 @@ namespace Worktown.Game.Tests
             int id = _nextId++;
             kitchen.Register(id, item);
             foreach (int option in boardOptions)
-                Assert.AreEqual(CookOutcome.Ok, kitchen.TryApply(id, StationKind.Board, option, out _, out _));
+                HeatTestKit.Cut(kitchen, id, option); // spec 021: on a board vessel
             return id;
         }
 
@@ -115,19 +115,19 @@ namespace Worktown.Game.Tests
             int fries = Food(kitchen, "potato", 3);
             HeatTestKit.Fry(kitchen, fries, 150);
             int tomato = Food(kitchen, "tomato", 2);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(fries, Table, StationKind.PlatingTable));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(tomato, Table, StationKind.PlatingTable));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(fries, Table, VesselKind.Plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(tomato, Table, VesselKind.Plate));
 
             var friesLook = new FoodLook(PotatoIndex, FoodLook.ShapeSticks, FoodLook.DonenessMedium, FoodLook.HeatFried, 0, 0);
             var tomatoLook = new FoodLook(TomatoIndex, FoodLook.ShapeSlices, FoodLook.DonenessRaw, FoodLook.HeatNone, 0, 0);
 
             // On the table: the order added.
-            IReadOnlyList<FoodLook> onTable = kitchen.LooksOnStation(Table);
+            IReadOnlyList<FoodLook> onTable = kitchen.LooksIn(Table);
             Assert.AreEqual(2, onTable.Count);
             Assert.AreEqual(friesLook, onTable[0]);
             Assert.AreEqual(tomatoLook, onTable[1]);
 
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Table, StationKind.PlatingTable, out Item plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Table, VesselKind.Plate, out Item plate));
             FoodLook look = FoodLookRules.From(plate);
             Assert.AreEqual(FoodLook.KindPlated, look.Kind);
             Assert.AreEqual(2, look.PartCount);
@@ -138,7 +138,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(2, parts.Count);
             Assert.AreEqual(tomatoLook, parts[0], "part 0");
             Assert.AreEqual(friesLook, parts[1], "part 1");
-            Assert.IsEmpty(kitchen.LooksOnStation(Table), "taking the plate empties the table");
+            Assert.IsEmpty(kitchen.LooksIn(Table), "taking the plate empties the table");
         }
 
         [Test]
@@ -146,8 +146,8 @@ namespace Worktown.Game.Tests
         {
             var kitchen = KitchenState.CreateDemo();
             foreach (string id in new[] { "onion", "tomato", "apple" })
-                Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(Food(kitchen, id, 4), Bowl, StationKind.Bowl));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item mix));
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(Food(kitchen, id, 4), Bowl, VesselKind.Bowl));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Bowl, VesselKind.Bowl, out Item mix));
 
             FoodLook look = FoodLookRules.From(mix);
             Assert.AreEqual(FoodLook.KindMixed, look.Kind);
@@ -179,9 +179,9 @@ namespace Worktown.Game.Tests
         /// <summary>Potato cubes and onion cubes mixed in the bowl, then fried 150 sim s (medium).</summary>
         private Item FriedCubeMix(KitchenState kitchen)
         {
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(Food(kitchen, "potato", 4), Bowl, StationKind.Bowl));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(Food(kitchen, "onion", 4), Bowl, StationKind.Bowl));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item mix));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(Food(kitchen, "potato", 4), Bowl, VesselKind.Bowl));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(Food(kitchen, "onion", 4), Bowl, VesselKind.Bowl));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Bowl, VesselKind.Bowl, out Item mix));
             int id = _nextId++;
             kitchen.Register(id, mix);
             return HeatTestKit.Fry(kitchen, id, 150);
@@ -217,9 +217,9 @@ namespace Worktown.Game.Tests
             Item fried = FriedCubeMix(kitchen);
             int mixId = _nextId++;
             kitchen.Register(mixId, fried);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(mixId, Table, StationKind.PlatingTable));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(Food(kitchen, "tomato", 2), Table, StationKind.PlatingTable));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Table, StationKind.PlatingTable, out Item plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(mixId, Table, VesselKind.Plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(Food(kitchen, "tomato", 2), Table, VesselKind.Plate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Table, VesselKind.Plate, out Item plate));
 
             FoodLook look = FoodLookRules.From(plate);
             Assert.AreEqual(FoodLook.KindPlated, look.Kind);
@@ -263,8 +263,8 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             int id = Food(kitchen, "potato", 3);
             Assert.IsNull(kitchen.HeatLook(HeatTestKit.PanIndex, HeatTestKit.StartTick, HeatTestKit.TickRate));
-            HeatTestKit.SwitchOn(kitchen, HeatTestKit.PanIndex, StationKind.Pan);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(id, HeatTestKit.PanIndex, StationKind.Pan, HeatTestKit.StartTick));
+            HeatTestKit.SwitchOn(kitchen, HeatTestKit.PanIndex, HeatTestKit.PanBurner);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(id, HeatTestKit.PanIndex, VesselKind.Pan, HeatTestKit.StartTick));
 
             FoodLook? raw = kitchen.HeatLook(HeatTestKit.PanIndex, HeatTestKit.StartTick, HeatTestKit.TickRate);
             Assert.IsTrue(raw.HasValue);

@@ -121,13 +121,26 @@ namespace Worktown.Game.UI
             UpdateCrosshair(player, firstPerson, held);
 
             Show(_heldBox, held != null);
-            if (held != null)
-                _held.text = held.TryGetComponent(out Food food) ? food.Describe()
-                    : held.TryGetComponent(out Knife _) ? "Knife" : "Carrying a box";
+            if (held != null) _held.text = HeldText(held);
 
             UpdateResultToast(player);
             UpdateFeedToast();
             ExpireToasts();
+        }
+
+        /// <summary>The held-item line; spec 021: cookware shows what it would give ("Pan: crispy fried potato sticks").</summary>
+        private static string HeldText(Pickup held)
+        {
+            if (held.TryGetComponent(out Food food)) return food.Describe();
+            if (held.TryGetComponent(out Knife _)) return "Knife";
+            if (held.TryGetComponent(out Vessel vessel))
+            {
+                string name = VesselRules.Name(vessel.Kind);
+                name = char.ToUpperInvariant(name[0]) + name.Substring(1);
+                if (vessel.ContentCount == 0) return name + " (empty)";
+                return string.IsNullOrEmpty(vessel.Title.Value) ? name : name + ": " + vessel.Title.Value;
+            }
+            return "Carrying a box";
         }
 
         /// <summary>
@@ -244,6 +257,11 @@ namespace Worktown.Game.UI
                 case CookOutcome.PanBusy: return "Take the food out before switching fry/saute";
                 case CookOutcome.NoKnife: return "Take a knife to cut";
                 case CookOutcome.NothingToCut: return "Put food on the board first";
+                case CookOutcome.VesselFull: return "No more room in there";
+                case CookOutcome.NotAVessel: return "You can't use that";
+                case CookOutcome.CannotPour: return "That does not pour in there";
+                case CookOutcome.PourInstead: return "Pour it onto a plate or into a bowl";
+                case CookOutcome.NoPlatesLeft: return "No clean plates left: sell a meal first";
                 default: return outcome.ToString();
             }
         }

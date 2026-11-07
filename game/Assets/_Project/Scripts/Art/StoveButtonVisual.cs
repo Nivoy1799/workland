@@ -4,9 +4,10 @@ using Worktown.Game.Cooking;
 namespace Worktown.Game.Art
 {
     /// <summary>
-    /// Spec 019: colours a stove's buttons from the synced <see cref="StationContents.StoveFlags"/>: the switch
-    /// glows green when on and dark red when off; the pan's mode button shows "fry" or "sauté". Display only,
-    /// client side; the server decides the flags.
+    /// Spec 019/021: colours a stove's knobs, buttons and burner rings from the synced
+    /// <see cref="StationContents.StoveFlags"/>, per burner: the knob glows green when on and is dark red when off,
+    /// the burner ring glows orange while on, the mode button shows "fry" or "sauté". Display only, client side; the
+    /// server decides the flags. Index in each array = burner.
     /// </summary>
     public sealed class StoveButtonVisual : MonoBehaviour
     {
@@ -16,13 +17,15 @@ namespace Worktown.Game.Art
         private static readonly Color Off = new Color(0.4f, 0.05f, 0.05f);
         private static readonly Color Fry = new Color(0.95f, 0.55f, 0.15f);
         private static readonly Color Saute = new Color(0.95f, 0.85f, 0.3f);
+        private static readonly Color RingOn = new Color(1f, 0.35f, 0.08f);
+        private static readonly Color RingOff = new Color(0.12f, 0.12f, 0.12f);
 
         [SerializeField] private StationContents _contents;
-        [SerializeField] private Renderer _switch;
-        [Tooltip("Pan only.")]
-        [SerializeField] private Renderer _modeButton;
-        [Tooltip("Pan only: shows the current mode.")]
-        [SerializeField] private TextMesh _modeLabel;
+        [SerializeField] private Renderer[] _switches = new Renderer[0];
+        [SerializeField] private Renderer[] _modeButtons = new Renderer[0];
+        [SerializeField] private TextMesh[] _modeLabels = new TextMesh[0];
+        [Tooltip("Spec 021: a flat ring on each burner that glows while it is on.")]
+        [SerializeField] private Renderer[] _rings = new Renderer[0];
 
         private MaterialPropertyBlock _block;
         private int _shown = -1;
@@ -33,12 +36,19 @@ namespace Worktown.Game.Art
             byte flags = _contents.StoveFlags.Value;
             if (flags == _shown) return;
             _shown = flags;
-            bool on = StationRules.IsStoveOn(flags);
-            bool saute = StationRules.IsSaute(flags);
-            Paint(_switch, on ? On : Off, on);
-            Paint(_modeButton, saute ? Saute : Fry, false);
-            if (_modeLabel != null) _modeLabel.text = saute ? "sauté" : "fry";
+            for (int burner = 0; burner < StationRules.BurnersPerStove; burner++)
+            {
+                bool on = StationRules.IsBurnerOn(flags, burner);
+                bool saute = StationRules.IsBurnerSaute(flags, burner);
+                Paint(At(_switches, burner), on ? On : Off, on);
+                Paint(At(_modeButtons, burner), saute ? Saute : Fry, false);
+                Paint(At(_rings, burner), on ? RingOn : RingOff, on);
+                TextMesh label = burner < _modeLabels.Length ? _modeLabels[burner] : null;
+                if (label != null) label.text = saute ? "sauté" : "fry";
+            }
         }
+
+        private static Renderer At(Renderer[] renderers, int i) => renderers != null && i < renderers.Length ? renderers[i] : null;
 
         private void Paint(Renderer target, Color color, bool glow)
         {

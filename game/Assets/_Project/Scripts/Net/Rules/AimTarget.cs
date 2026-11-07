@@ -4,21 +4,23 @@ namespace Worktown.Game.Net.Rules
 {
     /// <summary>
     /// Spec 020: what the dot points at, as plain data for <see cref="InteractionRules"/>: the kind of target and
-    /// what clients can see of it (the station's synced contents, the stove flags, the item's name, the chosen
-    /// spot). <c>default</c> is "nothing".
+    /// what clients can see of it (the stove flags, the item's name, the chosen spot; spec 021: a piece of cookware's
+    /// kind and synced contents, whether a spot is a burner). <c>default</c> is "nothing".
     /// </summary>
     public readonly struct AimTarget
     {
         /// <summary><see cref="AimKind.Other"/> = nothing to interact with.</summary>
         public readonly AimKind Kind;
         public readonly StationKind Station;
-        /// <summary>Stations: how many things lie on or in it (from its synced contents).</summary>
+        /// <summary>Spec 021, cookware: board, pan, pot, plate or bowl.</summary>
+        public readonly VesselKind Vessel;
+        /// <summary>Cookware: how many things lie in it (from its synced contents).</summary>
         public readonly int ContentCount;
-        /// <summary>Stations: the first content name ("potato slices"), null when empty.</summary>
+        /// <summary>Cookware: what taking or pouring gives ("potato slices"), null when empty.</summary>
         public readonly string ContentName;
-        /// <summary>Buttons: the station option (StationRules.StoveSwitch or PanMode).</summary>
+        /// <summary>Buttons: the station option (StationRules.StoveOption).</summary>
         public readonly int Option;
-        /// <summary>Buttons: the stove's synced flags (on, saute).</summary>
+        /// <summary>Buttons: the stove's synced flags (on, saute per burner).</summary>
         public readonly byte StoveFlags;
         /// <summary>Pickups: the item's name ("potato", "knife", "box"). Crates: the ingredient ("potato").</summary>
         public readonly string Name;
@@ -26,64 +28,75 @@ namespace Worktown.Game.Net.Rules
         public readonly long Price;
         /// <summary>Spots: the chosen free spot, <see cref="PlaceSpots.None"/> when the surface is full.</summary>
         public readonly int SpotIndex;
+        /// <summary>Spec 021, spots: the surface is a burner.</summary>
+        public readonly bool IsBurner;
         /// <summary>Spec 020: the target is beyond reach (the ray sees it, the server would refuse): no action, "Too far".</summary>
         public readonly bool IsTooFar;
 
-        private AimTarget(AimKind kind, StationKind station, int contentCount, string contentName, int option,
-            byte stoveFlags, string name, long price, int spotIndex, bool tooFar = false)
+        private AimTarget(AimKind kind, StationKind station, VesselKind vessel, int contentCount, string contentName, int option,
+            byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar)
         {
-            IsTooFar = tooFar;
             Kind = kind;
             Station = station;
-            ContentCount = contentCount;
-            ContentName = contentName;
+            Vessel = vessel;
+            ContentCount = contentCount < 0 ? 0 : contentCount;
+            ContentName = ContentCount > 0 && !string.IsNullOrEmpty(contentName) ? contentName : null;
             Option = option;
             StoveFlags = stoveFlags;
             Name = name;
             Price = price;
             SpotIndex = spotIndex;
+            IsBurner = burner;
+            IsTooFar = tooFar;
         }
 
         public static AimTarget Nothing => default;
 
         /// <summary>The same target, but beyond reach.</summary>
-        public AimTarget TooFar()
-        {
-            return new AimTarget(Kind, Station, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, true);
-        }
+        public AimTarget TooFar() => With(true);
 
         /// <summary>The same target within reach (what a step closer would give).</summary>
-        public AimTarget InReach()
+        public AimTarget InReach() => With(false);
+
+        private AimTarget With(bool tooFar)
         {
-            return new AimTarget(Kind, Station, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, false);
+            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar);
         }
 
         public static AimTarget Button(int option, byte stoveFlags)
         {
-            return new AimTarget(AimKind.Button, default, 0, null, option, stoveFlags, null, -1, PlaceSpots.None);
+            return new AimTarget(AimKind.Button, StationKind.Stove, default, 0, null, option, stoveFlags, null, -1, PlaceSpots.None, false, false);
         }
 
-        /// <summary>Any station except a crate (use <see cref="Crate"/>).</summary>
-        public static AimTarget OnStation(StationKind kind, int contentCount, string contentName)
+        /// <summary>A station other than a crate: the counter, a stove's body, the plate shelf.</summary>
+        public static AimTarget OnStation(StationKind kind)
         {
-            int count = contentCount < 0 ? 0 : contentCount;
-            return new AimTarget(AimKind.Station, kind, count, count > 0 ? contentName : null, 0, 0, null, -1, PlaceSpots.None);
+            return new AimTarget(AimKind.Station, kind, default, 0, null, 0, 0, null, -1, PlaceSpots.None, false, false);
         }
 
         public static AimTarget Crate(string ingredient, long price)
         {
-            return new AimTarget(AimKind.Station, StationKind.Crate, 0, null, 0, 0, ingredient, price, PlaceSpots.None);
+            return new AimTarget(AimKind.Station, StationKind.Crate, default, 0, null, 0, 0, ingredient, price, PlaceSpots.None, false, false);
         }
 
+        /// <summary>A free item that is no cookware (food, the knife, a box).</summary>
         public static AimTarget Item(string name)
         {
-            return new AimTarget(AimKind.Pickup, default, 0, null, 0, 0, name, -1, PlaceSpots.None);
+            return new AimTarget(AimKind.Pickup, default, default, 0, null, 0, 0, name, -1, PlaceSpots.None, false, false);
+        }
+
+        /// <summary>Spec 021: cookware lying somewhere, with <paramref name="contentCount"/> things in it.</summary>
+        public static AimTarget Cookware(VesselKind kind, int contentCount, string contentName)
+        {
+            return new AimTarget(AimKind.Vessel, default, kind, contentCount, contentName, 0, 0, "the " + VesselRules.Name(kind), -1,
+                PlaceSpots.None, false, false);
         }
 
         /// <summary>A place surface; <paramref name="spotIndex"/> is the chosen free spot or PlaceSpots.None (full).</summary>
-        public static AimTarget Spot(int spotIndex)
+        public static AimTarget Spot(int spotIndex, bool burner = false)
         {
-            return new AimTarget(AimKind.Spot, default, 0, null, 0, 0, null, -1, spotIndex < 0 ? PlaceSpots.None : spotIndex);
+            return new AimTarget(AimKind.Spot, default, default, 0, null, 0, 0, null, -1, spotIndex < 0 ? PlaceSpots.None : spotIndex,
+                burner, false);
         }
     }
 }

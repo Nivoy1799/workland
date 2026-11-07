@@ -23,7 +23,7 @@ namespace Worktown.Game.Tests
         {
             KitchenState kitchen = NewKitchenWithPotato(out Item potato);
 
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryApply(FoodId, StationKind.Board, 3, out _, out _));
+            HeatTestKit.Cut(kitchen, FoodId, 3); // spec 021: sticks cut on a board vessel (same item as the old digit 3)
             Item fries = HeatTestKit.PanPreset(kitchen, FoodId, 2); // spec 016: pan switched on, 150 sim s at 190 C
 
             // Built directly with the sim, the way spec 005's tests build fries.
@@ -47,7 +47,7 @@ namespace Worktown.Game.Tests
         public void GoldenFries_RateBetterThanRawAndBurnt()
         {
             KitchenState kitchen = NewKitchenWithPotato(out Item raw);
-            kitchen.TryApply(FoodId, StationKind.Board, 3, out Item sticks, out _);
+            Item sticks = HeatTestKit.Cut(kitchen, FoodId, 3);
             Item golden = HeatTestKit.PanPreset(kitchen, FoodId, 2);
 
             kitchen.Register(7, sticks);
@@ -57,25 +57,37 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(4, StarRating.Stars(KitchenState.QualityOf(golden)));
             Assert.Less(KitchenState.QualityOf(dark), KitchenState.QualityOf(golden));
         }
-
         [Test]
         public void UnknownFood_IsRefused()
         {
             var kitchen = KitchenState.CreateDemo();
-            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryApply(1, StationKind.Board, 2, out _, out _));
-            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutOnHeat(1, HeatTestKit.PanIndex, StationKind.Pan, 0));
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutOnBoard(1, HeatTestKit.BoardIndex));
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutOnHeat(1, HeatTestKit.PanIndex, VesselKind.Pan, 0));
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutInto(1, 60, VesselKind.Plate, 0));
         }
 
-        [TestCase(StationKind.Pan, 2)]
-        [TestCase(StationKind.Board, 9)]
-        [TestCase(StationKind.Crate, 1)]
-        public void InvalidOption_IsRefusedAndChangesNothing(StationKind station, int option)
+        /// <summary>Spec 021 (was the station option check): requests that do not fit the cookware change nothing.</summary>
+        [TestCase(VesselKind.Plate)]
+        [TestCase(VesselKind.Board)]
+        [TestCase(VesselKind.Bowl)]
+        public void HeatOnAVesselThatDoesNotHeat_IsInvalid_AndChangesNothing(VesselKind kind)
         {
             KitchenState kitchen = NewKitchenWithPotato(out Item potato);
-            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryApply(FoodId, station, option, out Item result, out _));
-            Assert.IsNull(result);
+            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryPutOnHeat(FoodId, 60, kind, 0));
+            Assert.AreEqual(0, kitchen.ContentCount(60, kind));
             kitchen.TryGet(FoodId, out Item stored);
             Assert.AreEqual(potato.Hash, stored.Hash);
+        }
+
+        [Test]
+        public void TakingOutAPlateByHand_IsInvalid_APotIsPoured()
+        {
+            KitchenState kitchen = NewKitchenWithPotato(out _);
+            Assert.AreEqual(CookOutcome.InvalidOption, kitchen.TryPreviewTakeOut(60, VesselKind.Plate, 0, HeatTestKit.TickRate, out Item none));
+            Assert.IsNull(none);
+            Assert.AreEqual(CookOutcome.StationEmpty, kitchen.TryPreviewTakeOut(HeatTestKit.PotIndex, VesselKind.Pot, 0, HeatTestKit.TickRate, out _));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId, HeatTestKit.PotIndex, VesselKind.Pot, 0));
+            Assert.AreEqual(CookOutcome.PourInstead, kitchen.TryPreviewTakeOut(HeatTestKit.PotIndex, VesselKind.Pot, 0, HeatTestKit.TickRate, out _));
         }
 
         [Test]
