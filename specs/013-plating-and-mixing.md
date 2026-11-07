@@ -64,7 +64,7 @@ Only `game/` (branch stacked on `spec/012-nonverbal-communication`).
 - **Server restart:** contents are cleared like the kitchen state (spec 007 review finding).
 
 ## Acceptance criteria
-- [x] AC1: `AssemblyRules`/`AssemblyState` (EditMode tests): add up to the limit then refuse; a
+- [x] AC1: `AssemblyRules` and the station contents in `KitchenState` (EditMode tests): add up to the limit then refuse; a
       plated item cannot be added to a plate; take returns `plate`/`mix` of the items in order and
       empties the station; bowl with one item returns it unchanged; empty take is refused.
 - [x] AC2: Plate of golden fries + tomato slices sells to the meal market and pays more than the
@@ -85,6 +85,12 @@ Only `game/` (branch stacked on `spec/012-nonverbal-communication`).
 - Approve, answer the open questions, cook a meal with a second person.
 
 ## Implementation notes
+- Review 2026-11-07 (blocker fixed): adding is dry-run against the sim's `plate`/`mix` first, because
+  the sim flattens nested mixes and has depth/component limits; a station can no longer get locked.
+  Taking hands the dish over first and clears the station only on success.
+- Scope deviations: the planned `AssemblyState.cs` became `KitchenState` station contents plus
+  `AssemblyEntry.cs`; also changed `CookOutcome.cs`, `HudView.cs`, `PickupInteractor.cs`,
+  `CookingRulesTests.cs` (counter prompt), two station materials.
 Built 2026-11-07 on `spec/013-plating-and-mixing` (stacked on spec 012).
 - AC1, AC2: `AssemblyTests` (plate of fries + tomato equals the sim's `plate`, table empties, limit 4,
   plated dish refused on plate and in bowl, bowl gives a single item back unchanged and mixes two,

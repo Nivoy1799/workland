@@ -109,6 +109,20 @@ namespace Worktown.Game.Cooking
             List<AssemblyEntry> contents = ContentsOf(stationIndex);
             CookOutcome allowed = AssemblyRules.CanAdd(kind, contents.Count, item);
             if (allowed != CookOutcome.Ok) return allowed;
+
+            // Dry run: the sim flattens nested mixes and has depth/component limits, so the entry
+            // count alone does not tell whether "take" will work. Refuse now, while the food is
+            // still in the player's hands, instead of locking the station later (review blocker).
+            // A first item in a bowl is handed back unchanged, so it needs no mix check.
+            bool singleInBowl = kind == StationKind.Bowl && contents.Count == 0;
+            if (!singleInBowl)
+            {
+                var inputs = new List<Item>(contents.Count + 1);
+                foreach (AssemblyEntry entry in contents) inputs.Add(entry.Item);
+                inputs.Add(item);
+                if (!_factory.Apply(AssemblyRules.OperationFor(kind), inputs, NoParams).Ok)
+                    return CookOutcome.SimRefused;
+            }
             contents.Add(new AssemblyEntry(item, color));
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
@@ -120,6 +134,17 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public CookOutcome TryTakeFromStation(int stationIndex, StationKind kind, out Item result, out byte color)
         {
+            CookOutcome outcome = TryPreviewTake(stationIndex, kind, out result, out color);
+            if (outcome == CookOutcome.Ok) ClearStation(stationIndex);
+            return outcome;
+        }
+
+        /// <summary>
+        /// What "take" would produce, without changing the station. The caller hands the result over
+        /// first and then calls <see cref="ClearStation"/>, so a failed hand-over loses nothing.
+        /// </summary>
+        public CookOutcome TryPreviewTake(int stationIndex, StationKind kind, out Item result, out byte color)
+        {
             result = null;
             color = 0;
             if (!AssemblyRules.IsAssembly(kind)) return CookOutcome.InvalidOption;
@@ -130,7 +155,6 @@ namespace Worktown.Game.Cooking
             if (kind == StationKind.Bowl && contents.Count == 1)
             {
                 result = contents[0].Item;
-                contents.Clear();
                 return CookOutcome.Ok;
             }
 
@@ -139,8 +163,12 @@ namespace Worktown.Game.Cooking
             OperationResult combined = _factory.Apply(AssemblyRules.OperationFor(kind), inputs, NoParams);
             if (!combined.Ok || combined.Item == null) return CookOutcome.SimRefused;
             result = combined.Item;
-            contents.Clear();
             return CookOutcome.Ok;
+        }
+
+        public void ClearStation(int stationIndex)
+        {
+            ContentsOf(stationIndex).Clear();
         }
 
         /// <summary>Display names of what is on the station, in order.</summary>

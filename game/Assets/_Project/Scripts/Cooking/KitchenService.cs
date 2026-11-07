@@ -44,12 +44,7 @@ namespace Worktown.Game.Cooking
             // old food entries must not attach to new objects (review finding, spec 007).
             if (args.ConnectionState == FishNet.Transporting.LocalConnectionState.Stopped
                 && !_networkManager.ServerManager.IsAnyServerStarted())
-            {
-                _kitchen.Clear();
-                foreach (Station station in _stations)
-                    if (station != null && station.TryGetComponent(out StationContents contents) && contents.IsSpawned)
-                        contents.ServerSet(System.Array.Empty<string>());
-            }
+                _kitchen.Clear(); // station labels reset with their SyncLists when FishNet despawns them
         }
 
         public CookOutcome TryUseStation(PickupInteractor player, int stationIndex, int option)
@@ -131,10 +126,12 @@ namespace Worktown.Game.Cooking
                 return CookOutcome.Ok;
             }
 
-            CookOutcome taken = _kitchen.TryTakeFromStation(station.Index, station.Kind, out Item result, out byte color);
+            // Hand the result over first, clear the station only on success (review finding).
+            CookOutcome taken = _kitchen.TryPreviewTake(station.Index, station.Kind, out Item result, out byte color);
             if (taken != CookOutcome.Ok) return taken;
-            if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index));
             if (!SpawnFoodInHands(player, result, color)) return CookOutcome.SimRefused;
+            _kitchen.ClearStation(station.Index);
+            if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index));
             Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result)
                 + " from " + station.DisplayName + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
             return CookOutcome.Ok;

@@ -92,6 +92,37 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void AddingThatTheSimCouldNotCombine_IsRefusedAtAdd_AndTheBowlStaysUsable()
+        {
+            // Review blocker: the sim flattens nested mixes, so a full 6-item mix plus one more item
+            // is 7 inputs. That must be refused while the item is still in hand.
+            var kitchen = KitchenState.CreateDemo();
+            for (int i = 0; i < CookingLimits.MaxMixInputs; i++)
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(TomatoSlices(kitchen), Bowl, StationKind.Bowl, 2));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item fullMix, out _));
+            kitchen.Register(700, fullMix);
+
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToStation(700, Bowl, StationKind.Bowl, 2), "a single mix goes in");
+            int extra = TomatoSlices(kitchen);
+            Assert.AreEqual(CookOutcome.SimRefused, kitchen.TryAddToStation(extra, Bowl, StationKind.Bowl, 2));
+            Assert.IsTrue(kitchen.TryGet(extra, out _), "the refused item stays in hand");
+
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromStation(Bowl, StationKind.Bowl, out Item back, out _));
+            Assert.AreEqual(fullMix.Hash, back.Hash, "the bowl is not locked");
+        }
+
+        [Test]
+        public void PreviewTake_DoesNotEmptyTheStation()
+        {
+            var kitchen = KitchenState.CreateDemo();
+            kitchen.TryAddToStation(GoldenFries(kitchen), Table, StationKind.PlatingTable, 0);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTake(Table, StationKind.PlatingTable, out _, out _));
+            Assert.AreEqual(1, kitchen.NamesOnStation(Table).Count);
+            kitchen.ClearStation(Table);
+            Assert.AreEqual(0, kitchen.NamesOnStation(Table).Count);
+        }
+
+        [Test]
         public void EmptyStation_IsRefused_AndOtherStationsAreNotAssemblies()
         {
             var kitchen = KitchenState.CreateDemo();
