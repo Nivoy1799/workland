@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using Worktown.Game.Art;
+using Worktown.Game.Player;
 
 namespace Worktown.Game.Editor
 {
@@ -20,6 +21,11 @@ namespace Worktown.Game.Editor
         private const string Commercial = "Assets/ThirdParty/Kenney/CityKitCommercial/";
         private const string Roads = "Assets/ThirdParty/Kenney/CityKitRoads/";
         private const string FoodKit = "Assets/ThirdParty/Kenney/FoodKit/";
+        private const string MiniCharacters = "Assets/ThirdParty/Kenney/MiniCharacters/";
+        /// <summary>Spec 024: every character plays the clips of this file (all six share one rig and bone names).</summary>
+        public const string CharacterClipSource = MiniCharacters + "character-male-a.fbx";
+        /// <summary>Spec 024: character height in m.</summary>
+        public const float CharacterHeight = 1.8f;
         /// <summary>Spec 017: white material for the generic food pieces; FoodVisual tints them per ingredient.</summary>
         public const string FoodPieceMaterialPath = GrayboxSceneBuilder.Root + "/Art/FoodPiece.mat";
 
@@ -29,7 +35,7 @@ namespace Worktown.Game.Editor
         /// <summary>Kenney furniture fronts face +Z; stations face the spawn at -Z.</summary>
         private const float StationYaw = 180f;
 
-        private enum Fit { Station, Height, Scale, Max, Unit }
+        private enum Fit { Station, Height, Scale, Max, Unit, Character }
 
         private sealed class Def
         {
@@ -95,8 +101,19 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, Value = 0.3f, AlongZ = true },
 
             // Spec 023: the cabinet squeezed into a 1 x 1 x 1 m box; the scene builder scales the instance to each worktop.
-            new Def { Key = ArtKey.Worktop, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Unit, Yaw = StationYaw }
+            new Def { Key = ArtKey.Worktop, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Unit, Yaw = StationYaw },
+
+            // Spec 024: Kenney Mini Characters, 1.8 m, facing +Z (feet and the right arm at +X checked in the import).
+            Character(ArtKey.CharacterMaleA, "character-male-a.fbx"),
+            Character(ArtKey.CharacterFemaleA, "character-female-a.fbx"),
+            Character(ArtKey.CharacterMaleB, "character-male-b.fbx"),
+            Character(ArtKey.CharacterMaleC, "character-male-c.fbx"),
+            Character(ArtKey.CharacterFemaleB, "character-female-b.fbx"),
+            Character(ArtKey.CharacterFemaleC, "character-female-c.fbx")
         };
+
+        private static Def Character(ArtKey key, string model) =>
+            new Def { Key = key, Model = MiniCharacters + model, Mode = Fit.Character, Value = CharacterHeight };
 
         private static Def FoodDef(ArtKey key, string model, float maxSize) =>
             new Def { Key = key, Model = FoodKit + model, Mode = Fit.Max, Value = maxSize };
@@ -145,6 +162,7 @@ namespace Worktown.Game.Editor
         private static GameObject BuildWrapper(Def def)
         {
             var root = new GameObject("Art_" + def.Key);
+            if (def.Mode == Fit.Character) ConfigureCharacterImport(def.Model);
             GameObject model = def.Primitive.HasValue
                 ? CreatePiece(def.Primitive.Value, root.transform)
                 : InstantiateModel(def.Model, root.transform, "Model");
@@ -197,6 +215,15 @@ namespace Worktown.Game.Editor
                     if (def.Key.ToString().StartsWith("Tool")) Debug.Log("[Art] " + def.Key + " size " + WorldBounds(model).size.ToString("F3"));
                     break;
                 }
+                case Fit.Character:
+                {
+                    Bounds b = WorldBounds(model);
+                    model.transform.localScale = Vector3.one * (def.Value / b.size.y);
+                    CenterOnBottom(model);
+                    ConfigureAnimator(model);
+                    AddHandAnchor(model, def.Key);
+                    break;
+                }
                 default:
                     model.transform.localScale = def.ScaleXyz != Vector3.zero ? def.ScaleXyz : Vector3.one * def.Value;
                     if (def.Primitive.HasValue) CenterOnBottom(model);
@@ -219,6 +246,113 @@ namespace Worktown.Game.Editor
                 || instance.GetComponentsInChildren<MonoBehaviour>(true).Length > 0)
                 throw new InvalidOperationException(path + " imports with a collider or script; disable it in the importer");
             return instance;
+        }
+
+        /// <summary>
+        /// Spec 024: the character FBX files import as a Generic rig with an avatar of their own, so the instance gets an
+        /// Animator (the pack ships without .meta files; the default is no avatar and no Animator). Clip settings stay
+        /// at the import defaults: CharacterVisual loops the clips itself.
+        /// </summary>
+        private static void ConfigureCharacterImport(string path)
+        {
+            if (!(AssetImporter.GetAtPath(path) is ModelImporter importer)) throw new InvalidOperationException("Pack model missing: " + path);
+            bool changed = false;
+            if (importer.animationType != ModelImporterAnimationType.Generic)
+            {
+                importer.animationType = ModelImporterAnimationType.Generic;
+                changed = true;
+            }
+            if (importer.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel)
+            {
+                importer.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+                changed = true;
+            }
+            if (importer.addCollider)
+            {
+                importer.addCollider = false;
+                changed = true;
+            }
+            if (changed) importer.SaveAndReimport();
+        }
+
+        /// <summary>Spec 024: no controller (CharacterVisual plays the clips), no root motion, animate when only the shadow is drawn.</summary>
+        private static void ConfigureAnimator(GameObject model)
+        {
+            Animator animator = model.GetComponent<Animator>();
+            if (animator == null) animator = model.AddComponent<Animator>();
+            animator.runtimeAnimatorController = null;
+            animator.applyRootMotion = false;
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        }
+
+        /// <summary>
+        /// Spec 024: an empty <see cref="CharacterVisual.HandName"/> under the right arm bone at the end of the arm, where
+        /// carried items are drawn. All six characters share one rig, so the point is measured once on the plain arm of
+        /// <see cref="CharacterClipSource"/> (female-a has something extra on her right arm that would push it outwards).
+        /// </summary>
+        private static void AddHandAnchor(GameObject model, ArtKey key)
+        {
+            Transform arm = FindDeep(model.transform, CharacterVisual.RightArmBone);
+            if (arm == null) throw new InvalidOperationException(key + ": no bone " + CharacterVisual.RightArmBone);
+            var hand = new GameObject(CharacterVisual.HandName);
+            hand.transform.SetParent(arm, false);
+            hand.transform.localPosition = HandInBoneSpace();
+            Bounds b = WorldBounds(model);
+            Debug.Log("[Art] " + key + " height " + b.size.y.ToString("F2") + " m, hand at " + hand.transform.position.ToString("F2")
+                      + " (bone space " + hand.transform.localPosition.ToString("F3") + ")");
+        }
+
+        /// <summary>
+        /// Spec 024: the end of the right arm in bone space: the centre of the arm vertices in the outer 20 % of its reach
+        /// (bind pose, so it holds in every animated pose).
+        /// </summary>
+        private static Vector3 HandInBoneSpace()
+        {
+            var reference = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(CharacterClipSource));
+            try
+            {
+                Transform arm = FindDeep(reference.transform, CharacterVisual.RightArmBone);
+                var points = new List<Vector3>();
+                foreach (SkinnedMeshRenderer skin in reference.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                {
+                    int bone = Array.IndexOf(skin.bones, arm);
+                    if (bone < 0 || skin.sharedMesh == null) continue;
+                    Vector3[] vertices = skin.sharedMesh.vertices;
+                    BoneWeight[] weights = skin.sharedMesh.boneWeights;
+                    Matrix4x4 bind = skin.sharedMesh.bindposes[bone];
+                    for (int v = 0; v < vertices.Length && v < weights.Length; v++)
+                        if (weights[v].boneIndex0 == bone && weights[v].weight0 >= 0.5f) points.Add(bind.MultiplyPoint3x4(vertices[v]));
+                }
+                if (points.Count == 0) throw new InvalidOperationException(CharacterClipSource + ": no vertices on " + CharacterVisual.RightArmBone);
+                float reach = 0f;
+                foreach (Vector3 p in points) reach = Mathf.Max(reach, p.magnitude);
+                Vector3 sum = Vector3.zero;
+                int count = 0;
+                foreach (Vector3 p in points)
+                {
+                    if (p.magnitude < reach * 0.8f) continue;
+                    sum += p;
+                    count++;
+                }
+                return sum / count;
+            }
+            finally { UnityEngine.Object.DestroyImmediate(reference); }
+        }
+
+        /// <summary>Spec 024: the clip of that name from <see cref="CharacterClipSource"/>.</summary>
+        public static AnimationClip CharacterClip(string name)
+        {
+            foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(CharacterClipSource))
+                if (asset is AnimationClip clip && clip.name == name) return clip;
+            throw new InvalidOperationException("Clip " + name + " missing in " + CharacterClipSource);
+        }
+
+        /// <summary>Spec 024: first transform of that name under <paramref name="parent"/> (inactive ones included).</summary>
+        public static Transform FindDeep(Transform parent, string name)
+        {
+            foreach (Transform t in parent.GetComponentsInChildren<Transform>(true))
+                if (t.name == name) return t;
+            return null;
         }
 
         /// <summary>Spec 017: a generic food piece from a Unity primitive, without its collider, white material.</summary>

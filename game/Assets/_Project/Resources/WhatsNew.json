@@ -281,6 +281,24 @@
         "Walk away from the stove: the sounds get quieter, nothing is too loud",
         "Aim at a worktop and at something out of reach: the prompt is readable, the grey reason stays grey"
       ]
+    },
+    {
+      "id": "2026-11-08-spec-024",
+      "date": "2026-11-08",
+      "title": "People instead of capsules",
+      "items": [
+        "Players and customers are low-poly people (Kenney Mini Characters) with idle, walk, run and crouch animations",
+        "What you carry is in your right hand for everyone else (and for you in third person), not above your head",
+        "Customers are four different people, lightly tinted by what they want",
+        "First person is unchanged: you see your shadow and the item in view, not your own body"
+      ],
+      "test": [
+        "Two players: walk, sprint and crouch in front of each other; the other one walks, runs and crouches",
+        "Pick up a potato, a plate and the pan: the other player sees it in your hand, nothing floats",
+        "Third person (V): your own person holds the item; first person: the item is in view as before",
+        "Customers at the counter are people, the order text is still above their heads",
+        "Send an emote (G): the bubble is above the head and the person wobbles"
+      ]
     }
   ]
 }

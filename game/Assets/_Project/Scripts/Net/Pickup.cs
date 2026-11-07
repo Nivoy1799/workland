@@ -1,7 +1,10 @@
+using System.Collections.Generic;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Worktown.Game.Net.Rules;
+using Worktown.Game.Player;
 
 namespace Worktown.Game.Net
 {
@@ -12,6 +15,10 @@ namespace Worktown.Game.Net
     /// While held, the holder OWNS this object (PickupService gives ownership so the client can
     /// find its held cube). Do not add [ServerRpc] methods here without RequireOwnership = false
     /// plus explicit server checks: the holder could otherwise call them.
+    /// Spec 024, client side only: while held, every client draws the item's visual children at the holder's right hand
+    /// (<see cref="CharacterVisual.Hand"/>) for the duration of each camera render and puts them back afterwards, so the
+    /// networked transform, the server hold point above the head and every rule stay unchanged. Your own item in first
+    /// person is left to <see cref="HeldItemView"/>.
     /// </summary>
     public sealed class Pickup : NetworkBehaviour
     {
@@ -27,6 +34,19 @@ namespace Worktown.Game.Net
         // Spec 020: how the item lies when it is put down, without its yaw (a knife lies flat on its side).
         private Quaternion _restTilt = Quaternion.identity;
         private Collider _collider;
+
+        // Spec 024, client only: the visual in the holder's hand.
+        /// <summary>m, in the holder's yaw frame: a little in front of the hand anchor, so the item sits in the fingers.</summary>
+        private static readonly Vector3 HandOffset = new Vector3(0f, -0.02f, 0.06f);
+        private const float HolderLookupSeconds = 0.5f;
+        private CharacterVisual _handHolder;
+        private int _handHolderId = PickupRegistry.NoHolder;
+        private float _nextHolderLookup;
+        private bool _handHooked;
+        private bool _inHand;
+        private readonly List<Transform> _handMoved = new List<Transform>();
+        private readonly List<Vector3> _handPositions = new List<Vector3>();
+        private readonly List<Quaternion> _handRotations = new List<Quaternion>();
 
         public bool IsHeld => HolderClientId.Value != PickupRegistry.NoHolder;
 
@@ -63,6 +83,104 @@ namespace Worktown.Game.Net
         {
             if (TimeManager != null)
                 TimeManager.OnPostTick -= OnPostTick;
+            UnhookHand();
+        }
+
+        private void OnDestroy()
+        {
+            UnhookHand();
+        }
+
+        /// <summary>Spec 024, client: find the holder's character and decide whether this frame draws the item in its hand.</summary>
+        private void LateUpdate()
+        {
+            int holder = HolderClientId.Value;
+            if (!IsClientInitialized || holder == PickupRegistry.NoHolder)
+            {
+                _handHolder = null;
+                _handHolderId = PickupRegistry.NoHolder;
+                UnhookHand();
+                return;
+            }
+            if (holder != _handHolderId)
+            {
+                _handHolderId = holder;
+                _handHolder = null;
+                _nextHolderLookup = 0f;
+            }
+            if (_handHolder == null && Time.unscaledTime >= _nextHolderLookup)
+            {
+                // A late joiner may see the item before the holder's player object: try again shortly.
+                _handHolder = CharacterVisual.FindPlayer(holder);
+                _nextHolderLookup = Time.unscaledTime + HolderLookupSeconds;
+            }
+            if (_handHolder == null || _handHolder.OwnerId != holder)
+            {
+                _handHolder = null;
+                UnhookHand();
+                return;
+            }
+            _handHolder.MarkHolding();
+            if (_handHolder.DrawsHeldInHand && _handHolder.Hand != null) HookHand();
+            else UnhookHand();
+        }
+
+        private void HookHand()
+        {
+            if (_handHooked) return;
+            _handHooked = true;
+            RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
+            RenderPipelineManager.endCameraRendering += OnEndCameraRendering;
+        }
+
+        private void UnhookHand()
+        {
+            RestoreFromHand();
+            if (!_handHooked) return;
+            _handHooked = false;
+            RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
+            RenderPipelineManager.endCameraRendering -= OnEndCameraRendering;
+        }
+
+        private void OnBeginCameraRendering(ScriptableRenderContext context, Camera cam)
+        {
+            RestoreFromHand();
+            if (_handHolder == null) return;
+            Transform hand = _handHolder.Hand;
+            if (hand == null) return;
+
+            // The visual children (model, food visual, fallback cube); labels stay where they are. An item without
+            // children (the spec 003 cube) moves as a whole.
+            foreach (Transform child in transform)
+                if (!child.TryGetComponent(out TextMesh _)) _handMoved.Add(child);
+            if (_handMoved.Count == 0) _handMoved.Add(transform);
+
+            Quaternion frame = Quaternion.Euler(0f, _handHolder.Yaw, 0f);
+            Vector3 origin = hand.position + frame * HandOffset;
+            foreach (Transform moved in _handMoved)
+            {
+                _handPositions.Add(moved.localPosition);
+                _handRotations.Add(moved.localRotation);
+                if (moved == transform) moved.SetPositionAndRotation(origin, frame);
+                else moved.SetPositionAndRotation(origin + frame * moved.localPosition, frame * moved.localRotation);
+            }
+            _inHand = true;
+        }
+
+        private void OnEndCameraRendering(ScriptableRenderContext context, Camera cam)
+        {
+            RestoreFromHand();
+        }
+
+        private void RestoreFromHand()
+        {
+            if (!_inHand) return;
+            for (int i = 0; i < _handMoved.Count; i++)
+                if (_handMoved[i] != null) _handMoved[i].SetLocalPositionAndRotation(_handPositions[i], _handRotations[i]);
+            _handMoved.Clear();
+            _handPositions.Clear();
+            _handRotations.Clear();
+            _inHand = false;
         }
 
         /// <summary>Server: attach to a holder after the registry accepted the claim.</summary>
