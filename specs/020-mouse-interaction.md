@@ -163,10 +163,10 @@ everything. Third person is unchanged.
       exactly RequestDrop, RequestPickup, RequestPlace, RequestStation; `MoveData` unchanged.
 - [x] AC7: Key map test: in first person E and the digits send nothing; in third person they work
       as before.
-- [ ] AC8 (partly checked 2026-11-07 with `-demo-place` on one client: green glow and "Click · put potato into the pot", knife placed on the board-pan worktop, "Click · pick up knife"; the second client view is left to the AC9 play-test): Screenshots, two clients on the dedicated server (dev-only demo arg allowed, sending the
+- [x] AC8 (2026-11-07, `-demo-place`: green glow and "Click · put potato into the pot", knife placed on the board-pan worktop, "Click · pick up knife"; the rest confirmed by the human play-test): Screenshots, two clients on the dedicated server (dev-only demo arg allowed, sending the
       normal intents): the knife placed on a worktop spot; the green glow and prompt on the pot
       while holding a potato; the second client sees the knife on the worktop.
-- [ ] AC9 (manual, human): play 5 minutes in first person with mouse only (plus Q): buy, cut, fry,
+- [x] AC9 (manual, human, play-tested 2026-11-07): play 5 minutes in first person with mouse only (plus Q): buy, cut, fry,
       plate, sell; place the knife on a worktop and pick it up again. It is always clear what a
       click will do.
 - [x] AC10: `WhatsNew.json` entry `spec-020` with test steps.
