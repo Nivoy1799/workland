@@ -166,6 +166,8 @@ namespace Worktown.Game.Cooking
             float quality = KitchenState.QualityOf(item);
             string stars = StarRating.Format(StarRating.Stars(quality));
             string entry;
+            string soldMarket = null;
+            long soldPayout = 0;
 
             if (_economy != null)
             {
@@ -178,7 +180,11 @@ namespace Worktown.Game.Cooking
                     return CookOutcome.CannotSell;
                 }
                 string where = sale.Channel == SaleChannel.NpcDemand ? sale.MarketId : "wholesaler";
-                if (sale.Channel == SaleChannel.NpcDemand && _customers != null) _customers.OnSale(sale.MarketId, sale.Payout);
+                if (sale.Channel == SaleChannel.NpcDemand)
+                {
+                    soldMarket = sale.MarketId;
+                    soldPayout = sale.Payout;
+                }
                 entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
                     + EconomyRules.Money(sale.Payout) + " (" + where + ")";
                 Debug.Log("[Economy] player " + player.OwnerId + " sold " + name + " for " + EconomyRules.Money(sale.Payout)
@@ -194,6 +200,14 @@ namespace Worktown.Game.Cooking
             _pickups.TakeAway(player, out _);
             _networkManager.ServerManager.Despawn(held);
             if (_feed != null) _feed.ServerAdd(entry);
+
+            // Spec 014, after the sale is complete: customers are display only and must never be able
+            // to break the money transaction (review blocker).
+            if (soldMarket != null && _customers != null)
+            {
+                try { _customers.OnSale(soldMarket, soldPayout); }
+                catch (System.Exception e) { Debug.LogException(e); }
+            }
             return CookOutcome.Ok;
         }
     }

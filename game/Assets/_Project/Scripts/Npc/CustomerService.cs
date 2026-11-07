@@ -65,7 +65,7 @@ namespace Worktown.Game.Npc
         {
             if (!_queue.TryServe(market, out QueuedCustomer served)) return;
             if (_customers.TryGetValue(served.Id, out Customer customer))
-                customer.ServerLeave("Thanks! " + EconomyRules.Money(payout), _entry.position, OnExited);
+                customer.ServerLeave("Thanks! +" + EconomyRules.Money(payout), _entry.position, OnExited);
             Debug.Log("[Customers] a " + served.Wish + " customer got their " + market + " (" + EconomyRules.Money(payout) + ")");
             Sync();
         }
@@ -81,15 +81,21 @@ namespace Worktown.Game.Npc
                 if (_customers.TryGetValue(gone.Id, out Customer customer))
                     customer.ServerLeave("Too slow...", _entry.position, OnExited);
 
+            // At most MaxVisible customer objects exist at once, including those still walking out;
+            // the rest join when someone has left (OnExited syncs again). Review finding.
+            int free = CustomerRules.MaxVisible - _customers.Count;
+            int spawned = 0;
             foreach (string wish in _joining)
             {
+                if (spawned >= free) break;
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_customerPrefab, true);
                 nob.transform.SetPositionAndRotation(_entry.position, _entry.rotation);
-                _networkManager.ServerManager.Spawn(nob);
                 var customer = nob.GetComponent<Customer>();
+                customer.ServerInit(wish, _entry.position); // before Spawn: values go out with the spawn
+                _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;
                 _queue.Add(nob.ObjectId, wish);
-                customer.ServerInit(wish, _entry.position);
+                spawned++;
             }
 
             IReadOnlyList<QueuedCustomer> entries = _queue.Entries;
@@ -97,15 +103,16 @@ namespace Worktown.Game.Npc
                 if (_customers.TryGetValue(entries[i].Id, out Customer customer))
                     customer.ServerSetTarget(CustomerRules.QueueSlot(_queueHead.position, _queueDirection, i));
 
-            if (_leaving.Count > 0 || _joining.Count > 0)
-                Debug.Log("[Customers] queue " + entries.Count + ": " + _joining.Count + " walking in, "
-                    + _leaving.Count + " left unserved");
+            if (_leaving.Count > 0 || spawned > 0)
+                Debug.Log("[Customers] queue " + entries.Count + ": " + spawned + " walking in, "
+                    + _leaving.Count + " left unserved" + (spawned < _joining.Count ? ", " + (_joining.Count - spawned) + " waiting for room" : string.Empty));
         }
 
         private void OnExited(Customer customer)
         {
             _customers.Remove(customer.ObjectId);
             if (customer.IsSpawned) _networkManager.ServerManager.Despawn(customer.NetworkObject);
+            Sync(); // room for a waiting customer
         }
     }
 }

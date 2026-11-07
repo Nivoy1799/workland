@@ -78,6 +78,11 @@ Only `game/` (branch stacked on `spec/013-plating-and-mixing`).
 - Approve, answer the open questions, sell a few dishes and watch the queue.
 
 ## Implementation notes
+- Review 2026-11-07 (blocker fixed): customers are told about a sale only after the sale is complete
+  (wallet, food removed, feed), inside try/catch; the hourly event runs last and isolated. At most 6
+  customer objects exist including those walking out; waiting customers join when someone has left.
+  Bubble and color are set before spawn. Bubble says "Thanks! +$X". Station material color changes
+  are intended (the builder sets the station colors).
 Built 2026-11-07 on `spec/014-npc-customers` (stacked on spec 013).
 - AC1: `CustomerTests` (desired wishes follow demand, caps and order; reconcile keeps matching,
   removes extra, adds missing; serve prefers the matching wish; slots 1 m apart).
