@@ -130,27 +130,27 @@ decides the outcome.
   them). Others still see them.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes (Unity EditMode, check-assets).
-- [ ] AC2: `ViewRules` tests: toggle flips the mode; pitch clamps to -80 .. 80; the start mode
+- [x] AC1: `bash scripts/verify.sh` passes (Unity EditMode, check-assets).
+- [x] AC2: `ViewRules` tests: toggle flips the mode; pitch clamps to -80 .. 80; the start mode
       prefers the launch arg, then the saved mode, then first person.
-- [ ] AC3: `MovementRules.FacingYaw` tests: first person returns the camera yaw (also when moving
+- [x] AC3: `MovementRules.FacingYaw` tests: first person returns the camera yaw (also when moving
       backwards or sideways, and when not moving); third person matches `TurnTowards`; a NaN or
       huge camera yaw is sanitized.
-- [ ] AC4: `AimRules.Pick` tests: closest hit wins; a wall in front of a station gives no target; a
+- [x] AC4: `AimRules.Pick` tests: closest hit wins; a wall in front of a station gives no target; a
       station or pickup outside 2.5 m of the player gives no target; a pickup behind a station gives
       the station; no hits gives no target.
-- [ ] AC5: `LaunchArgs` tests: `-view first` and `-view third` parse; an unknown value is an error
+- [x] AC5: `LaunchArgs` tests: `-view first` and `-view third` parse; an unknown value is an error
       like the other args; no `-view` leaves it unset.
-- [ ] AC6: Reflection test: no ServerRpc gained a parameter (`RpcSurfaceTests` green) and `MoveData`
+- [x] AC6: Reflection test: no ServerRpc gained a parameter (`RpcSurfaceTests` green) and `MoveData`
       has exactly one new field, a bool named `FirstPerson`.
-- [ ] AC7: Two clients on the dedicated server, screenshots like specs 012 to 017: client A in first
+- [ ] AC7 (partly checked 2026-11-07: dot shown in first person, client B sees A turned to its camera yaw, no exceptions; aiming at the board, held food and V switch are left to the AC8 play-test because batch clients get no input): Two clients on the dedicated server, screenshots like specs 012 to 017: client A in first
       person looking at the board shows the dot and the board prompt; client B in third person sees
       client A's body facing where A looks; A holding a potato sees it in the lower right; after V,
       A's view is third person with the same yaw.
 - [ ] AC8 (manual, human): play 5 minutes in first person: walk, strafe, jump, cut a potato, fry
       it, plate it, serve it, all by looking at the stations. Switch with V a few times. Nothing
       clips badly, the mouse feels right.
-- [ ] AC9: `WhatsNew.json` entry `spec-018` with test steps.
+- [x] AC9: `WhatsNew.json` entry `spec-018` with test steps.
 
 ## Test plan
 - EditMode: `ViewRulesTests`, `FacingYawTests` (or added to `MovementRulesTests`), `AimRulesTests`,
@@ -177,6 +177,55 @@ decides the outcome.
 - Play-test AC8.
 
 ## Implementation notes
-(Builder fills this in.)
+- Built: `Player/ViewMode.cs`, `ViewRules.cs` (toggle, pitch clamp, start mode, `-view` parse, saved value,
+  eye height; constants: eyes 1.6 m / 1.0 m crouched, 0.1 m forward, FOV 70, pitch -80..80, near clip 0.05,
+  aim 3 m, blend 0.2 s, view hold (0.35, -0.3, 0.55)), `FirstPersonBody.cs`, `HeldItemView.cs`;
+  `Net/Rules/AimRules.cs` plus two small data types `AimKind.cs` and `AimHit.cs` (one public type per file,
+  same folder). Changed: `PlayerCameraRig`, `PlayerInputReader` (`ConsumeToggleView`: V / right stick press,
+  ignored while UI open, wheel open, T, G or LB held), `MovementRules.FacingYaw`, `PlayerController`,
+  `PickupInteractor`, `LaunchArgs` (`-view first|third`, bad or missing value = error), `HudView`,
+  `GrayboxSceneBuilder`, `WhatsNew.json`. Not changed: `NetBootstrap` (the rig reads `NetBootstrap.Args.View`
+  at bind time), `SocialInteractor` (the ping already aims through the camera centre).
+- Tests: `ViewRulesTests`, `FacingYawTests`, `AimRulesTests`, `LaunchArgsTests` (+3 tests: parse, unset, bad value),
+  `MoveDataSurfaceTests` (MoveData has exactly Move, CameraYaw, Sprint, Crouch, Jump, FirstPerson, _tick;
+  FirstPerson is a public bool; the three interactor ServerRpcs keep 1 / 0 / 2 parameters and there is no
+  new one). EditMode 288/288 (60 new), `scripts/verify.sh` PASS.
+- Movement: `MoveData.FirstPerson` is filled from `PlayerCameraRig.IsFirstPerson`; the replicate code calls
+  `FacingYaw(md.FirstPerson, _yaw, sanitizedCameraYaw, direction, delta)`, so replays use the same input.
+  The server still sanitizes the yaw; speed, reach and jump do not read the bool.
+- Cameras: the third-person camera keeps its rig (priority 11 before bind, so the menu view is unchanged);
+  new `FirstPersonCamera` with `CinemachineHardLockToTarget` (damping 0) on the player's `Eyes` and
+  `CinemachinePanTilt` in world axes, tilt range -80..80. The rig sets the live camera to priority 20, the
+  other to 10; the brain's default blend is EaseInOut 0.2 s. Both lenses use near clip 0.05 (the brain copies
+  the live lens to the main camera, so 0.05 on the main camera alone would be overwritten). Switching copies
+  orbit yaw to pan (tilt 0) and pan back to the orbit yaw. The mode is saved in PlayerPrefs `worktown.view`
+  only when the player toggles; `-view` itself is not saved.
+- `Eyes` sits in the smoothed `Graphic` (smooth view) and moves down to 1.0 m while crouched (in
+  `PlayerController.Update`, next to the body squash), otherwise the crouched view stayed at 1.6 m.
+- Deviation (small): the `ViewHold` anchor is a child of the Main Camera, not of the first-person
+  CinemachineCamera. The main camera is the one that renders, so the held food stays right during the
+  0.2 s blend into first person. `HeldItemView` places the food's visual children (the `Visual` with the
+  FoodVisual and the `Body` fallback cube, every child except the label) at the anchor in
+  `RenderPipelineManager.beginCameraRendering`, after network, smoother and Cinemachine moved everything,
+  so it does not trail. It restores their local pose in third person, on drop or when the food leaves the
+  hands. The held food's label is hidden while it is in view (it would float above your head).
+- Own body: body and nose are `ShadowsOnly` in first person; the emote bubble label renderer is disabled
+  (others still see both). Only the owner activates `FirstPersonBody` and `HeldItemView`.
+- Aim: one `RaycastNonAlloc` per frame (16 hits, triggers and own colliders ignored), each hit classified
+  as station (`GetComponentInParent<Station>`), free pickup, or other, then `AimRules.Pick`. In first
+  person: station target gets E / digits as before; empty hands + pickup target = pick up; holding = drop
+  (also when looking at a pickup, prompt "E · drop"); nothing = note "nothing to use here". Third person is
+  unchanged (nearest station, 4 m pickup search). `Target` is a `Component` (Station, Pickup or null);
+  `NearestStation` is now `Target as Station`.
+- HUD: 4 px dot (white 55 %, yellow when on a target), under it the station's full `Prompt` (it already
+  contains the keys), "E · pick up <name>" or "E · drop". The bottom prompt box is hidden in first person.
+  Styled inline in `HudView` (the .uss is outside scope).
+- Visual check in the screenshot run: the held food position (0.35, -0.3, 0.55) and its size at FOV 70
+  (a full plate is 0.35 m wide and may look big), the dot and prompt size, the eye height 1.6 m against
+  the 1 m stations, and whether a station's world label (about 1.6 m high) gets in the way at close range.
+- Known limits: a held spec 003 `PickupCube` has no visual child, so it stays above the head in first
+  person (only food moves into view). Mouse sensitivity is the same 0.12 deg per count in both views.
+- Batch rebuild: `DefaultPrefabObjects.asset` changed only in order and was reverted; the usual FishNet
+  "same assetPath hash of 0" errors appeared during prefab saves.
 
 ## Blockers

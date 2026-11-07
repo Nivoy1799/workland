@@ -5,6 +5,7 @@ using UnityEngine.UIElements;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Game.Net;
+using Worktown.Game.Player;
 using Worktown.Game.Social;
 
 namespace Worktown.Game.UI
@@ -30,6 +31,13 @@ namespace Worktown.Game.UI
         private VisualElement _heldBox;
         private Label _held;
         private VisualElement _toasts;
+        // Spec 018: first-person crosshair dot and the prompt under it.
+        private const float CrosshairSize = 4f;
+        private static readonly Color CrosshairIdle = new Color(1f, 1f, 1f, 0.55f);
+        private static readonly Color CrosshairOnTarget = new Color(1f, 0.85f, 0.3f, 1f);
+        private VisualElement _crosshair;
+        private Label _aimPrompt;
+        private PlayerInputReader _input;
         private readonly List<(VisualElement element, float until)> _activeToasts = new List<(VisualElement, float)>();
 
         private int _lastResultVersion = -1;
@@ -63,6 +71,8 @@ namespace Worktown.Game.UI
             _toasts = new VisualElement { pickingMode = PickingMode.Ignore };
             _toasts.AddToClassList("toast-column");
             _root.Add(_toasts);
+
+            CreateCrosshair(); // spec 018
 
             documentRoot.Add(_root);
         }
@@ -98,11 +108,14 @@ namespace Worktown.Game.UI
             if (_board == null) _board = FindFirstObjectByType<MarketBoard>();
             _clock.text = _board != null && _board.IsSpawned ? _board.Clock.Value : string.Empty;
 
-            Station station = player.NearestStation;
-            Show(_promptBox, station != null);
-            if (station != null) _prompt.text = station.Prompt;
-
             Pickup held = player.FindHeldPickup();
+            Station station = player.NearestStation;
+            bool firstPerson = player.IsFirstPerson;
+            // Third person: the bottom prompt as before. First person: the dot and its prompt instead.
+            Show(_promptBox, !firstPerson && station != null);
+            if (!firstPerson && station != null) _prompt.text = station.Prompt;
+            UpdateCrosshair(player, firstPerson, held != null);
+
             Show(_heldBox, held != null);
             if (held != null)
                 _held.text = held.TryGetComponent(out Food food) ? food.Describe() : "Carrying a box";
@@ -110,6 +123,65 @@ namespace Worktown.Game.UI
             UpdateResultToast(player);
             UpdateFeedToast();
             ExpireToasts();
+        }
+
+        /// <summary>Spec 018: the centre dot and what E / the digits would do, first person only, hidden under menus.</summary>
+        private void UpdateCrosshair(PickupInteractor player, bool firstPerson, bool holding)
+        {
+            if (_input == null) _input = FindFirstObjectByType<PlayerInputReader>();
+            bool visible = firstPerson && (_input == null || !_input.IsUiOpen);
+            Show(_crosshair, visible);
+            Show(_aimPrompt, false);
+            if (!visible) return;
+
+            Component target = player.Target;
+            _crosshair.style.backgroundColor = target != null ? CrosshairOnTarget : CrosshairIdle;
+            string text = AimPromptText(target, holding);
+            if (text == null) return;
+            _aimPrompt.text = text;
+            Show(_aimPrompt, true);
+        }
+
+        private static string AimPromptText(Component target, bool holding)
+        {
+            if (target is Station station) return station.Prompt;
+            if (holding) return "E · drop";
+            if (target is Pickup pickup)
+                return "E · pick up " + (pickup.TryGetComponent(out Food food) && food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "box");
+            return null;
+        }
+
+        private void CreateCrosshair()
+        {
+            _crosshair = new VisualElement { name = "crosshair", pickingMode = PickingMode.Ignore };
+            IStyle dot = _crosshair.style;
+            dot.position = Position.Absolute;
+            dot.left = Length.Percent(50);
+            dot.top = Length.Percent(50);
+            dot.width = CrosshairSize;
+            dot.height = CrosshairSize;
+            dot.marginLeft = -CrosshairSize * 0.5f;
+            dot.marginTop = -CrosshairSize * 0.5f;
+            dot.borderTopLeftRadius = CrosshairSize * 0.5f;
+            dot.borderTopRightRadius = CrosshairSize * 0.5f;
+            dot.borderBottomLeftRadius = CrosshairSize * 0.5f;
+            dot.borderBottomRightRadius = CrosshairSize * 0.5f;
+            dot.backgroundColor = CrosshairIdle;
+            _root.Add(_crosshair);
+
+            _aimPrompt = new Label { name = "aim-prompt", pickingMode = PickingMode.Ignore };
+            IStyle prompt = _aimPrompt.style;
+            prompt.fontSize = 18;
+            prompt.position = Position.Absolute;
+            prompt.left = 0;
+            prompt.right = 0;
+            prompt.top = Length.Percent(50);
+            prompt.marginTop = 12;
+            prompt.unityTextAlign = TextAnchor.UpperCenter;
+            prompt.color = Color.white;
+            prompt.unityTextOutlineColor = new Color(0f, 0f, 0f, 0.85f);
+            prompt.unityTextOutlineWidth = 1f;
+            _root.Add(_aimPrompt);
         }
 
         private void UpdateResultToast(PickupInteractor player)

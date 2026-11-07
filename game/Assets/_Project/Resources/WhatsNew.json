@@ -154,6 +154,26 @@
         "Put fries and tomato slices on the plating table: both show on the plate, also after taking it",
         "Put food in the pan and switch it on: the other player sees it in the pan and it darkens"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-018",
+      "date": "2026-11-07",
+      "title": "First-person view",
+      "items": [
+        "You now see the town through your own eyes; V (or pressing the right stick) switches to the camera behind you and back",
+        "A small dot in the middle of the screen shows what you look at; E and 1-4 act on that station or food",
+        "The food you carry is shown in the lower right of your view",
+        "In first person your character faces where you look, so you can walk sideways and backwards",
+        "The game remembers the view you used last"
+      ],
+      "test": [
+        "Start the game: you look from your eyes and see a dot in the middle of the screen",
+        "Look at the board from close by: the dot lights up and the board's keys show under it",
+        "Look at the potato crate and press E: you hold a potato in the lower right of your view",
+        "Look at a wall or the floor and press E: you drop the potato",
+        "Press V: the camera moves behind you and looks the same way; press V again to go back",
+        "Ask another player: in first person your body turns to where you look"
+      ]
     }
   ]
 }

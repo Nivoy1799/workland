@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Worktown.Game.Player;
 
 namespace Worktown.Game.Net.Rules
 {
@@ -17,6 +18,8 @@ namespace Worktown.Game.Net.Rules
         public string SteamTarget { get; private set; } = string.Empty;
         /// <summary><c>-latency ms</c>: simulated latency for testing prediction (spec 010 AC2). 0 = off.</summary>
         public int LatencyMs { get; private set; }
+        /// <summary>Spec 018: <c>-view first|third</c>, the start view for screenshots and tests. Null = not given.</summary>
+        public ViewMode? View { get; private set; }
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -60,6 +63,12 @@ namespace Worktown.Game.Net.Rules
                         if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int latency) || latency < 0 || latency > 2000)
                             return Fail("-latency needs milliseconds 0..2000");
                         result.LatencyMs = latency;
+                        i++;
+                        break;
+                    case "-view":
+                        if (i + 1 >= args.Count || !ViewRules.TryParse(args[i + 1], out ViewMode view))
+                            return Fail("-view needs first or third");
+                        result.View = view;
                         i++;
                         break;
                 }
