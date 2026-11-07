@@ -100,7 +100,7 @@ the existing guards (UI open, T or G held) apply.
 - [x] AC4: Pot: boil after 300 sim s matches `Apply("boil", [food], {time 300})`.
 - [x] AC5: A reflection test over `Worktown.Game.Cooking` still finds no `float`, `double`,
       `string`, `long` or `Item` ServerRpc parameter.
-- [ ] AC6 (manual, human): two clients on the dedicated server: A puts potato sticks in the pan,
+- [x] AC6 (manual, human): two clients on the dedicated server: A puts potato sticks in the pan,
       B takes them out after about 25 s and sees "crispy fried potato sticks"; the label changed while cooking.
 - [x] AC7: `WhatsNew.json` has a spec-016 entry with these test steps.
 
