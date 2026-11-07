@@ -89,20 +89,20 @@ E put in / take out; 1/2 heat; 3 fry/saute. G (emote wheel) and T (quick chat) s
 the existing guards (UI open, T or G held) apply.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes with `UNITY_PATH` set (Unity EditMode tests run).
-- [ ] AC2: `CookingTimeTests`: at tick rate 30 and scale 6, 750 ticks give exactly 150 sim s;
+- [x] AC1: `bash scripts/verify.sh` passes with `UNITY_PATH` set (Unity EditMode tests run).
+- [x] AC2: `CookingTimeTests`: at tick rate 30 and scale 6, 750 ticks give exactly 150 sim s;
       9000 ticks on fry clamp to 600 s; fry taken out below 10 sim s is `TooShort`.
-- [ ] AC3: `HeatSessionTests`/`KitchenState` tests: food put in a pan at 190 C fry and taken out
+- [x] AC3: `HeatSessionTests`/`KitchenState` tests: food put in a pan at 190 C fry and taken out
       after 750 ticks has the same `Hash` as `ItemFactory.Apply("fry", [food], {temp 190, time 150})`
       built directly; `TooShort` returns the unchanged food with its original hash; a second item
       in a busy pan is `StationFull`; heat changes with food in the pan are `PanBusy`; heat stops
       at 120 and 220; saute mode produces a saute result.
-- [ ] AC4: Pot: boil after 300 sim s matches `Apply("boil", [food], {time 300})`.
-- [ ] AC5: A reflection test over `Worktown.Game.Cooking` still finds no `float`, `double`,
+- [x] AC4: Pot: boil after 300 sim s matches `Apply("boil", [food], {time 300})`.
+- [x] AC5: A reflection test over `Worktown.Game.Cooking` still finds no `float`, `double`,
       `string`, `long` or `Item` ServerRpc parameter.
 - [ ] AC6 (manual, human): two clients on the dedicated server: A puts potato sticks in the pan,
       B takes them out after about 25 s and sees "crispy fried potato sticks"; the label changed while cooking.
-- [ ] AC7: `WhatsNew.json` has a spec-016 entry with these test steps.
+- [x] AC7: `WhatsNew.json` has a spec-016 entry with these test steps.
 
 ## Test plan
 - Pure rules (`CookingTime`, `HeatSession`, `PanSettings`) and `KitchenState` carry the logic and
@@ -142,7 +142,7 @@ Built 2026-11-07 by the main session (Opus), branch `spec/016-cooking-time-and-h
   (light 180 C/40 s, golden 190/150, dark 200/400); the pinned fries hash is unchanged.
 - Verified: `verify.sh` PASS (Unity EditMode 186/186); scene regenerated; Linux server and Windows
   client built; a client on the WSL dedicated server shows the pan label "heat 6/11 · fry" (synced
-  from the server), no server exceptions. AC6 (two people cooking over time) is still manual.
+  from the server), no server exceptions. AC6 confirmed by the human on 2026-11-07 (two windows, host + client).
 - Review (reviewer subagent): approve with nits. Fixed: label refresh once per second or on change
   instead of every frame, cached station lookups, name read before despawn, one time-param helper,
   nullable pot temperature, `PanOptionCount`. Kept as is: E near the pan or pot always goes to the
