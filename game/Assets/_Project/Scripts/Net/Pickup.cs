@@ -23,6 +23,8 @@ namespace Worktown.Game.Net
 
         // Server only.
         private Transform _serverHoldPoint;
+        // Spec 020: how the item lies when it is put down, without its yaw (a knife lies flat on its side).
+        private Quaternion _restTilt = Quaternion.identity;
         private Collider _collider;
 
         public bool IsHeld => HolderClientId.Value != PickupRegistry.NoHolder;
@@ -44,6 +46,17 @@ namespace Worktown.Game.Net
             // position of this tick instead of trailing it by one.
             TimeManager.OnPostTick += OnPostTick;
         }
+
+        public override void OnStartServer()
+        {
+            base.OnStartServer();
+            // Spec 020: scene objects and server-spawned items (a respawned knife, food made in the hands) start in
+            // their resting pose; keep its tilt for every later drop or place.
+            _restTilt = PlaceSpots.TiltOf(transform.rotation);
+        }
+
+        /// <summary>Spec 020, server: the item's resting tilt (rotation without yaw), captured when the server starts it.</summary>
+        internal Quaternion RestTilt => _restTilt;
 
         public override void OnStopNetwork()
         {
@@ -73,9 +86,32 @@ namespace Worktown.Game.Net
             Vector3 atFeet = holderPosition;
             atFeet.y = RestHeight;
 
-            transform.SetPositionAndRotation(IsFree(inFront) ? inFront : atFeet, Quaternion.identity);
+            // Spec 020: lies the way it rests (a knife flat), yaw reset as before.
+            transform.SetPositionAndRotation(IsFree(inFront) ? inFront : atFeet, PlaceSpots.RestRotation(_restTilt, Quaternion.identity));
             _serverHoldPoint = null;
             HolderClientId.Value = PickupRegistry.NoHolder;
+        }
+
+        /// <summary>
+        /// Spec 020, server only: put the held item down exactly here (a place spot the server chose), e.g. its
+        /// bottom on a worktop. No free-space fallback: PickupService checked the spot.
+        /// </summary>
+        internal void ServerPlaceAt(Vector3 position, Quaternion rotation)
+        {
+            transform.SetPositionAndRotation(position, rotation);
+            _serverHoldPoint = null;
+            HolderClientId.Value = PickupRegistry.NoHolder;
+        }
+
+        /// <summary>Spec 020: height from the bottom of the item's collider to its pivot, so it rests on a surface.</summary>
+        internal float BottomOffset
+        {
+            get
+            {
+                if (_collider is BoxCollider box)
+                    return (box.size.y * 0.5f - box.center.y) * transform.lossyScale.y;
+                return RestHeight;
+            }
         }
 
         private bool IsFree(Vector3 position)
