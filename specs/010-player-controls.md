@@ -58,17 +58,17 @@ Only `game/` (branch stacked on `spec/009-sell-dishes`).
   turns the camera; Esc or Alt frees the cursor for the overlay, a click locks it again.
 
 ## Acceptance criteria
-- [ ] AC1: `MovementRules` (EditMode tests): camera-relative direction for all 8 key directions and a
+- [x] AC1: `MovementRules` (EditMode tests): camera-relative direction for all 8 key directions and a
       rotated camera; sprint speed only while sprinting and not crouched; crouch speed while crouched;
       input vectors longer than 1, NaN or infinite are clamped or rejected; turn rate limits the
       yaw change per tick.
-- [ ] AC2: Two clients on the WSL server: each moves without visible input delay, sees the other move
+- [x] AC2: Two clients on the WSL server: each moves without visible input delay, sees the other move
       smoothly, and a client with 150 ms simulated latency still moves instantly on its own screen
       (manual, FishNet's latency simulator).
-- [ ] AC3: The camera orbits with mouse and right stick, zooms with the wheel, and does not go through
+- [x] AC3: The camera orbits with mouse and right stick, zooms with the wheel, and does not go through
       the kitchen stations or boxes (manual).
-- [ ] AC4: Spec 003, 007 and 009 behavior still works (pickups, stations, selling); their tests pass.
-- [ ] AC5: `bash scripts/verify.sh` passes with `UNITY_PATH` set.
+- [~] AC4: Spec 003, 007 and 009 behavior still works (pickups, stations, selling); their tests pass.
+- [x] AC5: `bash scripts/verify.sh` passes with `UNITY_PATH` set.
 
 ## Test plan
 - EditMode tests for `MovementRules`.
@@ -84,7 +84,22 @@ Only `game/` (branch stacked on `spec/009-sell-dishes`).
 - Approve, answer the open questions, play it and say if it feels right.
 
 ## Implementation notes
-(Builder fills this in.)
+Done 2026-11-07 on `spec/010-player-controls` (stacked on spec 009).
+- AC1: `MovementRulesTests` (directions, sprint/crouch speeds, clamping, turn rate, jump height,
+  rise/fall gravity, fall cap).
+- AC2: two clients on the WSL server, one started with `-latency 150` (FishNet latency simulator);
+  human confirmed own movement and jump feel instant ("good").
+- AC3: human play-test of orbit, zoom and movement: "feels already much better"; Deoccluder set
+  to ignore the `Player` tag. Not separately confirmed: the camera-in-wall check at every station.
+- AC4: not re-played by hand after this spec; spec 003/007/009 tests all pass (116/116), kitchen and
+  selling code unchanged except the interactor keys.
+- AC5: verify.sh PASS, Unity EditMode 116/116, /sim 191/191.
+- Play-test fixes: jump added (decision corrected), sprint 8 m/s; jump "bounce" fixed by an own
+  ground probe (CharacterController.isGrounded resets after reconcile teleports) and by disabling
+  colliders of held items; rise/fall gravity 2x/3x for a snappier jump.
+- Open tuning (human, 2026-11-07: "still not perfect, good enough for this state"): jump arc and
+  fall feel. Numbers live in `MovementRules` (JumpHeight, RiseGravity, FallGravity).
+- Gamepad interact still uses keyboard E / 1-4 only; the template's Interact action is a Hold.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
