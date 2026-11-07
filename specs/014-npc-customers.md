@@ -1,7 +1,7 @@
 ---
 id: 014
 title: Visible NPC customers at the counter
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -68,7 +68,7 @@ Only `game/` (branch stacked on `spec/013-plating-and-mixing`).
 - EditMode tests for the pure queue and rules.
 - Screenshots via `-screenshot` from a client near the counter; manual selling test.
 
-## Open questions (human decides; recommended default in brackets)
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. How many customers at most? [6 in the queue, so the counter area stays readable.]
 2. Look of customers. [Same capsule as players, warm colors per wish (meal orange, snack green,
    drink blue), until an asset pack is chosen (decision O8).]
