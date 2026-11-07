@@ -433,6 +433,8 @@ GameObject:
   - component: {fileID: 1205110357671234405}
   - component: {fileID: 6882486339157007149}
   - component: {fileID: 4449510630803289957}
+  - component: {fileID: 4119733508252766766}
+  - component: {fileID: 2833841830571119682}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -650,3 +652,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 172d6bc9a22301e41ba9869fa79def4a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Player.HeldItemView
+--- !u!114 &4119733508252766766
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9204124324090065605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe5722bad028f804e89abdf2b705ffa8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Player.InteractionHighlight
+  _markerMaterial: {fileID: 2100000, guid: 20679c31f4c3fcd4cb8fcd725a704792, type: 2}
+--- !u!114 &2833841830571119682
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9204124324090065605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2f9cdf0d905a6c04bbe9f3a724c9b27d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Player.WorldLabelFade

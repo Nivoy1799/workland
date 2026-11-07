@@ -5,6 +5,7 @@ using UnityEngine.UIElements;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Game.Net;
+using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
 using Worktown.Game.Social;
 
@@ -35,6 +36,9 @@ namespace Worktown.Game.UI
         private const float CrosshairSize = 4f;
         private static readonly Color CrosshairIdle = new Color(1f, 1f, 1f, 0.55f);
         private static readonly Color CrosshairOnTarget = new Color(1f, 0.85f, 0.3f, 1f);
+        // Spec 020: a grey prompt says why a click would do nothing.
+        private static readonly Color PromptAction = Color.white;
+        private static readonly Color PromptReason = new Color(0.72f, 0.72f, 0.72f, 1f);
         private VisualElement _crosshair;
         private Label _aimPrompt;
         private PlayerInputReader _input;
@@ -126,7 +130,11 @@ namespace Worktown.Game.UI
             ExpireToasts();
         }
 
-        /// <summary>Spec 018: the centre dot and what E / the digits would do, first person only, hidden under menus.</summary>
+        /// <summary>
+        /// Spec 018: the centre dot, first person only, hidden under menus. Spec 020: the prompt under it comes from
+        /// InteractionRules (the same action the click and the highlight use): white for an action, grey for a
+        /// reason; with full hands and nothing else to say it reminds of Q.
+        /// </summary>
         private void UpdateCrosshair(PickupInteractor player, bool firstPerson, Pickup held)
         {
             if (_input == null) _input = FindFirstObjectByType<PlayerInputReader>();
@@ -135,38 +143,19 @@ namespace Worktown.Game.UI
             Show(_aimPrompt, false);
             if (!visible) return;
 
-            Component target = player.Target;
-            _crosshair.style.backgroundColor = target != null ? CrosshairOnTarget : CrosshairIdle;
-            string text = AimPromptText(target, held);
+            InteractionAction action = player.CurrentAction;
+            _crosshair.style.backgroundColor = action != InteractionAction.None ? CrosshairOnTarget : CrosshairIdle;
+            string text = InteractionRules.PromptFor(player.CurrentHeld, player.CurrentAim);
+            bool reason = action == InteractionAction.None;
+            if (text == null && held != null)
+            {
+                text = "Q · drop";
+                reason = true;
+            }
             if (text == null) return;
             _aimPrompt.text = text;
+            _aimPrompt.style.color = reason ? PromptReason : PromptAction;
             Show(_aimPrompt, true);
-        }
-
-        /// <summary>Spec 018/019: what E (or the knife) does on the target, without digits.</summary>
-        private static string AimPromptText(Component target, Pickup held)
-        {
-            bool holding = held != null;
-            bool holdingKnife = holding && held.TryGetComponent(out Knife _);
-            if (target is StationButton button && button.Station != null)
-                return StationRules.ButtonPrompt(button.Option,
-                    button.Station.TryGetComponent(out StationContents stove) ? stove.StoveFlags.Value : (byte)0);
-            if (target is Station station)
-                return StationRules.FirstPersonPrompt(station.Kind, station.DisplayName, holding, holdingKnife, ContentName(station));
-            if (holding) return holdingKnife && target is Pickup ? "Put the knife down first" : "E · drop";
-            if (target is Pickup pickup)
-            {
-                if (pickup.TryGetComponent(out Knife _)) return "E · take knife";
-                return "E · pick up " + (pickup.TryGetComponent(out Food food) && food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "box");
-            }
-            return null;
-        }
-
-        /// <summary>Spec 019: what lies on the board or in the pan or pot, as its label shows it; null when empty.</summary>
-        private static string ContentName(Station station)
-        {
-            if (!PickupInteractor.HasContents(station) || !station.TryGetComponent(out StationContents contents)) return null;
-            return contents.Names.Count > 0 ? contents.Names[0] : null;
         }
 
         private void CreateCrosshair()
@@ -229,7 +218,8 @@ namespace Worktown.Game.UI
         private static string FriendlyResult(PickupInteractor player)
         {
             if (player.LastCookOutcome.HasValue) return CookText(player.LastCookOutcome.Value);
-            if (player.LastPickupOutcome.HasValue) return PickupText(player.LastPickupOutcome.Value);
+            if (player.LastPickupOutcome.HasValue)
+                return player.LastPickupWasPlace ? PlaceText(player.LastPickupOutcome.Value) : PickupText(player.LastPickupOutcome.Value);
             return string.IsNullOrEmpty(player.LastResult) ? null : player.LastResult; // local notes
         }
 
@@ -269,6 +259,20 @@ namespace Worktown.Game.UI
                 case PickupOutcome.AlreadyHolding: return "You are already carrying something";
                 case PickupOutcome.NothingHeld: return "You are not holding anything";
                 default: return outcome.ToString();
+            }
+        }
+
+        /// <summary>Spec 020: answers to "put it on this spot".</summary>
+        private static string PlaceText(PickupOutcome outcome)
+        {
+            switch (outcome)
+            {
+                case PickupOutcome.Ok: return null;
+                case PickupOutcome.NotFound: return "You can't put it there";
+                case PickupOutcome.TooFar: return "Too far away";
+                case PickupOutcome.Taken: return "Something is already there";
+                case PickupOutcome.NothingHeld: return "You are not holding anything";
+                default: return PickupText(outcome);
             }
         }
 

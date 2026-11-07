@@ -10,6 +10,7 @@ namespace Worktown.Game.Tests
     /// Spec 018 AC6: first person adds exactly one input to the predicted movement, a bool view hint named
     /// FirstPerson, and no request gained an argument (the client still sends only intents). Found by
     /// name and attribute name, so this test assembly needs no FishNet reference (like RpcSurfaceTests).
+    /// Spec 020 AC6 (changed on purpose): one new request, RequestPlace(int surface, int spot); MoveData unchanged.
     /// </summary>
     public class MoveDataSurfaceTests
     {
@@ -45,6 +46,7 @@ namespace Worktown.Game.Tests
         [TestCase("RequestPickup", 1)]
         [TestCase("RequestDrop", 0)]
         [TestCase("RequestStation", 2)]
+        [TestCase("RequestPlace", 2)]
         public void InteractorRequests_KeepTheirArguments(string rpc, int parameters)
         {
             MethodInfo method = Find(InteractorType)
@@ -56,13 +58,23 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void Interactor_HasNoNewServerRpc()
+        public void RequestPlace_TakesOnlyInts()
+        {
+            MethodInfo method = Find(InteractorType)
+                .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly)
+                .Single(m => m.Name == "RequestPlace" && m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"));
+            CollectionAssert.AreEqual(new[] { typeof(int), typeof(int) }, method.GetParameters().Select(p => p.ParameterType).ToArray(),
+                "surface and spot index only, never a position");
+        }
+
+        [Test]
+        public void Interactor_HasExactlyTheSpec020ServerRpcs()
         {
             string[] rpcs = Find(InteractorType)
                 .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly)
                 .Where(m => m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"))
                 .Select(m => m.Name).OrderBy(n => n).ToArray();
-            CollectionAssert.AreEqual(new[] { "RequestDrop", "RequestPickup", "RequestStation" }, rpcs, string.Join(", ", rpcs));
+            CollectionAssert.AreEqual(new[] { "RequestDrop", "RequestPickup", "RequestPlace", "RequestStation" }, rpcs, string.Join(", ", rpcs));
         }
     }
 }

@@ -196,6 +196,27 @@
         "Look at the pan's switch and press E: it turns green; the button next to it switches fry and sauté",
         "Ask another player: they see the potato fall apart and the switch light change"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-020",
+      "date": "2026-11-07",
+      "title": "Use the kitchen with the mouse",
+      "items": [
+        "First person: left click does what the text under the dot says; E is gone, Q drops what you hold",
+        "What you look at lights up: white = take, green = put or use, grey = not possible (the text says why)",
+        "Worktops between the stations: click with something in your hands to put it down on the green spot",
+        "The knife now has its own spot next to the cutting board; put it on any worktop and take it back",
+        "Station labels are smaller in first person and fade out when you stand right at them",
+        "Third person keeps E and the number keys"
+      ],
+      "test": [
+        "Look at the potato crate with empty hands: it glows white, 'Click · take potato ($60)'; click",
+        "Look at the pot: it glows green, 'Click · put potato into the pot'. Look at the board instead and click",
+        "Look at the knife and click to pick it up; hold the left button and drag down on the potato to cut",
+        "With the knife, look at a worktop: a green spot shows where it goes; click, then click the knife again to take it",
+        "Hold a finished plate over the pan: grey 'can't go in there', the click does nothing",
+        "Press Q to drop what you hold; ask another player whether they see your knife on the worktop"
+      ]
     }
   ]
 }

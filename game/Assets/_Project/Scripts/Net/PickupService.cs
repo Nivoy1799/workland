@@ -11,12 +11,24 @@ namespace Worktown.Game.Net
     /// Server-side authority for pickups. Validates distance (PickupRules) and exclusivity
     /// (PickupRegistry), then sets the cube's owner and attaches it (spec 003 design).
     /// Lives next to the NetworkManager; does nothing on pure clients.
+    /// Spec 020: also puts held items on the spots of place surfaces (worktops); the client only names the
+    /// surface and the spot, the server checks hands, reach and the spot and picks the position.
     /// </summary>
     public sealed class PickupService : MonoBehaviour
     {
         [SerializeField] private NetworkManager _networkManager;
 
+        [Tooltip("Spec 020: index in this array = PlaceSurface.Index.")]
+        [SerializeField] private PlaceSurface[] _surfaces = new PlaceSurface[0];
+
+        // Spec 020: a probe this small sits inside the item lying on a spot but misses the neighbours.
+        private const float SpotProbeRadius = 0.03f;
+        // An occupant further than this from its spot (horizontally) no longer lies there.
+        private const float SpotTolerance = 0.1f;
+
         private readonly PickupRegistry _registry = new PickupRegistry();
+        private readonly PlaceSpots _spots = new PlaceSpots();
+        private readonly Collider[] _probe = new Collider[8];
 
         // Start, not OnEnable: NetworkManager creates its ServerManager in its own Awake.
         private void Start()
@@ -36,7 +48,10 @@ namespace Worktown.Game.Net
         {
             // A server restart in the same process must not keep claims for despawned cubes.
             if (args.ConnectionState == LocalConnectionState.Stopped && !_networkManager.ServerManager.IsAnyServerStarted())
+            {
                 _registry.Clear();
+                _spots.Clear(); // spec 020
+            }
         }
 
         public PickupOutcome TryPickup(PickupInteractor player, NetworkObject target)
@@ -54,7 +69,68 @@ namespace Worktown.Game.Net
 
             target.GiveOwnership(player.Owner);
             pickup.ServerAttach(player.HoldPoint, clientId);
+            _spots.Free(target.ObjectId); // spec 020: picking it up frees its spot
             return PickupOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 020: puts the held item on spot <paramref name="spotIndex"/> of surface
+        /// <paramref name="surfaceIndex"/>. Checks (PlaceSpots.CheckPlace): something held, the surface exists, the
+        /// spot index is valid, the spot is within reach (2.5 m, to the spot), the spot is free; also nothing else
+        /// lies there (e.g. the knife at its home spot after a respawn). The item rests on the spot in its resting
+        /// tilt (Pickup.RestTilt, e.g. the knife flat), turned with the surface's yaw.
+        /// </summary>
+        public PickupOutcome TryPlace(PickupInteractor player, int surfaceIndex, int spotIndex)
+        {
+            int clientId = player.Owner.ClientId;
+            bool holding = _registry.TryGetHeldItem(clientId, out int itemId);
+            PlaceSurface surface = surfaceIndex >= 0 && surfaceIndex < _surfaces.Length ? _surfaces[surfaceIndex] : null;
+            int spotCount = surface != null ? surface.SpotCount : 0;
+            bool validSpot = spotIndex >= 0 && spotIndex < spotCount;
+            Vector3 spot = validSpot ? surface.SpotWorldPosition(spotIndex) : Vector3.zero;
+            bool inReach = validSpot && PickupRules.IsInReach(player.transform.position, spot);
+            if (validSpot) FreeIfStale(surfaceIndex, spotIndex, spot);
+
+            PickupOutcome check = _spots.CheckPlace(holding, surface != null, spotCount, surfaceIndex, spotIndex, inReach);
+            if (check != PickupOutcome.Ok) return check;
+            if (IsSpotOccupied(spot, _probe)) return PickupOutcome.Taken;
+            if (!_networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out NetworkObject item)
+                || !item.TryGetComponent(out Pickup pickup))
+                return PickupOutcome.NotFound;
+
+            _registry.TryRelease(itemId, clientId);
+            item.RemoveOwnership();
+            Quaternion rest = PlaceSpots.RestRotation(pickup.RestTilt, surface.transform.rotation);
+            pickup.ServerPlaceAt(spot + surface.transform.up * pickup.BottomOffset, rest);
+            _spots.TryTake(surfaceIndex, spotIndex, itemId);
+            return PickupOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 020: true when a free (not held) item lies on the spot: a tiny probe just above the top touches its
+        /// collider. Used by the server and by the client to pick a free spot (clients cannot see the server's
+        /// spot table, but they see the items).
+        /// </summary>
+        public static bool IsSpotOccupied(Vector3 spot, Collider[] buffer)
+        {
+            int count = Physics.OverlapSphereNonAlloc(spot + Vector3.up * (SpotProbeRadius + 0.005f), SpotProbeRadius, buffer,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                Pickup pickup = buffer[i] != null ? buffer[i].GetComponentInParent<Pickup>() : null;
+                if (pickup != null && !pickup.IsHeld) return true;
+            }
+            return false;
+        }
+
+        /// <summary>A spot whose recorded item is gone, held or lies elsewhere is free again (object ids are reused).</summary>
+        private void FreeIfStale(int surfaceIndex, int spotIndex, Vector3 spot)
+        {
+            if (!_spots.TryGetOccupant(surfaceIndex, spotIndex, out int occupantId)) return;
+            bool lies = _networkManager.ServerManager.Objects.Spawned.TryGetValue(occupantId, out NetworkObject occupant)
+                && occupant.TryGetComponent(out Pickup pickup) && !pickup.IsHeld
+                && Vector3.ProjectOnPlane(occupant.transform.position - spot, Vector3.up).sqrMagnitude <= SpotTolerance * SpotTolerance;
+            if (!lies) _spots.Free(occupantId);
         }
 
         public PickupOutcome TryDrop(PickupInteractor player)

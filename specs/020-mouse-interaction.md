@@ -149,27 +149,27 @@ everything. Third person is unchanged.
   holding a pan with food + plate → `PourOnto`.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes.
-- [ ] AC2: `InteractionRules` tests cover every row of the table, including: food that fits + empty
+- [x] AC1: `bash scripts/verify.sh` passes.
+- [x] AC2: `InteractionRules` tests cover every row of the table, including: food that fits + empty
       pot = `PutInto`; plated food + pan = `None` with a reason; empty hands + pan with food =
       `Take`; knife + board with food = `Cut`; knife + free spot = `Place`; button beats everything.
-- [ ] AC3: `ClickGesture` tests: short press = click; long press = no click; press with 15+ counts
+- [x] AC3: `ClickGesture` tests: short press = click; long press = no click; press with 15+ counts
       of movement = no click; a downward drag over a board with food = stroke, not click.
-- [ ] AC4: `PlaceSpots` tests: grid size and positions for a 1 m x 0.6 m top; nearest free spot to
+- [x] AC4: `PlaceSpots` tests: grid size and positions for a 1 m x 0.6 m top; nearest free spot to
       a hit point; taken spots are skipped; a full surface gives none; freeing a spot.
-- [ ] AC5: Server place tests (pure part): valid place marks the spot; a taken spot, a bad index, an
+- [x] AC5: Server place tests (pure part): valid place marks the spot; a taken spot, a bad index, an
       out-of-reach surface and empty hands are refused; pickup frees the spot.
-- [ ] AC6: Reflection: `RequestPlace` has only int parameters; the interactor's ServerRpcs are
+- [x] AC6: Reflection: `RequestPlace` has only int parameters; the interactor's ServerRpcs are
       exactly RequestDrop, RequestPickup, RequestPlace, RequestStation; `MoveData` unchanged.
-- [ ] AC7: Key map test: in first person E and the digits send nothing; in third person they work
+- [x] AC7: Key map test: in first person E and the digits send nothing; in third person they work
       as before.
-- [ ] AC8: Screenshots, two clients on the dedicated server (dev-only demo arg allowed, sending the
+- [ ] AC8 (partly checked 2026-11-07 with `-demo-place` on one client: green glow and "Click · put potato into the pot", knife placed on the board-pan worktop, "Click · pick up knife"; the second client view is left to the AC9 play-test): Screenshots, two clients on the dedicated server (dev-only demo arg allowed, sending the
       normal intents): the knife placed on a worktop spot; the green glow and prompt on the pot
       while holding a potato; the second client sees the knife on the worktop.
 - [ ] AC9 (manual, human): play 5 minutes in first person with mouse only (plus Q): buy, cut, fry,
       plate, sell; place the knife on a worktop and pick it up again. It is always clear what a
       click will do.
-- [ ] AC10: `WhatsNew.json` entry `spec-020` with test steps.
+- [x] AC10: `WhatsNew.json` entry `spec-020` with test steps.
 
 ## Test plan
 - EditMode: `InteractionRulesTests`, `ClickGestureTests`, `PlaceSpotsTests`, `PlaceServiceTests`,
@@ -193,6 +193,93 @@ everything. Third person is unchanged.
 - Play-test AC9.
 
 ## Implementation notes
-(Builder fills this in.)
+- Built (builder, 2026-11-07): `Net/Rules/InteractionRules.cs`, `InteractionAction.cs`, `Held.cs`, `AimTarget.cs`,
+  `PlaceSpots.cs` (grid + server spot table + `CheckPlace`), `Net/PlaceSurface.cs`, `Player/ClickGesture.cs`,
+  `Player/InteractionHighlight.cs`, `Player/WorldLabelFade.cs` (new file outside the Scope list, in Scripts/Player as
+  the orchestrator allowed). Changed: `AimKind` (`Spot`), `AimHit` (`SurfaceIndex`, `SpotIndex`, `AimHit.Spot`),
+  `AimRules` (spot targets; overload with `pickupsTransparent`), `Pickup` (`ServerPlaceAt`, `BottomOffset`),
+  `PickupService` (`TryPlace`, `_surfaces`, spot table, `IsSpotOccupied`), `PickupInteractor`, `HudView`,
+  `GrayboxSceneBuilder`, `WhatsNew.json`. `PlayerInputReader` unchanged (Q is read like E was).
+- Tests: `InteractionRulesTests` (every table row), `ClickGestureTests`, `PlaceSpotsTests`, `PlaceServiceTests`,
+  `PlaceSceneTests` (scene surfaces by index, worktops do not overlap stations, knife on its home spot, labels without
+  keys, player prefab, highlight colours, per-material block clears with null, label alpha), `FirstPersonKeysTests`
+  (+3, AC7), `AimRulesTests` (+6), `MoveDataSurfaceTests` (updated on purpose: four RPCs, `RequestPlace(int, int)`),
+  `WhatsNewTests` (+1). EditMode 415/415, `scripts/verify.sh` PASS; after the review fixes below 422/422, PASS.
+- Click: fires on release (press + release within 0.3 s, path length < 15 counts). A press that starts while the cursor
+  was free in the previous frame, a press while a menu/wheel/T has the keys, and a press that fires a cut stroke are
+  cancelled. With the knife armed (`Cut`) a click does nothing; strokes and right-click turn as in spec 019. Gamepad:
+  RT = click (or stroke when armed), Y = turn, X = drop. Q / X drop only in first person (`InteractionRules.DropKeyActs`);
+  E and digits only in third person (`InteractionRules.KeysActInView`), third person otherwise unchanged.
+- "Fits" on the client: `InteractionRules.Fits` uses only client-visible state: plated = `Food.Look.Kind == KindPlated`,
+  board/pan/pot full = the station's synced `Names`/`Looks` count > 0, plating table/bowl full = count >=
+  `AssemblyRules.MaxItems` (the server's constant). The sim dry runs (e.g. food the sim would not cut or heat) are
+  server-only, so such food shows green and the server refuses with today's toast.
+- Deviations / additions to the table (reviewer please check): (1) **Sell accepts any food**, not only plated food:
+  the counter has plated food itself since spec 009 and the server sells it, so refusing on the client would have broken
+  today's buy-fry-sell loop. (2) Extra grey reasons: knife + empty board "Put food on the board to cut", food + full
+  board "can't go in there", full surface "No room here"; with full hands and nothing to say the HUD shows a grey
+  "Q · drop". (3) While holding, pickups do not block the aim ray (`pickupsTransparent`), so you can place next to an
+  item lying on a worktop; empty hands see items as before. (4) World labels: no key hints any more (name, and price on
+  crates), in both views; half size and fade (1.5 m to 1.0 m) happen at runtime in first person only
+  (`WorldLabelFade`), third person keeps the full size. (5) `StationRules.FirstPersonPrompt`, `ButtonPrompt` and
+  `FirstPersonKeysHint` are no longer used by runtime code (kept with their tests; `StationRules` is outside Scope);
+  the unused `PickupInteractor.HasContents` was removed.
+- Place spots: reach is measured from the player's feet to the spot (not the surface centre), on client (AimRules) and
+  server. The client cannot see the server's spot table, so a spot counts as taken when a tiny probe (sphere r 0.03 m
+  just above the spot) touches a free pickup; the server checks its table (stale entries freed: object gone, held or
+  moved > 0.1 m) and the same probe, which also covers the scene knife at start and a respawned knife. The item rests on
+  the spot (collider bottom on the top) in its resting tilt turned by the surface's yaw (review fix 1 below). Picking up frees the spot. Place
+  answers come back through a new TargetRpc `ReportPlace` (`LastPickupWasPlace` for the toast texts).
+- Scene: surface 0 = board station's free half (x 0.08..0.6 local, 2 x 4 spots, thin collider 5 mm above the station
+  body so the ray hits it first, items rest on the furniture top at 1.1 m); surfaces 1-5 = worktops in the gaps
+  board-pan, pan-pot, pot-counter, counter-plating, plating-bowl (1.26 m or 1.76 m wide, 1.2 m deep, 1.1 m high = the
+  furniture top; 5 x 4 = 20 or 7 x 4 = 28 spots), plain cubes with `Settings/Worktop.mat`. The knife starts on board
+  spot 3 (local 0.465, -0.125, the spot nearest its spec 019 position); `KitchenService` respawns at the start
+  position, which is now that home spot (no change there). Scene network objects: still 28.
+- Highlight: per-material `MaterialPropertyBlock`s on the target's renderers: base colour lerped 35 % towards the glow
+  colour and x1.15, plus `_EmissionColor` (only visible where a material has emission on; the pack materials do not,
+  so the tint is what shows). It starts from the renderer-wide block, so FoodVisual tints and the stove button lights
+  stay right; per-material blocks are owned by the highlight and cleared with `SetPropertyBlock(null, i)` (tested).
+  Re-applied every frame without allocations; a station's own buttons and all TextMesh labels are skipped. Place:
+  a 0.22 m flat translucent green disc (`Settings/PlaceMarker.mat`, URP Unlit transparent) on the spot.
+- Known limits: food colliders are 0.4 m, wider than the 0.25 m spot spacing, so neighbouring placed food overlaps
+  in collider terms (the models are smaller; the probe still sees the neighbour spot as free). The client probes every
+  spot of the aimed surface each frame (up to 28 small overlap queries).
+- Dev launch arg (AC8, development builds only): `-demo-place`. Walks like `-demo-cut` (simulated W/A/S/D) and turns the
+  view with simulated mouse deltas (feedback loop on the camera, about 0.12 deg per count), so it needs `-view first
+  -skip-whatsnew`, the first spawn point and window focus (run it on one client only). Steps: take a potato
+  (`RequestStation(crate, 0)`); walk to x between pan and pot, z = kitchen - 1.3; aim at the pot until the action is
+  `PutInto`, log the prompt, hold the aim 4 s; level the view, walk between board and pan; then three times "aim, wait
+  for the expected action, `ExecuteAction()`" (the same code a click runs): put on the board (`RequestStation`),
+  pick up the knife (`RequestPickup`), put it on the front middle spot of the board-pan worktop (`RequestPlace`). If an
+  aim does not give the expected action within 3 s it logs a warning and sends the same request directly. Afterwards it
+  keeps looking at the knife on the worktop for 30 s. Estimated timeline (every step logs `[Demo] ...`, the hold and
+  done lines with `Time.time`): potato about 19 s, pot glow about 23-27 s, board about 30 s, knife about 32 s, knife on
+  the worktop about 34 s. Example:
+  `<client exe> -connect <server> -view first -skip-whatsnew -demo-place -screenshot shotA.png -screenshot-after 24 -screenshot-every 3`.
+  The second client needs to look at the board-pan worktop (x 1.75, z 13) to see the knife.
+- Review fixes (orchestrator, after the first screenshot run):
+  1. Placed knife stood upright. `Pickup` now captures a server-side resting tilt in `OnStartServer`
+     (`PlaceSpots.TiltOf(transform.rotation)`: the rotation without its yaw), so scene objects and a respawned knife keep
+     how they lie and food spawned in the hands (yaw-only rotation) keeps identity. `TryPlace` uses
+     `PlaceSpots.RestRotation(tilt, surface rotation)` (yaw follows the surface, tilt stays), `ServerDetach` (Q) uses
+     `RestRotation(tilt, identity)` instead of `Quaternion.identity`. Pure and tested (`PlaceSpotsTests` +3). Note for the
+     re-run: the scene knife's own rotation is identity too, so if the knife still stands up after this fix, the likely
+     cause is client-side: `HeldItemView` (spec 018, outside this Scope) not restoring the knife's `Visual` local pose
+     when it leaves the hands. Worth checking which client the upright knife was seen on. `BottomOffset` still assumes
+     an untilted collider (true for every item today).
+  2. Out of reach: `AimRules.Pick(..., out int outOfReach)` reports the closest station, button, item or spot that the
+     3 m ray sees beyond the 2.5 m reach (walls still hide, full hands still ignore items). The interactor keeps it as
+     `Target` with `TargetTooFar`; `AimTarget.TooFar()` makes `ActionFor` None and `Reason` "Too far" whenever the same
+     target in reach would show an action or a reason (empty hands at an empty far pan stay silent). The highlight then
+     glows grey, the prompt is grey "Too far"; nothing is sent. Tests: `AimRulesTests` +2, `InteractionRulesTests` +2.
+  3. Demo: the pot step now walks to x = pot, z = pot - 1.2 (about 1.3 m in front of it, via the lane) before aiming and
+     logs the distance; then back along z = kitchen - 1.3 to between board and pan. Rest unchanged. Timeline shifts by
+     about 1 s (pot glow about 24-28 s).
+- Screenshot check: the glow strength on the pot (35 % tint) and the disc size/alpha; the worktop colour and height
+  against the station furniture (art may stick into the 2 cm gaps); label size and fade in first person; that the
+  held potato does not cover the prompt.
+- Batch rebuild: `DefaultPrefabObjects.asset` changed only in order and was reverted; the usual FishNet "same
+  assetPath hash of 0" errors appeared.
 
 ## Blockers

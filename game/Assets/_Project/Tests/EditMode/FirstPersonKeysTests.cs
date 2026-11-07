@@ -1,15 +1,41 @@
 using System;
 using NUnit.Framework;
 using Worktown.Game.Cooking;
+using Worktown.Game.Net.Rules;
 
 namespace Worktown.Game.Tests
 {
     /// <summary>
     /// Spec 019 AC7: the first-person key map has no digits (the stoves have buttons, the board a knife); third
     /// person keeps them. Also the digit-free prompts and the stove flags byte.
+    /// Spec 020 AC7: first person has no E either (the mouse does it, Q drops); third person keeps E and the digits.
     /// </summary>
     public class FirstPersonKeysTests
     {
+        [Test]
+        public void FirstPerson_EAndDigitsSendNothing()
+        {
+            Assert.IsFalse(InteractionRules.KeysActInView(firstPerson: true), "E and the digits are off in first person");
+            foreach (StationKind kind in Enum.GetValues(typeof(StationKind)))
+                for (int digit = 1; digit <= 4; digit++)
+                    Assert.AreEqual(0, StationRules.DigitOption(kind, digit, firstPerson: true), kind + " digit " + digit);
+        }
+
+        [Test]
+        public void ThirdPerson_EAndDigitsWorkAsBefore()
+        {
+            Assert.IsTrue(InteractionRules.KeysActInView(firstPerson: false));
+            Assert.AreEqual(2, StationRules.DigitOption(StationKind.Board, 2, firstPerson: false));
+            Assert.AreEqual(StationRules.StoveSwitch, StationRules.DigitOption(StationKind.Pot, 1, firstPerson: false));
+        }
+
+        [Test]
+        public void QDrops_InFirstPersonOnly()
+        {
+            Assert.IsTrue(InteractionRules.DropKeyActs(firstPerson: true));
+            Assert.IsFalse(InteractionRules.DropKeyActs(firstPerson: false), "third person drops with E as before");
+        }
+
         [Test]
         public void FirstPerson_NoDigitMakesAStationRequest()
         {

@@ -25,6 +25,7 @@ using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Sim.Economy;
 using Worktown.Game.Net;
+using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
 using Worktown.Game.UI;
 using Worktown.Game.Social;
@@ -53,7 +54,14 @@ namespace Worktown.Game.Editor
         private const string StoveButtonMaterialPath = Root + "/Settings/StoveButton.mat";
         // Spec 019: the knife's pickup collider (long side along Z, like its model) and where it lies.
         private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.34f);
+        // Spec 019 knife position on the board station; spec 020: the knife's home is the board surface spot nearest to it.
         private static readonly Vector3 KnifeSpot = new Vector3(0.42f, 0f, -0.1f);
+        // Spec 020: the board station's free half (next to the cutting board) is a place surface from here to its edge.
+        private const float BoardSurfaceMinX = 0.08f;
+        private const float StationWidth = 1.2f;
+        private const float WorktopGapMargin = 0.02f;
+        private const string WorktopMaterialPath = Root + "/Settings/Worktop.mat";
+        private const string PlaceMarkerMaterialPath = Root + "/Settings/PlaceMarker.mat";
         private const float CuttingBoardOffsetX = -0.12f;
         private const float FoodSize = 0.4f;
         private const float StationHeight = 1f;
@@ -189,6 +197,10 @@ namespace Worktown.Game.Editor
             SetField(firstPersonBody, "_body", new Renderer[] { body.GetComponent<Renderer>(), nose.GetComponent<Renderer>() });
             SetField(firstPersonBody, "_overhead", new Renderer[] { bubbleLabel.GetComponent<Renderer>() });
             root.AddComponent<HeldItemView>();
+            // Spec 020: owner-only target glow with the place marker, and the first-person label fade.
+            var highlight = root.AddComponent<InteractionHighlight>();
+            SetField(highlight, "_markerMaterial", CreatePlaceMarkerMaterial());
+            root.AddComponent<WorldLabelFade>();
 
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PlayerPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
@@ -353,16 +365,103 @@ namespace Worktown.Game.Editor
             return saved.GetComponent<NetworkObject>();
         }
 
-        /// <summary>Spec 019: one knife per board, a scene object lying on the board station next to the cutting board.</summary>
-        private static void CreateBoardKnife(NetworkObject knifePrefab, Station board)
+        /// <summary>
+        /// Spec 019: one knife per board, a scene object lying on the board station next to the cutting board.
+        /// Spec 020: it lies on its home spot of the board's place surface (the spot nearest the spec 019 position),
+        /// which is also where KitchenService puts a replacement for a lost knife (its start position).
+        /// </summary>
+        private static void CreateBoardKnife(NetworkObject knifePrefab, Station board, PlaceSurface boardSurface)
         {
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(knifePrefab.gameObject);
             instance.name = "Knife (" + board.DisplayName + ")";
-            float top = StationTop(board);
-            instance.transform.SetPositionAndRotation(
-                board.transform.TransformPoint(KnifeSpot + new Vector3(0f, top + KnifeColliderSize.y * 0.5f, 0f)),
-                board.transform.rotation);
+            Vector3 knifeWorld = board.transform.TransformPoint(KnifeSpot);
+            int home = PlaceSpots.NearestFree(boardSurface.Size, boardSurface.ToTopPlane(knifeWorld), null);
+            Vector3 spot = boardSurface.SpotWorldPosition(home);
+            instance.transform.SetPositionAndRotation(spot + Vector3.up * (KnifeColliderSize.y * 0.5f), boardSurface.transform.rotation);
             SetField(instance.GetComponent<Knife>(), "_boardIndex", board.Index);
+        }
+
+        /// <summary>
+        /// Spec 020: the free half of the board station as a place surface: a thin collider just above the station's
+        /// body (so the aim ray hits it before the body), items resting on the furniture top.
+        /// </summary>
+        private static PlaceSurface CreateBoardSurface(Station board, int index)
+        {
+            float top = StationTop(board);
+            float colliderTop = Mathf.Max(top, StationHeight * 0.5f) + 0.005f;
+            float minX = BoardSurfaceMinX;
+            float maxX = StationWidth * 0.5f;
+            var go = new GameObject("PlaceSurface");
+            go.transform.SetParent(board.transform, false);
+            go.transform.localPosition = new Vector3((minX + maxX) * 0.5f, 0f, 0f);
+            var box = go.AddComponent<BoxCollider>();
+            box.size = new Vector3(maxX - minX, 0.02f, StationWidth);
+            box.center = new Vector3(0f, colliderTop - 0.01f, 0f);
+            go.isStatic = true;
+            var surface = go.AddComponent<PlaceSurface>();
+            SetField(surface, "_index", index);
+            SetField(surface, "_size", new Vector2(maxX - minX, StationWidth));
+            SetField(surface, "_topY", top);
+            return surface;
+        }
+
+        /// <summary>
+        /// Spec 020: a plain worktop filling the gap between two neighbouring stations, as high as the left one's
+        /// top, as deep as the stations; its whole top is a place surface. Not scaled (PlaceSurface works in metres).
+        /// </summary>
+        private static PlaceSurface CreateWorktop(Transform parent, Station left, Station right, int index, Material material)
+        {
+            float minX = left.transform.position.x + StationWidth * 0.5f + WorktopGapMargin;
+            float maxX = right.transform.position.x - StationWidth * 0.5f - WorktopGapMargin;
+            float width = maxX - minX;
+            float height = left.transform.position.y + StationTop(left);
+            var root = new GameObject("Worktop " + index);
+            root.transform.SetParent(parent, false);
+            root.transform.position = new Vector3((minX + maxX) * 0.5f, 0f, KitchenZ);
+            var box = root.AddComponent<BoxCollider>();
+            box.size = new Vector3(width, height, StationWidth);
+            box.center = new Vector3(0f, height * 0.5f, 0f);
+
+            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = "Body";
+            UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+            body.transform.SetParent(root.transform, false);
+            body.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
+            body.transform.localScale = new Vector3(width, height, StationWidth);
+            body.GetComponent<MeshRenderer>().sharedMaterial = material;
+            SetStaticRecursive(root);
+
+            var surface = root.AddComponent<PlaceSurface>();
+            SetField(surface, "_index", index);
+            SetField(surface, "_size", new Vector2(width, StationWidth));
+            SetField(surface, "_topY", height);
+            return surface;
+        }
+
+        /// <summary>Spec 020: translucent green for the place marker disc (URP Unlit, transparent, no depth write).</summary>
+        private static Material CreatePlaceMarkerMaterial()
+        {
+            var material = AssetDatabase.LoadAssetAtPath<Material>(PlaceMarkerMaterialPath);
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Transparent");
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, PlaceMarkerMaterialPath);
+            }
+            else if (material.shader != shader) material.shader = shader;
+            material.SetColor("_BaseColor", new Color(0.35f, 1f, 0.45f, 0.45f));
+            material.SetFloat("_Surface", 1f); // transparent
+            material.SetFloat("_Blend", 0f);   // alpha
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_SrcBlendAlpha", (float)UnityEngine.Rendering.BlendMode.One);
+            material.SetFloat("_DstBlendAlpha", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_ZWrite", 0f);
+            material.SetOverrideTag("RenderType", "Transparent");
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            EditorUtility.SetDirty(material);
+            return material;
         }
 
         /// <summary>
@@ -437,7 +536,8 @@ namespace Worktown.Game.Editor
                 CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0);
             // Spec 019: the cutting board shows the food on it; the knife lies next to it.
             AddStationContents(catalog, cuttingBoard, ArtKey.ToolCuttingBoard, CuttingBoardOffsetX, BoardFill, 1f, 0.06f);
-            CreateBoardKnife(knifePrefab, cuttingBoard);
+            var surfaces = new List<PlaceSurface> { CreateBoardSurface(cuttingBoard, 0) }; // spec 020
+            CreateBoardKnife(knifePrefab, cuttingBoard, surfaces[0]);
             stations.Add(cuttingBoard);
             // Spec 016: pan and pot cook over time; their label (knob, what is cooking) is networked.
             Station pan = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
@@ -463,6 +563,13 @@ namespace Worktown.Game.Editor
             // The bowl stands next to the blender of the spec 015 bowl station.
             AddStationContents(catalog, bowl, ArtKey.FoodBowl, -0.32f, BowlFill, 0.45f, 0.06f);
             stations.Add(bowl);
+
+            // Spec 020: plain worktops in the gaps between board, pan, pot, counter, plating table and bowl.
+            Material worktopMat = CreateMaterial(WorktopMaterialPath, new Color(0.78f, 0.74f, 0.66f));
+            int firstWorktop = stations.IndexOf(cuttingBoard);
+            for (int i = firstWorktop; i < stations.Count - 1; i++)
+                surfaces.Add(CreateWorktop(parent.transform, stations[i], stations[i + 1], surfaces.Count, worktopMat));
+            SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
 
             var feedObject = new GameObject("ServeFeed");
             NetworkObject feedNob = feedObject.AddComponent<NetworkObject>();
@@ -516,7 +623,7 @@ namespace Worktown.Game.Editor
                 labelY = Mathf.Max(labelY, top + 0.1f);
             }
 
-            string keys = StationRules.FirstPersonKeysHint(kind); // spec 019: no digits on the world labels
+            // Spec 020: no keys on the world labels any more (first person clicks; the prompts say how).
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, labelY, 0f), 60, 0.05f);
             string price = string.Empty;
             if (kind == StationKind.Crate
@@ -524,7 +631,7 @@ namespace Worktown.Game.Editor
                 price = " " + EconomyRules.Money(dollars);
             // Short labels so neighbouring stations do not overlap (spec 011 screenshot check).
             string shortName = kind == StationKind.Crate ? displayName.Replace(" crate", string.Empty) : displayName;
-            label.text = shortName + "\n" + (price.Length > 0 ? price.Trim() + " · " : string.Empty) + keys;
+            label.text = price.Length > 0 ? shortName + "\n" + price.Trim() : shortName;
 
             var station = root.AddComponent<Station>();
             SetField(station, "_index", index);
@@ -1015,6 +1122,7 @@ namespace Worktown.Game.Editor
                 case float f: prop.floatValue = f; break;
                 case int i: prop.intValue = i; break;
                 case string s: prop.stringValue = s; break;
+                case Vector2 v: prop.vector2Value = v; break;
                 case UnityEngine.Object o: prop.objectReferenceValue = o; break;
                 case System.Collections.IList list:
                     prop.arraySize = list.Count;

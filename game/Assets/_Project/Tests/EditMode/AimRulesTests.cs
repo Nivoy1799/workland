@@ -124,5 +124,79 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(1, Pick(new AimHit(float.NaN, AimKind.Other, Vector3.zero), new AimHit(1.2f, AimKind.Station, Near)));
             Assert.AreEqual(1, Pick(new AimHit(-1f, AimKind.Other, Vector3.zero), new AimHit(1.2f, AimKind.Station, Near)));
         }
+
+        // ---- spec 020: spots on place surfaces ----
+
+        [Test]
+        public void Spot_IsATarget_CarryingItsSurfaceAndSpot()
+        {
+            AimHit spot = AimHit.Spot(1.3f, Near, 2, 5);
+            Assert.AreEqual(0, Pick(spot));
+            Assert.AreEqual(AimKind.Spot, spot.Kind);
+            Assert.AreEqual(2, spot.SurfaceIndex);
+            Assert.AreEqual(5, spot.SpotIndex);
+            Assert.AreEqual(-1, spot.StationIndex);
+            Assert.AreEqual(-1, new AimHit(1f, AimKind.Station, Near).SurfaceIndex, "other hits carry no surface");
+        }
+
+        [Test]
+        public void SpotOutOfReach_NoTarget()
+        {
+            Assert.AreEqual(AimRules.None, Pick(AimHit.Spot(2.2f, Far, 0, 1)));
+        }
+
+        [Test]
+        public void ButtonStillWinsOverItsStation_AndOverASpot()
+        {
+            Assert.AreEqual(1, Pick(new AimHit(1.2f, AimKind.Station, Near), AimHit.Button(1.2f, Near, 7, 1)));
+            Assert.AreEqual(1, Pick(AimHit.Spot(1.2f, Near, 0, 1), AimHit.Button(1.2f, Near, 7, 1)));
+        }
+
+        [Test]
+        public void SpotInFrontOfItsStationBody_Wins()
+        {
+            // The board station's free half: its thin collider sits just above the station body.
+            Assert.AreEqual(0, Pick(AimHit.Spot(1.18f, Near, 0, 3), new AimHit(1.2f, AimKind.Station, Near)));
+        }
+
+        [Test]
+        public void FullHands_PickupsDoNotBlock_SoTheSpotBehindIsFound()
+        {
+            var hits = new List<AimHit> { new AimHit(1.1f, AimKind.Pickup, Near), AimHit.Spot(1.2f, Near, 1, 4) };
+            Assert.AreEqual(0, AimRules.Pick(hits, Player, pickupsTransparent: false), "empty hands: the item");
+            Assert.AreEqual(1, AimRules.Pick(hits, Player, pickupsTransparent: true), "full hands: the spot behind it");
+            Assert.AreEqual(AimRules.None, AimRules.Pick(new List<AimHit> { new AimHit(1.1f, AimKind.Pickup, Near) }, Player, true));
+        }
+
+        [Test]
+        public void OutOfReach_IsReported_SoItCanSayTooFar()
+        {
+            var hits = new List<AimHit> { new AimHit(2.6f, AimKind.Station, Far) };
+            Assert.AreEqual(AimRules.None, AimRules.Pick(hits, Player, false, out int far));
+            Assert.AreEqual(0, far);
+            Assert.AreEqual(AimRules.None, AimRules.Pick(new List<AimHit> { AimHit.Spot(2.5f, Far, 1, 2) }, Player, true, out far));
+            Assert.AreEqual(0, far, "a spot too");
+            Assert.AreEqual(AimRules.None, AimRules.Pick(new List<AimHit> { AimHit.Button(2.5f, Far, 3, 1) }, Player, false, out far));
+            Assert.AreEqual(0, far, "a button too");
+        }
+
+        [Test]
+        public void InReachOrWalls_AreNotOutOfReach()
+        {
+            Assert.AreEqual(0, AimRules.Pick(new List<AimHit> { new AimHit(1.2f, AimKind.Station, Near) }, Player, false, out int far));
+            Assert.AreEqual(AimRules.None, far);
+            var wall = new List<AimHit> { new AimHit(1f, AimKind.Other, Vector3.zero), new AimHit(2.6f, AimKind.Station, Far) };
+            Assert.AreEqual(AimRules.None, AimRules.Pick(wall, Player, false, out far));
+            Assert.AreEqual(AimRules.None, far, "behind a wall is not 'too far', it is hidden");
+            Assert.AreEqual(AimRules.None, AimRules.Pick(new List<AimHit> { new AimHit(2.6f, AimKind.Pickup, Far) }, Player, true, out far));
+            Assert.AreEqual(AimRules.None, far, "full hands ignore items");
+        }
+
+        [Test]
+        public void FullHands_WallsStillBlock()
+        {
+            var hits = new List<AimHit> { new AimHit(0.9f, AimKind.Other, Vector3.zero), AimHit.Spot(1.2f, Near, 1, 4) };
+            Assert.AreEqual(AimRules.None, AimRules.Pick(hits, Player, pickupsTransparent: true));
+        }
     }
 }
