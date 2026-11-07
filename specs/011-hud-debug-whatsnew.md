@@ -1,7 +1,7 @@
 ---
 id: 011
 title: Player HUD, F1 debug menu and "What's new" banner
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -64,7 +64,7 @@ Only `game/` (branch stacked on `spec/010-player-controls`), plus one line in `d
 - EditMode tests for the pure What's-new logic and the shipped JSON.
 - Manual play with two clients on the WSL server.
 
-## Open questions (human decides; recommended default in brackets)
+## Open questions (answered 2026-11-07: human approved both defaults)
 1. Keys. [F1 debug menu, F2 What's new. F1 is the classic help/debug key; F3 is Minecraft's debug key
    if you prefer that convention.]
 2. Who writes What's-new entries. [The agent that builds a spec adds one entry as part of "done";
