@@ -1,7 +1,7 @@
 ---
 id: 012
 title: Non-verbal communication: emote wheel, world pings, quick chat
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -61,7 +61,7 @@ Only `game/` (branch stacked on `spec/011-hud-debug-whatsnew`).
 - EditMode tests for the pure rules and catalogs.
 - Manual with two clients, plus screenshots via `-screenshot`.
 
-## Open questions (human decides; recommended default in brackets)
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. Keys. [G emote wheel, middle mouse ping, T quick chat; gamepad LB / RB / D-pad.]
 2. Emote and phrase lists. [As listed above; easy to change later, they are data.]
 3. Should pings be visible to everyone or only to nearby players? [Nearby, within the 40 m interest
