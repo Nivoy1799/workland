@@ -84,18 +84,18 @@ struct FoodLook {
 - No new RPC. One extra SyncVar per food (5 bytes) and one SyncList on stations; sent only on change.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes (Unity EditMode, check-assets with the Food Kit row).
-- [ ] AC2: `FoodLookRules` tests: raw potato = (potato, whole, raw, single); board option 3 =
+- [x] AC1: `bash scripts/verify.sh` passes (Unity EditMode, check-assets with the Food Kit row).
+- [x] AC2: `FoodLookRules` tests: raw potato = (potato, whole, raw, single); board option 3 =
       sticks; sticks fried 150 sim s = sticks, medium; boiled 30 sim s = short; a plate of fries and
       tomato slices = plated with 2 parts in input order; a mix of 3 = mixed with 3 parts; unknown
       base id gives Ingredient 255.
-- [ ] AC3: Reflection test: `FoodLook` has only byte fields (no float, string or stats).
-- [ ] AC4: Catalog test: every demo ingredient has a whole model; every shape has a model or the
+- [x] AC3: Reflection test: `FoodLook` has only byte fields (no float, string or stats).
+- [x] AC4: Catalog test: every demo ingredient has a whole model; every shape has a model or the
       generic piece; plate and bowl models exist; wrappers have no colliders or scripts (spec 015 AC7).
-- [ ] AC5: Two clients on the dedicated server (screenshots like specs 012 to 016): a potato in the
+- [x] AC5: Two clients on the dedicated server (screenshots like specs 012 to 016): a potato in the
       hand looks like a potato, cut sticks look like sticks, fried sticks are darker than raw ones,
-      a plate with fries and tomato shows both, the pan shows what is cooking.
-- [ ] AC6: `WhatsNew.json` entry `spec-017` with test steps.
+      a plate with fries and tomato shows both, the pan shows what is cooking. Confirmed by the human play-test on 2026-11-07.
+- [x] AC6: `WhatsNew.json` entry `spec-017` with test steps.
 
 ## Test plan
 - EditMode: `FoodLookRulesTests`, `FoodLookSurfaceTests`, `FoodArtCatalogTests`.
