@@ -22,6 +22,7 @@ namespace Worktown.Game.Social
 
         // Server only.
         private readonly SocialRateLimiter _serverLimiter = new SocialRateLimiter();
+        private bool _serverLimitedLogged;
 
         // Owner only.
         private PlayerInputReader _input;
@@ -38,7 +39,7 @@ namespace Worktown.Game.Social
         public override void OnStartClient()
         {
             base.OnStartClient();
-            if (IsOwner && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-dev-social") >= 0)
+            if (IsOwner && Debug.isDebugBuild && System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-dev-social") >= 0)
                 _devNext = Time.unscaledTime + 8f;
         }
 
@@ -61,7 +62,11 @@ namespace Worktown.Game.Social
             if (_input == null) _input = FindFirstObjectByType<PlayerInputReader>();
             if (_wheel == null) _wheel = FindFirstObjectByType<EmoteWheelView>();
             if (_input == null || _wheel == null) return;
-            if (_input.IsUiOpen && !_wheelOpen) return;
+            if (_input.IsUiOpen && !_wheelOpen)
+            {
+                _wheel.SetQuickChatOpen(false); // a menu opened while T was held
+                return;
+            }
 
             Keyboard keyboard = Keyboard.current;
             Mouse mouse = Mouse.current;
@@ -160,6 +165,29 @@ namespace Worktown.Game.Social
             return 0;
         }
 
+        public override void OnStopClient()
+        {
+            base.OnStopClient();
+            if (IsOwner) CloseOwnerUi();
+        }
+
+        private void OnDisable()
+        {
+            if (IsOwner) CloseOwnerUi();
+        }
+
+        /// <summary>Never leave the camera frozen or panels open when this player goes away (review finding).</summary>
+        private void CloseOwnerUi()
+        {
+            _wheelOpen = false;
+            if (_input != null) _input.SuppressLook = false;
+            if (_wheel != null)
+            {
+                _wheel.SetWheelOpen(false);
+                _wheel.SetQuickChatOpen(false);
+            }
+        }
+
         // ---------- server ----------
 
         [ServerRpc]
@@ -188,8 +216,17 @@ namespace Worktown.Game.Social
 
         private bool Allow()
         {
-            if (_serverLimiter.TryConsume(Time.unscaledTime)) return true;
-            Debug.Log("[Social] player " + OwnerId + " rate-limited");
+            if (_serverLimiter.TryConsume(Time.unscaledTime))
+            {
+                _serverLimitedLogged = false;
+                return true;
+            }
+            // Log once per burst of refused requests, so a spamming client cannot flood the server log.
+            if (!_serverLimitedLogged)
+            {
+                Debug.Log("[Social] player " + OwnerId + " rate-limited");
+                _serverLimitedLogged = true;
+            }
             return false;
         }
 

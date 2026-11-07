@@ -55,7 +55,9 @@ namespace Worktown.Game.Cooking
             switch (kind)
             {
                 case StationKind.Crate: return stationName + ": E take one";
-                case StationKind.Counter: return stationName + ": E serve";
+                case StationKind.Counter: return stationName + ": E sell";
+                case StationKind.PlatingTable: return stationName + ": E put food on / E (empty hands) take the plate";
+                case StationKind.Bowl: return stationName + ": E put food in / E (empty hands) take the mix";
             }
             StationAction[] actions = ActionsOf(kind);
             var parts = new List<string>(actions.Length);

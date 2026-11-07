@@ -6,6 +6,10 @@ namespace Worktown.Game.Cooking
         Board,
         Pan,
         Pot,
-        Counter
+        Counter,
+        /// <summary>Spec 013: put items on a plate, take them as one plated dish.</summary>
+        PlatingTable,
+        /// <summary>Spec 013: put items in a bowl, take them as one mix.</summary>
+        Bowl
     }
 }

@@ -74,6 +74,21 @@
         "Quick chat appears as a toast for nearby players",
         "Spamming G or middle mouse gets limited after a few tries"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-013",
+      "date": "2026-11-07",
+      "title": "Meals: plating table and mixing bowl",
+      "items": [
+        "Plating table and bowl next to the counter (end of the kitchen row)",
+        "E with food in hand puts it on the plate / in the bowl; E with empty hands takes the result",
+        "A plate with two or more things is a meal: it sells for about 3x a single snack"
+      ],
+      "test": [
+        "Golden fries + tomato slices on one plate, take it, sell it: about $1,400",
+        "Two players fill the same plate together",
+        "A finished plate cannot go onto another plate"
+      ]
     }
   ]
 }

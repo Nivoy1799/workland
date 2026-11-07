@@ -262,6 +262,16 @@ namespace Worktown.Game.Editor
             stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
                 CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
 
+            // Spec 013: combine stations next to the counter; their contents are networked.
+            Station plating = CreateStation(parent.transform, stations.Count, StationKind.PlatingTable, "Plating table", 11f,
+                CreateMaterial(Root + "/Settings/Station_Plating.mat", new Color(0.86f, 0.84f, 0.72f)), 0);
+            AddStationContents(plating);
+            stations.Add(plating);
+            Station bowl = CreateStation(parent.transform, stations.Count, StationKind.Bowl, "Bowl", 13.5f,
+                CreateMaterial(Root + "/Settings/Station_Bowl.mat", new Color(0.55f, 0.75f, 0.62f)), 0);
+            AddStationContents(bowl);
+            stations.Add(bowl);
+
             var feedObject = new GameObject("ServeFeed");
             NetworkObject feedNob = feedObject.AddComponent<NetworkObject>();
             // Global: every client gets the feed, whatever the distance condition says.
@@ -300,7 +310,7 @@ namespace Worktown.Game.Editor
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
             body.isStatic = true;
 
-            string keys = kind == StationKind.Crate || kind == StationKind.Counter ? "E" : "1-" + StationRules.OptionCount(kind);
+            string keys = StationRules.OptionCount(kind) == 0 ? "E" : "1-" + StationRules.OptionCount(kind);
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, StationHeight * 0.5f + 0.6f, 0f), 60, 0.05f);
             string price = string.Empty;
             if (kind == StationKind.Crate
@@ -316,6 +326,14 @@ namespace Worktown.Game.Editor
             SetField(station, "_displayName", displayName);
             SetField(station, "_ingredientIndex", ingredientIndex);
             return station;
+        }
+
+        /// <summary>Spec 013: scene network object that syncs what lies on the station to its label.</summary>
+        private static void AddStationContents(Station station)
+        {
+            station.gameObject.AddComponent<NetworkObject>();
+            var contents = station.gameObject.AddComponent<StationContents>();
+            SetField(contents, "_label", station.transform.Find("Label").GetComponent<TextMesh>());
         }
 
         private static TextMesh CreateLabel(Transform parent, Vector3 localPosition, int fontSize, float characterSize)

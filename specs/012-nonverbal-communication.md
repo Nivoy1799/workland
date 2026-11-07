@@ -71,6 +71,10 @@ Only `game/` (branch stacked on `spec/011-hud-debug-whatsnew`).
 - Approve, answer the open questions, play it with a second person.
 
 ## Implementation notes
+- Review 2026-11-07: refused social requests log once per burst; the wheel/quick-chat UI and the look
+  suppression are reset when the player goes away; dev switches only work in development builds.
+- Scope deviations: also changed `PlayerInputReader.cs` (SuppressLook), `PickupInteractor.cs` (T/G
+  guards), `WhatsNewView.cs` (-skip-whatsnew), `Worktown.uss`, and added `PingMarker.prefab`.
 Built 2026-11-07 on `spec/012-nonverbal-communication` (stacked on spec 011).
 - AC1, AC2: `SocialRulesTests` (8 wheel directions, dead zone, NaN, rate-limit burst/refill/backwards
   time, ping range and finiteness, catalog ids/text, unknown ids).

@@ -14,6 +14,12 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 009: the grocer price is more than the wallet holds.</summary>
         NotEnoughMoney,
         /// <summary>Spec 009: no market wants it (e.g. quality too low, raw potato).</summary>
-        CannotSell
+        CannotSell,
+        /// <summary>Spec 013: the plate or bowl is full.</summary>
+        StationFull,
+        /// <summary>Spec 013: a plated dish cannot go onto another plate or into a bowl.</summary>
+        AlreadyPlated,
+        /// <summary>Spec 013: nothing on the plate or in the bowl to take.</summary>
+        StationEmpty
     }
 }
