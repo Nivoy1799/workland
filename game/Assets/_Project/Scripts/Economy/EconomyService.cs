@@ -23,6 +23,15 @@ namespace Worktown.Game.Economy
         private readonly TownEconomy _economy = TownEconomy.CreateDemo();
         private float _secondsIntoHour;
 
+        /// <summary>Spec 014: raised on the server after every in-game hour (demand changed).</summary>
+        public event System.Action HourTicked;
+
+        /// <summary>Spec 014: open NPC orders of a market right now (0 if unknown).</summary>
+        public int OpenDemand(string marketId)
+        {
+            return _economy.TryGetMarket(marketId, out MarketState market) ? market.OpenDemand : 0;
+        }
+
         private void Start()
         {
             PlayerSpawner spawner = _networkManager.GetComponent<PlayerSpawner>();
@@ -49,6 +58,9 @@ namespace Worktown.Game.Economy
             _economy.TickHour();
             PublishBoard();
             Debug.Log("[Economy] " + EconomyRules.ClockText(_economy.Tick) + " " + PriceText());
+            // Last, and isolated: listeners (spec 014 customers) must not break the clock.
+            try { HourTicked?.Invoke(); }
+            catch (System.Exception e) { Debug.LogException(e); }
         }
 
         private void OnPlayerSpawned(NetworkObject player)

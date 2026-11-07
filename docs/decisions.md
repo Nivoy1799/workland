@@ -32,6 +32,7 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D23 | Currency | Dollar ($), whole dollars only, no sub-units | 2026-11-05 | Simple to read; integer money keeps the sim deterministic |
 | D24 | Cloud LLM provider (was O2) | OpenRouter, with pinned providers that support strict JSON output | 2026-11-05 | One key, easy model comparison; switching is a config change (D3) |
 | D25 | Gateway language (was O3) | C# / ASP.NET on .NET 10 | 2026-11-05 | One language and toolchain for the project; can reuse /sim (item hash, process tree) without a second implementation |
+| D26 | Asset packs (was O8) | Start with free CC0 packs, Kenney first; KayKit/Quaternius only to fill gaps. Art sits behind a swap layer (spec 015). Paid packs (e.g. Synty POLYGON) only if the project heads to release, and then bought outright; no subscription-licensed assets in the project | 2026-11-07 | Project is a playground for now: $0 and no licence risk. Synty's subscription licence requires an active subscription for any further development after cancelling |
 
 ## OPEN
 
@@ -42,4 +43,3 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | O5 | Server hoster | Which rental provider, region (EU) | Phase 4 |
 | O6 | Moderation approach | Rule-based filter, small classifier model, or provider moderation API | Before Early Access |
 | O7 | Max players per server at Early Access | Depends on load test results | After spec 004 |
-| O8 | Asset packs | Which low-poly pack family | Phase 2 graybox to art pass |

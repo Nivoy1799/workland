@@ -27,6 +27,7 @@ using Worktown.Game.Net;
 using Worktown.Game.Player;
 using Worktown.Game.UI;
 using Worktown.Game.Social;
+using Worktown.Game.Npc;
 using UnityEngine.UIElements;
 using Unity.Cinemachine;
 using UnityEngine.InputSystem;
@@ -46,6 +47,7 @@ namespace Worktown.Game.Editor
         private const string PickupPrefabPath = Root + "/Prefabs/PickupCube.prefab";
         private const string FoodPrefabPath = Root + "/Prefabs/Food.prefab";
         private const string PingMarkerPrefabPath = Root + "/Prefabs/PingMarker.prefab";
+        private const string CustomerPrefabPath = Root + "/Prefabs/Customer.prefab";
         private const float FoodSize = 0.4f;
         private const float StationHeight = 1f;
         private const float KitchenZ = 13f;
@@ -78,6 +80,7 @@ namespace Worktown.Game.Editor
             NetworkObject playerPrefab = CreatePlayerPrefab(pingPrefab);
             GameObject pickupPrefab = CreatePickupPrefab(pickupMat);
             NetworkObject foodPrefab = CreateFoodPrefab(pickupMat);
+            NetworkObject customerPrefab = CreateCustomerPrefab(pickupMat);
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
             AssetDatabase.SaveAssets();
@@ -91,6 +94,7 @@ namespace Worktown.Game.Editor
             CreatePickups(pickupPrefab);
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
             CreateKitchen(networkManager, foodPrefab);
+            CreateCustomers(networkManager, customerPrefab);
             CreateBootstrap(networkManager);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -182,6 +186,51 @@ namespace Worktown.Game.Editor
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(cube, PickupPrefabPath);
             UnityEngine.Object.DestroyImmediate(cube);
             return saved;
+        }
+
+        /// <summary>Spec 014: NPC customer, moved by the server; no collider so it never blocks players.</summary>
+        private static NetworkObject CreateCustomerPrefab(Material material)
+        {
+            var root = new GameObject("Customer");
+            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            body.name = "Body";
+            UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+            body.transform.SetParent(root.transform, false);
+            body.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+            body.transform.localScale = new Vector3(0.8f, 0.9f, 0.8f);
+            var renderer = body.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, 2.1f, 0f), 56, 0.045f);
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            AddServerAuthoritativeTransform(root);
+            var customer = root.AddComponent<Customer>();
+            SetField(customer, "_label", label);
+            SetField(customer, "_body", renderer);
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, CustomerPrefabPath);
+            UnityEngine.Object.DestroyImmediate(root);
+            return saved.GetComponent<NetworkObject>();
+        }
+
+        /// <summary>Spec 014: street entry east of the kitchen and the queue in front of the counter.</summary>
+        private static void CreateCustomers(NetworkManager networkManager, NetworkObject customerPrefab)
+        {
+            var parent = new GameObject("Customers");
+            var entry = new GameObject("StreetEntry");
+            entry.transform.SetParent(parent.transform, false);
+            entry.transform.SetPositionAndRotation(new Vector3(24f, 0.1f, KitchenZ - 2.2f), Quaternion.Euler(0f, -90f, 0f));
+            var head = new GameObject("QueueHead");
+            head.transform.SetParent(parent.transform, false);
+            head.transform.position = new Vector3(8.5f, 0.1f, KitchenZ - 2.2f); // in front of the counter
+
+            var service = networkManager.gameObject.AddComponent<CustomerService>();
+            SetField(service, "_networkManager", networkManager);
+            SetField(service, "_economy", networkManager.GetComponent<EconomyService>());
+            SetField(service, "_customerPrefab", customerPrefab);
+            SetField(service, "_entry", entry.transform);
+            SetField(service, "_queueHead", head.transform);
+            SetField(networkManager.GetComponent<KitchenService>(), "_customers", service);
         }
 
         /// <summary>Spec 012: local (not networked) ping marker: a thin pillar and a label.</summary>
@@ -430,7 +479,7 @@ namespace Worktown.Game.Editor
             var walls = new GameObject("Boxes");
             Vector3[] positions =
             {
-                new Vector3(6f, 1f, 6f), new Vector3(-8f, 1.5f, 4f), new Vector3(3f, 0.75f, -9f),
+                new Vector3(17f, 1f, 2f), new Vector3(-8f, 1.5f, 4f), new Vector3(3f, 0.75f, -9f),
                 new Vector3(-5f, 1f, -6f), new Vector3(30f, 2f, 30f), new Vector3(-35f, 2f, -25f)
             };
             Vector3[] sizes =
