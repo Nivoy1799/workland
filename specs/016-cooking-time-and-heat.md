@@ -1,7 +1,7 @@
 ---
 id: 016
 title: Cooking takes time; pan heat and fry/saute mode
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -110,7 +110,7 @@ the existing guards (UI open, T or G held) apply.
   two-client screenshot run like specs 012 to 014.
 - Command: `bash scripts/verify.sh` (Windows, Editor closed, `UNITY_PATH` set).
 
-## Open questions
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. **Keep the instant 1 to 3 presets as well?** Default: no, the pan and pot are timed only.
    Alternative: keep presets as a "quick cook" for the demo.
 2. **Time scale.** Default: 6 (fries about 25 s). Alternative: 1:1 (fries 2.5 min) or another factor.
