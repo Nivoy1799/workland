@@ -1,7 +1,7 @@
 ---
 id: 023
 title: Kitchen polish (sounds, steam, real counter models, readable prompts)
-status: draft
+status: approved
 owner: architect
 builder: sonnet
 ---
@@ -57,7 +57,7 @@ Written on 2026-11-07 for the overnight build.
 - [ ] AC5 (manual, human): sounds play on chop, sizzle, boil, click; nothing is too loud.
 - [ ] AC6: `WhatsNew.json` entry `spec-023`.
 
-## Open questions (defaults in bold)
+## Open questions (answered 2026-11-07: human approved all defaults, incl. the download)
 1. **Download** one CC0 Kenney sound pack (≤ 30 MB), only used files kept? **Default: yes.**
 2. **Furniture Kit** models for worktops and stoves? **Default: yes.**
 

@@ -1,7 +1,7 @@
 ---
 id: 024
 title: Human characters (players and customers as low-poly people)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -53,7 +53,7 @@ same characters in other colours. This was step 4 of the human's order from 2026
 - [ ] AC5 (manual, human): looks right, no floating items, first person unchanged.
 - [ ] AC6: `WhatsNew.json` entry `spec-024`.
 
-## Open questions (defaults in bold)
+## Open questions (answered 2026-11-07: human approved all defaults, incl. the download)
 1. **Download** one CC0 character pack (≤ 30 MB) chosen by the orchestrator? **Default: yes.**
 2. **Customers** use the same characters with different colours? **Default: yes.**
 

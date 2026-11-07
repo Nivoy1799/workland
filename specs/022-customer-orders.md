@@ -1,7 +1,7 @@
 ---
 id: 022
 title: Customer orders and a short shift (a real game loop)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -92,7 +92,7 @@ The builder checks each dish can be made with spec 021 and adjusts names or rule
 - [ ] AC8 (manual, human): play one shift, serve at least 3 different dishes.
 - [ ] AC9: `WhatsNew.json` entry `spec-022`.
 
-## Open questions (defaults in bold)
+## Open questions (answered 2026-11-07: human approved all defaults, incl. the download)
 1. **Menu** as in the table (builder may adjust to what 021 can cook)? **Default: yes.**
 2. **Pay factors** 100 % + tip / 60 % / 25 %? **Default: yes.**
 3. **Shift** 08:00 to 14:00 in-game, summary 15 s, then the next day? **Default: yes.**
