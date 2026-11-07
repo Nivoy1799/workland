@@ -1,7 +1,7 @@
 ---
 id: 020
 title: Mouse interaction, place spots and a clear highlight (first person)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -179,7 +179,7 @@ everything. Third person is unchanged.
 - Human play-test (AC9).
 - Command: `bash scripts/verify.sh` (Windows, Editor closed, `UNITY_PATH` set).
 
-## Open questions (defaults in bold; the human answers before approval)
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. **E in first person:** removed completely (the mouse does everything)? **Default: yes.**
 2. **Q drops** what you hold at your feet? **Default: yes.**
 3. **Highlight style:** a soft glow on the target (white = take, green = put/use, grey = not
