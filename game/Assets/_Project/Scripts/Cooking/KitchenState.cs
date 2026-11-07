@@ -62,6 +62,22 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
+        /// <summary>
+        /// Spec 009: the plated version of the food, for selling. Does not change the stored item,
+        /// so a refused sale leaves the food as it was.
+        /// </summary>
+        public CookOutcome TryPlate(int objectId, out Item plated)
+        {
+            plated = null;
+            if (!_items.TryGetValue(objectId, out Item item)) return CookOutcome.NotFood;
+            OperationResult result = _factory.Apply("plate", new[] { item }, NoParams);
+            if (!result.Ok || result.Item == null) return CookOutcome.SimRefused;
+            plated = result.Item;
+            return CookOutcome.Ok;
+        }
+
+        private static readonly IReadOnlyDictionary<string, ParamValue> NoParams = new Dictionary<string, ParamValue>();
+
         /// <summary>Removes the food (it was served or despawned).</summary>
         public bool TryRemove(int objectId, out Item item)
         {

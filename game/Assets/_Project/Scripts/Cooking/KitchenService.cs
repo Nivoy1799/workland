@@ -1,8 +1,10 @@
 using FishNet.Managing;
 using FishNet.Object;
 using UnityEngine;
+using Worktown.Game.Economy;
 using Worktown.Game.Net;
 using Worktown.Sim.Cooking;
+using Worktown.Sim.Economy;
 
 namespace Worktown.Game.Cooking
 {
@@ -17,6 +19,8 @@ namespace Worktown.Game.Cooking
         [SerializeField] private PickupService _pickups;
         [SerializeField] private NetworkObject _foodPrefab;
         [SerializeField] private ServeFeed _feed;
+        [Tooltip("Spec 009. Without it, crates are free and the counter only serves.")]
+        [SerializeField] private EconomyService _economy;
         [Tooltip("Index in this array = Station.Index.")]
         [SerializeField] private Station[] _stations = new Station[0];
 
@@ -44,8 +48,18 @@ namespace Worktown.Game.Cooking
             int ingredient = crate.IngredientIndex;
             if (ingredient < 0 || ingredient >= DemoIngredients.All.Count) return CookOutcome.UnknownStation;
 
-            CookOutcome created = _kitchen.TryCreateIngredient(DemoIngredients.All[ingredient].Id, out Item item);
+            string baseId = DemoIngredients.All[ingredient].Id;
+            CookOutcome created = _kitchen.TryCreateIngredient(baseId, out Item item);
             if (created != CookOutcome.Ok) return created;
+
+            // Spec 009: pay the NPC grocer first; no money, no potato.
+            long cost = 0;
+            if (_economy != null)
+            {
+                EconomyError paid = _economy.TryBuy(player.NetworkObject, baseId, out cost);
+                if (paid == EconomyError.InsufficientFunds) return CookOutcome.NotEnoughMoney;
+                if (paid != EconomyError.None) return CookOutcome.SimRefused;
+            }
 
             NetworkObject food = _networkManager.GetPooledInstantiated(_foodPrefab, true);
             food.transform.SetPositionAndRotation(player.HoldPoint.position, player.HoldPoint.rotation);
@@ -53,7 +67,8 @@ namespace Worktown.Game.Cooking
             _kitchen.Register(food.ObjectId, item);
             food.GetComponent<Food>().ServerSet(KitchenState.NameOf(item), KitchenState.QualityOf(item), (byte)ingredient);
             _pickups.HandTo(player, food);
-            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(item));
+            Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item)
+                + " for " + EconomyRules.Money(cost));
             return CookOutcome.Ok;
         }
 
@@ -78,17 +93,39 @@ namespace Worktown.Game.Cooking
         private CookOutcome Serve(PickupInteractor player)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return CookOutcome.NothingHeld;
-            if (!_kitchen.TryRemove(held.ObjectId, out Item item)) return CookOutcome.NotFood;
-
-            _pickups.TakeAway(player, out _);
-            _networkManager.ServerManager.Despawn(held);
+            if (!_kitchen.TryGet(held.ObjectId, out Item item)) return CookOutcome.NotFood;
 
             string name = KitchenState.NameOf(item);
             float quality = KitchenState.QualityOf(item);
-            string entry = "Player " + player.OwnerId + " served " + name + " "
-                + StarRating.Format(StarRating.Stars(quality)) + " (q " + quality.ToString("0.00") + ")";
+            string stars = StarRating.Format(StarRating.Stars(quality));
+            string entry;
+
+            if (_economy != null)
+            {
+                // Spec 009: plate and sell. A refused sale keeps the food in the player's hands.
+                if (_kitchen.TryPlate(held.ObjectId, out Item plated) != CookOutcome.Ok) return CookOutcome.CannotSell;
+                SaleResult sale = _economy.TrySell(player.NetworkObject, plated);
+                if (!sale.Ok)
+                {
+                    Debug.Log("[Economy] player " + player.OwnerId + " could not sell " + name + ": " + sale.Error);
+                    return CookOutcome.CannotSell;
+                }
+                string where = sale.Channel == SaleChannel.NpcDemand ? sale.MarketId : "wholesaler";
+                entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
+                    + EconomyRules.Money(sale.Payout) + " (" + where + ")";
+                Debug.Log("[Economy] player " + player.OwnerId + " sold " + name + " for " + EconomyRules.Money(sale.Payout)
+                    + " to " + where + " q=" + quality.ToString("0.00"));
+            }
+            else
+            {
+                entry = "Player " + player.OwnerId + " served " + name + " " + stars + " (q " + quality.ToString("0.00") + ")";
+                Debug.Log("[Kitchen] player " + player.OwnerId + " served " + name + " q=" + quality.ToString("0.00"));
+            }
+
+            _kitchen.TryRemove(held.ObjectId, out _);
+            _pickups.TakeAway(player, out _);
+            _networkManager.ServerManager.Despawn(held);
             if (_feed != null) _feed.ServerAdd(entry);
-            Debug.Log("[Kitchen] player " + player.OwnerId + " served " + name + " q=" + quality.ToString("0.00"));
             return CookOutcome.Ok;
         }
     }
