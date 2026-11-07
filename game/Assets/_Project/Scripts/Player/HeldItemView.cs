@@ -20,8 +20,9 @@ namespace Worktown.Game.Player
     {
         // Spec 019: the knife in view, relative to the view anchor; numbers for the visual check.
         private static readonly Vector3 KnifeHoldOffset = new Vector3(-0.05f, 0.05f, 0.05f);
-        // Turned 180 degrees after the spec 020 play-test (the human: "knife is held the wrong way around").
-        private static readonly Quaternion KnifeHoldRotation = Quaternion.Euler(15f, 170f, 90f);
+        // Turned 180 degrees after the spec 020 play-test (the human: "knife is held the wrong way around"),
+        // then rolled over so the cutting edge points down (second play-test note).
+        private static readonly Quaternion KnifeHoldRotation = Quaternion.Euler(15f, 170f, -90f);
         private const float ChopSeconds = 0.18f;
         private const float ChopAngle = 35f;      // degrees the tip dips
         private const float ChopDrop = 0.08f;     // metres the knife moves down
