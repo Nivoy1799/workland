@@ -13,18 +13,15 @@ namespace Worktown.Game.Cooking
         private uint _runningSince;
         private bool _running;
 
-        public HeatSession(Item food, byte color, string operationId, int? tempC, bool stoveOn, uint tick)
+        public HeatSession(Item food, string operationId, int? tempC, bool stoveOn, uint tick)
         {
             Food = food;
-            Color = color;
             OperationId = operationId;
             TempC = tempC;
             if (stoveOn) Start(tick);
         }
 
         public Item Food { get; }
-        /// <summary>Display color of the food (ingredient index), kept for the result.</summary>
-        public byte Color { get; }
         /// <summary>"fry", "saute" or "boil".</summary>
         public string OperationId { get; }
         /// <summary>Pan temperature in Celsius; null for the pot (boil has a fixed temperature).</summary>

@@ -136,6 +136,24 @@
         "Walk to the counter: customers queue on the street side next to the road",
         "Cook one dish end to end: it works as before"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-017",
+      "date": "2026-11-07",
+      "title": "Food you can see",
+      "items": [
+        "Food is a 3D model now: potatoes, apples, tomatoes and onions look like themselves",
+        "Cut food shows its shape (halves, slices, sticks, cubes); fried potato sticks become fries",
+        "Cooked food gets darker the longer it cooks; fried food turns golden",
+        "Plates and bowls show what is on them, the pan and the pot show what is cooking"
+      ],
+      "test": [
+        "Take a potato from the crate: it looks like a potato (a brown oval) in your hands",
+        "Board 3 (sticks): it turns into sticks; board 2 on a tomato gives tomato slices",
+        "Fry the sticks for about 25 s: they come out as golden fries, darker than raw sticks",
+        "Put fries and tomato slices on the plating table: both show on the plate, also after taking it",
+        "Put food in the pan and switch it on: the other player sees it in the pan and it darkens"
+      ]
     }
   ]
 }

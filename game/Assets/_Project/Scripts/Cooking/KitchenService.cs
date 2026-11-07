@@ -105,7 +105,8 @@ namespace Worktown.Game.Cooking
             {
                 if (!contents.IsServerInitialized) continue;
                 string status = _kitchen.StoveOf(station.Index).Describe(station.Kind);
-                contents.ServerSetHeat(status, _kitchen.DescribeHeat(station.Index, tick, tickRate));
+                contents.ServerSetHeat(status, _kitchen.DescribeHeat(station.Index, tick, tickRate),
+                    _kitchen.HeatLook(station.Index, tick, tickRate));
             }
         }
 
@@ -126,7 +127,7 @@ namespace Worktown.Game.Cooking
             if (_pickups.TryGetHeld(player, out NetworkObject held))
             {
                 if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
-                CookOutcome added = _kitchen.TryPutOnHeat(held.ObjectId, station.Index, station.Kind, food.Ingredient.Value, tick);
+                CookOutcome added = _kitchen.TryPutOnHeat(held.ObjectId, station.Index, station.Kind, tick);
                 if (added != CookOutcome.Ok) return added;
                 string name = food.DisplayName.Value; // read before despawn (review nit)
                 _pickups.TakeAway(player, out _);
@@ -138,9 +139,9 @@ namespace Worktown.Game.Cooking
 
             // Hand the result over first, clear the station only on success (as on the plating table).
             CookOutcome taken = _kitchen.TryPreviewHeatTake(station.Index, tick, _networkManager.TimeManager.TickRate,
-                out Item result, out byte color);
+                out Item result);
             if (taken != CookOutcome.Ok && taken != CookOutcome.TooShort) return taken;
-            if (!SpawnFoodInHands(player, result, color)) return CookOutcome.SimRefused;
+            if (!SpawnFoodInHands(player, result)) return CookOutcome.SimRefused;
             _kitchen.ClearHeat(station.Index);
             _labelsDirty = true;
             Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " out of the "
@@ -167,20 +168,22 @@ namespace Worktown.Game.Cooking
                 if (paid != EconomyError.None) return CookOutcome.SimRefused;
             }
 
-            if (!SpawnFoodInHands(player, item, (byte)ingredient)) return CookOutcome.SimRefused;
+            if (!SpawnFoodInHands(player, item)) return CookOutcome.SimRefused;
             Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item)
                 + " for " + EconomyRules.Money(cost));
             return CookOutcome.Ok;
         }
 
         /// <summary>Spawns a food object for a sim item directly in the player's hands.</summary>
-        private bool SpawnFoodInHands(PickupInteractor player, Item item, byte color)
+        private bool SpawnFoodInHands(PickupInteractor player, Item item)
         {
             NetworkObject food = _networkManager.GetPooledInstantiated(_foodPrefab, true);
             food.transform.SetPositionAndRotation(player.HoldPoint.position, player.HoldPoint.rotation);
+            // Spec 017: set the look before spawning, so it arrives with the spawn and a pooled object never
+            // shows its old model or the fallback cube for a tick.
+            Publish(food.GetComponent<Food>(), item);
             _networkManager.ServerManager.Spawn(food);
             _kitchen.Register(food.ObjectId, item);
-            food.GetComponent<Food>().ServerSet(KitchenState.NameOf(item), KitchenState.QualityOf(item), color);
             if (_pickups.HandTo(player, food)) return true;
 
             // Should not happen (hands were checked); do not leave the item lying around unowned.
@@ -200,21 +203,21 @@ namespace Worktown.Game.Cooking
             if (_pickups.TryGetHeld(player, out NetworkObject held))
             {
                 if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
-                CookOutcome added = _kitchen.TryAddToStation(held.ObjectId, station.Index, station.Kind, food.Ingredient.Value);
+                CookOutcome added = _kitchen.TryAddToStation(held.ObjectId, station.Index, station.Kind);
                 if (added != CookOutcome.Ok) return added;
                 _pickups.TakeAway(player, out _);
                 _networkManager.ServerManager.Despawn(held);
-                if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index));
+                if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index), _kitchen.LooksOnStation(station.Index));
                 Debug.Log("[Kitchen] player " + player.OwnerId + " put " + food.DisplayName.Value + " on " + station.DisplayName);
                 return CookOutcome.Ok;
             }
 
             // Hand the result over first, clear the station only on success (review finding).
-            CookOutcome taken = _kitchen.TryPreviewTake(station.Index, station.Kind, out Item result, out byte color);
+            CookOutcome taken = _kitchen.TryPreviewTake(station.Index, station.Kind, out Item result);
             if (taken != CookOutcome.Ok) return taken;
-            if (!SpawnFoodInHands(player, result, color)) return CookOutcome.SimRefused;
+            if (!SpawnFoodInHands(player, result)) return CookOutcome.SimRefused;
             _kitchen.ClearStation(station.Index);
-            if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index));
+            if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index), _kitchen.LooksOnStation(station.Index));
             Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result)
                 + " from " + station.DisplayName + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
             return CookOutcome.Ok;
@@ -233,10 +236,17 @@ namespace Worktown.Game.Cooking
                     Debug.Log("[Kitchen] sim refused " + station.Kind + " " + option + ": " + error);
                 return outcome;
             }
-            food.ServerSet(KitchenState.NameOf(result), KitchenState.QualityOf(result), food.Ingredient.Value);
+            Publish(food, result);
             Debug.Log("[Kitchen] player " + player.OwnerId + " made " + KitchenState.NameOf(result)
                 + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
             return CookOutcome.Ok;
+        }
+
+        /// <summary>Server: name, rating and (spec 017) the coarse look of the item on its food object.</summary>
+        private static void Publish(Food food, Item item)
+        {
+            food.ServerSet(KitchenState.NameOf(item), KitchenState.QualityOf(item),
+                FoodLookRules.From(item), FoodLookRules.PartsOf(item));
         }
 
         private CookOutcome Serve(PickupInteractor player)
