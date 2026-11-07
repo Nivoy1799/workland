@@ -1,7 +1,7 @@
 ---
 id: 013
 title: Plating table and mixing bowl: combine ingredients into meals
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -77,7 +77,7 @@ Only `game/` (branch stacked on `spec/012-nonverbal-communication`).
 - EditMode tests for the pure assembly logic and the meal sale.
 - Manual co-op test with two clients; screenshots of the table label.
 
-## Open questions (human decides; recommended default in brackets)
+## Open questions (answered 2026-11-07: human approved both defaults)
 1. Can everyone use a table, or only the player who started it? [Everyone: co-op is the point.]
 2. Where do the stations go? [Plating table and bowl next to the counter at the end of the kitchen row.]
 
