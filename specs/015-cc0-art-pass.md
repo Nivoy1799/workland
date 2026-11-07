@@ -112,7 +112,16 @@ touching gameplay code or scenes by hand. Imported packs are tracked in a licenc
 - Add one manifest row per pack (or give the builder the pack name and URL to fill in).
 
 ## Implementation notes
-(Builder fills this in.)
+- Built: `Scripts/Art/` (ArtKey, ArtCatalog, ArtCatalogEntry, ArtCatalogRules), `Art/ArtCatalog.asset` (22 entries), 22 wrapper prefabs in `Prefabs/Art/`, the street in `GrayboxSceneBuilder.CreateStreet`, `check-assets.sh` (+ fixtures, `--self-test`, called from `verify.sh`), `ASSETS.md`, `docs/assets.md`, WhatsNew entry, 9 EditMode tests (196 total, all green).
+- Scope extension (approved by the orchestrator): `Editor/ArtCatalogBuilder.cs` generates wrappers and the catalog and is called first in `GrayboxSceneBuilder.Build`, so one command regenerates everything. Models, fit modes and scales live in its `Defs` table.
+- Station mapping: Crate=cardboardBoxOpen, Board=kitchenCabinetDrawer, Pan=kitchenStove, Pot=kitchenStoveElectric, Counter=kitchenBar, PlatingTable=kitchenCabinet, Bowl=kitchenCabinet + kitchenBlender on top. Stations are fitted automatically (uniform scale, max 1.2 x 1.2 m XZ and 1.1 m high, pivot bottom centre, yaw 180 so fronts face the spawn). The label is raised only when the model is taller than the cube (Bowl).
+- Swap layer: the station keeps root, `Body` cube + BoxCollider (unchanged size/position) and label; only the Body MeshRenderer is removed (the MeshFilter stays) and the wrapper is added as a sibling under the station root.
+- Materials: the FBX importer already produces URP Lit materials (colormap texture for the city kits, flat colours for the furniture kit), so no material overrides were needed. Not visually verified (batch mode, no graphics).
+- Street (visual only, no colliders, static): 6 road tiles z 5.5..10.5 x 9..39 (last is a crossroad), 5 buildings (shop + 3 houses north of the customer path, 1 house south), awning, 3 street lights, dumpster, trashcan, 2 trees, 2 planters, a fence behind the kitchen row. Obstacle boxes were left as they are (optional swap skipped).
+- Needs a visual check (awning moved to z 14.8 to meet the facade): model facing (stations and houses assume the model front faces +Z, rotated 180 to face south), road tile orientation (assumed to run along X), awning height (2.4 m) and street light arm direction. All are single numbers in `ArtCatalogBuilder.Defs` / `CreateStreet`.
+- Gotcha: `EditorSceneManager.NewScene` unloads unused assets, which destroys a catalog loaded before it, so the builder loads the catalog right after NewScene.
+- `ArtCatalogRules.StationKey` maps `StationKind` to `ArtKey` with an explicit switch (a test covers every kind). `ArtKey.Ground` is defined but has no catalog entry: no CC0 ground model is used, the plane stays. The generic `Building` and `Prop` slots also have no entry (unused); the fallback helper was removed.
+- `DefaultPrefabObjects.asset` is reordered by FishNet's prefab refresh on every scene build; that churn was reverted and is not part of this change.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

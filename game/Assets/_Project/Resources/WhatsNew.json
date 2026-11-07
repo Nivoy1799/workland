@@ -121,6 +121,21 @@
         "Take food out right away: 'Too short', it comes back unchanged",
         "A puts food in the pan, B takes it out: works for both players"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-015",
+      "date": "2026-11-07",
+      "title": "The kitchen and the street get real art",
+      "items": [
+        "Kitchen stations are now stoves, cabinets and a bar instead of grey boxes (free CC0 models)",
+        "A short street east of the kitchen with a road, houses, a shop, street lights and trees",
+        "Movement, interaction range and cooking are unchanged"
+      ],
+      "test": [
+        "Walk along the kitchen row: every station shows a model and its label is readable",
+        "Walk to the counter: customers queue on the street side next to the road",
+        "Cook one dish end to end: it works as before"
+      ]
     }
   ]
 }

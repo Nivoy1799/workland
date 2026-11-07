@@ -56,6 +56,12 @@ else
   skip "game: Unity EditMode tests" "no Unity project yet"
 fi
 
+# 2b. Third-party asset manifest, licences and size cap (spec 015)
+if [ -f scripts/check-assets.sh ]; then
+  run "assets: self-test" bash scripts/check-assets.sh --self-test
+  run "assets: manifest and size" bash scripts/check-assets.sh
+fi
+
 # 3. AI gateway tests
 if [ -f ai-gateway/package.json ]; then
   run "ai-gateway: tests" bash -c "cd ai-gateway && npm test --silent"
