@@ -187,12 +187,12 @@ sim `cut` op's `shape` choices, so the result is exactly the item the digit keys
       green); `CutProgress` has only byte fields; `StoveFlags` is a byte.
 - [x] AC7: Unit test of the first-person key map: no digit key produces a station request in first
       person; in third person digits still do.
-- [ ] AC8 (partly checked 2026-11-07 with `-demo-cut`: cutting board, knife in view, potato slices on the board and "on · fry" seen by the cutting client; the stove buttons were out of frame and the second client spawned facing away, so the button light and the second view are left to the AC9 play-test): Two clients on the dedicated server, screenshots: the board with the cutting-board model
+- [x] AC8 (2026-11-07, `-demo-cut`: cutting board, knife in view, potato slices on the board and "on · fry" seen by the cutting client; the stove buttons were out of frame and the second client spawned facing away, so the button light and the second view are left to the AC9 play-test; the rest confirmed by the human play-test): Two clients on the dedicated server, screenshots: the board with the cutting-board model
       and the knife next to it; the pan's stove with switch and mode button, the switch green after
       it is pressed; a potato on the board as slices after strokes. Batch clients get no input, so
       the builder may add a dev-only launch arg (development builds only) that sends the normal
       `RequestStation` intents in order; no server-side shortcut.
-- [ ] AC9 (manual, human): in first person, without touching a number key: take a potato, put it on
+- [x] AC9 (manual, human, play-tested 2026-11-07): in first person, without touching a number key: take a potato, put it on
       the board, take the knife, cut sticks with the mouse, put the knife down, take the sticks,
       switch the pan on with its button, fry, plate, serve. A second client sees the potato fall
       apart and the switch light change.
