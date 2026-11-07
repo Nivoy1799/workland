@@ -1,7 +1,7 @@
 ---
 id: 021
 title: Movable cookware on normal worktops (board, pan, pot, plates, bowl as items; several ingredients in a pot)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -165,7 +165,7 @@ The rule "empty hands + pan with food" is `Take` (food first), "empty hands + em
 - Screenshot run (dev demo arg, single client), human play-test (AC9).
 - Command: `bash scripts/verify.sh`.
 
-## Open questions (defaults in bold; the human answers before approval)
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. **Kitchen layout:** worktops + 2 stoves with 2 burners each + counter + plate shelf, cookware lying
    on top as described? **Default: yes.**
 2. **Pan capacity:** one food at a time (several only in the pot)? **Default: yes; can grow later.**
