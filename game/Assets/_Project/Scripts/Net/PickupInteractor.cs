@@ -111,6 +111,12 @@ namespace Worktown.Game.Net
                     if (!keyboard.eKey.wasPressedThisFrame || !holding) return false;
                     RequestStation(station.Index, 0);
                     return true;
+                case StationKind.PlatingTable:
+                case StationKind.Bowl:
+                    // Spec 013: E puts the held food on/in it, or takes the result with empty hands.
+                    if (!keyboard.eKey.wasPressedThisFrame) return false;
+                    RequestStation(station.Index, 0);
+                    return true;
                 default:
                     int option = PressedOption(keyboard);
                     if (option == 0) return false;

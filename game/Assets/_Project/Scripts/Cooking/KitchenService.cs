@@ -44,7 +44,12 @@ namespace Worktown.Game.Cooking
             // old food entries must not attach to new objects (review finding, spec 007).
             if (args.ConnectionState == FishNet.Transporting.LocalConnectionState.Stopped
                 && !_networkManager.ServerManager.IsAnyServerStarted())
+            {
                 _kitchen.Clear();
+                foreach (Station station in _stations)
+                    if (station != null && station.TryGetComponent(out StationContents contents) && contents.IsSpawned)
+                        contents.ServerSet(System.Array.Empty<string>());
+            }
         }
 
         public CookOutcome TryUseStation(PickupInteractor player, int stationIndex, int option)
@@ -59,6 +64,8 @@ namespace Worktown.Game.Cooking
             {
                 case StationKind.Crate: return TakeIngredient(player, station);
                 case StationKind.Counter: return Serve(player);
+                case StationKind.PlatingTable:
+                case StationKind.Bowl: return Assemble(player, station);
                 default: return Cook(player, station, option);
             }
         }
@@ -82,21 +89,54 @@ namespace Worktown.Game.Cooking
                 if (paid != EconomyError.None) return CookOutcome.SimRefused;
             }
 
+            if (!SpawnFoodInHands(player, item, (byte)ingredient)) return CookOutcome.SimRefused;
+            Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item)
+                + " for " + EconomyRules.Money(cost));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spawns a food object for a sim item directly in the player's hands.</summary>
+        private bool SpawnFoodInHands(PickupInteractor player, Item item, byte color)
+        {
             NetworkObject food = _networkManager.GetPooledInstantiated(_foodPrefab, true);
             food.transform.SetPositionAndRotation(player.HoldPoint.position, player.HoldPoint.rotation);
             _networkManager.ServerManager.Spawn(food);
             _kitchen.Register(food.ObjectId, item);
-            food.GetComponent<Food>().ServerSet(KitchenState.NameOf(item), KitchenState.QualityOf(item), (byte)ingredient);
-            if (!_pickups.HandTo(player, food))
+            food.GetComponent<Food>().ServerSet(KitchenState.NameOf(item), KitchenState.QualityOf(item), color);
+            if (_pickups.HandTo(player, food)) return true;
+
+            // Should not happen (hands were checked); do not leave the item lying around unowned.
+            Debug.LogError("[Kitchen] could not hand " + KitchenState.NameOf(item) + " to player " + player.OwnerId);
+            _kitchen.TryRemove(food.ObjectId, out _);
+            _networkManager.ServerManager.Despawn(food);
+            return false;
+        }
+
+        /// <summary>
+        /// Spec 013: with food in hand, put it on the plating table / in the bowl; with empty hands,
+        /// take everything as one plated dish / mix.
+        /// </summary>
+        private CookOutcome Assemble(PickupInteractor player, Station station)
+        {
+            StationContents contents = station.GetComponent<StationContents>();
+            if (_pickups.TryGetHeld(player, out NetworkObject held))
             {
-                // Should not happen (hands were checked); do not leave a paid item lying around unowned.
-                Debug.LogError("[Kitchen] could not hand " + KitchenState.NameOf(item) + " to player " + player.OwnerId);
-                _kitchen.TryRemove(food.ObjectId, out _);
-                _networkManager.ServerManager.Despawn(food);
-                return CookOutcome.SimRefused;
+                if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
+                CookOutcome added = _kitchen.TryAddToStation(held.ObjectId, station.Index, station.Kind, food.Ingredient.Value);
+                if (added != CookOutcome.Ok) return added;
+                _pickups.TakeAway(player, out _);
+                _networkManager.ServerManager.Despawn(held);
+                if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index));
+                Debug.Log("[Kitchen] player " + player.OwnerId + " put " + food.DisplayName.Value + " on " + station.DisplayName);
+                return CookOutcome.Ok;
             }
-            Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item)
-                + " for " + EconomyRules.Money(cost));
+
+            CookOutcome taken = _kitchen.TryTakeFromStation(station.Index, station.Kind, out Item result, out byte color);
+            if (taken != CookOutcome.Ok) return taken;
+            if (contents != null) contents.ServerSet(_kitchen.NamesOnStation(station.Index));
+            if (!SpawnFoodInHands(player, result, color)) return CookOutcome.SimRefused;
+            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result)
+                + " from " + station.DisplayName + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
             return CookOutcome.Ok;
         }
 

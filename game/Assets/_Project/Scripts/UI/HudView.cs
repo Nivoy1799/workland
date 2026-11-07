@@ -157,6 +157,9 @@ namespace Worktown.Game.UI
                 case CookOutcome.SimRefused: return "That does not work with this food";
                 case CookOutcome.NotEnoughMoney: return "Not enough money";
                 case CookOutcome.CannotSell: return "Nobody wants to buy that";
+                case CookOutcome.StationFull: return "No more room there";
+                case CookOutcome.AlreadyPlated: return "That is already a finished plate";
+                case CookOutcome.StationEmpty: return "Nothing there yet";
                 default: return outcome.ToString();
             }
         }

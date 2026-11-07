@@ -67,7 +67,7 @@ namespace Worktown.Game.Tests
         {
             Assert.AreEqual("Pan: 1 light, 2 golden, 3 dark", StationRules.Prompt(StationKind.Pan, "Pan"));
             Assert.AreEqual("Board: 1 halves, 2 slices, 3 sticks, 4 cubes", StationRules.Prompt(StationKind.Board, "Board"));
-            Assert.AreEqual("Counter: E serve", StationRules.Prompt(StationKind.Counter, "Counter"));
+            Assert.AreEqual("Counter: E sell", StationRules.Prompt(StationKind.Counter, "Counter"));
         }
 
         [Test]

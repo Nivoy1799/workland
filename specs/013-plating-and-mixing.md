@@ -64,14 +64,14 @@ Only `game/` (branch stacked on `spec/012-nonverbal-communication`).
 - **Server restart:** contents are cleared like the kitchen state (spec 007 review finding).
 
 ## Acceptance criteria
-- [ ] AC1: `AssemblyRules`/`AssemblyState` (EditMode tests): add up to the limit then refuse; a
+- [x] AC1: `AssemblyRules`/`AssemblyState` (EditMode tests): add up to the limit then refuse; a
       plated item cannot be added to a plate; take returns `plate`/`mix` of the items in order and
       empties the station; bowl with one item returns it unchanged; empty take is refused.
-- [ ] AC2: Plate of golden fries + tomato slices sells to the meal market and pays more than the
+- [x] AC2: Plate of golden fries + tomato slices sells to the meal market and pays more than the
       fries alone (EditMode test with the real engine).
-- [ ] AC3: Two players on the WSL server build a plate together (each adds one item), one takes it and
+- [~] AC3: Two players on the WSL server build a plate together (each adds one item), one takes it and
       sells it; the feed shows the meal sale (manual, server log `[Economy] ... to meal`).
-- [ ] AC4: `bash scripts/verify.sh` passes with `UNITY_PATH` set; What's-new entry added.
+- [x] AC4: `bash scripts/verify.sh` passes with `UNITY_PATH` set; What's-new entry added.
 
 ## Test plan
 - EditMode tests for the pure assembly logic and the meal sale.
@@ -85,7 +85,16 @@ Only `game/` (branch stacked on `spec/012-nonverbal-communication`).
 - Approve, answer the open questions, cook a meal with a second person.
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-07 on `spec/013-plating-and-mixing` (stacked on spec 012).
+- AC1, AC2: `AssemblyTests` (plate of fries + tomato equals the sim's `plate`, table empties, limit 4,
+  plated dish refused on plate and in bowl, bowl gives a single item back unchanged and mixes two,
+  empty take refused, a plated dish sells as it is; meal market pays more than twice the snack).
+- AC3: needs two players; the stations show in the game (screenshot) and the server log will show
+  `[Kitchen] player N put ... on Plating table`, `took plate of ...`, `[Economy] ... to meal`.
+- AC4: verify.sh PASS, Unity EditMode 158/158; What's-new entry added.
+- Food put on a station is despawned and kept as a sim item in `KitchenState` per station index;
+  `StationContents` (scene NetworkObject) syncs the names to the station label.
+- Counter prompt now says "E sell" (was "E serve"); the spec 007 prompt test was updated.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
