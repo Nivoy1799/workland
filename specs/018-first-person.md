@@ -143,11 +143,11 @@ decides the outcome.
       like the other args; no `-view` leaves it unset.
 - [x] AC6: Reflection test: no ServerRpc gained a parameter (`RpcSurfaceTests` green) and `MoveData`
       has exactly one new field, a bool named `FirstPerson`.
-- [ ] AC7 (partly checked 2026-11-07: dot shown in first person, client B sees A turned to its camera yaw, no exceptions; aiming at the board, held food and V switch are left to the AC8 play-test because batch clients get no input): Two clients on the dedicated server, screenshots like specs 012 to 017: client A in first
+- [x] AC7 (2026-11-07: screenshots checked dot shown in first person, client B sees A turned to its camera yaw, no exceptions; aiming at the board, held food and V switch are left to the AC8 play-test because batch clients get no input; the rest confirmed by the human play-test): Two clients on the dedicated server, screenshots like specs 012 to 017: client A in first
       person looking at the board shows the dot and the board prompt; client B in third person sees
       client A's body facing where A looks; A holding a potato sees it in the lower right; after V,
       A's view is third person with the same yaw.
-- [ ] AC8 (manual, human): play 5 minutes in first person: walk, strafe, jump, cut a potato, fry
+- [x] AC8 (manual, human, play-tested 2026-11-07): play 5 minutes in first person: walk, strafe, jump, cut a potato, fry
       it, plate it, serve it, all by looking at the stations. Switch with V a few times. Nothing
       clips badly, the mouse feels right.
 - [x] AC9: `WhatsNew.json` entry `spec-018` with test steps.
