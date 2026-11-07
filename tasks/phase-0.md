@@ -21,8 +21,8 @@ Tick boxes as you go and commit after each finished task.
 ## Phase 1: Netcode (target: 2 to 3 weeks)
 
 - [x] 1.1 [HUMAN] Read and approve spec 003 (set `status: approved`), or request changes.
-- [ ] 1.2 [AGENT] Implement spec 003 with the builder subagent (opus: netcode).
-- [ ] 1.3 [AGENT] Tester and reviewer subagents on spec 003.
+- [x] 1.2 [AGENT] Implement spec 003 with the builder subagent (opus: netcode).
+- [x] 1.3 [AGENT] Tester and reviewer subagents on spec 003.
 - [ ] 1.4 [HUMAN] Review the netcode diff. Two-PC Steam test (AC2). Merge.
 - [x] 1.5 [HUMAN] Approve spec 004. Provide a Linux test VM.
 - [ ] 1.6 [AGENT] Implement spec 004, run 8 / 16 / 32 bot tests, write docs/loadtest-results.md.

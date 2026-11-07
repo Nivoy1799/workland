@@ -52,3 +52,8 @@ Thumbs.db
 
 # /sim build output (kept out of Unity via the ~ suffix)
 sim/Build~/
+
+# Unity Performance Testing writes these during every player build and removes the
+# files afterwards; drop these lines once the project has real Resources.
+game/Assets/Resources.meta
+game/Assets/Resources/PerformanceTestRun*
