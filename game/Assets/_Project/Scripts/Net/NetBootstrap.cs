@@ -55,6 +55,13 @@ namespace Worktown.Game.Net
             Args =LaunchArgs.Parse(Environment.GetCommandLineArgs());
             if (!Args.IsValid)
                 Debug.LogError("[Net] bad command line: " + Args.Error);
+            if (Args.LatencyMs > 0)
+            {
+                // Testing only: FishNet's latency simulator delays this process's traffic.
+                _networkManager.TransportManager.LatencySimulator.SetLatency(Args.LatencyMs);
+                _networkManager.TransportManager.LatencySimulator.SetEnabled(true);
+                Debug.Log("[Net] simulated latency " + Args.LatencyMs + " ms");
+            }
 
             switch (Args.Mode)
             {

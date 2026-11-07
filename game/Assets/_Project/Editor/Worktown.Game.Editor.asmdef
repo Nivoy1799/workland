@@ -4,7 +4,9 @@
     "references": [
         "Worktown.Game",
         "FishNet.Runtime",
-        "Worktown.Sim"
+        "Worktown.Sim",
+        "Unity.Cinemachine",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

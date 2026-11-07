@@ -15,6 +15,8 @@ namespace Worktown.Game.Net.Rules
         public string Address { get; private set; } = string.Empty;
         public ushort Port { get; private set; } = DefaultTugboatPort;
         public string SteamTarget { get; private set; } = string.Empty;
+        /// <summary><c>-latency ms</c>: simulated latency for testing prediction (spec 010 AC2). 0 = off.</summary>
+        public int LatencyMs { get; private set; }
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -53,6 +55,12 @@ namespace Worktown.Game.Net.Rules
                             return Fail("-steam needs a SteamID64 or address");
                         result.Mode = LaunchMode.ClientSteam;
                         result.SteamTarget = args[++i];
+                        break;
+                    case "-latency":
+                        if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int latency) || latency < 0 || latency > 2000)
+                            return Fail("-latency needs milliseconds 0..2000");
+                        result.LatencyMs = latency;
+                        i++;
                         break;
                 }
             }

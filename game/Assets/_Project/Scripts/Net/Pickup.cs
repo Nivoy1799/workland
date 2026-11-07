@@ -30,6 +30,12 @@ namespace Worktown.Game.Net
         private void Awake()
         {
             _collider = GetComponent<Collider>();
+            // A carried item never collides: on the holder's screen it trails a tick behind the
+            // head, and the predicted jump would hit it from below (spec 010 play-test).
+            HolderClientId.OnChange += (_, holder, _) =>
+            {
+                if (_collider != null) _collider.enabled = holder == PickupRegistry.NoHolder;
+            };
         }
 
         public override void OnStartNetwork()
