@@ -1,7 +1,7 @@
 ---
 id: 007
 title: Cooking stations in the graybox (cut, fry, boil, mix, plate), server-authoritative
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -229,9 +229,9 @@ NetworkObjects.
 ## Human steps
 - Merge spec 003 first (task 1.4).
 - AC9 on the Windows PC with two client builds and the WSL Linux server, as in spec 003 AC3.
-- Answer the open questions below (approve the defaults or change them).
+- Done 2026-11-07: open questions answered (defaults approved).
 
-## Open questions (defaults recommended by the architect, human decides)
+## Open questions (answered 2026-11-07: human approved all recommended defaults)
 1. **Ingredient source until the economy is in the game.** Default: dev crates behind
    `-devcrates`, replaced by the grocer later. Alternative: pull accounts, a starting grant and
    `TryBuyBase` into this spec (bigger, and needs the starting-grant decision from spec 008 Q12).
