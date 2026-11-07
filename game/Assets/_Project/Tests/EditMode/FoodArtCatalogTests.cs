@@ -288,23 +288,24 @@ namespace Worktown.Game.Tests
                         var visual = new SerializedObject(contents).FindProperty("_visual").objectReferenceValue as FoodVisual;
                         Assert.IsNotNull(visual, station.name + " has no content anchor");
                         Assert.AreSame(station.transform, visual.transform.parent);
-                        Assert.IsNotNull(station.transform.Find("Tool_Food" + ToolName(station.Kind)), station.name + " has no tool model");
+                        Assert.IsNotNull(station.transform.Find("Tool_" + ToolKey(station.Kind)), station.name + " has no tool model");
                         Assert.Greater(visual.transform.localPosition.y, 0f, station.name + " contents sit below the top");
                     }
                 }
-                Assert.AreEqual(4, found, "pan, pot, plating table, bowl");
+                Assert.AreEqual(5, found, "board (spec 019), pan, pot, plating table, bowl");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }
 
-        private static string ToolName(StationKind kind)
+        private static string ToolKey(StationKind kind)
         {
             switch (kind)
             {
-                case StationKind.Pan: return "Pan";
-                case StationKind.Pot: return "Pot";
-                case StationKind.PlatingTable: return "Plate";
-                case StationKind.Bowl: return "Bowl";
+                case StationKind.Board: return nameof(ArtKey.ToolCuttingBoard);
+                case StationKind.Pan: return nameof(ArtKey.FoodPan);
+                case StationKind.Pot: return nameof(ArtKey.FoodPot);
+                case StationKind.PlatingTable: return nameof(ArtKey.FoodPlate);
+                case StationKind.Bowl: return nameof(ArtKey.FoodBowl);
                 default: return "?";
             }
         }

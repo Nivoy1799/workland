@@ -73,6 +73,51 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(0, Pick(new AimHit(1.2f, AimKind.Station, Near)));
         }
 
+        // ---- Spec 019 AC4: buttons on station fronts ----
+
+        [Test]
+        public void ButtonHitBeforeItsStation_GivesTheButton()
+        {
+            var hits = new List<AimHit>
+            {
+                new AimHit(1.25f, AimKind.Station, Near),
+                AimHit.Button(1.2f, Near, 7, 2)
+            };
+            int picked = AimRules.Pick(hits, Player);
+            Assert.AreEqual(1, picked);
+            Assert.AreEqual(AimKind.Button, hits[picked].Kind);
+            Assert.AreEqual(7, hits[picked].StationIndex);
+            Assert.AreEqual(2, hits[picked].Option);
+        }
+
+        [Test]
+        public void ButtonAndStationAtTheSameDistance_TheButtonWins()
+        {
+            Assert.AreEqual(1, Pick(new AimHit(1.2f, AimKind.Station, Near), AimHit.Button(1.2f, Near, 7, 1)));
+            Assert.AreEqual(0, Pick(AimHit.Button(1.2f, Near, 7, 1), new AimHit(1.2f, AimKind.Station, Near)));
+        }
+
+        [Test]
+        public void ButtonOutOfReach_NoTarget()
+        {
+            // Reach is measured to the button's station, like the server measures it.
+            Assert.AreEqual(AimRules.None, Pick(AimHit.Button(2.2f, Far, 7, 1)));
+        }
+
+        [Test]
+        public void WallInFrontOfAButton_NoTarget()
+        {
+            Assert.AreEqual(AimRules.None, Pick(AimHit.Button(1.2f, Near, 7, 1), new AimHit(0.8f, AimKind.Other, Vector3.zero)));
+        }
+
+        [Test]
+        public void NonButtonHits_CarryNoStationOrOption()
+        {
+            var hit = new AimHit(1f, AimKind.Station, Near);
+            Assert.AreEqual(-1, hit.StationIndex);
+            Assert.AreEqual(0, hit.Option);
+        }
+
         [Test]
         public void BadDistances_AreIgnored()
         {

@@ -25,8 +25,25 @@ namespace Worktown.Game.Cooking
         [SerializeField] private Worktown.Game.Npc.CustomerService _customers;
         [Tooltip("Index in this array = Station.Index.")]
         [SerializeField] private Station[] _stations = new Station[0];
+        [Tooltip("Spec 019: knife prefab for replacing a board's lost knife (the scene knives are instances of it).")]
+        [SerializeField] private NetworkObject _knifePrefab;
+
+        private const float KnifeCheckInterval = 0.5f;
 
         private readonly KitchenState _kitchen = KitchenState.CreateDemo();
+        // Spec 019: one knife per board; where it lies at the start and when it went missing. Null until the
+        // server runs (built from the scene knives on the first server frame).
+        private System.Collections.Generic.List<KnifeSlot> _knifeSlots;
+        private float _nextKnifeCheck;
+
+        private sealed class KnifeSlot
+        {
+            public int Board;
+            public Vector3 Position;
+            public Quaternion Rotation;
+            public NetworkObject Knife;
+            public float LostSince = -1f;
+        }
         // Spec 016: pan and pot labels, refreshed on change or once per second.
         private (Station station, StationContents contents)[] _heatLabels;
         private bool _labelsDirty = true;
@@ -53,6 +70,7 @@ namespace Worktown.Game.Cooking
             {
                 _kitchen.Clear(); // station labels reset with their SyncLists when FishNet despawns them
                 _labelsDirty = true;
+                _knifeSlots = null; // spec 019: rebuilt from the scene knives on the next start
             }
         }
 
@@ -72,8 +90,115 @@ namespace Worktown.Game.Cooking
                 case StationKind.Bowl: return Assemble(player, station);
                 case StationKind.Pan:
                 case StationKind.Pot: return Heat(player, station, option);
+                case StationKind.Board: return Board(player, station, option);
                 default: return Cook(player, station, option);
             }
+        }
+
+        /// <summary>
+        /// Spec 019: E with food puts it on the board, E with empty hands takes it (cut as far as it was cut).
+        /// KnifeStroke and KnifeTurn need a knife in the hands. Digits 1-4 (third person) still cut the food in
+        /// the hands at once (spec 007). Strokes are limited by the interactor's request rate (one per 0.2 s).
+        /// </summary>
+        private CookOutcome Board(PickupInteractor player, Station station, int option)
+        {
+            if (option == StationRules.KnifeStroke || option == StationRules.KnifeTurn)
+            {
+                if (!_pickups.TryGetHeld(player, out NetworkObject tool) || !tool.TryGetComponent(out Knife _))
+                    return CookOutcome.NoKnife;
+                CookOutcome cut = option == StationRules.KnifeStroke
+                    ? _kitchen.TryBoardStroke(station.Index)
+                    : _kitchen.TryBoardTurn(station.Index);
+                if (cut == CookOutcome.Ok) RefreshBoard(station);
+                return cut;
+            }
+            if (option != 0) return Cook(player, station, option);
+
+            if (_pickups.TryGetHeld(player, out NetworkObject held))
+            {
+                if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
+                CookOutcome put = _kitchen.TryPutOnBoard(held.ObjectId, station.Index);
+                if (put != CookOutcome.Ok) return put;
+                string name = food.DisplayName.Value; // read before despawn
+                _pickups.TakeAway(player, out _);
+                _networkManager.ServerManager.Despawn(held);
+                RefreshBoard(station);
+                Debug.Log("[Kitchen] player " + player.OwnerId + " put " + name + " on the " + station.DisplayName);
+                return CookOutcome.Ok;
+            }
+
+            // Hand the result over first, clear the board only on success (spec 016 order).
+            CookOutcome taken = _kitchen.TryPreviewBoardTake(station.Index, out Item result);
+            if (taken != CookOutcome.Ok) return taken;
+            if (!SpawnFoodInHands(player, result)) return CookOutcome.SimRefused;
+            _kitchen.ClearBoard(station.Index);
+            RefreshBoard(station);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " from the "
+                + station.DisplayName + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 019: the board's label line, the food on it and its look (shape cut so far).</summary>
+        private void RefreshBoard(Station station)
+        {
+            if (!station.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            bool turned = _kitchen.TryGetBoard(station.Index, out _, out CutProgress progress) && progress.Turned != 0;
+            contents.ServerSetHeat(turned ? "turned" : string.Empty, _kitchen.BoardName(station.Index), _kitchen.BoardLook(station.Index));
+        }
+
+        /// <summary>
+        /// Spec 019 (open question 5): a board's knife that has been gone, or below the world, for 5 s is replaced
+        /// by a new one where the knife lay at the start. Never more knives than boards: the lost one is
+        /// despawned first.
+        /// </summary>
+        private void WatchKnives()
+        {
+            float now = Time.unscaledTime;
+            if (now < _nextKnifeCheck) return;
+            _nextKnifeCheck = now + KnifeCheckInterval;
+            if (_knifeSlots == null) _knifeSlots = FindKnifeSlots();
+
+            foreach (KnifeSlot slot in _knifeSlots)
+            {
+                NetworkObject knife = slot.Knife;
+                bool exists = knife != null && knife.IsSpawned;
+                if (!CutRules.IsKnifeLost(exists, exists ? knife.transform.position.y : 0f))
+                {
+                    slot.LostSince = -1f;
+                    continue;
+                }
+                if (slot.LostSince < 0f) slot.LostSince = now;
+                if (!CutRules.ShouldRespawnKnife(slot.LostSince, now) || _knifePrefab == null) continue;
+
+                if (exists) _networkManager.ServerManager.Despawn(knife);
+                NetworkObject fresh = _networkManager.GetPooledInstantiated(_knifePrefab, true);
+                fresh.transform.SetPositionAndRotation(slot.Position, slot.Rotation);
+                if (fresh.TryGetComponent(out Knife marker)) marker.BoardIndex = slot.Board;
+                _networkManager.ServerManager.Spawn(fresh);
+                slot.Knife = fresh;
+                slot.LostSince = -1f;
+                Debug.Log("[Kitchen] the knife of board " + slot.Board + " was lost; a new one lies next to it");
+            }
+        }
+
+        private System.Collections.Generic.List<KnifeSlot> FindKnifeSlots()
+        {
+            var slots = new System.Collections.Generic.List<KnifeSlot>();
+            Knife[] knives = FindObjectsByType<Knife>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (Station station in _stations)
+            {
+                if (station == null || station.Kind != StationKind.Board) continue;
+                foreach (Knife knife in knives)
+                {
+                    if (knife.BoardIndex != station.Index || !knife.TryGetComponent(out NetworkObject nob)) continue;
+                    slots.Add(new KnifeSlot
+                    {
+                        Board = station.Index, Position = knife.transform.position, Rotation = knife.transform.rotation, Knife = nob
+                    });
+                    break; // one knife per board
+                }
+            }
+            return slots;
         }
 
         // Spec 016: keep the pan and pot labels current (knob, mode, doneness bucket). Only changes are
@@ -89,6 +214,7 @@ namespace Worktown.Game.Cooking
                 _lastLabelTick = tick;
                 RefreshHeatLabels(tick, tickRate);
             }
+            WatchKnives(); // spec 019
         }
 
         private void RefreshHeatLabels(uint tick, double tickRate)
@@ -104,7 +230,9 @@ namespace Worktown.Game.Cooking
             foreach ((Station station, StationContents contents) in _heatLabels)
             {
                 if (!contents.IsServerInitialized) continue;
-                string status = _kitchen.StoveOf(station.Index).Describe(station.Kind);
+                StoveSettings stove = _kitchen.StoveOf(station.Index);
+                contents.ServerSetStoveFlags(StationRules.StoveFlags(stove.IsOn, stove.Saute)); // spec 019 button lights
+                string status = stove.Describe(station.Kind);
                 contents.ServerSetHeat(status, _kitchen.DescribeHeat(station.Index, tick, tickRate),
                     _kitchen.HeatLook(station.Index, tick, tickRate));
             }

@@ -21,6 +21,83 @@ namespace Worktown.Game.Cooking
         public const int PanMode = 2;
 
         /// <summary>
+        /// Spec 019: board options above the digit range, sent while holding a knife: one cut stroke, and
+        /// turning the food 90 degrees. Option 0 (E) puts food on the board or takes it.
+        /// </summary>
+        public const int KnifeStroke = 10;
+        public const int KnifeTurn = 11;
+
+        /// <summary>Spec 019: bits of <c>StationContents.StoveFlags</c>, so the button lights need no text parsing.</summary>
+        public const byte StoveFlagOn = 1;
+        public const byte StoveFlagSaute = 2;
+
+        /// <summary>Spec 019: the synced stove byte: bit 0 on, bit 1 saute.</summary>
+        public static byte StoveFlags(bool on, bool saute)
+        {
+            return (byte)((on ? StoveFlagOn : 0) | (saute ? StoveFlagSaute : 0));
+        }
+
+        public static bool IsStoveOn(byte flags) => (flags & StoveFlagOn) != 0;
+        public static bool IsSaute(byte flags) => (flags & StoveFlagSaute) != 0;
+
+        /// <summary>
+        /// Spec 019 (AC7): the station option a digit key 1-4 sends, 0 for none. First person has no digit
+        /// keys at all (the stoves have buttons, the board a knife); third person keeps them on the board, pan
+        /// and pot. A digit above the station's options is passed on so the caller can say so. This is a
+        /// client input rule; the server does not know the view mode and still accepts digits.
+        /// </summary>
+        public static int DigitOption(StationKind kind, int digit, bool firstPerson)
+        {
+            if (firstPerson || digit < 1 || digit > 4) return 0;
+            return OptionCount(kind) > 0 ? digit : 0;
+        }
+
+        /// <summary>Spec 019: keys on the station's world label, without digits (first person is the default view).</summary>
+        public static string FirstPersonKeysHint(StationKind kind)
+        {
+            switch (kind)
+            {
+                case StationKind.Board: return "E · knife";
+                case StationKind.Pan: return "E · buttons";
+                case StationKind.Pot: return "E · switch";
+                default: return "E";
+            }
+        }
+
+        /// <summary>Spec 019: prompt under the dot for a stove button: "E · switch on", "E · fry → sauté", ...</summary>
+        public static string ButtonPrompt(int option, byte stoveFlags)
+        {
+            if (option == StoveSwitch) return IsStoveOn(stoveFlags) ? "E · switch off" : "E · switch on";
+            if (option == PanMode) return IsSaute(stoveFlags) ? "E · sauté → fry" : "E · fry → sauté";
+            return null;
+        }
+
+        /// <summary>
+        /// Spec 019: prompt under the dot when looking at a station in first person, without digits.
+        /// <paramref name="contentName"/> is what lies on the board or in the pan or pot (null when empty).
+        /// Crates, the counter, the plating table and the bowl keep their spec 007/013 prompts.
+        /// </summary>
+        public static string FirstPersonPrompt(StationKind kind, string stationName, bool holding, bool holdingKnife, string contentName)
+        {
+            switch (kind)
+            {
+                case StationKind.Board:
+                    if (holdingKnife)
+                        return contentName != null ? "drag down · cut   right click · turn" : stationName + ": put food on it to cut";
+                    if (holding)
+                        return contentName == null ? "E · put on board" : stationName + ": take the " + contentName + " first";
+                    return contentName != null ? "E · take " + contentName : stationName + ": put food on it, then take the knife";
+                case StationKind.Pan:
+                case StationKind.Pot:
+                    if (holdingKnife) return stationName + ": put the knife down first";
+                    if (holding) return "E · put in the " + stationName.ToLowerInvariant();
+                    return contentName != null ? "E · take " + contentName : stationName + ": switch it on with the button";
+                default:
+                    return Prompt(kind, stationName);
+            }
+        }
+
+        /// <summary>
         /// Number of option keys a station accepts (0 for stations that only use E). Spec 016: the pan
         /// has on/off and fry/saute, the pot on/off; both cook over time with E.
         /// </summary>

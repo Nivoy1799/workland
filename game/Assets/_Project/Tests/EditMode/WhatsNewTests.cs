@@ -73,5 +73,17 @@ namespace Worktown.Game.Tests
             foreach (string spec in new[] { "spec-007", "spec-009", "spec-010", "spec-011" })
                 Assert.IsTrue(ids.Exists(id => id.EndsWith(spec)), "missing entry for " + spec);
         }
+
+        [Test]
+        public void ShippedFile_HasTheSpec019Entry_WithTestSteps()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-07-spec-019") entry = e;
+            Assert.IsNotNull(entry, "spec 019 AC10");
+            Assert.AreEqual("2026-11-07", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
+        }
     }
 }

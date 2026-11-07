@@ -49,6 +49,12 @@ namespace Worktown.Game.Editor
         private const string FoodPrefabPath = Root + "/Prefabs/Food.prefab";
         private const string PingMarkerPrefabPath = Root + "/Prefabs/PingMarker.prefab";
         private const string CustomerPrefabPath = Root + "/Prefabs/Customer.prefab";
+        private const string KnifePrefabPath = Root + "/Prefabs/Knife.prefab";
+        private const string StoveButtonMaterialPath = Root + "/Settings/StoveButton.mat";
+        // Spec 019: the knife's pickup collider (long side along Z, like its model) and where it lies.
+        private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.34f);
+        private static readonly Vector3 KnifeSpot = new Vector3(0.42f, 0f, -0.1f);
+        private const float CuttingBoardOffsetX = -0.12f;
         private const float FoodSize = 0.4f;
         private const float StationHeight = 1f;
         private const float KitchenZ = 13f;
@@ -83,6 +89,7 @@ namespace Worktown.Game.Editor
             GameObject pickupPrefab = CreatePickupPrefab(pickupMat);
             NetworkObject foodPrefab = CreateFoodPrefab(pickupMat, builtCatalog);
             NetworkObject customerPrefab = CreateCustomerPrefab(pickupMat);
+            NetworkObject knifePrefab = CreateKnifePrefab(builtCatalog); // spec 019
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
             AssetDatabase.SaveAssets();
@@ -99,7 +106,7 @@ namespace Worktown.Game.Editor
             Transform[] spawns = CreateSpawnPoints();
             CreatePickups(pickupPrefab);
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
-            CreateKitchen(networkManager, foodPrefab, catalog);
+            CreateKitchen(networkManager, foodPrefab, knifePrefab, catalog);
             CreateCustomers(networkManager, customerPrefab);
             CreateBootstrap(networkManager);
 
@@ -316,8 +323,101 @@ namespace Worktown.Game.Editor
             return saved.GetComponent<NetworkObject>();
         }
 
+        /// <summary>
+        /// Spec 019: the kitchen knife, a normal pickup (carried like food) with a Knife marker and the Food Kit
+        /// model. Its model lies along Z; the visual child sits on the bottom of the collider.
+        /// </summary>
+        private static NetworkObject CreateKnifePrefab(ArtCatalog catalog)
+        {
+            var root = new GameObject("Knife");
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = KnifeColliderSize;
+
+            var visual = new GameObject("Visual");
+            visual.transform.SetParent(root.transform, false);
+            visual.transform.localPosition = new Vector3(0f, -KnifeColliderSize.y * 0.5f, 0f);
+            if (catalog != null && catalog.TryGet(ArtKey.ToolKnife, out GameObject wrapper))
+                PrefabUtility.InstantiatePrefab(wrapper, visual.transform);
+            else
+                Debug.LogError("[Graybox] no ToolKnife model in the art catalog");
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            // Like the scene cubes: a missed release on disconnect must never despawn the knife.
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            AddServerAuthoritativeTransform(root);
+            root.AddComponent<Pickup>();
+            root.AddComponent<Knife>();
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, KnifePrefabPath);
+            UnityEngine.Object.DestroyImmediate(root);
+            return saved.GetComponent<NetworkObject>();
+        }
+
+        /// <summary>Spec 019: one knife per board, a scene object lying on the board station next to the cutting board.</summary>
+        private static void CreateBoardKnife(NetworkObject knifePrefab, Station board)
+        {
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(knifePrefab.gameObject);
+            instance.name = "Knife (" + board.DisplayName + ")";
+            float top = StationTop(board);
+            instance.transform.SetPositionAndRotation(
+                board.transform.TransformPoint(KnifeSpot + new Vector3(0f, top + KnifeColliderSize.y * 0.5f, 0f)),
+                board.transform.rotation);
+            SetField(instance.GetComponent<Knife>(), "_boardIndex", board.Index);
+        }
+
+        /// <summary>
+        /// Spec 019: the stove's switch (pan and pot) and the pan's fry/saute button: small colliders on the front
+        /// with a StationButton, coloured from the synced stove flags by a StoveButtonVisual.
+        /// </summary>
+        private static void AddStoveButtons(Station station, bool modeButton)
+        {
+            Material material = CreateMaterial(StoveButtonMaterialPath, Color.white);
+            material.EnableKeyword("_EMISSION");
+            material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            var visual = station.gameObject.AddComponent<StoveButtonVisual>();
+            SetField(visual, "_contents", station.GetComponent<StationContents>());
+
+            Renderer power = CreateButton(station, "Switch", new Vector3(-0.3f, 0.3f, -0.64f), StationRules.StoveSwitch, material);
+            SetField(visual, "_switch", power);
+            CreateButtonLabel(station, "SwitchLabel", new Vector3(-0.3f, 0.39f, -0.68f), "on/off");
+            if (!modeButton) return;
+            Renderer mode = CreateButton(station, "ModeButton", new Vector3(0.3f, 0.3f, -0.64f), StationRules.PanMode, material);
+            SetField(visual, "_modeButton", mode);
+            SetField(visual, "_modeLabel", CreateButtonLabel(station, "ModeLabel", new Vector3(0.3f, 0.39f, -0.68f), "fry"));
+        }
+
+        private static Renderer CreateButton(Station station, string name, Vector3 localPosition, int option, Material material)
+        {
+            GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube); // keeps its BoxCollider for the aim ray
+            button.name = name;
+            button.transform.SetParent(station.transform, false);
+            button.transform.localPosition = localPosition;
+            button.transform.localScale = new Vector3(0.14f, 0.14f, 0.06f);
+            var renderer = button.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            var marker = button.AddComponent<StationButton>();
+            SetField(marker, "_station", station);
+            SetField(marker, "_option", option);
+            return renderer;
+        }
+
+        private static TextMesh CreateButtonLabel(Station station, string name, Vector3 localPosition, string text)
+        {
+            TextMesh label = CreateLabel(station.transform, localPosition, 40, 0.02f);
+            label.gameObject.name = name; // not "Label": StationContents finds the station label by that name
+            label.text = text;
+            return label;
+        }
+
+        /// <summary>Spec 017/019: top of the station's furniture model in station space (the root sits at half height).</summary>
+        private static float StationTop(Station station)
+        {
+            Transform art = station.transform.Find("Art_Station" + station.Kind);
+            return art != null ? ArtCatalogBuilder.BaseTopOf(art.gameObject) + art.localPosition.y : StationHeight * 0.5f;
+        }
+
         /// <summary>Spec 007: a row of stations north of the spawn, the serve feed and the kitchen service.</summary>
-        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, ArtCatalog catalog)
+        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab, ArtCatalog catalog)
         {
             var parent = new GameObject("Kitchen");
             var stations = new List<Station>();
@@ -333,16 +433,22 @@ namespace Worktown.Game.Editor
                 stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
                     char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -8.5f + i * 2f, mat, i));
             }
-            stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
-                CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0));
+            Station cuttingBoard = CreateStation(catalog, parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
+                CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0);
+            // Spec 019: the cutting board shows the food on it; the knife lies next to it.
+            AddStationContents(catalog, cuttingBoard, ArtKey.ToolCuttingBoard, CuttingBoardOffsetX, BoardFill, 1f, 0.06f);
+            CreateBoardKnife(knifePrefab, cuttingBoard);
+            stations.Add(cuttingBoard);
             // Spec 016: pan and pot cook over time; their label (knob, what is cooking) is networked.
             Station pan = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
                 CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f)), 0);
             AddStationContents(catalog, pan, ArtKey.FoodPan, 0f, PanFill, 0.65f, 0.06f);
+            AddStoveButtons(pan, modeButton: true); // spec 019
             stations.Add(pan);
             Station pot = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
                 CreateMaterial(Root + "/Settings/Station_Pot.mat", new Color(0.4f, 0.5f, 0.65f)), 0);
             AddStationContents(catalog, pot, ArtKey.FoodPot, 0f, PotFill, 0.6f, 0.05f);
+            AddStoveButtons(pot, modeButton: false); // spec 019
             stations.Add(pot);
             stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
                 CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
@@ -370,6 +476,7 @@ namespace Worktown.Game.Editor
             SetField(kitchen, "_foodPrefab", foodPrefab);
             SetField(kitchen, "_feed", feed);
             SetField(kitchen, "_stations", stations);
+            SetField(kitchen, "_knifePrefab", knifePrefab); // spec 019: replaces a lost knife
 
             // Spec 009: market board (global, like the feed) and the server-side economy.
             var boardObject = new GameObject("MarketBoard");
@@ -409,7 +516,7 @@ namespace Worktown.Game.Editor
                 labelY = Mathf.Max(labelY, top + 0.1f);
             }
 
-            string keys = StationRules.KeysHint(kind);
+            string keys = StationRules.FirstPersonKeysHint(kind); // spec 019: no digits on the world labels
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, labelY, 0f), 60, 0.05f);
             string price = string.Empty;
             if (kind == StationKind.Crate
@@ -440,10 +547,7 @@ namespace Worktown.Game.Editor
             SetField(contents, "_label", station.transform.Find("Label").GetComponent<TextMesh>());
 
             // Top of the furniture in station space (the root sits at half the station height).
-            Transform art = station.transform.Find("Art_Station" + station.Kind);
-            float top = art != null
-                ? ArtCatalogBuilder.BaseTopOf(art.gameObject) + art.localPosition.y
-                : StationHeight * 0.5f;
+            float top = StationTop(station);
             float contentY = top;
             if (catalog != null && catalog.TryGet(tool, out GameObject toolPrefab))
             {
@@ -469,6 +573,7 @@ namespace Worktown.Game.Editor
         private const float BowlFill = 0.3f;
         private const float PanFill = 0.35f;
         private const float PotFill = 0.75f;
+        private const float BoardFill = 1f; // spec 019: food lies on top of the cutting board
 
         private static float ContentHeight(ArtCatalog catalog, ArtKey container, float fill)
         {

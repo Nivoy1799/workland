@@ -48,6 +48,10 @@ namespace Worktown.Game.Art
         FoodPlate,
         FoodBowl,
         FoodPan,
-        FoodPot
+        FoodPot,
+
+        // Spec 019: the cutting board on the board station and the knife (Food Kit).
+        ToolCuttingBoard,
+        ToolKnife
     }
 }

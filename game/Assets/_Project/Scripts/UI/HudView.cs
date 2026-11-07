@@ -114,11 +114,12 @@ namespace Worktown.Game.UI
             // Third person: the bottom prompt as before. First person: the dot and its prompt instead.
             Show(_promptBox, !firstPerson && station != null);
             if (!firstPerson && station != null) _prompt.text = station.Prompt;
-            UpdateCrosshair(player, firstPerson, held != null);
+            UpdateCrosshair(player, firstPerson, held);
 
             Show(_heldBox, held != null);
             if (held != null)
-                _held.text = held.TryGetComponent(out Food food) ? food.Describe() : "Carrying a box";
+                _held.text = held.TryGetComponent(out Food food) ? food.Describe()
+                    : held.TryGetComponent(out Knife _) ? "Knife" : "Carrying a box";
 
             UpdateResultToast(player);
             UpdateFeedToast();
@@ -126,7 +127,7 @@ namespace Worktown.Game.UI
         }
 
         /// <summary>Spec 018: the centre dot and what E / the digits would do, first person only, hidden under menus.</summary>
-        private void UpdateCrosshair(PickupInteractor player, bool firstPerson, bool holding)
+        private void UpdateCrosshair(PickupInteractor player, bool firstPerson, Pickup held)
         {
             if (_input == null) _input = FindFirstObjectByType<PlayerInputReader>();
             bool visible = firstPerson && (_input == null || !_input.IsUiOpen);
@@ -136,19 +137,36 @@ namespace Worktown.Game.UI
 
             Component target = player.Target;
             _crosshair.style.backgroundColor = target != null ? CrosshairOnTarget : CrosshairIdle;
-            string text = AimPromptText(target, holding);
+            string text = AimPromptText(target, held);
             if (text == null) return;
             _aimPrompt.text = text;
             Show(_aimPrompt, true);
         }
 
-        private static string AimPromptText(Component target, bool holding)
+        /// <summary>Spec 018/019: what E (or the knife) does on the target, without digits.</summary>
+        private static string AimPromptText(Component target, Pickup held)
         {
-            if (target is Station station) return station.Prompt;
-            if (holding) return "E · drop";
+            bool holding = held != null;
+            bool holdingKnife = holding && held.TryGetComponent(out Knife _);
+            if (target is StationButton button && button.Station != null)
+                return StationRules.ButtonPrompt(button.Option,
+                    button.Station.TryGetComponent(out StationContents stove) ? stove.StoveFlags.Value : (byte)0);
+            if (target is Station station)
+                return StationRules.FirstPersonPrompt(station.Kind, station.DisplayName, holding, holdingKnife, ContentName(station));
+            if (holding) return holdingKnife && target is Pickup ? "Put the knife down first" : "E · drop";
             if (target is Pickup pickup)
+            {
+                if (pickup.TryGetComponent(out Knife _)) return "E · take knife";
                 return "E · pick up " + (pickup.TryGetComponent(out Food food) && food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "box");
+            }
             return null;
+        }
+
+        /// <summary>Spec 019: what lies on the board or in the pan or pot, as its label shows it; null when empty.</summary>
+        private static string ContentName(Station station)
+        {
+            if (!PickupInteractor.HasContents(station) || !station.TryGetComponent(out StationContents contents)) return null;
+            return contents.Names.Count > 0 ? contents.Names[0] : null;
         }
 
         private void CreateCrosshair()
@@ -225,7 +243,7 @@ namespace Worktown.Game.UI
                 case CookOutcome.HandsFull: return "Your hands are full";
                 case CookOutcome.UnknownStation: return "That station does not work";
                 case CookOutcome.InvalidOption: return "That station has no such option";
-                case CookOutcome.NotFood: return "That is not food";
+                case CookOutcome.NotFood: return "That's not food";
                 case CookOutcome.SimRefused: return "That does not work with this food";
                 case CookOutcome.NotEnoughMoney: return "Not enough money";
                 case CookOutcome.CannotSell: return "Nobody wants to buy that";
@@ -234,6 +252,8 @@ namespace Worktown.Game.UI
                 case CookOutcome.StationEmpty: return "Nothing there yet";
                 case CookOutcome.TooShort: return "Too short: it came back unchanged";
                 case CookOutcome.PanBusy: return "Take the food out before switching fry/saute";
+                case CookOutcome.NoKnife: return "Take a knife to cut";
+                case CookOutcome.NothingToCut: return "Put food on the board first";
                 default: return outcome.ToString();
             }
         }

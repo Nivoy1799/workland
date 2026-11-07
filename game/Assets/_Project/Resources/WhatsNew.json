@@ -174,6 +174,28 @@
         "Press V: the camera moves behind you and looks the same way; press V again to go back",
         "Ask another player: in first person your body turns to where you look"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-019",
+      "date": "2026-11-07",
+      "title": "Cut with the knife, stoves with buttons",
+      "items": [
+        "First person needs no number keys any more: you cook with E and the mouse",
+        "The board has a cutting board and a knife next to it; the knife is an item you can carry and put down",
+        "Put food on the board, take the knife, hold the left mouse button and drag down to cut; right click turns the food",
+        "One cut gives halves, two give slices; turn and cut for sticks, turn and cut again for cubes",
+        "The pan and the pot have a switch (green when on); the pan also has a fry/sauté button",
+        "Third person keeps the old number keys"
+      ],
+      "test": [
+        "Hold a potato, look at the board and press E: the potato lies on the cutting board",
+        "Look at the knife next to it and press E: you hold the knife in your view",
+        "Look at the board, hold the left button and drag down twice: the knife chops and the potato becomes slices",
+        "Right click, drag down once more: sticks; right click and cut again: cubes",
+        "Put the knife down (look at the floor, E), then take the food from the board with E",
+        "Look at the pan's switch and press E: it turns green; the button next to it switches fry and sauté",
+        "Ask another player: they see the potato fall apart and the switch light change"
+      ]
     }
   ]
 }
