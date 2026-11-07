@@ -26,6 +26,27 @@ namespace Worktown.Game.Cooking
 
         private readonly KitchenState _kitchen = KitchenState.CreateDemo();
 
+        // Start, not OnEnable: NetworkManager creates its ServerManager in its own Awake.
+        private void Start()
+        {
+            _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
+        }
+
+        private void OnDestroy()
+        {
+            if (_networkManager != null && _networkManager.ServerManager != null)
+                _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
+        }
+
+        private void OnServerConnectionState(FishNet.Transporting.ServerConnectionStateArgs args)
+        {
+            // FishNet despawns everything and reuses object ids on a restart in the same process;
+            // old food entries must not attach to new objects (review finding, spec 007).
+            if (args.ConnectionState == FishNet.Transporting.LocalConnectionState.Stopped
+                && !_networkManager.ServerManager.IsAnyServerStarted())
+                _kitchen.Clear();
+        }
+
         public CookOutcome TryUseStation(PickupInteractor player, int stationIndex, int option)
         {
             if (stationIndex < 0 || stationIndex >= _stations.Length || _stations[stationIndex] == null)
@@ -66,7 +87,14 @@ namespace Worktown.Game.Cooking
             _networkManager.ServerManager.Spawn(food);
             _kitchen.Register(food.ObjectId, item);
             food.GetComponent<Food>().ServerSet(KitchenState.NameOf(item), KitchenState.QualityOf(item), (byte)ingredient);
-            _pickups.HandTo(player, food);
+            if (!_pickups.HandTo(player, food))
+            {
+                // Should not happen (hands were checked); do not leave a paid item lying around unowned.
+                Debug.LogError("[Kitchen] could not hand " + KitchenState.NameOf(item) + " to player " + player.OwnerId);
+                _kitchen.TryRemove(food.ObjectId, out _);
+                _networkManager.ServerManager.Despawn(food);
+                return CookOutcome.SimRefused;
+            }
             Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item)
                 + " for " + EconomyRules.Money(cost));
             return CookOutcome.Ok;
@@ -93,7 +121,7 @@ namespace Worktown.Game.Cooking
         private CookOutcome Serve(PickupInteractor player)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return CookOutcome.NothingHeld;
-            if (!_kitchen.TryGet(held.ObjectId, out Item item)) return CookOutcome.NotFood;
+            if (!held.TryGetComponent(out Food _) || !_kitchen.TryGet(held.ObjectId, out Item item)) return CookOutcome.NotFood;
 
             string name = KitchenState.NameOf(item);
             float quality = KitchenState.QualityOf(item);

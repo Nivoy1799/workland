@@ -25,7 +25,7 @@ namespace Worktown.Game.Player
         /// <summary>Spec 011: a menu or banner is open, so the cursor stays free and clicks go to the UI.</summary>
         public bool IsUiOpen => _uiOpenCount > 0;
 
-        public Vector2 Move => _active ? _move.ReadValue<Vector2>() : Vector2.zero;
+        public Vector2 Move => _active && !IsUiOpen ? _move.ReadValue<Vector2>() : Vector2.zero;
         public bool Sprint => _active && _sprint.IsPressed();
         /// <summary>Crouch toggles on each press (C / gamepad east).</summary>
         public bool Crouch => _active && _crouchToggled;

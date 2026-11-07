@@ -123,6 +123,9 @@ namespace Worktown.Game.Net
 
         protected override void TimeManager_OnPostTick()
         {
+            // SyncVar writes stay out of [Replicate] (review finding): server publishes after the tick.
+            if (IsServerStarted && CrouchedForOthers.Value != _crouched)
+                CrouchedForOthers.Value = _crouched;
             CreateReconcile();
         }
 
@@ -187,8 +190,6 @@ namespace Worktown.Game.Net
 
             _controller.Move((_velocity + Vector3.up * _verticalVelocity) * delta);
 
-            if (IsServerStarted && CrouchedForOthers.Value != _crouched)
-                CrouchedForOthers.Value = _crouched;
         }
 
         [Reconcile]

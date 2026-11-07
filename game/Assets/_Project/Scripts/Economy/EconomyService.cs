@@ -59,8 +59,6 @@ namespace Worktown.Game.Economy
             PublishWallet(player);
         }
 
-        public bool TryGetGrocerPrice(string baseId, out long price) => _economy.TryGetGrocerPrice(baseId, out price);
-
         /// <summary>Server: charge the grocer price for one base item.</summary>
         public EconomyError TryBuy(NetworkObject player, string baseId, out long cost)
         {

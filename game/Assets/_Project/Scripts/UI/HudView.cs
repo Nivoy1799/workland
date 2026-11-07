@@ -104,7 +104,7 @@ namespace Worktown.Game.UI
             bool first = _lastResultVersion < 0;
             _lastResultVersion = player.ResultVersion;
             if (first) return;
-            string text = FriendlyResult(player.LastResult);
+            string text = FriendlyResult(player);
             if (text != null) Toast(text, bad: true);
         }
 
@@ -120,21 +120,45 @@ namespace Worktown.Game.UI
             if (!first) Toast(top, bad: false);
         }
 
-        /// <summary>Player-facing text for a server answer; null for successes (they are visible anyway).</summary>
-        private static string FriendlyResult(string result)
+        /// <summary>Player-facing text for the last answer; null for successes (they are visible anyway).
+        /// Maps the enums, so a renamed value is a compile error instead of a silent missing toast.</summary>
+        private static string FriendlyResult(PickupInteractor player)
         {
-            if (string.IsNullOrEmpty(result) || result.EndsWith(": Ok")) return null;
-            if (result.Contains("NotEnoughMoney")) return "Not enough money";
-            if (result.Contains("CannotSell")) return "Nobody wants to buy that";
-            if (result.Contains("TooFar")) return "Too far away";
-            if (result.Contains("HandsFull")) return "Your hands are full";
-            if (result.Contains("NothingHeld")) return "You are not holding anything";
-            if (result.Contains("AlreadyHolding")) return "You are already carrying something";
-            if (result.Contains("Taken")) return "Someone else has it";
-            if (result.Contains("NotFood")) return "That is not food";
-            if (result.Contains("no cube within")) return "Nothing to pick up here";
-            if (result.Contains("has no option")) return result;
-            return null;
+            if (player.LastCookOutcome.HasValue) return CookText(player.LastCookOutcome.Value);
+            if (player.LastPickupOutcome.HasValue) return PickupText(player.LastPickupOutcome.Value);
+            return string.IsNullOrEmpty(player.LastResult) ? null : player.LastResult; // local notes
+        }
+
+        private static string CookText(CookOutcome outcome)
+        {
+            switch (outcome)
+            {
+                case CookOutcome.Ok: return null;
+                case CookOutcome.TooFar: return "Too far away";
+                case CookOutcome.NothingHeld: return "You are not holding anything";
+                case CookOutcome.HandsFull: return "Your hands are full";
+                case CookOutcome.UnknownStation: return "That station does not work";
+                case CookOutcome.InvalidOption: return "That station has no such option";
+                case CookOutcome.NotFood: return "That is not food";
+                case CookOutcome.SimRefused: return "That does not work with this food";
+                case CookOutcome.NotEnoughMoney: return "Not enough money";
+                case CookOutcome.CannotSell: return "Nobody wants to buy that";
+                default: return outcome.ToString();
+            }
+        }
+
+        private static string PickupText(PickupOutcome outcome)
+        {
+            switch (outcome)
+            {
+                case PickupOutcome.Ok: return null;
+                case PickupOutcome.NotFound: return "Nothing to pick up there";
+                case PickupOutcome.TooFar: return "Too far away";
+                case PickupOutcome.Taken: return "Someone else has it";
+                case PickupOutcome.AlreadyHolding: return "You are already carrying something";
+                case PickupOutcome.NothingHeld: return "You are not holding anything";
+                default: return outcome.ToString();
+            }
         }
 
         private void Toast(string text, bool bad)

@@ -74,6 +74,9 @@ Only `game/` (branch stacked on `spec/010-player-controls`), plus one line in `d
 - Approve, answer the open questions, play it and say if the HUD is clear enough.
 
 ## Implementation notes
+- Review 2026-11-07, outside the listed scope: `PickupInteractor.cs` (result counter, enum outcomes,
+  keys ignored while a menu is open) and `DevScreenshot.cs`. HUD toasts map `CookOutcome` /
+  `PickupOutcome` enums instead of matching strings. Movement input is zero while a menu is open.
 Built 2026-11-07 on `spec/011-hud-debug-whatsnew` (stacked on spec 010).
 - UI Toolkit with the tree built in C# (`HudView`, `DebugMenuView`, `WhatsNewView`) and one
   stylesheet `UI/Worktown.uss` plus theme `UI/WorktownTheme.tss`; no UXML files (simpler to

@@ -24,6 +24,7 @@ namespace Worktown.Game.Net
 
         private PickupService _service;
         private KitchenService _kitchen;
+        private Worktown.Game.Player.PlayerInputReader _inputReader;
         private Station[] _stations;
         private readonly Collider[] _hits = new Collider[16];
 
@@ -41,6 +42,11 @@ namespace Worktown.Game.Net
         }
         private string _lastResult = string.Empty;
 
+        /// <summary>Owner side: last kitchen answer (null if the last result was not a kitchen one).</summary>
+        public CookOutcome? LastCookOutcome { get; private set; }
+        /// <summary>Owner side: last pickup/drop answer (null if the last result was not a pickup one).</summary>
+        public PickupOutcome? LastPickupOutcome { get; private set; }
+
         /// <summary>Owner side: increases with every result, so the HUD can toast repeats (spec 011).</summary>
         public int ResultVersion { get; private set; }
 
@@ -55,6 +61,9 @@ namespace Worktown.Game.Net
         private void Update()
         {
             if (!IsOwner) return;
+            // Keys belong to the menu or banner while one is open (review finding, spec 011).
+            if (_inputReader == null) _inputReader = FindFirstObjectByType<Worktown.Game.Player.PlayerInputReader>();
+            if (_inputReader != null && _inputReader.IsUiOpen) return;
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null) return;
 
@@ -72,9 +81,16 @@ namespace Worktown.Game.Net
 
             Pickup nearest = FindNearestFreePickup();
             if (nearest == null)
-                LastResult = "no cube within " + ClientSearchRadius + " m";
+                SetLocalNote("no cube within " + ClientSearchRadius + " m");
             else
                 RequestPickup(nearest.NetworkObject);
+        }
+
+        private void SetLocalNote(string note)
+        {
+            LastCookOutcome = null;
+            LastPickupOutcome = null;
+            LastResult = note;
         }
 
         /// <summary>Owner side: the station within reach, for keys and the overlay prompt. Null if none.</summary>
@@ -98,7 +114,7 @@ namespace Worktown.Game.Net
                     if (option == 0) return false;
                     if (option > StationRules.OptionCount(station.Kind))
                     {
-                        LastResult = station.DisplayName + " has no option " + option;
+                        SetLocalNote(station.DisplayName + " has no option " + option);
                         return true;
                     }
                     RequestStation(station.Index, option);
@@ -191,6 +207,8 @@ namespace Worktown.Game.Net
         [TargetRpc]
         private void ReportCook(NetworkConnection target, CookOutcome outcome)
         {
+            LastPickupOutcome = null;
+            LastCookOutcome = outcome;
             LastResult = "kitchen: " + outcome;
             if (outcome != CookOutcome.Ok)
                 Debug.Log("[Kitchen] " + LastResult);
@@ -209,6 +227,8 @@ namespace Worktown.Game.Net
         [TargetRpc]
         private void ReportResult(NetworkConnection target, PickupOutcome outcome, bool wasPickup)
         {
+            LastCookOutcome = null;
+            LastPickupOutcome = outcome;
             LastResult = (wasPickup ? "pickup: " : "drop: ") + outcome;
             if (outcome != PickupOutcome.Ok)
                 Debug.Log("[Pickup] " + LastResult);

@@ -84,6 +84,11 @@ Only `game/` (branch stacked on `spec/009-sell-dishes`).
 - Approve, answer the open questions, play it and say if it feels right.
 
 ## Implementation notes
+- Review 2026-11-07, outside the listed scope: `-latency` switch (`NetBootstrap`, `LaunchArgs`,
+  `LaunchArgsTests`) for AC2, and `Pickup.cs` (held items disable their collider) for the jump fix.
+  The crouch SyncVar is now written in OnPostTick, not inside [Replicate].
+  Probes still toggle the CharacterController for self-exclusion; a dedicated player layer is a
+  follow-up.
 Done 2026-11-07 on `spec/010-player-controls` (stacked on spec 009).
 - AC1: `MovementRulesTests` (directions, sprint/crouch speeds, clamping, turn rate, jump height,
   rise/fall gravity, fall cap).

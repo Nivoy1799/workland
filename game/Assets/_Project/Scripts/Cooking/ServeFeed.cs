@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 
@@ -22,11 +21,5 @@ namespace Worktown.Game.Cooking
                 Entries.RemoveAt(Entries.Count - 1);
         }
 
-        public IReadOnlyList<string> Snapshot()
-        {
-            var copy = new List<string>(Entries.Count);
-            foreach (string entry in Entries) copy.Add(entry);
-            return copy;
-        }
     }
 }
