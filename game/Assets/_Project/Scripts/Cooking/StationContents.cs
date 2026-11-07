@@ -11,12 +11,15 @@ namespace Worktown.Game.Cooking
     /// shown on the station's label. Display only; the real items live in the server's KitchenState.
     /// Spec 016: pans and pots also show a status line (knob and mode) and what is cooking.
     /// Spec 017: the contents' coarse looks, drawn as models on the station's content anchor.
+    /// Spec 019: the cutting board shows its food the same way; stoves sync a flags byte for the buttons.
     /// </summary>
     public sealed class StationContents : NetworkBehaviour
     {
         public readonly SyncList<string> Names = new SyncList<string>();
         public readonly SyncVar<string> Status = new SyncVar<string>(string.Empty);
         public readonly SyncList<FoodLook> Looks = new SyncList<FoodLook>();
+        /// <summary>Spec 019: pan and pot switch and mode for the button lights (bit 0 on, bit 1 saute, see StationRules).</summary>
+        public readonly SyncVar<byte> StoveFlags = new SyncVar<byte>(0);
 
         [SerializeField] private TextMesh _label;
         [Tooltip("Spec 017: models of the contents on the plate, in the bowl, pan or pot. Optional.")]
@@ -47,7 +50,16 @@ namespace Worktown.Game.Cooking
             Refresh();
         }
 
-        /// <summary>Spec 016: server sets the label for a pan or pot; only sends what changed.</summary>
+        /// <summary>Spec 019: server sets the stove byte; only sends a change.</summary>
+        internal void ServerSetStoveFlags(byte flags)
+        {
+            if (StoveFlags.Value != flags) StoveFlags.Value = flags;
+        }
+
+        /// <summary>
+        /// Spec 016: server sets the label for a pan or pot; only sends what changed. Spec 019: also used for
+        /// the cutting board (status line, the food on it and its look).
+        /// </summary>
         internal void ServerSetHeat(string status, string cooking, FoodLook? look)
         {
             if (Status.Value != status) Status.Value = status ?? string.Empty;

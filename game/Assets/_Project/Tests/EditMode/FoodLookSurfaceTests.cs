@@ -47,6 +47,8 @@ namespace Worktown.Game.Tests
                 {
                     if (!field.FieldType.IsGenericType || !field.FieldType.Name.StartsWith("Sync")) continue;
                     Type argument = field.FieldType.GetGenericArguments()[0];
+                    // Spec 019: the stove flags byte (on, saute) for the button lights is the one byte allowed.
+                    if (type == typeof(StationContents) && field.Name == "StoveFlags" && argument == typeof(byte)) continue;
                     Assert.Contains(argument, allowed, type.Name + "." + field.Name);
                 }
             }

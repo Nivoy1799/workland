@@ -24,6 +24,10 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 016: taken out before it started cooking; the food came back unchanged.</summary>
         TooShort,
         /// <summary>Spec 016: fry/saute can only change while the pan is empty.</summary>
-        PanBusy
+        PanBusy,
+        /// <summary>Spec 019: a cut stroke or turn needs a knife in the hands.</summary>
+        NoKnife,
+        /// <summary>Spec 019: a cut stroke or turn on a board with no food on it.</summary>
+        NothingToCut
     }
 }

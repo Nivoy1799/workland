@@ -13,12 +13,23 @@ namespace Worktown.Game.Player
     /// or when the food leaves your hands, the children go back to where they were.
     /// The pose is applied right before the main camera renders, after every transform (network, smoother,
     /// Cinemachine) has moved this frame, so the food does not trail the view.
+    /// Spec 019: a held knife is drawn the same way, turned onto its edge with the tip forward, and chops down
+    /// once on every stroke (<see cref="PlayChop"/>, local only; other players see no chop).
     /// </summary>
     public sealed class HeldItemView : MonoBehaviour
     {
+        // Spec 019: the knife in view, relative to the view anchor; numbers for the visual check.
+        private static readonly Vector3 KnifeHoldOffset = new Vector3(-0.05f, 0.05f, 0.05f);
+        private static readonly Quaternion KnifeHoldRotation = Quaternion.Euler(15f, -10f, 90f);
+        private const float ChopSeconds = 0.18f;
+        private const float ChopAngle = 35f;      // degrees the tip dips
+        private const float ChopDrop = 0.08f;     // metres the knife moves down
+
         private PlayerCameraRig _rig;
         private PickupInteractor _interactor;
         private Camera _camera;
+        private float _chopStart = float.NegativeInfinity;
+        private bool _heldIsKnife;
 
         private Pickup _held;
         private readonly List<Transform> _moved = new List<Transform>();
@@ -45,9 +56,16 @@ namespace Worktown.Game.Player
             if (held != null) Capture(held);
         }
 
+        /// <summary>Spec 019: one chop of the knife in view (the owner sent a stroke).</summary>
+        public void PlayChop()
+        {
+            _chopStart = Time.unscaledTime;
+        }
+
         private void Capture(Pickup held)
         {
             _held = held;
+            _heldIsKnife = held.TryGetComponent(out Worktown.Game.Cooking.Knife _);
             foreach (Transform child in held.transform)
             {
                 if (child.TryGetComponent(out TextMesh _))
@@ -87,11 +105,27 @@ namespace Worktown.Game.Player
         {
             if (_held == null || cam != _camera || _rig.ViewHold == null) return;
             Transform anchor = _rig.ViewHold;
+            Vector3 origin = anchor.position;
+            Quaternion frame = anchor.rotation;
+            if (_heldIsKnife)
+            {
+                // Spec 019: on its edge, tip forward; a short dip while chopping.
+                float chop = ChopAmount(Time.unscaledTime - _chopStart);
+                origin = anchor.TransformPoint(KnifeHoldOffset + new Vector3(0f, -ChopDrop * chop, 0.02f * chop));
+                frame = anchor.rotation * Quaternion.Euler(ChopAngle * chop, 0f, 0f) * KnifeHoldRotation;
+            }
             for (int i = 0; i < _moved.Count; i++)
             {
                 if (_moved[i] == null) continue;
-                _moved[i].SetPositionAndRotation(anchor.TransformPoint(_localPositions[i]), anchor.rotation * _localRotations[i]);
+                _moved[i].SetPositionAndRotation(origin + frame * _localPositions[i], frame * _localRotations[i]);
             }
+        }
+
+        /// <summary>0 at rest, up to 1 in the middle of a chop, back to 0 after <see cref="ChopSeconds"/>.</summary>
+        private static float ChopAmount(float elapsed)
+        {
+            if (elapsed < 0f || elapsed >= ChopSeconds) return 0f;
+            return Mathf.Sin(elapsed / ChopSeconds * Mathf.PI);
         }
 
         private void OnDestroy()

@@ -93,6 +93,16 @@ namespace Worktown.Game.Cooking
             return look;
         }
 
+        /// <summary>
+        /// Spec 019: the look of food on a cutting board while it is being cut: the same look with the cut
+        /// shape reached so far. Only the shape byte changes.
+        /// </summary>
+        public static FoodLook WithShape(FoodLook look, byte shape)
+        {
+            look.Shape = shape;
+            return look;
+        }
+
         private static byte IngredientOf(Item item)
         {
             string baseId = item.Components.Count > 0 ? item.Components[0].BaseId : item.BaseId;

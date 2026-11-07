@@ -41,6 +41,7 @@ namespace Worktown.Game.Editor
             public Vector3 ScaleXyz = Vector3.zero; // Scale mode with a non-uniform scale when set
             public string Extra = null; // optional second model put on top of the first (Station mode)
             public PrimitiveType? Primitive; // spec 017: generic piece built from a Unity primitive (Model unused)
+            public bool AlongZ; // spec 019, Max mode: turn the model so its longest horizontal side runs along Z
         }
 
         private static readonly Def[] Defs =
@@ -87,7 +88,11 @@ namespace Worktown.Game.Editor
             FoodDef(ArtKey.FoodPlate, "plate.fbx", 0.35f),
             FoodDef(ArtKey.FoodBowl, "bowl.fbx", 0.3f),
             FoodDef(ArtKey.FoodPan, "frying-pan.fbx", 0.55f),
-            FoodDef(ArtKey.FoodPot, "pot.fbx", 0.42f)
+            FoodDef(ArtKey.FoodPot, "pot.fbx", 0.42f),
+
+            // Spec 019: the cutting board on the board station, the knife (its long side along Z, see AlongZ).
+            new Def { Key = ArtKey.ToolCuttingBoard, Model = FoodKit + "cutting-board.fbx", Mode = Fit.Max, Value = 0.5f },
+            new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, Value = 0.3f, AlongZ = true }
         };
 
         private static Def FoodDef(ArtKey key, string model, float maxSize) =>
@@ -171,9 +176,15 @@ namespace Worktown.Game.Editor
                 case Fit.Max:
                 {
                     Bounds b = WorldBounds(model);
+                    if (def.AlongZ && b.size.x > b.size.z)
+                    {
+                        model.transform.localRotation = Quaternion.Euler(0f, def.Yaw + 90f, 0f);
+                        b = WorldBounds(model);
+                    }
                     float largest = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
                     model.transform.localScale = Vector3.one * (def.Value / largest);
                     CenterOnBottom(model);
+                    if (def.Key.ToString().StartsWith("Tool")) Debug.Log("[Art] " + def.Key + " size " + WorldBounds(model).size.ToString("F3"));
                     break;
                 }
                 default:

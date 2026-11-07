@@ -17,6 +17,8 @@ namespace Worktown.Game.Net.Rules
         /// <see cref="AimKind.Other"/> there is no target (no aiming through walls). A station or pickup is a
         /// target only within <see cref="PickupRules.MaxReach"/> of the player, the rule the server checks.
         /// Hits with a NaN or negative distance are ignored.
+        /// Spec 019: a <see cref="AimKind.Button"/> is a target like a station (reach to its station); it sits on
+        /// the station's front, so the ray hits it first, and it also wins a tie with any other hit.
         /// </summary>
         public static int Pick(IReadOnlyList<AimHit> hits, Vector3 playerPosition)
         {
@@ -26,14 +28,15 @@ namespace Worktown.Game.Net.Rules
             for (int i = 0; i < hits.Count; i++)
             {
                 float distance = hits[i].Distance;
-                if (float.IsNaN(distance) || distance < 0f || distance >= bestDistance) continue;
+                if (float.IsNaN(distance) || distance < 0f || distance > bestDistance) continue;
+                if (distance == bestDistance && hits[i].Kind != AimKind.Button) continue;
                 bestDistance = distance;
                 best = i;
             }
             if (best == None) return None;
 
             AimHit hit = hits[best];
-            if (hit.Kind != AimKind.Station && hit.Kind != AimKind.Pickup) return None;
+            if (hit.Kind != AimKind.Station && hit.Kind != AimKind.Pickup && hit.Kind != AimKind.Button) return None;
             return PickupRules.IsInReach(playerPosition, hit.ObjectPosition) ? best : None;
         }
     }

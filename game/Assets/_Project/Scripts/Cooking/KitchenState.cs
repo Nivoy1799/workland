@@ -18,6 +18,9 @@ namespace Worktown.Game.Cooking
         private readonly Dictionary<int, Item> _items = new Dictionary<int, Item>();
         // Spec 013: contents of plating tables and bowls, per station index, in the order added.
         private readonly Dictionary<int, List<AssemblyEntry>> _stations = new Dictionary<int, List<AssemblyEntry>>();
+        // Spec 019: food lying on a cutting board and how far it is cut, per board station index.
+        private readonly Dictionary<int, Item> _boardFood = new Dictionary<int, Item>();
+        private readonly Dictionary<int, CutProgress> _boardCut = new Dictionary<int, CutProgress>();
 
         public KitchenState(ItemFactory factory, OperationCatalog operations)
         {
@@ -105,6 +108,113 @@ namespace Worktown.Game.Cooking
             _stations.Clear();
             _heat.Clear();
             _stoves.Clear();
+            _boardFood.Clear();
+            _boardCut.Clear();
+        }
+
+        // ---- Spec 019: cutting by hand on the board ----
+
+        /// <summary>
+        /// Puts the food on the cutting board, whole and not turned. On success the food no longer exists as an
+        /// item in the world (the caller despawns its object). A full board gives StationFull; plated food, or
+        /// food the sim would not cut, gives SimRefused; in both cases the food stays in the hands.
+        /// </summary>
+        public CookOutcome TryPutOnBoard(int foodObjectId, int boardIndex)
+        {
+            if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
+            if (_boardFood.ContainsKey(boardIndex)) return CookOutcome.StationFull;
+            if (AssemblyRules.IsPlated(item) || !CanCut(item, FoodLook.ShapeHalves)) return CookOutcome.SimRefused;
+
+            _boardFood[boardIndex] = item;
+            _boardCut[boardIndex] = CutProgress.Whole;
+            _items.Remove(foodObjectId);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// One knife stroke on the board (<see cref="CutRules.Stroke"/>). NothingToCut on an empty board. A new
+        /// shape the sim would refuse is refused now (SimRefused, nothing changes), so taking always works.
+        /// The caller checks the knife and the reach.
+        /// </summary>
+        public CookOutcome TryBoardStroke(int boardIndex)
+        {
+            if (!_boardFood.TryGetValue(boardIndex, out Item item)) return CookOutcome.NothingToCut;
+            CutProgress current = _boardCut[boardIndex];
+            CutProgress next = CutRules.Stroke(current);
+            if (next.Shape != current.Shape && !CanCut(item, next.Shape)) return CookOutcome.SimRefused;
+            _boardCut[boardIndex] = next;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Turns the food on the board 90 degrees (<see cref="CutRules.Turn"/>). NothingToCut on an empty board.</summary>
+        public CookOutcome TryBoardTurn(int boardIndex)
+        {
+            if (!_boardFood.ContainsKey(boardIndex)) return CookOutcome.NothingToCut;
+            _boardCut[boardIndex] = CutRules.Turn(_boardCut[boardIndex]);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>How far the food on the board is cut; false on an empty board.</summary>
+        public bool TryGetBoard(int boardIndex, out Item food, out CutProgress progress)
+        {
+            progress = default;
+            if (!_boardFood.TryGetValue(boardIndex, out food)) return false;
+            progress = _boardCut[boardIndex];
+            return true;
+        }
+
+        /// <summary>
+        /// What taking the food from the board gives, without changing the board: uncut food unchanged, else the
+        /// sim cut op with the shape reached (the same item the board's digit keys make). StationEmpty on an
+        /// empty board. The caller hands the result over first, then calls <see cref="ClearBoard"/>.
+        /// </summary>
+        public CookOutcome TryPreviewBoardTake(int boardIndex, out Item result)
+        {
+            result = null;
+            if (!_boardFood.TryGetValue(boardIndex, out Item item)) return CookOutcome.StationEmpty;
+            string shape = CutRules.ShapeId(_boardCut[boardIndex].Shape);
+            if (shape == null)
+            {
+                result = item;
+                return CookOutcome.Ok;
+            }
+            OperationResult cut = _factory.Apply("cut", new[] { item }, CutParams(shape));
+            if (!cut.Ok || cut.Item == null) return CookOutcome.SimRefused;
+            result = cut.Item;
+            return CookOutcome.Ok;
+        }
+
+        public void ClearBoard(int boardIndex)
+        {
+            _boardFood.Remove(boardIndex);
+            _boardCut.Remove(boardIndex);
+        }
+
+        /// <summary>The look of the food on the board with the shape cut so far; null on an empty board.</summary>
+        public FoodLook? BoardLook(int boardIndex)
+        {
+            if (!_boardFood.TryGetValue(boardIndex, out Item item)) return null;
+            FoodLook look = FoodLookRules.From(item);
+            byte shape = _boardCut[boardIndex].Shape;
+            // Food that was cut before (third-person digits) keeps its shape until the knife changes it.
+            return shape == FoodLook.ShapeWhole ? look : FoodLookRules.WithShape(look, shape);
+        }
+
+        /// <summary>Name of what taking the food would give, e.g. "potato slices"; null on an empty board.</summary>
+        public string BoardName(int boardIndex)
+        {
+            return TryPreviewBoardTake(boardIndex, out Item result) == CookOutcome.Ok ? NameOf(result) : null;
+        }
+
+        private bool CanCut(Item item, byte shape)
+        {
+            string id = CutRules.ShapeId(shape);
+            return id != null && _factory.Apply("cut", new[] { item }, CutParams(id)).Ok;
+        }
+
+        private static IReadOnlyDictionary<string, ParamValue> CutParams(string shape)
+        {
+            return new Dictionary<string, ParamValue> { ["shape"] = ParamValue.Choice(shape) };
         }
 
         // ---- Spec 016: cooking over time in the pan and pot ----
