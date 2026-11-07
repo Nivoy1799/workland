@@ -16,24 +16,38 @@ namespace Worktown.Game.Cooking
             Cut("halves"), Cut("slices"), Cut("sticks"), Cut("dice")
         };
 
-        private static readonly StationAction[] PanActions =
-        {
-            Fry(180f, 40f, "light"), Fry(190f, 150f, "golden"), Fry(200f, 400f, "dark")
-        };
+        /// <summary>Spec 016: option 1 on the pan and pot is the on/off switch, option 2 the pan's fry/saute.</summary>
+        public const int StoveSwitch = 1;
+        public const int PanMode = 2;
 
-        private static readonly StationAction[] PotActions =
-        {
-            Boil(60f, "short"), Boil(300f, "medium"), Boil(900f, "long")
-        };
-
-        /// <summary>Number of option keys a station accepts (0 for crate and counter, which use E).</summary>
+        /// <summary>
+        /// Number of option keys a station accepts (0 for stations that only use E). Spec 016: the pan
+        /// has on/off and fry/saute, the pot on/off; both cook over time with E.
+        /// </summary>
         public static int OptionCount(StationKind kind)
         {
+            if (kind == StationKind.Pan) return PanMode;
+            if (kind == StationKind.Pot) return StoveSwitch;
             StationAction[] actions = ActionsOf(kind);
             return actions == null ? 0 : actions.Length;
         }
 
-        /// <summary>The action for option 1..n, or false for unknown stations and options.</summary>
+        /// <summary>Spec 016: pan and pot cook food over time.</summary>
+        public static bool IsHeat(StationKind kind)
+        {
+            return kind == StationKind.Pan || kind == StationKind.Pot;
+        }
+
+        /// <summary>Spec 016: keys on the station's world label, e.g. "E · 1-3".</summary>
+        public static string KeysHint(StationKind kind)
+        {
+            int options = OptionCount(kind);
+            if (options == 0) return "E";
+            if (!IsHeat(kind)) return "1-" + options;
+            return options == 1 ? "E · 1" : "E · 1-" + options;
+        }
+
+        /// <summary>The instant action for option 1..n (board only), or false for other stations and options.</summary>
         public static bool TryGetAction(StationKind kind, int option, out StationAction action)
         {
             action = null;
@@ -49,7 +63,7 @@ namespace Worktown.Game.Cooking
             return PickupRules.IsInReach(playerPosition, stationPosition);
         }
 
-        /// <summary>Prompt for the overlay, e.g. "Pan: 1 light, 2 golden, 3 dark".</summary>
+        /// <summary>Prompt for the overlay, e.g. "Board: 1 halves, 2 slices, 3 sticks, 4 cubes".</summary>
         public static string Prompt(StationKind kind, string stationName)
         {
             switch (kind)
@@ -58,6 +72,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Counter: return stationName + ": E sell";
                 case StationKind.PlatingTable: return stationName + ": E put food on / E (empty hands) take the plate";
                 case StationKind.Bowl: return stationName + ": E put food in / E (empty hands) take the mix";
+                case StationKind.Pan: return stationName + ": E put food in / E (empty hands) take it out, 1 on/off, 2 fry/saute";
+                case StationKind.Pot: return stationName + ": E put food in / E (empty hands) take it out, 1 on/off";
             }
             StationAction[] actions = ActionsOf(kind);
             var parts = new List<string>(actions.Length);
@@ -71,8 +87,6 @@ namespace Worktown.Game.Cooking
             switch (kind)
             {
                 case StationKind.Board: return BoardActions;
-                case StationKind.Pan: return PanActions;
-                case StationKind.Pot: return PotActions;
                 default: return null;
             }
         }
@@ -82,21 +96,6 @@ namespace Worktown.Game.Cooking
             string label = shape == "dice" ? "cubes" : shape;
             return new StationAction("cut",
                 new Dictionary<string, ParamValue> { ["shape"] = ParamValue.Choice(shape) }, label);
-        }
-
-        private static StationAction Fry(float temp, float time, string label)
-        {
-            return new StationAction("fry", new Dictionary<string, ParamValue>
-            {
-                ["temp"] = ParamValue.Number(temp),
-                ["time"] = ParamValue.Number(time)
-            }, label);
-        }
-
-        private static StationAction Boil(float time, string label)
-        {
-            return new StationAction("boil",
-                new Dictionary<string, ParamValue> { ["time"] = ParamValue.Number(time) }, label);
         }
     }
 }

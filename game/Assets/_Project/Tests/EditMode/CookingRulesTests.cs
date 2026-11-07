@@ -19,25 +19,13 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(ParamValue.Choice(shape), action.Parameters["shape"]);
         }
 
-        [TestCase(1, 180f, 40f)]
-        [TestCase(2, 190f, 150f)]
-        [TestCase(3, 200f, 400f)]
-        public void Pan_MapsToFryPresets(int option, float temp, float time)
+        [TestCase(StationKind.Pan)]
+        [TestCase(StationKind.Pot)]
+        public void PanAndPot_HaveNoInstantPresets_Spec016(StationKind kind)
         {
-            Assert.IsTrue(StationRules.TryGetAction(StationKind.Pan, option, out StationAction action));
-            Assert.AreEqual("fry", action.OperationId);
-            Assert.AreEqual(ParamValue.Number(temp), action.Parameters["temp"]);
-            Assert.AreEqual(ParamValue.Number(time), action.Parameters["time"]);
-        }
-
-        [TestCase(1, 60f)]
-        [TestCase(2, 300f)]
-        [TestCase(3, 900f)]
-        public void Pot_MapsToBoilPresets(int option, float time)
-        {
-            Assert.IsTrue(StationRules.TryGetAction(StationKind.Pot, option, out StationAction action));
-            Assert.AreEqual("boil", action.OperationId);
-            Assert.AreEqual(ParamValue.Number(time), action.Parameters["time"]);
+            for (int option = 1; option <= 4; option++)
+                Assert.IsFalse(StationRules.TryGetAction(kind, option, out _), "option " + option);
+            Assert.IsTrue(StationRules.IsHeat(kind));
         }
 
         [TestCase(StationKind.Board, 0)]
@@ -56,8 +44,8 @@ namespace Worktown.Game.Tests
         public void OptionCounts()
         {
             Assert.AreEqual(4, StationRules.OptionCount(StationKind.Board));
-            Assert.AreEqual(3, StationRules.OptionCount(StationKind.Pan));
-            Assert.AreEqual(3, StationRules.OptionCount(StationKind.Pot));
+            Assert.AreEqual(2, StationRules.OptionCount(StationKind.Pan));
+            Assert.AreEqual(1, StationRules.OptionCount(StationKind.Pot));
             Assert.AreEqual(0, StationRules.OptionCount(StationKind.Crate));
             Assert.AreEqual(0, StationRules.OptionCount(StationKind.Counter));
         }
@@ -65,7 +53,11 @@ namespace Worktown.Game.Tests
         [Test]
         public void Prompt_ListsOptions()
         {
-            Assert.AreEqual("Pan: 1 light, 2 golden, 3 dark", StationRules.Prompt(StationKind.Pan, "Pan"));
+            Assert.AreEqual("Pan: E put food in / E (empty hands) take it out, 1 on/off, 2 fry/saute",
+                StationRules.Prompt(StationKind.Pan, "Pan"));
+            Assert.AreEqual("E · 1-2", StationRules.KeysHint(StationKind.Pan));
+            Assert.AreEqual("E · 1", StationRules.KeysHint(StationKind.Pot));
+            Assert.AreEqual("1-4", StationRules.KeysHint(StationKind.Board));
             Assert.AreEqual("Board: 1 halves, 2 slices, 3 sticks, 4 cubes", StationRules.Prompt(StationKind.Board, "Board"));
             Assert.AreEqual("Counter: E sell", StationRules.Prompt(StationKind.Counter, "Counter"));
         }

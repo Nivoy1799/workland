@@ -104,6 +104,23 @@
         "Sell a meal: an orange customer leaves happy",
         "Wait an in-game hour (1 minute): the queue changes"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-016",
+      "date": "2026-11-07",
+      "title": "Cooking takes time: switch on the pan and the pot",
+      "items": [
+        "Pan and pot cook over time: E puts food in, E with empty hands takes it out",
+        "1 switches the pan or pot on and off; food only cooks while it is on (they start off)",
+        "The label shows what is inside and how far: raw, warming up, short, medium, long",
+        "Pan: 2 switches fry or saute (only while the pan is empty)"
+      ],
+      "test": [
+        "Potato sticks in the pan, press 1 (on), take out after about 25 s: 'crispy fried potato sticks'",
+        "Switch off with food inside: the label stops changing; switch on again and it goes on",
+        "Take food out right away: 'Too short', it comes back unchanged",
+        "A puts food in the pan, B takes it out: works for both players"
+      ]
     }
   ]
 }

@@ -117,6 +117,15 @@ namespace Worktown.Game.Net
                     if (!keyboard.eKey.wasPressedThisFrame) return false;
                     RequestStation(station.Index, 0);
                     return true;
+                case StationKind.Pan:
+                case StationKind.Pot:
+                    // Spec 016: E puts food in or takes it out; 1 switches on/off, 2 the pan fry/saute.
+                    if (keyboard.eKey.wasPressedThisFrame)
+                    {
+                        RequestStation(station.Index, 0);
+                        return true;
+                    }
+                    goto default;
                 default:
                     int option = PressedOption(keyboard);
                     if (option == 0) return false;

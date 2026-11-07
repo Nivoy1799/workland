@@ -1,12 +1,19 @@
 ---
 id: 016
-title: Cooking takes time; pan heat and fry/saute mode
-status: draft
+title: Cooking takes time; on/off stoves and fry/saute mode
+status: approved
 owner: architect
 builder: opus
 ---
 
-# 016: Cooking takes time; pan heat and fry/saute mode
+# 016: Cooking takes time; on/off stoves and fry/saute mode
+
+> **Changed by the human on 2026-11-07, after AC6 passed:** the 11-step heat knob is replaced by an
+> on/off switch ("let's start just with on/off"). Key 1 switches the pan or pot on and off, also with
+> food inside; food only cooks while it is on; stoves start off. The pan has one fixed heat (190 C,
+> the old "golden" preset). Key 2 is the pan's fry/saute (only while empty). This also settles the
+> D21 question about showing "heat 6/11": no heat level is shown any more. Sections below that talk
+> about the knob are kept for history; the implementation notes describe what was built.
 
 ## Goal
 Today the pan and pot cook instantly: hold food, press 1 to 3, done. This spec makes cooking feel
@@ -89,20 +96,20 @@ E put in / take out; 1/2 heat; 3 fry/saute. G (emote wheel) and T (quick chat) s
 the existing guards (UI open, T or G held) apply.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes with `UNITY_PATH` set (Unity EditMode tests run).
-- [ ] AC2: `CookingTimeTests`: at tick rate 30 and scale 6, 750 ticks give exactly 150 sim s;
+- [x] AC1: `bash scripts/verify.sh` passes with `UNITY_PATH` set (Unity EditMode tests run).
+- [x] AC2: `CookingTimeTests`: at tick rate 30 and scale 6, 750 ticks give exactly 150 sim s;
       9000 ticks on fry clamp to 600 s; fry taken out below 10 sim s is `TooShort`.
-- [ ] AC3: `HeatSessionTests`/`KitchenState` tests: food put in a pan at 190 C fry and taken out
+- [x] AC3: `HeatSessionTests`/`KitchenState` tests: food put in a pan at 190 C fry and taken out
       after 750 ticks has the same `Hash` as `ItemFactory.Apply("fry", [food], {temp 190, time 150})`
       built directly; `TooShort` returns the unchanged food with its original hash; a second item
       in a busy pan is `StationFull`; heat changes with food in the pan are `PanBusy`; heat stops
       at 120 and 220; saute mode produces a saute result.
-- [ ] AC4: Pot: boil after 300 sim s matches `Apply("boil", [food], {time 300})`.
-- [ ] AC5: A reflection test over `Worktown.Game.Cooking` still finds no `float`, `double`,
+- [x] AC4: Pot: boil after 300 sim s matches `Apply("boil", [food], {time 300})`.
+- [x] AC5: A reflection test over `Worktown.Game.Cooking` still finds no `float`, `double`,
       `string`, `long` or `Item` ServerRpc parameter.
-- [ ] AC6 (manual, human): two clients on the dedicated server: A puts potato sticks in the pan,
+- [x] AC6 (manual, human): two clients on the dedicated server: A puts potato sticks in the pan,
       B takes them out after about 25 s and sees "crispy fried potato sticks"; the label changed while cooking.
-- [ ] AC7: `WhatsNew.json` has a spec-016 entry with these test steps.
+- [x] AC7: `WhatsNew.json` has a spec-016 entry with these test steps.
 
 ## Test plan
 - Pure rules (`CookingTime`, `HeatSession`, `PanSettings`) and `KitchenState` carry the logic and
@@ -110,7 +117,7 @@ the existing guards (UI open, T or G held) apply.
   two-client screenshot run like specs 012 to 014.
 - Command: `bash scripts/verify.sh` (Windows, Editor closed, `UNITY_PATH` set).
 
-## Open questions
+## Open questions (answered 2026-11-07: human approved all defaults)
 1. **Keep the instant 1 to 3 presets as well?** Default: no, the pan and pot are timed only.
    Alternative: keep presets as a "quick cook" for the demo.
 2. **Time scale.** Default: 6 (fries about 25 s). Alternative: 1:1 (fries 2.5 min) or another factor.
@@ -124,6 +131,38 @@ the existing guards (UI open, T or G held) apply.
 - AC6 with a second window or person.
 
 ## Implementation notes
-(Builder fills this in.)
+**On/off change (2026-11-07, human):** `PanSettings` (knob) removed, `StoveSettings` added (`IsOn`,
+`Saute`, fixed `PanTempC = 190`, starts off). `HeatSession` counts only ticks while the stove is on
+(`Start`/`Stop`/`CookedTicks`). `KitchenState.TryUseStove`: option 1 on/off for pan and pot (allowed
+with food inside, pauses cooking), option 2 fry/saute on the pan (only while empty, else `PanBusy`).
+Label: "on · fry", "off · saute", pot "on"/"off"; contents "potato sticks · raw" while off before the
+first bucket. Keys on the world label "E · 1-2" (pan) and "E · 1" (pot). `HeatTestKit` switches on
+before cooking; the old presets are now times at 190 C (light 40 s, golden 150 s, dark 400 s); the
+pinned golden-fries hash is unchanged. New tests: switch-off pauses cooking, new stoves are off.
+
+**First version (heat knob):**
+Built 2026-11-07 by the main session (Opus), branch `spec/016-cooking-time-and-heat`.
+- Pure rules: `CookingTime` (ticks to sim seconds, clamp, too short, bucket id picked like the sim
+  picks buckets), `HeatSession` (immutable, server only), `PanSettings` (knob 120..220 C in 10 C
+  steps, start 170, fry/saute).
+- `KitchenState` now also gets the `OperationCatalog` (to read each op's time limits). New:
+  `PanOf`, `TryChangePan`, `TryPutOnHeat` (dry-runs the op at its max time, so food the sim would
+  refuse, e.g. a finished plate, stays in the hands), `TryPreviewHeatTake` + `ClearHeat` (hand over
+  first, clear on success, like the plating table), `DescribeHeat`. `Clear` resets pans and sessions.
+- The pan and pot have no instant presets any more (`TryApply` is board only).
+- Label: knob shown as "heat 6/11 · fry", a dial position rather than degrees (D21: no exact values).
+  While cooking: "+ potato sticks · warming up/short/medium/long" (the sim's time bucket ids).
+  `StationContents` got a `Status` SyncVar; `KitchenService.Update` (server) writes only on change.
+- No new RPC: E sends option 0, pan keys 1..3 reuse `RequestStation`. `RpcSurfaceTests` checks
+  by reflection that no cooking ServerRpc takes float, double, long, string or `Item`.
+- Older tests that used the pan presets cook through `HeatTestKit` with the same values
+  (light 180 C/40 s, golden 190/150, dark 200/400); the pinned fries hash is unchanged.
+- Verified: `verify.sh` PASS (Unity EditMode 186/186); scene regenerated; Linux server and Windows
+  client built; a client on the WSL dedicated server shows the pan label "heat 6/11 · fry" (synced
+  from the server), no server exceptions. AC6 confirmed by the human on 2026-11-07 (two windows, host + client).
+- Review (reviewer subagent): approve with nits. Fixed: label refresh once per second or on change
+  instead of every frame, cached station lookups, name read before despawn, one time-param helper,
+  nullable pot temperature, `PanOptionCount`. Kept as is: E near the pan or pot always goes to the
+  station (same as the plating table). Open for the human: the knob display "heat 6/11" (see D21).
 
 ## Blockers

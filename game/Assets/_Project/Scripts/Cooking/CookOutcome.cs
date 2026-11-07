@@ -20,6 +20,10 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 013: a plated dish cannot go onto another plate or into a bowl.</summary>
         AlreadyPlated,
         /// <summary>Spec 013: nothing on the plate or in the bowl to take.</summary>
-        StationEmpty
+        StationEmpty,
+        /// <summary>Spec 016: taken out before it started cooking; the food came back unchanged.</summary>
+        TooShort,
+        /// <summary>Spec 016: fry/saute can only change while the pan is empty.</summary>
+        PanBusy
     }
 }

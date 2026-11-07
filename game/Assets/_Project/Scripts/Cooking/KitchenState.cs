@@ -11,18 +11,24 @@ namespace Worktown.Game.Cooking
     public sealed class KitchenState
     {
         private readonly ItemFactory _factory;
+        private readonly OperationCatalog _operations;
+        // Spec 016: food cooking in a pan or pot, and each stove's switch and mode, per station index.
+        private readonly Dictionary<int, HeatSession> _heat = new Dictionary<int, HeatSession>();
+        private readonly Dictionary<int, StoveSettings> _stoves = new Dictionary<int, StoveSettings>();
         private readonly Dictionary<int, Item> _items = new Dictionary<int, Item>();
         // Spec 013: contents of plating tables and bowls, per station index, in the order added.
         private readonly Dictionary<int, List<AssemblyEntry>> _stations = new Dictionary<int, List<AssemblyEntry>>();
 
-        public KitchenState(ItemFactory factory)
+        public KitchenState(ItemFactory factory, OperationCatalog operations)
         {
             _factory = factory;
+            _operations = operations;
         }
 
         public static KitchenState CreateDemo()
         {
-            return new KitchenState(new ItemFactory(new ItemCatalog(DemoIngredients.All), OperationCatalog.CreateDefault()));
+            OperationCatalog operations = OperationCatalog.CreateDefault();
+            return new KitchenState(new ItemFactory(new ItemCatalog(DemoIngredients.All), operations), operations);
         }
 
         /// <summary>Creates a raw ingredient. Register it under its object id once spawned.</summary>
@@ -97,6 +103,131 @@ namespace Worktown.Game.Cooking
         {
             _items.Clear();
             _stations.Clear();
+            _heat.Clear();
+            _stoves.Clear();
+        }
+
+        // ---- Spec 016: cooking over time in the pan and pot ----
+
+        /// <summary>The stove's switch and mode (created switched off, frying, on first use).</summary>
+        public StoveSettings StoveOf(int stationIndex)
+        {
+            if (!_stoves.TryGetValue(stationIndex, out StoveSettings stove))
+            {
+                stove = new StoveSettings();
+                _stoves[stationIndex] = stove;
+            }
+            return stove;
+        }
+
+        /// <summary>
+        /// Option 1 switches the pan or pot on or off, also with food inside (cooking pauses while off).
+        /// Option 2 switches the pan between fry and saute, only while it is empty.
+        /// </summary>
+        public CookOutcome TryUseStove(int stationIndex, StationKind kind, int option, uint tick)
+        {
+            if (!StationRules.IsHeat(kind) || option < 1 || option > StationRules.OptionCount(kind)) return CookOutcome.InvalidOption;
+            StoveSettings stove = StoveOf(stationIndex);
+            _heat.TryGetValue(stationIndex, out HeatSession session);
+            if (option == StationRules.StoveSwitch)
+            {
+                stove.Toggle();
+                if (session != null)
+                {
+                    if (stove.IsOn) session.Start(tick);
+                    else session.Stop(tick);
+                }
+                return CookOutcome.Ok;
+            }
+            if (session != null) return CookOutcome.PanBusy;
+            stove.ToggleMode();
+            return CookOutcome.Ok;
+        }
+
+        public bool TryGetHeat(int stationIndex, out HeatSession session)
+        {
+            return _heat.TryGetValue(stationIndex, out session);
+        }
+
+        /// <summary>
+        /// Puts the food into the pan or pot; it cooks from <paramref name="tick"/> if the stove is on. On success the
+        /// food no longer exists as an item in the world (the caller despawns its object). Food the sim
+        /// would refuse to heat (e.g. a finished plate) is refused now, while it is still in the hands.
+        /// </summary>
+        public CookOutcome TryPutOnHeat(int foodObjectId, int stationIndex, StationKind kind, byte color, uint tick)
+        {
+            if (!StationRules.IsHeat(kind)) return CookOutcome.InvalidOption;
+            if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
+            if (_heat.ContainsKey(stationIndex)) return CookOutcome.StationFull;
+
+            StoveSettings stove = StoveOf(stationIndex);
+            string opId = stove.OperationIdFor(kind);
+            int? tempC = kind == StationKind.Pan ? StoveSettings.PanTempC : (int?)null;
+            if (!TryGetTimeParam(opId, out ParamDef time)) return CookOutcome.SimRefused;
+            if (!_factory.Apply(opId, new[] { item }, HeatParams(tempC, time.Max)).Ok) return CookOutcome.SimRefused;
+
+            _heat[stationIndex] = new HeatSession(item, color, opId, tempC, stove.IsOn, tick);
+            _items.Remove(foodObjectId);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// What taking the food out at <paramref name="tick"/> gives, without changing the station. Ok: the
+        /// cooked item. TooShort: the food came out before the op's minimum time and is handed back
+        /// unchanged. The caller hands the result over first, then calls <see cref="ClearHeat"/>.
+        /// </summary>
+        public CookOutcome TryPreviewHeatTake(int stationIndex, uint tick, double tickRate, out Item result, out byte color)
+        {
+            result = null;
+            color = 0;
+            if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return CookOutcome.StationEmpty;
+            color = session.Color;
+            if (!TryGetTimeParam(session.OperationId, out ParamDef time)) return CookOutcome.SimRefused;
+
+            double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
+            if (CookingTime.IsTooShort(time, seconds))
+            {
+                result = session.Food;
+                return CookOutcome.TooShort;
+            }
+            OperationResult cooked = _factory.Apply(session.OperationId, new[] { session.Food },
+                HeatParams(session.TempC, CookingTime.Clamp(time, seconds)));
+            if (!cooked.Ok || cooked.Item == null) return CookOutcome.SimRefused;
+            result = cooked.Item;
+            return CookOutcome.Ok;
+        }
+
+        public void ClearHeat(int stationIndex)
+        {
+            _heat.Remove(stationIndex);
+        }
+
+        /// <summary>
+        /// Label line for what is in the pan or pot, e.g. "potato sticks · medium". Before the first doneness
+        /// bucket: "warming up" while the stove is on, "raw" while it is off. Null if it is empty.
+        /// </summary>
+        public string DescribeHeat(int stationIndex, uint tick, double tickRate)
+        {
+            if (!_heat.TryGetValue(stationIndex, out HeatSession session)) return null;
+            string bucket = string.Empty;
+            if (TryGetTimeParam(session.OperationId, out ParamDef time))
+                bucket = CookingTime.BucketId(time, CookingTime.SimSeconds(session.CookedTicks(tick), tickRate));
+            if (bucket.Length == 0) bucket = session.IsRunning ? "warming up" : "raw";
+            return NameOf(session.Food) + " · " + bucket;
+        }
+
+        private bool TryGetTimeParam(string opId, out ParamDef time)
+        {
+            time = null;
+            return _operations.TryGet(opId, out OperationDef op) && CookingTime.TryGetTimeParam(op, out time);
+        }
+
+        /// <summary>Heat op parameters; no temperature for the pot (boil has a fixed one).</summary>
+        private static IReadOnlyDictionary<string, ParamValue> HeatParams(int? tempC, float seconds)
+        {
+            var parameters = new Dictionary<string, ParamValue> { ["time"] = ParamValue.Number(seconds) };
+            if (tempC.HasValue) parameters["temp"] = ParamValue.Number(tempC.Value);
+            return parameters;
         }
 
         /// <summary>

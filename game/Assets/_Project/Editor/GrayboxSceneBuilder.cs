@@ -304,10 +304,15 @@ namespace Worktown.Game.Editor
             }
             stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
                 CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0));
-            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
-                CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f)), 0));
-            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
-                CreateMaterial(Root + "/Settings/Station_Pot.mat", new Color(0.4f, 0.5f, 0.65f)), 0));
+            // Spec 016: pan and pot cook over time; their label (knob, what is cooking) is networked.
+            Station pan = CreateStation(parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
+                CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f)), 0);
+            AddStationContents(pan);
+            stations.Add(pan);
+            Station pot = CreateStation(parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
+                CreateMaterial(Root + "/Settings/Station_Pot.mat", new Color(0.4f, 0.5f, 0.65f)), 0);
+            AddStationContents(pot);
+            stations.Add(pot);
             stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
                 CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
 
@@ -359,7 +364,7 @@ namespace Worktown.Game.Editor
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
             body.isStatic = true;
 
-            string keys = StationRules.OptionCount(kind) == 0 ? "E" : "1-" + StationRules.OptionCount(kind);
+            string keys = StationRules.KeysHint(kind);
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, StationHeight * 0.5f + 0.6f, 0f), 60, 0.05f);
             string price = string.Empty;
             if (kind == StationKind.Crate

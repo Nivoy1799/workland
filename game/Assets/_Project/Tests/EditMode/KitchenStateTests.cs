@@ -24,7 +24,7 @@ namespace Worktown.Game.Tests
             KitchenState kitchen = NewKitchenWithPotato(out Item potato);
 
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryApply(FoodId, StationKind.Board, 3, out _, out _));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryApply(FoodId, StationKind.Pan, 2, out Item fries, out _));
+            Item fries = HeatTestKit.PanPreset(kitchen, FoodId, 2); // spec 016: pan switched on, 150 sim s at 190 C
 
             // Built directly with the sim, the way spec 005's tests build fries.
             var factory = new ItemFactory(new ItemCatalog(DemoIngredients.All), OperationCatalog.CreateDefault());
@@ -48,10 +48,10 @@ namespace Worktown.Game.Tests
         {
             KitchenState kitchen = NewKitchenWithPotato(out Item raw);
             kitchen.TryApply(FoodId, StationKind.Board, 3, out Item sticks, out _);
-            kitchen.TryApply(FoodId, StationKind.Pan, 2, out Item golden, out _);
+            Item golden = HeatTestKit.PanPreset(kitchen, FoodId, 2);
 
             kitchen.Register(7, sticks);
-            kitchen.TryApply(7, StationKind.Pan, 3, out Item dark, out _);
+            Item dark = HeatTestKit.PanPreset(kitchen, 7, 3);
 
             Assert.AreEqual(1, StarRating.Stars(KitchenState.QualityOf(raw)));
             Assert.AreEqual(4, StarRating.Stars(KitchenState.QualityOf(golden)));
@@ -62,10 +62,11 @@ namespace Worktown.Game.Tests
         public void UnknownFood_IsRefused()
         {
             var kitchen = KitchenState.CreateDemo();
-            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryApply(1, StationKind.Pan, 2, out _, out _));
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryApply(1, StationKind.Board, 2, out _, out _));
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutOnHeat(1, HeatTestKit.PanIndex, StationKind.Pan, 0, 0));
         }
 
-        [TestCase(StationKind.Pan, 0)]
+        [TestCase(StationKind.Pan, 2)]
         [TestCase(StationKind.Board, 9)]
         [TestCase(StationKind.Crate, 1)]
         public void InvalidOption_IsRefusedAndChangesNothing(StationKind station, int option)
