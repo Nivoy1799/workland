@@ -239,6 +239,29 @@
         "Pick up the plate and click the counter: it sells with stars and the plate is gone",
         "Ask another player: they see the pan move, the pot's contents and the plate in your hands"
       ]
+    },
+    {
+      "id": "2026-11-08-spec-022",
+      "date": "2026-11-08",
+      "title": "Customer orders and a short shift",
+      "items": [
+        "Every customer orders a dish from the menu: Fries, Potato soup, Onion soup, Tomato salad, Fried apple, Veggie mix",
+        "The order floats above the customer and hangs as a card on the ticket rail above the counter, with the minutes waited",
+        "Sell a plate at the counter: the first customer whose order it matches gets it, else the first in line",
+        "Exact order: full price plus 10 % tip per star above 2. Close (one step off): 60 %. Wrong dish: 25 %",
+        "A shift runs from 08:00 to 14:00 in-game (6 minutes). Then everyone sees the summary for 15 s and the next day starts at 08:00",
+        "F3 shows the shift summary (served, earned, average stars, missed); the top left shows open orders"
+      ],
+      "test": [
+        "Fries: potato, cut into sticks (3 strokes with a turn), into the pan on a burner that is on, about 25 s, pour onto a plate, sell: a fries customer says 'Thanks!'",
+        "Potato soup: potato cut in halves, into the pot on a burner, about 1 minute, pour onto a plate",
+        "Onion soup: an onion and one more ingredient into the pot together, about 1 minute, pour onto a plate",
+        "Tomato salad: tomato slices and a cut onion into the bowl, pour the bowl onto a plate (no heat)",
+        "Fried apple: switch the burner to saute with its mode button first, apple slices or halves into the pan, a few seconds",
+        "Veggie mix: three different cut ingredients on one plate",
+        "Serve a wrong dish on purpose: the customer leaves red, 'That's not what I ordered', and pays little",
+        "Play until 14:00: the queue leaves, the summary shows your numbers for 15 s, then a new shift starts at 08:00"
+      ]
     }
   ]
 }

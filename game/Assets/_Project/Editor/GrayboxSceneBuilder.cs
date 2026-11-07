@@ -279,7 +279,73 @@ namespace Worktown.Game.Editor
             SetField(service, "_customerPrefab", customerPrefab);
             SetField(service, "_entry", entry.transform);
             SetField(service, "_queueHead", head.transform);
+            SetField(service, "_rail", CreateTicketRail()); // spec 022
             SetField(networkManager.GetComponent<KitchenService>(), "_customers", service);
+        }
+
+        // Spec 022: the ticket rail board above the counter, facing the players (south). Two rows of three cards.
+        private const int TicketCards = 6;
+        private static readonly Vector3 RailPosition = new Vector3(CounterX, 2.75f, KitchenZ + 0.75f);
+        private static readonly Vector2 RailSize = new Vector2(2.5f, 1.15f);
+        private static readonly Vector2 CardSize = new Vector2(0.74f, 0.4f);
+        private const float CardStepX = 0.8f;
+        private const float CardStepY = 0.46f;
+
+        /// <summary>
+        /// Spec 022: a global network object (orders and shift numbers for every client) with a dark board, a title and
+        /// six cards (cream quad + text, hidden while unused). No colliders, so it never blocks aiming or walking.
+        /// </summary>
+        private static TicketRailView CreateTicketRail()
+        {
+            var root = new GameObject("TicketRail");
+            root.transform.position = RailPosition;
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_isGlobal", true);
+
+            GameObject board = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            board.name = "Board";
+            UnityEngine.Object.DestroyImmediate(board.GetComponent<Collider>());
+            board.transform.SetParent(root.transform, false);
+            board.transform.localScale = new Vector3(RailSize.x, RailSize.y, 0.05f);
+            board.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/TicketRail.mat", new Color(0.22f, 0.16f, 0.12f));
+            board.isStatic = true;
+
+            TextMesh title = CreateLabel(root.transform, new Vector3(0f, RailSize.y * 0.5f + 0.04f, -0.03f), 60, 0.03f);
+            title.name = "Title";
+            title.text = "ORDERS";
+
+            Material cardMat = CreateMaterial(Root + "/Settings/TicketCard.mat", new Color(0.96f, 0.93f, 0.82f));
+            var cards = new List<TextMesh>(TicketCards);
+            var backs = new List<Renderer>(TicketCards);
+            for (int i = 0; i < TicketCards; i++)
+            {
+                int column = i % 3;
+                int row = i / 3;
+                var centre = new Vector3((column - 1) * CardStepX, (0.5f - row) * CardStepY, 0f);
+
+                GameObject back = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                back.name = "Card " + (i + 1);
+                UnityEngine.Object.DestroyImmediate(back.GetComponent<Collider>());
+                back.transform.SetParent(root.transform, false);
+                back.transform.localPosition = centre + new Vector3(0f, 0f, -0.03f);
+                back.transform.localScale = new Vector3(CardSize.x, CardSize.y, 1f);
+                var backRenderer = back.GetComponent<MeshRenderer>();
+                backRenderer.sharedMaterial = cardMat;
+                backs.Add(backRenderer);
+
+                TextMesh text = CreateLabel(root.transform, centre + new Vector3(0f, 0f, -0.04f), 48, 0.018f);
+                text.name = "Card text " + (i + 1);
+                text.anchor = TextAnchor.MiddleCenter;
+                text.color = new Color(0.12f, 0.1f, 0.08f);
+                text.text = string.Empty;
+                cards.Add(text);
+            }
+
+            var rail = root.AddComponent<TicketRailView>();
+            SetField(rail, "_title", title);
+            SetField(rail, "_cards", cards);
+            SetField(rail, "_cardBacks", backs);
+            return rail;
         }
 
         /// <summary>Spec 012: local (not networked) ping marker: a thin pillar and a label.</summary>
@@ -1184,6 +1250,8 @@ namespace Worktown.Game.Editor
             var whatsNew = go.AddComponent<WhatsNewView>();
             SetField(whatsNew, "_style", style);
             go.AddComponent<DevScreenshot>();
+            var summary = go.AddComponent<ShiftSummaryView>(); // spec 022
+            SetField(summary, "_style", style);
             var wheel = go.AddComponent<EmoteWheelView>(); // spec 012
             SetField(wheel, "_style", style);
         }

@@ -85,6 +85,32 @@ namespace Worktown.Game.Economy
             return result;
         }
 
+        /// <summary>
+        /// Spec 022: sells like <see cref="TrySell(string, Item)"/>; a sale to NPC demand then pays
+        /// <paramref name="npcPayPermille"/> of the sim payout (the customer's order factor: exact + tip, close, wrong).
+        /// The account gets the scaled amount and the result carries it as <c>Payout</c>. Wholesaler sales and refused
+        /// sales are unchanged. On failure nothing changes.
+        /// </summary>
+        public SaleResult TrySell(string accountId, Item platedItem, int npcPayPermille)
+        {
+            SaleResult result = TrySell(accountId, platedItem);
+            if (!result.Ok || result.Channel != SaleChannel.NpcDemand || npcPayPermille == EconomyRules.FullPayPermille)
+                return result;
+
+            long pay = EconomyRules.ApplyPermille(result.Payout, npcPayPermille);
+            long delta = pay - result.Payout;
+            var accounts = new List<Account>(_state.Accounts.Count);
+            foreach (Account account in _state.Accounts)
+            {
+                if (account.Id != accountId) { accounts.Add(account); continue; }
+                long balance = System.Math.Max(0L, System.Math.Min(EconomyLimits.MaxBalance, account.Balance + delta));
+                accounts.Add(account with { Balance = balance });
+            }
+            long paid = System.Math.Max(0L, _state.Totals.PaidToPlayers + delta);
+            _state = _state with { Accounts = accounts, Totals = _state.Totals with { PaidToPlayers = paid } };
+            return result with { State = _state, Payout = pay };
+        }
+
         /// <summary>One in-game hour: demand refills, prices move (spec 008 tick).</summary>
         public void TickHour()
         {

@@ -32,6 +32,24 @@ namespace Worktown.Game.Economy
             return _economy.TryGetMarket(marketId, out MarketState market) ? market.OpenDemand : 0;
         }
 
+        /// <summary>Spec 022: the in-game clock (one tick per hour, day 1 starts at tick 0).</summary>
+        public long Tick => _economy.Tick;
+
+        /// <summary>
+        /// Spec 022, server: moves the clock forward by <paramref name="hours"/> economy ticks at once (the night between
+        /// two shifts), then publishes the board and raises <see cref="HourTicked"/> once.
+        /// </summary>
+        public void SkipHours(int hours)
+        {
+            if (!_networkManager.IsServerStarted || hours <= 0) return;
+            for (int i = 0; i < hours; i++) _economy.TickHour();
+            _secondsIntoHour = 0f;
+            PublishBoard();
+            Debug.Log("[Economy] skipped " + hours + " h to " + EconomyRules.ClockText(_economy.Tick) + " " + PriceText());
+            try { HourTicked?.Invoke(); }
+            catch (System.Exception e) { Debug.LogException(e); }
+        }
+
         private void Start()
         {
             PlayerSpawner spawner = _networkManager.GetComponent<PlayerSpawner>();
@@ -82,7 +100,13 @@ namespace Worktown.Game.Economy
         /// <summary>Server: sell a plated dish to NPC demand or the wholesaler.</summary>
         public SaleResult TrySell(NetworkObject player, Item plated)
         {
-            SaleResult result = _economy.TrySell(EconomyRules.AccountId(player.OwnerId), plated);
+            return TrySell(player, plated, EconomyRules.FullPayPermille);
+        }
+
+        /// <summary>Spec 022: a sale to NPC demand pays <paramref name="npcPayPermille"/> of the sim payout (the order factor).</summary>
+        public SaleResult TrySell(NetworkObject player, Item plated, int npcPayPermille)
+        {
+            SaleResult result = _economy.TrySell(EconomyRules.AccountId(player.OwnerId), plated, npcPayPermille);
             PublishWallet(player);
             if (result.Ok) PublishBoard();
             return result;

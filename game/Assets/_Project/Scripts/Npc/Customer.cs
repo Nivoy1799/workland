@@ -9,15 +9,26 @@ namespace Worktown.Game.Npc
     /// A visible NPC customer (spec 014). The server walks it to its queue slot or out of the street;
     /// clients see the movement through a server-authoritative NetworkTransform and the bubble and
     /// color through SyncVars. Display only: customers never touch prices or payouts.
+    /// Spec 022: the ordered dish id and the mood are SyncVars too; the label is the ticket (dish name) while it
+    /// waits and what it says on the way out, coloured by mood.
     /// </summary>
     public sealed class Customer : NetworkBehaviour
     {
         private static readonly Color MealColor = new Color(0.95f, 0.55f, 0.2f);
         private static readonly Color SnackColor = new Color(0.4f, 0.8f, 0.35f);
         private static readonly Color DrinkColor = new Color(0.35f, 0.6f, 0.95f);
+        private static readonly Color TicketColor = new Color(1f, 0.92f, 0.55f);
+        private static readonly Color HappyColor = new Color(0.55f, 1f, 0.55f);
+        private static readonly Color OkColor = new Color(1f, 0.75f, 0.35f);
+        private static readonly Color UnhappyColor = new Color(1f, 0.45f, 0.4f);
+        private static readonly Color MissedColor = new Color(0.75f, 0.75f, 0.75f);
 
         public readonly SyncVar<string> Wish = new SyncVar<string>(string.Empty);
         public readonly SyncVar<string> Bubble = new SyncVar<string>(string.Empty);
+        /// <summary>Spec 022: the ordered menu dish id (<see cref="Menu.None"/> if none).</summary>
+        public readonly SyncVar<byte> Dish = new SyncVar<byte>(Menu.None);
+        /// <summary>Spec 022: <see cref="CustomerRules.MoodWaiting"/> and the others.</summary>
+        public readonly SyncVar<byte> Mood = new SyncVar<byte>(CustomerRules.MoodWaiting);
 
         [SerializeField] private TextMesh _label;
         [SerializeField] private Renderer _body;
@@ -33,6 +44,7 @@ namespace Worktown.Game.Npc
         {
             Wish.OnChange += (_, _, _) => Refresh();
             Bubble.OnChange += (_, _, _) => Refresh();
+            Mood.OnChange += (_, _, _) => Refresh();
         }
 
         public override void OnStartClient()
@@ -40,10 +52,12 @@ namespace Worktown.Game.Npc
             Refresh();
         }
 
-        internal void ServerInit(string wish, Vector3 target)
+        internal void ServerInit(string wish, byte dish, Vector3 target)
         {
             Wish.Value = wish;
-            Bubble.Value = CustomerRules.WishText(wish);
+            Dish.Value = dish;
+            Mood.Value = CustomerRules.MoodWaiting;
+            Bubble.Value = dish == Menu.None ? CustomerRules.WishText(wish) : CustomerRules.OrderText(dish);
             _target = target;
             _leaving = false;
             Refresh();
@@ -54,9 +68,10 @@ namespace Worktown.Game.Npc
             if (!_leaving) _target = target;
         }
 
-        internal void ServerLeave(string bubble, Vector3 exit, Action<Customer> onExit)
+        internal void ServerLeave(string bubble, byte mood, Vector3 exit, Action<Customer> onExit)
         {
             Bubble.Value = bubble;
+            Mood.Value = mood;
             _target = exit;
             _leaving = true;
             _onExit = onExit;
@@ -92,11 +107,27 @@ namespace Worktown.Game.Npc
 
         private void Refresh()
         {
-            if (_label != null) _label.text = Bubble.Value;
+            if (_label != null)
+            {
+                _label.text = Bubble.Value;
+                _label.color = MoodColor(Mood.Value);
+            }
             if (_body == null) return;
             _block ??= new MaterialPropertyBlock();
             _block.SetColor("_BaseColor", ColorOf(Wish.Value));
             _body.SetPropertyBlock(_block);
+        }
+
+        private static Color MoodColor(byte mood)
+        {
+            switch (mood)
+            {
+                case CustomerRules.MoodHappy: return HappyColor;
+                case CustomerRules.MoodOk: return OkColor;
+                case CustomerRules.MoodUnhappy: return UnhappyColor;
+                case CustomerRules.MoodMissed: return MissedColor;
+                default: return TicketColor;
+            }
         }
 
         private static Color ColorOf(string wish)

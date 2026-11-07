@@ -1,0 +1,141 @@
+using System;
+using System.Collections.Generic;
+using Worktown.Game.Cooking;
+using Worktown.Sim.Core;
+
+namespace Worktown.Game.Npc
+{
+    /// <summary>
+    /// The spec 022 menu: six dishes the spec 021 kitchen can cook from the crate ingredients, and the seeded draw of a
+    /// customer's order. Pure and deterministic (no RNG of its own, no mutable state).
+    /// </summary>
+    public static class Menu
+    {
+        /// <summary>Dish id of "no order".</summary>
+        public const byte None = 0;
+
+        public const byte Fries = 1;
+        public const byte PotatoSoup = 2;
+        public const byte OnionSoup = 3;
+        public const byte TomatoSalad = 4;
+        public const byte FriedApple = 5;
+        public const byte VeggieMix = 6;
+
+        private static readonly IReadOnlyList<string> Sticks = new[] { "sticks" };
+        private static readonly IReadOnlyList<string> Slices = new[] { "slices" };
+        private static readonly IReadOnlyList<string> SlicesOrHalves = new[] { "halves", "slices" };
+        private static readonly IReadOnlyList<string> FryOp = new[] { "fry" };
+        private static readonly IReadOnlyList<string> SauteOp = new[] { "saute" };
+        private static readonly IReadOnlyList<string> BoilOp = new[] { "boil" };
+
+        /// <summary>
+        /// The menu, in id order. Fries, potato soup and fried apple are one ingredient (sim market snack); onion soup,
+        /// tomato salad and veggie mix are two or more (meal). "Any cut" means cut, in any shape.
+        /// </summary>
+        public static readonly IReadOnlyList<MenuDish> All = new[]
+        {
+            new MenuDish(Fries, "Fries", "snack", "potato",
+                new[] { new DishNeed("potato", Sticks, FryOp, "medium") }, false, false, 1),
+            new MenuDish(PotatoSoup, "Potato soup", "snack", "potato",
+                new[] { new DishNeed("potato", DishNeed.AnyCut, BoilOp, "medium") }, false, false, 1),
+            new MenuDish(OnionSoup, "Onion soup", "meal", "onion",
+                new[] { new DishNeed("onion", null, BoilOp, "medium"), new DishNeed(null, null, BoilOp, "medium") }, true, false, 2),
+            new MenuDish(TomatoSalad, "Tomato salad", "meal", "tomato",
+                new[] { new DishNeed("tomato", Slices, null, null), new DishNeed("onion", DishNeed.AnyCut, null, null) }, true, true, 2),
+            new MenuDish(FriedApple, "Fried apple", "snack", "apple",
+                new[] { new DishNeed("apple", SlicesOrHalves, SauteOp, "short") }, false, false, 1),
+            new MenuDish(VeggieMix, "Veggie mix", "meal", null,
+                new[]
+                {
+                    new DishNeed(null, DishNeed.AnyCut, null, null), new DishNeed(null, DishNeed.AnyCut, null, null),
+                    new DishNeed(null, DishNeed.AnyCut, null, null),
+                }, false, false, 4),
+        };
+
+        /// <summary>What the crates sell (spec 007 demo ingredients): potato, apple, tomato, onion.</summary>
+        public static readonly IReadOnlyList<string> CrateIngredients = CrateIds();
+
+        /// <summary>The dish with this id, or null.</summary>
+        public static MenuDish ById(byte id)
+        {
+            foreach (MenuDish dish in All)
+                if (dish.Id == id) return dish;
+            return null;
+        }
+
+        /// <summary>Display name of a dish id; "?" when unknown.</summary>
+        public static string NameOf(byte id)
+        {
+            MenuDish dish = ById(id);
+            return dish != null ? dish.Name : "?";
+        }
+
+        /// <summary>
+        /// Whether the dish can be made from <paramref name="forSale"/>: every named ingredient is for sale and enough
+        /// other ingredients are for sale for its "any other" needs.
+        /// </summary>
+        public static bool CanMake(MenuDish dish, IReadOnlyCollection<string> forSale)
+        {
+            if (dish == null || forSale == null) return false;
+            var named = new List<string>();
+            int any = 0;
+            foreach (DishNeed need in dish.Needs)
+            {
+                if (need.BaseId == null) any++;
+                else if (!named.Contains(need.BaseId)) named.Add(need.BaseId);
+            }
+            foreach (string baseId in named)
+                if (!Contains(forSale, baseId)) return false;
+            if (dish.Main != null && !Contains(forSale, dish.Main)) return false;
+            int others = 0;
+            var seen = new List<string>();
+            foreach (string baseId in forSale)
+            {
+                if (baseId == null || named.Contains(baseId) || seen.Contains(baseId)) continue;
+                seen.Add(baseId);
+                others++;
+            }
+            return others >= any;
+        }
+
+        /// <summary>The dishes of <paramref name="market"/> that can be made from <paramref name="forSale"/>, in id order.</summary>
+        public static IReadOnlyList<MenuDish> Available(string market, IReadOnlyCollection<string> forSale)
+        {
+            var dishes = new List<MenuDish>();
+            foreach (MenuDish dish in All)
+                if (dish.Market == market && CanMake(dish, forSale)) dishes.Add(dish);
+            return dishes;
+        }
+
+        public static bool HasDishes(string market, IReadOnlyCollection<string> forSale)
+        {
+            return Available(market, forSale).Count > 0;
+        }
+
+        /// <summary>
+        /// A customer's order: one of the available dishes of the market, drawn with the injected seeded RNG (one draw).
+        /// Null (and no draw) when the market has no dish, e.g. drink.
+        /// </summary>
+        public static MenuDish Draw(IRandom random, string market, IReadOnlyCollection<string> forSale)
+        {
+            if (random == null) throw new ArgumentNullException(nameof(random));
+            IReadOnlyList<MenuDish> dishes = Available(market, forSale);
+            if (dishes.Count == 0) return null;
+            return dishes[random.NextInt(0, dishes.Count)];
+        }
+
+        private static bool Contains(IReadOnlyCollection<string> list, string value)
+        {
+            foreach (string item in list)
+                if (item == value) return true;
+            return false;
+        }
+
+        private static IReadOnlyList<string> CrateIds()
+        {
+            var ids = new string[DemoIngredients.All.Count];
+            for (int i = 0; i < ids.Length; i++) ids[i] = DemoIngredients.All[i].Id;
+            return Array.AsReadOnly(ids);
+        }
+    }
+}

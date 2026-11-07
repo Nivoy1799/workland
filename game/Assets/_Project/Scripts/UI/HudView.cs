@@ -14,6 +14,7 @@ namespace Worktown.Game.UI
     /// <summary>
     /// The always-visible player HUD (spec 011): wallet, clock, held item, station prompt and
     /// toasts for sales and refused actions. No technical text; that lives in the F1 debug menu.
+    /// Spec 022: the shift next to the clock and the open orders from the ticket rail.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class HudView : MonoBehaviour
@@ -27,6 +28,8 @@ namespace Worktown.Game.UI
         private VisualElement _root;
         private Label _wallet;
         private Label _clock;
+        private Label _orders;
+        private TicketRailView _rail;
         private VisualElement _promptBox;
         private Label _prompt;
         private VisualElement _heldBox;
@@ -62,6 +65,7 @@ namespace Worktown.Game.UI
             var walletBox = Panel("wallet-box");
             _wallet = AddLabel(walletBox, "wallet");
             _clock = AddLabel(walletBox, "clock");
+            _orders = AddLabel(walletBox, "clock"); // spec 022
             _root.Add(walletBox);
 
             _promptBox = Panel("prompt-box");
@@ -111,6 +115,7 @@ namespace Worktown.Game.UI
             _wallet.text = player.TryGetComponent(out Wallet wallet) ? EconomyRules.Money(wallet.Balance.Value) : string.Empty;
             if (_board == null) _board = FindFirstObjectByType<MarketBoard>();
             _clock.text = _board != null && _board.IsSpawned ? _board.Clock.Value : string.Empty;
+            UpdateShift();
 
             Pickup held = player.FindHeldPickup();
             Station station = player.NearestStation;
@@ -126,6 +131,26 @@ namespace Worktown.Game.UI
             UpdateResultToast(player);
             UpdateFeedToast();
             ExpireToasts();
+        }
+
+        /// <summary>Spec 022: "Shift until 14:00" after the clock, and "Orders open: 3 · served 2 · missed 1".</summary>
+        private void UpdateShift()
+        {
+            if (_rail == null) _rail = FindFirstObjectByType<TicketRailView>();
+            bool known = _rail != null && _rail.IsSpawned;
+            Show(_orders, known);
+            if (!known) return;
+            if (_rail.ShiftOpen.Value)
+            {
+                if (_clock.text.Length > 0) _clock.text += "  ·  shift until " + Npc.Shift.CloseHour.ToString("00") + ":00";
+                _orders.text = "Orders open: " + _rail.Tickets.Count + "  ·  served " + _rail.LiveServed.Value
+                    + "  ·  missed " + _rail.LiveMissed.Value;
+            }
+            else
+            {
+                if (_clock.text.Length > 0) _clock.text += "  ·  kitchen closed";
+                _orders.text = "Next shift " + Npc.Shift.OpenHour.ToString("00") + ":00  ·  F3 shift summary";
+            }
         }
 
         /// <summary>The held-item line; spec 021: cookware shows what it would give ("Pan: crispy fried potato sticks").</summary>
