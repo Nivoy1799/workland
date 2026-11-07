@@ -49,13 +49,13 @@ Only `game/` (branch stacked on `spec/011-hud-debug-whatsnew`).
   `ObserversRpc`. No free text means nothing to moderate.
 
 ## Acceptance criteria
-- [ ] AC1: `SocialRules` (EditMode tests): direction to wheel slot for 8 slots and dead zone; rate
+- [x] AC1: `SocialRules` (EditMode tests): direction to wheel slot for 8 slots and dead zone; rate
       limit allows a short burst then refuses; ping refused when non-finite or out of range.
-- [ ] AC2: Catalogs: unique ids, every emote and phrase has text; unknown ids are refused (tests).
-- [ ] AC3: Two clients on the WSL server: an emote shows above the sender on both screens, a ping
+- [x] AC2: Catalogs: unique ids, every emote and phrase has text; unknown ids are refused (tests).
+- [~] AC3: Two clients on the WSL server: an emote shows above the sender on both screens, a ping
       marker appears for both, quick chat shows as a toast for both (manual; screenshots).
-- [ ] AC4: Spamming the key does not flood others (rate limit visible in the server log).
-- [ ] AC5: `bash scripts/verify.sh` passes with `UNITY_PATH` set; What's-new entry added.
+- [~] AC4: Spamming the key does not flood others (rate limit visible in the server log).
+- [x] AC5: `bash scripts/verify.sh` passes with `UNITY_PATH` set; What's-new entry added.
 
 ## Test plan
 - EditMode tests for the pure rules and catalogs.
@@ -71,7 +71,21 @@ Only `game/` (branch stacked on `spec/011-hud-debug-whatsnew`).
 - Approve, answer the open questions, play it with a second person.
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-07 on `spec/012-nonverbal-communication` (stacked on spec 011).
+- AC1, AC2: `SocialRulesTests` (8 wheel directions, dead zone, NaN, rate-limit burst/refill/backwards
+  time, ping range and finiteness, catalog ids/text, unknown ids).
+- AC3 (partly): a client started with the dev switch `-dev-social` sends an emote, a quick-chat line and
+  a ping every 2 s; the server log shows `[Social] player 0 emote Wave / says On my way / ping LookHere`,
+  and screenshots from the second client show the bubble "o/ Hi!", the ping pillar with
+  "Player 0: Look here" and the toasts. The wheel UI itself (hold G) needs a human at the keys.
+- AC4 (partly): rate limit covered by tests and logged as `[Social] player N rate-limited`; not yet
+  triggered live.
+- AC5: verify.sh PASS, Unity EditMode 151/151; What's-new entry added.
+- Input reads Keyboard/Mouse/Gamepad directly (the template action map has no emote/ping/chat
+  actions). E and 1-4 are ignored while T or G is held.
+- Dev switches: `-dev-social`, `-skip-whatsnew` (automated screenshot runs).
+- Polish idea from the screenshots: the bubble sits high above the head (3.2 m, above a carried
+  item) and has no background; readable but faint against the sky.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

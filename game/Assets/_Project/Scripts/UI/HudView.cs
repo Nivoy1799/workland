@@ -5,6 +5,7 @@ using UnityEngine.UIElements;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Game.Net;
+using Worktown.Game.Social;
 
 namespace Worktown.Game.UI
 {
@@ -66,10 +67,23 @@ namespace Worktown.Game.UI
             documentRoot.Add(_root);
         }
 
+        private void OnEnable()
+        {
+            SocialFeed.Message += OnSocialMessage;
+        }
+
         private void OnDisable()
         {
+            SocialFeed.Message -= OnSocialMessage;
             _root?.RemoveFromHierarchy();
             _root = null;
+        }
+
+        /// <summary>Spec 012: quick chat and pings from nearby players as toasts.</summary>
+        private void OnSocialMessage(int playerId, string text)
+        {
+            if (_root == null) return;
+            Toast("Player " + playerId + ": " + text, bad: false);
         }
 
         private void Update()

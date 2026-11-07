@@ -37,7 +37,9 @@ namespace Worktown.Game.UI
             documentRoot.Add(_backdrop);
 
             string seen = SafeGetSeen();
-            SetOpen(WhatsNewRules.ShouldShowOnStart(_newest, seen));
+            // Dev only: automated screenshot runs start without the banner.
+            bool skip = System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-skip-whatsnew") >= 0;
+            SetOpen(!skip && WhatsNewRules.ShouldShowOnStart(_newest, seen));
         }
 
         private void OnDisable()

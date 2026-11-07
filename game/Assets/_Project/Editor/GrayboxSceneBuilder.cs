@@ -26,6 +26,7 @@ using Worktown.Sim.Economy;
 using Worktown.Game.Net;
 using Worktown.Game.Player;
 using Worktown.Game.UI;
+using Worktown.Game.Social;
 using UnityEngine.UIElements;
 using Unity.Cinemachine;
 using UnityEngine.InputSystem;
@@ -44,6 +45,7 @@ namespace Worktown.Game.Editor
         private const string PlayerPrefabPath = Root + "/Prefabs/Player.prefab";
         private const string PickupPrefabPath = Root + "/Prefabs/PickupCube.prefab";
         private const string FoodPrefabPath = Root + "/Prefabs/Food.prefab";
+        private const string PingMarkerPrefabPath = Root + "/Prefabs/PingMarker.prefab";
         private const float FoodSize = 0.4f;
         private const float StationHeight = 1f;
         private const float KitchenZ = 13f;
@@ -72,7 +74,8 @@ namespace Worktown.Game.Editor
 
             Material groundMat = CreateMaterial(GroundMaterialPath, new Color(0.45f, 0.48f, 0.45f));
             Material pickupMat = CreateMaterial(PickupMaterialPath, new Color(0.95f, 0.6f, 0.15f));
-            NetworkObject playerPrefab = CreatePlayerPrefab();
+            PingMarker pingPrefab = CreatePingMarkerPrefab(pickupMat);
+            NetworkObject playerPrefab = CreatePlayerPrefab(pingPrefab);
             GameObject pickupPrefab = CreatePickupPrefab(pickupMat);
             NetworkObject foodPrefab = CreateFoodPrefab(pickupMat);
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
@@ -103,7 +106,7 @@ namespace Worktown.Game.Editor
         /// CharacterControllerPrediction example: the root simulates (no NetworkTransform), the
         /// visible "Graphic" child is smoothed by a NetworkTickSmoother and followed by the camera.
         /// </summary>
-        private static NetworkObject CreatePlayerPrefab()
+        private static NetworkObject CreatePlayerPrefab(PingMarker pingPrefab)
         {
             var root = new GameObject("Player");
             root.tag = "Player";
@@ -148,6 +151,16 @@ namespace Worktown.Game.Editor
             root.AddComponent<Wallet>(); // spec 009
             SetField(interactor, "_holdPoint", hold.transform);
 
+            // Spec 012: emote bubble above the head (above a carried item) and social input.
+            TextMesh bubbleLabel = CreateLabel(root.transform, new Vector3(0f, 3.2f, 0f), 56, 0.045f);
+            bubbleLabel.color = new Color(1f, 0.9f, 0.4f);
+            var bubble = root.AddComponent<EmoteBubble>();
+            SetField(bubble, "_label", bubbleLabel);
+            SetField(bubble, "_body", body.transform);
+            var social = root.AddComponent<SocialInteractor>();
+            SetField(social, "_pingPrefab", pingPrefab);
+            SetField(social, "_bubble", bubble);
+
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PlayerPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -169,6 +182,27 @@ namespace Worktown.Game.Editor
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(cube, PickupPrefabPath);
             UnityEngine.Object.DestroyImmediate(cube);
             return saved;
+        }
+
+        /// <summary>Spec 012: local (not networked) ping marker: a thin pillar and a label.</summary>
+        private static PingMarker CreatePingMarkerPrefab(Material material)
+        {
+            var root = new GameObject("PingMarker");
+            GameObject pillar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pillar.name = "Pillar";
+            UnityEngine.Object.DestroyImmediate(pillar.GetComponent<Collider>());
+            pillar.transform.SetParent(root.transform, false);
+            pillar.transform.localPosition = new Vector3(0f, 1.5f, 0f);
+            pillar.transform.localScale = new Vector3(0.15f, 1.5f, 0.15f);
+            var renderer = pillar.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, 3.3f, 0f), 56, 0.045f);
+            var marker = root.AddComponent<PingMarker>();
+            SetField(marker, "_pillar", renderer);
+            SetField(marker, "_label", label);
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PingMarkerPrefabPath);
+            UnityEngine.Object.DestroyImmediate(root);
+            return saved.GetComponent<PingMarker>();
         }
 
         /// <summary>Spec 007: a food item. Root holds the network components and the collider;
@@ -548,6 +582,8 @@ namespace Worktown.Game.Editor
             var whatsNew = go.AddComponent<WhatsNewView>();
             SetField(whatsNew, "_style", style);
             go.AddComponent<DevScreenshot>();
+            var wheel = go.AddComponent<EmoteWheelView>(); // spec 012
+            SetField(wheel, "_style", style);
         }
 
         /// <summary>

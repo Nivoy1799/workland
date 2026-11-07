@@ -66,6 +66,8 @@ namespace Worktown.Game.Net
             if (_inputReader != null && _inputReader.IsUiOpen) return;
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null) return;
+            // Spec 012: while quick chat (T) or the emote wheel (G) is held, digits and E belong to them.
+            if (keyboard.tKey.isPressed || keyboard.gKey.isPressed) return;
 
             // Spec 007: near a station, E and 1-4 go to the kitchen.
             Station station = FindNearestStation();

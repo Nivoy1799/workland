@@ -157,3 +157,53 @@
     color: rgb(170, 170, 170);
     margin-top: 14px;
 }
+
+/* Spec 012: emote wheel and quick-chat list. */
+.wheel-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+.wheel-ring {
+    width: 300px;
+    height: 300px;
+}
+
+.wheel-centre {
+    position: absolute;
+    left: 100px;
+    top: 135px;
+    width: 100px;
+    -unity-text-align: middle-center;
+    font-size: 18px;
+    color: rgb(255, 213, 74);
+    -unity-font-style: bold;
+}
+
+.wheel-slot {
+    position: absolute;
+    width: 120px;
+    -unity-text-align: middle-center;
+    color: rgb(238, 238, 238);
+    font-size: 15px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.wheel-slot-selected {
+    background-color: rgba(255, 213, 74, 0.9);
+    color: rgb(20, 20, 20);
+    -unity-font-style: bold;
+}
+
+.chat-list {
+    position: absolute;
+    left: 16px;
+    bottom: 110px;
+    width: 260px;
+}

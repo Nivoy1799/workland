@@ -29,8 +29,11 @@ namespace Worktown.Game.Player
         public bool Sprint => _active && _sprint.IsPressed();
         /// <summary>Crouch toggles on each press (C / gamepad east).</summary>
         public bool Crouch => _active && _crouchToggled;
-        /// <summary>Camera look delta this frame; zero while the cursor is free.</summary>
-        public Vector2 Look => _active && Cursor.lockState == CursorLockMode.Locked ? _look.ReadValue<Vector2>() : Vector2.zero;
+        /// <summary>Spec 012: true while the emote wheel uses the mouse, so the camera stays still.</summary>
+        public bool SuppressLook { get; set; }
+
+        /// <summary>Camera look delta this frame; zero while the cursor is free or look is suppressed.</summary>
+        public Vector2 Look => _active && !SuppressLook && Cursor.lockState == CursorLockMode.Locked ? _look.ReadValue<Vector2>() : Vector2.zero;
         public bool IsGamepadLook => _look != null && _look.activeControl != null && _look.activeControl.device is Gamepad;
         /// <summary>Mouse wheel this frame (positive = zoom in).</summary>
         public float Zoom => _active && Mouse.current != null ? Mouse.current.scroll.ReadValue().y : 0f;
