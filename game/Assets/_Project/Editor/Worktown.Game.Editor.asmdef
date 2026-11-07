@@ -3,7 +3,8 @@
     "rootNamespace": "Worktown.Game.Editor",
     "references": [
         "Worktown.Game",
-        "FishNet.Runtime"
+        "FishNet.Runtime",
+        "Worktown.Sim"
     ],
     "includePlatforms": [
         "Editor"

@@ -1,6 +1,7 @@
 using FishNet.Managing;
 using FishNet.Object;
 using UnityEngine;
+using Worktown.Game.Cooking;
 using Worktown.Game.Net.Rules;
 
 namespace Worktown.Game.Net
@@ -16,6 +17,7 @@ namespace Worktown.Game.Net
         private string _joinAddress = "127.0.0.1:" + LaunchArgs.DefaultTugboatPort;
         private string _joinSteamId = string.Empty;
         private string _simStatus;
+        private ServeFeed _feed;
 
         private void Start()
         {
@@ -36,7 +38,7 @@ namespace Worktown.Game.Net
             if (Application.isBatchMode) return;
             NetworkManager nm = _bootstrap.NetworkManager;
 
-            GUILayout.BeginArea(new Rect(10, 10, 360, 400), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(10, 10, 480, 560), GUI.skin.box);
             GUILayout.Label("Worktown netcode graybox (spec 003)");
             GUILayout.Label("Mode: " + _bootstrap.Args.Mode + (_bootstrap.Args.IsValid ? string.Empty : "  (" + _bootstrap.Args.Error + ")"));
             GUILayout.Label("Status: " + _bootstrap.Status);
@@ -58,6 +60,8 @@ namespace Worktown.Game.Net
                 GUILayout.Label("Players: " + players);
                 DrawHeld(nm);
                 GUILayout.Label("Move WASD, turn arrows or right mouse, E pick up / drop");
+                GUILayout.Label("Kitchen (north): crate E, board 1-4, pan 1-3, pot 1-3, counter E serves");
+                DrawServeFeed();
             }
             else
             {
@@ -79,9 +83,23 @@ namespace Worktown.Game.Net
                 return;
             }
             Pickup held = local.FindHeldPickup();
-            GUILayout.Label("Held: " + (held != null ? held.name + " #" + held.ObjectId : "nothing"));
+            string heldText = "nothing";
+            if (held != null)
+                heldText = held.TryGetComponent(out Food food) ? food.Describe() : held.name + " #" + held.ObjectId;
+            GUILayout.Label("Held: " + heldText);
+            if (local.NearestStation != null)
+                GUILayout.Label(">> " + local.NearestStation.Prompt, GUI.skin.box);
             if (local.LastResult.Length > 0)
                 GUILayout.Label("Last: " + local.LastResult);
+        }
+
+        private void DrawServeFeed()
+        {
+            if (_feed == null) _feed = FindFirstObjectByType<ServeFeed>();
+            if (_feed == null || !_feed.IsSpawned || _feed.Entries.Count == 0) return;
+            GUILayout.Label("Served:");
+            foreach (string entry in _feed.Entries)
+                GUILayout.Label("  " + entry);
         }
 
         private void DrawMenu()

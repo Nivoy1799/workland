@@ -19,6 +19,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Worktown.Game.Cooking;
 using Worktown.Game.Net;
 
 namespace Worktown.Game.Editor
@@ -34,6 +35,10 @@ namespace Worktown.Game.Editor
         public const string ScenePath = Root + "/Scenes/Graybox.unity";
         private const string PlayerPrefabPath = Root + "/Prefabs/Player.prefab";
         private const string PickupPrefabPath = Root + "/Prefabs/PickupCube.prefab";
+        private const string FoodPrefabPath = Root + "/Prefabs/Food.prefab";
+        private const float FoodSize = 0.4f;
+        private const float StationHeight = 1f;
+        private const float KitchenZ = 13f;
         private const string DistanceConditionPath = Root + "/Settings/DistanceCondition40m.asset";
         private const string LoggingConfigurationPath = Root + "/Settings/FishNetLogging.asset";
         private const string GroundMaterialPath = Root + "/Settings/Ground.mat";
@@ -56,6 +61,7 @@ namespace Worktown.Game.Editor
             Material pickupMat = CreateMaterial(PickupMaterialPath, new Color(0.95f, 0.6f, 0.15f));
             NetworkObject playerPrefab = CreatePlayerPrefab();
             GameObject pickupPrefab = CreatePickupPrefab(pickupMat);
+            NetworkObject foodPrefab = CreateFoodPrefab(pickupMat);
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
             AssetDatabase.SaveAssets();
@@ -68,6 +74,7 @@ namespace Worktown.Game.Editor
             Transform[] spawns = CreateSpawnPoints();
             CreatePickups(pickupPrefab);
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
+            CreateKitchen(networkManager, foodPrefab);
             CreateBootstrap(networkManager);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -131,6 +138,120 @@ namespace Worktown.Game.Editor
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(cube, PickupPrefabPath);
             UnityEngine.Object.DestroyImmediate(cube);
             return saved;
+        }
+
+        /// <summary>Spec 007: a food item. Root holds the network components and the collider;
+        /// the visual cube and the label are children so their scale does not affect each other.</summary>
+        private static NetworkObject CreateFoodPrefab(Material material)
+        {
+            var root = new GameObject("Food");
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = Vector3.one * FoodSize;
+
+            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = "Body";
+            UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+            body.transform.SetParent(root.transform, false);
+            body.transform.localScale = Vector3.one * FoodSize;
+            var renderer = body.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, 0.55f, 0f), 40, 0.035f);
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            AddServerAuthoritativeTransform(root);
+            root.AddComponent<Pickup>();
+            var food = root.AddComponent<Food>();
+            SetField(food, "_label", label);
+            SetField(food, "_renderer", renderer);
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, FoodPrefabPath);
+            UnityEngine.Object.DestroyImmediate(root);
+            return saved.GetComponent<NetworkObject>();
+        }
+
+        /// <summary>Spec 007: a row of stations north of the spawn, the serve feed and the kitchen service.</summary>
+        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab)
+        {
+            var parent = new GameObject("Kitchen");
+            var stations = new List<Station>();
+            Color[] crateColors =
+            {
+                new Color(0.85f, 0.72f, 0.45f), new Color(0.80f, 0.15f, 0.15f),
+                new Color(0.95f, 0.35f, 0.20f), new Color(0.85f, 0.80f, 0.90f)
+            };
+            for (int i = 0; i < DemoIngredients.All.Count; i++)
+            {
+                string id = DemoIngredients.All[i].Id;
+                Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", crateColors[i]);
+                stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Crate,
+                    char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -7f + i * 1.5f, mat, i));
+            }
+            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
+                CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0));
+            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
+                CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f)), 0));
+            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
+                CreateMaterial(Root + "/Settings/Station_Pot.mat", new Color(0.4f, 0.5f, 0.65f)), 0));
+            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
+                CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
+
+            var feedObject = new GameObject("ServeFeed");
+            NetworkObject feedNob = feedObject.AddComponent<NetworkObject>();
+            // Global: every client gets the feed, whatever the distance condition says.
+            SetField(feedNob, "_isGlobal", true);
+            var feed = feedObject.AddComponent<ServeFeed>();
+
+            var kitchen = networkManager.gameObject.AddComponent<KitchenService>();
+            SetField(kitchen, "_networkManager", networkManager);
+            SetField(kitchen, "_pickups", networkManager.GetComponent<PickupService>());
+            SetField(kitchen, "_foodPrefab", foodPrefab);
+            SetField(kitchen, "_feed", feed);
+            SetField(kitchen, "_stations", stations);
+        }
+
+        private static Station CreateStation(Transform parent, int index, StationKind kind, string displayName,
+            float x, Material material, int ingredientIndex)
+        {
+            var root = new GameObject(displayName);
+            root.transform.SetParent(parent, false);
+            root.transform.position = new Vector3(x, StationHeight * 0.5f, KitchenZ);
+
+            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = "Body";
+            body.transform.SetParent(root.transform, false);
+            body.transform.localScale = new Vector3(1.2f, StationHeight, 1.2f);
+            body.GetComponent<MeshRenderer>().sharedMaterial = material;
+            body.isStatic = true;
+
+            string keys = kind == StationKind.Crate || kind == StationKind.Counter ? "E" : "1-" + StationRules.OptionCount(kind);
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, StationHeight * 0.5f + 0.6f, 0f), 60, 0.05f);
+            label.text = displayName + "\n" + keys;
+
+            var station = root.AddComponent<Station>();
+            SetField(station, "_index", index);
+            SetField(station, "_kind", (int)kind);
+            SetField(station, "_displayName", displayName);
+            SetField(station, "_ingredientIndex", ingredientIndex);
+            return station;
+        }
+
+        private static TextMesh CreateLabel(Transform parent, Vector3 localPosition, int fontSize, float characterSize)
+        {
+            var go = new GameObject("Label");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPosition;
+            var text = go.AddComponent<TextMesh>();
+            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = font;
+            go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            text.fontSize = fontSize;
+            text.characterSize = characterSize;
+            text.anchor = TextAnchor.LowerCenter;
+            text.alignment = TextAlignment.Center;
+            text.color = Color.white;
+            return text;
         }
 
         private static void AddServerAuthoritativeTransform(GameObject go)
@@ -385,6 +506,8 @@ namespace Worktown.Game.Editor
             {
                 case bool b: prop.boolValue = b; break;
                 case float f: prop.floatValue = f; break;
+                case int i: prop.intValue = i; break;
+                case string s: prop.stringValue = s; break;
                 case UnityEngine.Object o: prop.objectReferenceValue = o; break;
                 case System.Collections.IList list:
                     prop.arraySize = list.Count;
