@@ -55,13 +55,13 @@ Only `game/` (branch stacked on `spec/013-plating-and-mixing`).
 - **Network cost:** at most 6 extra network objects, within the 40 m interest radius only.
 
 ## Acceptance criteria
-- [ ] AC1: `CustomerRules`/`CustomerQueue` (EditMode tests): visible count follows open demand with
+- [x] AC1: `CustomerRules`/`CustomerQueue` (EditMode tests): visible count follows open demand with
       caps; wish order meal, snack, drink; serving removes the first matching customer, else the
       first; hour change keeps matching customers and removes the rest; queue slots are 1 m apart.
-- [ ] AC2: In the game, customers walk in and queue at the counter; selling a dish makes one leave
+- [~] AC2: In the game, customers walk in and queue at the counter; selling a dish makes one leave
       with a thanks bubble; at the next hour unserved ones leave (manual / screenshots, server log
       `[Customers] ...`).
-- [ ] AC3: Spec 007-013 tests still pass; `bash scripts/verify.sh` passes with `UNITY_PATH` set;
+- [x] AC3: Spec 007-013 tests still pass; `bash scripts/verify.sh` passes with `UNITY_PATH` set;
       What's-new entry added.
 
 ## Test plan
@@ -78,7 +78,18 @@ Only `game/` (branch stacked on `spec/013-plating-and-mixing`).
 - Approve, answer the open questions, sell a few dishes and watch the queue.
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-07 on `spec/014-npc-customers` (stacked on spec 013).
+- AC1: `CustomerTests` (desired wishes follow demand, caps and order; reconcile keeps matching,
+  removes extra, adds missing; serve prefers the matching wish; slots 1 m apart).
+- AC2 (partly): client on the WSL server: server log `[Customers] queue 6: 6 walking in`, then at
+  09:00 `2 walking in, 2 left unserved`; screenshot shows six orange "Meal?" customers queued in front
+  of the counter. A sale serving a customer needs a human (`[Customers] a meal customer got ...`).
+- AC3: verify.sh PASS, Unity EditMode 166/166; What's-new entry added.
+- Customers have no collider (they never block players) and walk on straight lines; entry at the
+  east end of the kitchen row, queue along the front of the counter, plating table and bowl.
+- Also changed: `EconomyService` (HourTicked event, OpenDemand), `KitchenService` (sale hook).
+- Graybox: "Box 1" moved from (6, 1, 6) to (17, 1, 2) because it hid the counter from the spawn view
+  (found in the screenshot check; spec 003 only asks for "a few boxes").
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

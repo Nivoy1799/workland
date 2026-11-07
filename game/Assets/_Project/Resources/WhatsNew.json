@@ -89,6 +89,21 @@
         "Two players fill the same plate together",
         "A finished plate cannot go onto another plate"
       ]
+    },
+    {
+      "id": "2026-11-07-spec-014",
+      "date": "2026-11-07",
+      "title": "Customers: the town's demand walks in",
+      "items": [
+        "NPC customers walk in from the east and queue at the counter with their wish above the head",
+        "Orange wants a meal, green a snack, blue a drink",
+        "Sell a dish: one customer takes it and leaves with 'Thanks!'; unserved ones leave at the next hour"
+      ],
+      "test": [
+        "At 08:00 a queue forms in front of the counter",
+        "Sell a meal: an orange customer leaves happy",
+        "Wait an in-game hour (1 minute): the queue changes"
+      ]
     }
   ]
 }

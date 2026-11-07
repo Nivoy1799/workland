@@ -21,6 +21,8 @@ namespace Worktown.Game.Cooking
         [SerializeField] private ServeFeed _feed;
         [Tooltip("Spec 009. Without it, crates are free and the counter only serves.")]
         [SerializeField] private EconomyService _economy;
+        [Tooltip("Spec 014. Optional: visible customers react to sales.")]
+        [SerializeField] private Worktown.Game.Npc.CustomerService _customers;
         [Tooltip("Index in this array = Station.Index.")]
         [SerializeField] private Station[] _stations = new Station[0];
 
@@ -176,6 +178,7 @@ namespace Worktown.Game.Cooking
                     return CookOutcome.CannotSell;
                 }
                 string where = sale.Channel == SaleChannel.NpcDemand ? sale.MarketId : "wholesaler";
+                if (sale.Channel == SaleChannel.NpcDemand && _customers != null) _customers.OnSale(sale.MarketId, sale.Payout);
                 entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
                     + EconomyRules.Money(sale.Payout) + " (" + where + ")";
                 Debug.Log("[Economy] player " + player.OwnerId + " sold " + name + " for " + EconomyRules.Money(sale.Payout)

@@ -21,6 +21,15 @@ namespace Worktown.Game.Economy
         [SerializeField] private MarketBoard _board;
 
         private readonly TownEconomy _economy = TownEconomy.CreateDemo();
+
+        /// <summary>Spec 014: raised on the server after every in-game hour (demand changed).</summary>
+        public event System.Action HourTicked;
+
+        /// <summary>Spec 014: open NPC orders of a market right now (0 if unknown).</summary>
+        public int OpenDemand(string marketId)
+        {
+            return _economy.TryGetMarket(marketId, out MarketState market) ? market.OpenDemand : 0;
+        }
         private float _secondsIntoHour;
 
         private void Start()
@@ -48,6 +57,7 @@ namespace Worktown.Game.Economy
             _secondsIntoHour -= EconomyRules.SecondsPerHour;
             _economy.TickHour();
             PublishBoard();
+            HourTicked?.Invoke();
             Debug.Log("[Economy] " + EconomyRules.ClockText(_economy.Tick) + " " + PriceText());
         }
 
