@@ -79,6 +79,8 @@ Only `game/` (branch stacked on `spec/007-cooking-stations`).
 - Play it with a second person for 5 minutes.
 
 ## Implementation notes
+- Review 2026-11-07: sale instance ids come from a monotonic counter in `TownEconomy`, not from the
+  food object id (object ids are reused by FishNet); the Design section's wording is superseded.
 Done 2026-11-06 on `spec/009-sell-dishes` (stacked on spec 007).
 - AC1-AC4: `EconomyDemoTests` with the real engine and default catalog: grant once, grocer price,
   refused buy without money, golden fries pay more than dark fries, raw potato refused

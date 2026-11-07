@@ -17,8 +17,6 @@ namespace Worktown.Game.Player
         private CinemachineOrbitalFollow _orbit;
         private PlayerInputReader _input;
 
-        public bool IsBound => _orbit != null;
-
         /// <summary>Points the scene camera at the smoothed graphic of the local player.</summary>
         public void Bind(Transform followTarget, PlayerInputReader input)
         {

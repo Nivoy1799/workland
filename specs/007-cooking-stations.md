@@ -92,6 +92,10 @@ Only `game/` (builds on spec 003, branch stacked on `spec/003-netcode-graybox`).
 - Play the demo for 5 minutes with a second person or two windows; say if it is fun to show.
 
 ## Implementation notes
+- Review 2026-11-07: kitchen state is cleared when the server stops (FishNet reuses object ids on a
+  restart in the same process); serving requires a Food component; a failed hand-over after buying
+  despawns the food and logs an error. Hands-empty / hands-full refusals live in the networked
+  `KitchenService` and are covered by the manual test, not by EditMode tests.
 Done 2026-11-06 on `spec/007-cooking-stations` (stacked on spec 003).
 - AC1-AC4: `CookingRulesTests`, `KitchenStateTests` (potato -> sticks -> golden fry gives hash
   `2ab1f862...` and "crispy fried potato sticks", same as the sim).

@@ -20,8 +20,12 @@ namespace Worktown.Game.Player
         private bool _active;
         private bool _crouchToggled;
         private bool _jumpPressed;
+        private int _uiOpenCount;
 
-        public Vector2 Move => _active ? _move.ReadValue<Vector2>() : Vector2.zero;
+        /// <summary>Spec 011: a menu or banner is open, so the cursor stays free and clicks go to the UI.</summary>
+        public bool IsUiOpen => _uiOpenCount > 0;
+
+        public Vector2 Move => _active && !IsUiOpen ? _move.ReadValue<Vector2>() : Vector2.zero;
         public bool Sprint => _active && _sprint.IsPressed();
         /// <summary>Crouch toggles on each press (C / gamepad east).</summary>
         public bool Crouch => _active && _crouchToggled;
@@ -40,6 +44,14 @@ namespace Worktown.Game.Player
             return _active && pressed;
         }
 
+        /// <summary>Spec 011: menus call this when they open (true) and close (false).</summary>
+        public void SetUiOpen(bool open)
+        {
+            _uiOpenCount = Mathf.Max(0, _uiOpenCount + (open ? 1 : -1));
+            if (IsUiOpen) LockCursor(false);
+            else if (_active) LockCursor(true);
+        }
+
         /// <summary>Called by the owner's player when it spawns.</summary>
         public void Activate()
         {
@@ -52,7 +64,7 @@ namespace Worktown.Game.Player
             _jump = map.FindAction("Jump", true);
             map.Enable();
             _active = true;
-            LockCursor(true);
+            if (!IsUiOpen) LockCursor(true);
         }
 
         public void Deactivate()
@@ -71,7 +83,7 @@ namespace Worktown.Game.Player
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null && (keyboard.escapeKey.wasPressedThisFrame || keyboard.leftAltKey.wasPressedThisFrame))
                 LockCursor(false);
-            else if (Cursor.lockState != CursorLockMode.Locked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            else if (!IsUiOpen && Cursor.lockState != CursorLockMode.Locked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 LockCursor(true);
         }
 

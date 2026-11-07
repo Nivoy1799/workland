@@ -51,6 +51,12 @@ can do the job; the spec's `builder:` field says which one.
 3. Then: `Use the tester subagent on specs/NNN-name.md`, then
    `Use the reviewer subagent to review branch spec/NNN-name against specs/NNN-name.md.`
 
+## What's new entries
+Every spec that changes something playable adds one entry to
+`game/Assets/_Project/Resources/WhatsNew.json` as part of "done": an id ending in `spec-NNN`,
+the date, a title, what is new, and what to test. The game shows the newest entry once per build
+(F2 reopens it). Decided by the human on 2026-11-07 (spec 011).
+
 ## Human checkpoints
 
 - Approve every spec. Reading 1 page saves hours of wrong code.
