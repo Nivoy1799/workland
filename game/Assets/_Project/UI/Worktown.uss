@@ -122,10 +122,26 @@
 
 .banner {
     width: 620px;
+    max-height: 90%;
+    flex-direction: column;
     padding-left: 22px;
     padding-right: 22px;
     padding-top: 18px;
     padding-bottom: 18px;
+}
+
+/* Long entries scroll inside the banner; title, footer and button stay visible. */
+.banner-scroll {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-height: 80px;
+}
+
+.panel .banner-title,
+.panel .banner-kicker,
+.panel .banner-footer,
+.banner > Button {
+    flex-shrink: 0;
 }
 
 .panel .banner-kicker {

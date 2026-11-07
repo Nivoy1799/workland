@@ -108,11 +108,16 @@ namespace Worktown.Game.UI
 
             AddLabel(banner, "banner-kicker", "WHAT'S NEW  ·  " + entry.date);
             AddLabel(banner, "banner-title", entry.title);
-            AddLabel(banner, "banner-heading", "New");
-            foreach (string item in entry.items) AddLabel(banner, "banner-item", "•  " + item);
-            AddLabel(banner, "banner-heading", "Please test");
-            foreach (string item in entry.test) AddLabel(banner, "banner-item", "☐  " + item);
-            AddLabel(banner, "banner-footer", "Enter or the button closes this.  F2 opens it again.  F1 debug menu.");
+            // Long entries scroll (mouse wheel or drag); the title, footer and button always stay visible.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("banner-scroll");
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            banner.Add(scroll);
+            AddLabel(scroll, "banner-heading", "New");
+            foreach (string item in entry.items) AddLabel(scroll, "banner-item", "•  " + item);
+            AddLabel(scroll, "banner-heading", "Please test");
+            foreach (string item in entry.test) AddLabel(scroll, "banner-item", "☐  " + item);
+            AddLabel(banner, "banner-footer", "Scroll for more.  Enter or the button closes this.  F2 opens it again.  F1 debug menu.");
             banner.Add(new Button(Close) { text = "Got it" });
             return backdrop;
         }
