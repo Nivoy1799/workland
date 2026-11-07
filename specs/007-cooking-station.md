@@ -1,12 +1,19 @@
 ---
 id: 007
 title: Cooking stations in the graybox (cut, fry, boil, mix, plate), server-authoritative
-status: approved
+status: superseded
 owner: architect
 builder: opus
 ---
 
 # 007: Cooking stations in the graybox
+
+> **Superseded on 2026-11-07. Do not build this spec.** The Windows session had already built
+> spec 007 as `specs/007-cooking-stations.md` (branch `spec/007-cooking-stations`, with specs
+> 009 to 014 stacked on it), and the human chose to keep that version. The new ideas here
+> (real cooking time from ticks, a pan temperature knob, fry/saute mode) move to spec 016,
+> `specs/016-cooking-time-and-heat.md` (draft, branch `spec/014-npc-customers`). The empty
+> branch `spec/007-cooking-station` is deleted once the human confirms.
 
 ## Goal
 The first playable cooking loop on the dedicated server: players carry ingredients to a board,
