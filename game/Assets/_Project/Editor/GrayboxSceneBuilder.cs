@@ -20,6 +20,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Worktown.Game.Art;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Sim.Economy;
@@ -74,6 +75,7 @@ namespace Worktown.Game.Editor
             EnsureFolder(Root + "/Scenes");
             EnsureFolder(Root + "/Settings");
 
+            ArtCatalogBuilder.Build(); // spec 015: wrappers and catalog first
             Material groundMat = CreateMaterial(GroundMaterialPath, new Color(0.45f, 0.48f, 0.45f));
             Material pickupMat = CreateMaterial(PickupMaterialPath, new Color(0.95f, 0.6f, 0.15f));
             PingMarker pingPrefab = CreatePingMarkerPrefab(pickupMat);
@@ -89,11 +91,15 @@ namespace Worktown.Game.Editor
             DistanceCondition distance = CreateDistanceCondition();
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            // Load after NewScene: opening a scene unloads unused assets, which destroys a catalog loaded earlier.
+            var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>(ArtCatalogBuilder.CatalogPath);
+            if (catalog == null) throw new InvalidOperationException("ArtCatalog missing: " + ArtCatalogBuilder.CatalogPath);
             CreateEnvironment(groundMat);
+            CreateStreet(catalog);
             Transform[] spawns = CreateSpawnPoints();
             CreatePickups(pickupPrefab);
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
-            CreateKitchen(networkManager, foodPrefab);
+            CreateKitchen(networkManager, foodPrefab, catalog);
             CreateCustomers(networkManager, customerPrefab);
             CreateBootstrap(networkManager);
 
@@ -286,7 +292,7 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>Spec 007: a row of stations north of the spawn, the serve feed and the kitchen service.</summary>
-        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab)
+        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, ArtCatalog catalog)
         {
             var parent = new GameObject("Kitchen");
             var stations = new List<Station>();
@@ -299,29 +305,29 @@ namespace Worktown.Game.Editor
             {
                 string id = DemoIngredients.All[i].Id;
                 Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", crateColors[i]);
-                stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Crate,
+                stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
                     char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -8.5f + i * 2f, mat, i));
             }
-            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
+            stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Board, "Board", 0.5f,
                 CreateMaterial(Root + "/Settings/Station_Board.mat", new Color(0.75f, 0.58f, 0.35f)), 0));
             // Spec 016: pan and pot cook over time; their label (knob, what is cooking) is networked.
-            Station pan = CreateStation(parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
+            Station pan = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pan, "Pan", 3f,
                 CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f)), 0);
             AddStationContents(pan);
             stations.Add(pan);
-            Station pot = CreateStation(parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
+            Station pot = CreateStation(catalog, parent.transform, stations.Count, StationKind.Pot, "Pot", 5.5f,
                 CreateMaterial(Root + "/Settings/Station_Pot.mat", new Color(0.4f, 0.5f, 0.65f)), 0);
             AddStationContents(pot);
             stations.Add(pot);
-            stations.Add(CreateStation(parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
+            stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", 8.5f,
                 CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
 
             // Spec 013: combine stations next to the counter; their contents are networked.
-            Station plating = CreateStation(parent.transform, stations.Count, StationKind.PlatingTable, "Plating table", 11f,
+            Station plating = CreateStation(catalog, parent.transform, stations.Count, StationKind.PlatingTable, "Plating table", 11f,
                 CreateMaterial(Root + "/Settings/Station_Plating.mat", new Color(0.86f, 0.84f, 0.72f)), 0);
             AddStationContents(plating);
             stations.Add(plating);
-            Station bowl = CreateStation(parent.transform, stations.Count, StationKind.Bowl, "Bowl", 13.5f,
+            Station bowl = CreateStation(catalog, parent.transform, stations.Count, StationKind.Bowl, "Bowl", 13.5f,
                 CreateMaterial(Root + "/Settings/Station_Bowl.mat", new Color(0.55f, 0.75f, 0.62f)), 0);
             AddStationContents(bowl);
             stations.Add(bowl);
@@ -350,7 +356,7 @@ namespace Worktown.Game.Editor
             SetField(kitchen, "_economy", economy);
         }
 
-        private static Station CreateStation(Transform parent, int index, StationKind kind, string displayName,
+        private static Station CreateStation(ArtCatalog catalog, Transform parent, int index, StationKind kind, string displayName,
             float x, Material material, int ingredientIndex)
         {
             var root = new GameObject(displayName);
@@ -364,8 +370,21 @@ namespace Worktown.Game.Editor
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
             body.isStatic = true;
 
+            // Spec 015 swap layer: the cube body and its collider stay; the catalog visual is a sibling.
+            float labelY = StationHeight * 0.5f + 0.6f;
+            if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(kind), out GameObject wrapper))
+            {
+                UnityEngine.Object.DestroyImmediate(body.GetComponent<MeshRenderer>());
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                visual.transform.localPosition = new Vector3(0f, -StationHeight * 0.5f, 0f);
+                SetStaticRecursive(visual);
+                // Raise the label only when the model is taller than the cube.
+                float top = ArtCatalogBuilder.TopOf(visual) - StationHeight * 0.5f;
+                labelY = Mathf.Max(labelY, top + 0.1f);
+            }
+
             string keys = StationRules.KeysHint(kind);
-            TextMesh label = CreateLabel(root.transform, new Vector3(0f, StationHeight * 0.5f + 0.6f, 0f), 60, 0.05f);
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, labelY, 0f), 60, 0.05f);
             string price = string.Empty;
             if (kind == StationKind.Crate
                 && GrocerPrices.TryGetGrocerPrice(DemoIngredients.All[ingredientIndex].Id, out long dollars))
@@ -501,6 +520,53 @@ namespace Worktown.Game.Editor
                 box.transform.localScale = sizes[i];
                 box.isStatic = true;
             }
+        }
+
+        /// <summary>
+        /// Spec 015: a short visual-only street east of the kitchen. The customers walk along
+        /// z = 10.8 (x 8.5 to 24) on the north side of the road; houses stand behind them.
+        /// Nothing here has a collider, so movement and interaction do not change.
+        /// </summary>
+        private static void CreateStreet(ArtCatalog catalog)
+        {
+            var street = new GameObject("Street");
+            // Road strip z 5.5 to 10.5, x 9 to 39, 5 m tiles; a crossroad at the east end.
+            for (int i = 0; i < 6; i++)
+                PlaceArt(catalog, street.transform, i == 5 ? ArtKey.RoadCrossroad : ArtKey.Road, new Vector3(11.5f + i * 5f, 0.02f, 8f), 0f);
+            // Facades north of the walking path, fronts facing the road (south).
+            PlaceArt(catalog, street.transform, ArtKey.BuildingShop, new Vector3(21f, 0f, 17f), 180f);
+            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseA, new Vector3(28f, 0f, 17f), 180f);
+            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseC, new Vector3(35f, 0f, 17f), 180f);
+            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseF, new Vector3(43f, 0f, 17f), 180f);
+            // One house south of the road, facing north.
+            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseK, new Vector3(30f, 0f, 0.5f), 0f);
+            PlaceArt(catalog, street.transform, ArtKey.PropAwning, new Vector3(21f, 2.4f, 14.8f), 180f);
+            // Street lights along the south edge of the road, arms over the road.
+            foreach (float x in new[] { 14f, 26f, 38f })
+                PlaceArt(catalog, street.transform, ArtKey.PropLamp, new Vector3(x, 0f, 4.8f), 180f);
+            PlaceArt(catalog, street.transform, ArtKey.PropDumpster, new Vector3(24.2f, 0f, 15f), 0f);
+            PlaceArt(catalog, street.transform, ArtKey.PropTrashcan, new Vector3(22f, 0f, 13.2f), 0f);
+            PlaceArt(catalog, street.transform, ArtKey.PropTreeLarge, new Vector3(-11f, 0f, 17f), 0f);
+            PlaceArt(catalog, street.transform, ArtKey.PropTreeSmall, new Vector3(16f, 0f, 14.3f), 0f);
+            PlaceArt(catalog, street.transform, ArtKey.PropPlanter, new Vector3(-10f, 0f, 14.2f), 0f);
+            PlaceArt(catalog, street.transform, ArtKey.PropPlanter, new Vector3(15.5f, 0f, 16f), 0f);
+            // A fence behind the kitchen row.
+            for (int i = 0; i < 10; i++)
+                PlaceArt(catalog, street.transform, ArtKey.PropFence, new Vector3(-8.5f + i * 2.4f, 0f, 15.5f), 0f);
+        }
+
+        private static void SetStaticRecursive(GameObject root)
+        {
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                t.gameObject.isStatic = true;
+        }
+
+        private static void PlaceArt(ArtCatalog catalog, Transform parent, ArtKey key, Vector3 position, float yaw)
+        {
+            if (catalog == null || !catalog.TryGet(key, out GameObject wrapper)) return;
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, parent);
+            instance.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
+            SetStaticRecursive(instance);
         }
 
         private static Transform[] CreateSpawnPoints()
