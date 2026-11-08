@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -99,7 +100,7 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void BuiltScene_WorktopsShowTheStretchedCabinet_AndKeepTheirColliders()
+        public void BuiltScene_WorktopsShowTheCabinet_AndKeepTheirColliders()
         {
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
             try
@@ -113,14 +114,15 @@ namespace Worktown.Game.Tests
                         worktops++;
                         var box = surface.GetComponent<BoxCollider>();
                         Assert.IsNotNull(box, surface.name);
-                        Transform visual = surface.transform.Find("Art_" + ArtKey.Worktop);
-                        Assert.IsNotNull(visual, surface.name + " has no cabinet");
-                        Assert.AreEqual(box.size.x, visual.localScale.x, 0.001f);
-                        Assert.AreEqual(box.size.y, visual.localScale.y, 0.001f);
-                        Assert.AreEqual(box.size.z, visual.localScale.z, 0.001f);
-                        Renderer[] renderers = visual.GetComponentsInChildren<Renderer>();
+                        // Spec 026: a row of 0.6 m cabinet modules instead of one stretched cabinet (ScaleSceneTests checks
+                        // the modules); together they cover the collider exactly as the one cabinet did.
+                        var renderers = new List<Renderer>();
+                        foreach (Transform module in surface.transform)
+                            if (module.name.StartsWith("Module ")) renderers.AddRange(module.GetComponentsInChildren<Renderer>());
+                        Assert.IsNotEmpty(renderers, surface.name + " has no cabinet");
                         Bounds b = renderers[0].bounds;
                         foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
+                        Assert.AreEqual(box.bounds.size.z, b.size.z, 0.02f, surface.name + " depth");
                         Assert.AreEqual(box.bounds.size.x, b.size.x, 0.02f, surface.name + " width");
                         Assert.AreEqual(box.bounds.size.y, b.size.y, 0.02f, surface.name + " height");
                     }

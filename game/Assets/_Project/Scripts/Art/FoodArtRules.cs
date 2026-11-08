@@ -9,29 +9,26 @@ namespace Worktown.Game.Art
     /// </summary>
     public static class FoodArtRules
     {
-        /// <summary>Ingredient colours in DemoIngredients order (were in Food, spec 007).</summary>
+        /// <summary>Ingredient colours in DemoIngredients order (were in Food, spec 007; spec 026: from the palette).</summary>
         private static readonly Color[] IngredientColors =
         {
-            new Color(0.85f, 0.72f, 0.45f), // potato
-            new Color(0.80f, 0.15f, 0.15f), // apple
-            new Color(0.95f, 0.35f, 0.20f), // tomato
-            new Color(0.85f, 0.80f, 0.90f)  // onion
+            Palette.FoodPotato, Palette.FoodApple, Palette.FoodTomato, Palette.FoodOnion
         };
 
         /// <summary>Darkening for raw / short / medium / long (open question 3).</summary>
         private static readonly float[] Darkening = { 0f, 0.10f, 0.25f, 0.45f };
 
-        private static readonly Color Golden = new Color(1f, 0.78f, 0.38f);
+        private static readonly Color Golden = Palette.FoodGolden;
         private const float GoldenShift = 0.35f;
 
         private const byte Potato = 0, Apple = 1, Tomato = 2, Onion = 3;
 
         public static int IngredientCount => IngredientColors.Length;
 
-        /// <summary>The ingredient colour; grey for an unknown ingredient.</summary>
+        /// <summary>The ingredient colour; Steel grey for an unknown ingredient.</summary>
         public static Color IngredientColor(byte ingredient)
         {
-            return ingredient < IngredientColors.Length ? IngredientColors[ingredient] : new Color(0.6f, 0.6f, 0.6f);
+            return ingredient < IngredientColors.Length ? IngredientColors[ingredient] : Palette.Steel;
         }
 
         /// <summary>
@@ -119,7 +116,7 @@ namespace Worktown.Game.Art
             if (look.Heat == FoodLook.HeatFried && look.Doneness > FoodLook.DonenessRaw)
                 c = Color.Lerp(c, c * Golden, GoldenShift);
             float keep = 1f - DarkeningOf(look.Doneness);
-            return new Color(c.r * keep, c.g * keep, c.b * keep, 1f);
+            return Palette.Shade(c, keep);
         }
 
         /// <summary>Position and yaw of piece <paramref name="index"/> of <paramref name="count"/> in a small pile.</summary>

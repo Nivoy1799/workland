@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using Worktown.Game.Art;
 using Worktown.Game.Player;
 
 namespace Worktown.Game.UI
@@ -100,6 +101,8 @@ namespace Worktown.Game.UI
         {
             var backdrop = new VisualElement();
             backdrop.AddToClassList("banner-backdrop");
+            // Spec 026: USS variables hold only the 16 palette colours, so the 35 % Ink dimming is set here.
+            backdrop.style.backgroundColor = Palette.WithAlpha(Palette.Ink, 0.35f);
 
             var banner = new VisualElement();
             banner.AddToClassList("panel");

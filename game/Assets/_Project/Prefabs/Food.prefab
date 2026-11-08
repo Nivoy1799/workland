@@ -299,7 +299,7 @@ TextMesh:
   m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4291880690
 --- !u!1 &6745556903774800666
 GameObject:
   m_ObjectHideFlags: 0
@@ -347,9 +347,11 @@ MonoBehaviour:
   _catalog: {fileID: 11400000, guid: 210566b6c6918bf4f96ab353bce5ce68, type: 2}
   _fallback: {fileID: 7055529193940710884}
   _partScale: 0.5
-  _partRadius: 0.075
-  _plateContentHeight: 0.014129141
-  _bowlContentHeight: 0.03568717
+  _partRadius: 0.064
+  _bowlPartScale: 0.45
+  _bowlPartRadius: 0.041
+  _plateContentHeight: 0.012070324
+  _bowlContentHeight: 0.022900455
 --- !u!1 &7908056985291405050
 GameObject:
   m_ObjectHideFlags: 0

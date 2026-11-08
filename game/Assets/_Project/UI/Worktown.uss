@@ -1,6 +1,9 @@
-/* Spec 011: HUD, debug menu and What's-new banner. Dark translucent panels, light text. */
+/* Spec 011: HUD, debug menu and What's-new banner. Dark translucent panels, light text.
+   Spec 026: colours only through the palette variables of Palette.uss. */
+@import url("Palette.uss");
+
 .panel {
-    background-color: rgba(12, 14, 18, 0.78);
+    background-color: var(--wt-panel);
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
     border-bottom-left-radius: 8px;
@@ -12,7 +15,7 @@
 }
 
 .panel Label {
-    color: rgb(238, 238, 238);
+    color: var(--wt-cream);
     font-size: 15px;
     white-space: normal;
 }
@@ -33,13 +36,13 @@
 
 .panel .wallet {
     font-size: 30px;
-    color: rgb(255, 213, 74);
+    color: var(--wt-mustard);
     -unity-font-style: bold;
 }
 
 .panel .clock {
     font-size: 15px;
-    color: rgb(190, 200, 210);
+    color: var(--wt-plaster);
 }
 
 .prompt-box {
@@ -81,7 +84,7 @@
 }
 
 .panel .toast-bad {
-    color: rgb(255, 140, 120);
+    color: var(--wt-terracotta);
 }
 
 .debug-box {
@@ -93,7 +96,7 @@
 
 .panel .debug-line {
     font-size: 13px;
-    color: rgb(200, 210, 200);
+    color: var(--wt-plaster);
 }
 
 .debug-title {
@@ -117,7 +120,7 @@
     bottom: 0;
     align-items: center;
     justify-content: center;
-    background-color: rgba(0, 0, 0, 0.35);
+    /* background: 35 % Ink, set by WhatsNewView (the palette variables have no opacity variants) */
 }
 
 .banner {
@@ -146,7 +149,7 @@
 
 .panel .banner-kicker {
     font-size: 13px;
-    color: rgb(255, 213, 74);
+    color: var(--wt-mustard);
     -unity-font-style: bold;
 }
 
@@ -160,7 +163,7 @@
     font-size: 16px;
     -unity-font-style: bold;
     margin-top: 10px;
-    color: rgb(160, 210, 255);
+    color: var(--wt-soft-blue);
 }
 
 .panel .banner-item {
@@ -170,7 +173,7 @@
 
 .panel .banner-footer {
     font-size: 12px;
-    color: rgb(170, 170, 170);
+    color: var(--wt-steel);
     margin-top: 14px;
 }
 
@@ -197,7 +200,7 @@
     width: 100px;
     -unity-text-align: middle-center;
     font-size: 18px;
-    color: rgb(255, 213, 74);
+    color: var(--wt-mustard);
     -unity-font-style: bold;
 }
 
@@ -205,15 +208,15 @@
     position: absolute;
     width: 120px;
     -unity-text-align: middle-center;
-    color: rgb(238, 238, 238);
+    color: var(--wt-cream);
     font-size: 15px;
     padding-top: 6px;
     padding-bottom: 6px;
 }
 
 .wheel-slot-selected {
-    background-color: rgba(255, 213, 74, 0.9);
-    color: rgb(20, 20, 20);
+    background-color: var(--wt-mustard);
+    color: var(--wt-ink);
     -unity-font-style: bold;
 }
 

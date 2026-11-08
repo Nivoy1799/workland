@@ -1,4 +1,5 @@
 using UnityEngine;
+using Worktown.Game.Art;
 
 namespace Worktown.Game.Social
 {
@@ -8,8 +9,8 @@ namespace Worktown.Game.Social
     /// </summary>
     public sealed class PingMarker : MonoBehaviour
     {
-        private static readonly Color LookColor = new Color(1f, 0.85f, 0.2f);
-        private static readonly Color DangerColor = new Color(1f, 0.25f, 0.2f);
+        private static readonly Color LookColor = Palette.Mustard; // spec 026
+        private static readonly Color DangerColor = Palette.Terracotta;
 
         [SerializeField] private Renderer _pillar;
         [SerializeField] private TextMesh _label;

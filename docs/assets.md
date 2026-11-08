@@ -13,7 +13,7 @@ How things should look (sizes, proportions, colours, motion): `docs/art-directio
 3. **Wrapper prefab.** Add the model to the `Defs` table in
    `game/Assets/_Project/Editor/ArtCatalogBuilder.cs` (key, model path, fit mode). The wrapper
    holds the model as a child; scale, pivot, rotation and material overrides live there. No
-   colliders, no scripts. Stations are fitted automatically to 1.2 x 1.2 m footprint, at most 1.1 m high.
+   colliders, no scripts. Stations are fitted to a 1.2 x 1.2 m footprint and 0.90 m height (spec 026); sizes come from `ArtSizeTable` and docs/art-direction.md.
 4. **Catalog entry.** Add an `ArtKey` in `game/Assets/_Project/Scripts/Art/ArtKey.cs` if needed.
    Station slots are mapped by `ArtCatalogRules.StationKey(StationKind)` (explicit switch); add a case for every new `StationKind`.
 5. **Regenerate.** Run `Worktown/Build Graybox Scene` (or `-executeMethod

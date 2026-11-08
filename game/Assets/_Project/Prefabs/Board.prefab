@@ -26,7 +26,7 @@ Transform:
   m_GameObject: {fileID: 577949294896127875}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.03658536, z: 0}
+  m_LocalPosition: {x: 0, y: 0.033658534, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -47,7 +47,9 @@ MonoBehaviour:
   _catalog: {fileID: 11400000, guid: 210566b6c6918bf4f96ab353bce5ce68, type: 2}
   _fallback: {fileID: 0}
   _partScale: 1
-  _partRadius: 0.06
+  _partRadius: 0.055
+  _bowlPartScale: 0.45
+  _bowlPartRadius: 0.04
   _plateContentHeight: 0.015
   _bowlContentHeight: 0.03
 --- !u!1 &2684897146383531951
@@ -108,7 +110,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.3536585, y: 0.06, z: 0.5}
+  m_Size: {x: 0.32536584, y: 0.06, z: 0.46000004}
   m_Center: {x: 0, y: 0.03, z: 0}
 --- !u!114 &121300522431551966
 MonoBehaviour:
@@ -382,7 +384,7 @@ TextMesh:
   m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4291880690
 --- !u!1001 &6635430520660486494
 PrefabInstance:
   m_ObjectHideFlags: 0

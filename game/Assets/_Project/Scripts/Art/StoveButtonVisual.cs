@@ -5,7 +5,7 @@ namespace Worktown.Game.Art
 {
     /// <summary>
     /// Spec 019/021: colours a stove's knobs, buttons and burner rings from the synced
-    /// <see cref="StationContents.StoveFlags"/>, per burner: the knob glows green when on and is dark red when off,
+    /// <see cref="StationContents.StoveFlags"/>, per burner: the knob glows green (sage) when on and is dark red (brick) when off,
     /// the burner ring glows orange while on, the mode button shows "fry" or "sauté". Display only, client side; the
     /// server decides the flags. Index in each array = burner.
     /// </summary>
@@ -13,12 +13,13 @@ namespace Worktown.Game.Art
     {
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-        private static readonly Color On = new Color(0.2f, 0.95f, 0.3f);
-        private static readonly Color Off = new Color(0.4f, 0.05f, 0.05f);
-        private static readonly Color Fry = new Color(0.95f, 0.55f, 0.15f);
-        private static readonly Color Saute = new Color(0.95f, 0.85f, 0.3f);
-        private static readonly Color RingOn = new Color(1f, 0.35f, 0.08f);
-        private static readonly Color RingOff = new Color(0.12f, 0.12f, 0.12f);
+        // Spec 026: palette colours (a sage knob when on, dark brick when off, a glowing terracotta ring).
+        private static readonly Color On = Palette.Sage;
+        private static readonly Color Off = Palette.Shade(Palette.Brick, 0.6f);
+        private static readonly Color Fry = Palette.Terracotta;
+        private static readonly Color Saute = Palette.Mustard;
+        private static readonly Color RingOn = Palette.Terracotta;
+        private static readonly Color RingOff = Palette.Charcoal;
 
         [SerializeField] private StationContents _contents;
         [SerializeField] private Renderer[] _switches = new Renderer[0];

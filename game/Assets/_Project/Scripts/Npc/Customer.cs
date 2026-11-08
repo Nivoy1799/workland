@@ -2,6 +2,7 @@ using System;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
+using Worktown.Game.Art;
 
 namespace Worktown.Game.Npc
 {
@@ -16,17 +17,14 @@ namespace Worktown.Game.Npc
     /// </summary>
     public sealed class Customer : NetworkBehaviour
     {
-        // Spec 025: customer tints from the palette in docs/art-direction.md (Mustard, Sage, SoftBlue; Cream for an
-        // unknown wish). They move to the shared Palette class in spec 026.
-        private static readonly Color MealColor = new Color(0xD9 / 255f, 0xA4 / 255f, 0x41 / 255f);  // Mustard #D9A441
-        private static readonly Color SnackColor = new Color(0x8F / 255f, 0xA7 / 255f, 0x7E / 255f); // Sage #8FA77E
-        private static readonly Color DrinkColor = new Color(0x7F / 255f, 0xA3 / 255f, 0xB8 / 255f); // SoftBlue #7FA3B8
-        private static readonly Color OtherColor = new Color(0xF2 / 255f, 0xE6 / 255f, 0xD0 / 255f); // Cream #F2E6D0
-        private static readonly Color TicketColor = new Color(1f, 0.92f, 0.55f);
-        private static readonly Color HappyColor = new Color(0.55f, 1f, 0.55f);
-        private static readonly Color OkColor = new Color(1f, 0.75f, 0.35f);
-        private static readonly Color UnhappyColor = new Color(1f, 0.45f, 0.4f);
-        private static readonly Color MissedColor = new Color(0.75f, 0.75f, 0.75f);
+        // Spec 025/026: customer tints from the shared palette (one of the guide's customer tints): a meal is Mustard,
+        // a snack Sage, a drink SoftBlue, an unknown wish Cream.
+        // Spec 026: label colours by mood from the palette.
+        private static readonly Color TicketColor = Palette.Cream;
+        private static readonly Color HappyColor = Palette.Sage;
+        private static readonly Color OkColor = Palette.Mustard;
+        private static readonly Color UnhappyColor = Palette.Terracotta;
+        private static readonly Color MissedColor = Palette.Steel;
         /// <summary>Spec 024: how far the character's colours are pulled towards the wish colour (0 = none).</summary>
         public const float TintStrength = 0.4f;
 
@@ -146,10 +144,10 @@ namespace Worktown.Game.Npc
         {
             switch (wish)
             {
-                case "meal": return MealColor;
-                case "snack": return SnackColor;
-                case "drink": return DrinkColor;
-                default: return OtherColor;
+                case "meal": return Palette.Mustard;
+                case "snack": return Palette.Sage;
+                case "drink": return Palette.SoftBlue;
+                default: return Palette.Cream;
             }
         }
     }

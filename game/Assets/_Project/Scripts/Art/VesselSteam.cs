@@ -109,7 +109,7 @@ namespace Worktown.Game.Art
             main.startLifetime = 1.6f;
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.25f, 0.4f);
             main.startSize = new ParticleSystem.MinMaxCurve(0.07f, 0.12f);
-            main.startColor = new Color(1f, 1f, 1f, 0.3f);
+            main.startColor = Palette.WithAlpha(Palette.Cream, 0.3f); // spec 026: warm white steam
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.gravityModifier = -0.02f;
 
@@ -168,7 +168,9 @@ namespace Worktown.Game.Art
                     float dx = (x + 0.5f) / n * 2f - 1f;
                     float dy = (y + 0.5f) / n * 2f - 1f;
                     float a = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
-                    pixels[y * n + x] = new Color32(255, 255, 255, (byte)(a * a * 255f));
+                    Color32 pixel = Color.white; // spec 026: white sprite, the particles carry the palette tint
+                    pixel.a = (byte)(a * a * 255f);
+                    pixels[y * n + x] = pixel;
                 }
             }
             _dot.SetPixels32(pixels);
