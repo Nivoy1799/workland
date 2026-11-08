@@ -8,15 +8,16 @@ namespace Worktown.Game.Player
     /// </summary>
     public static class MovementRules
     {
-        public const float WalkSpeed = 4f;
-        public const float SprintSpeed = 8f;
-        /// <summary>Jump apex height in metres; the take-off speed follows from gravity.</summary>
-        public const float JumpHeight = 1.2f;
-        public const float CrouchSpeed = 2f;
-        /// <summary>m/s² towards a higher target speed.</summary>
-        public const float Acceleration = 30f;
-        /// <summary>m/s² towards a lower target speed (stopping).</summary>
-        public const float Deceleration = 40f;
+        /// <summary>m/s. Spec 025 (D31): calmer speeds for people of real size (was 4 / 8 / 2).</summary>
+        public const float WalkSpeed = 2.5f;
+        public const float SprintSpeed = 5f;
+        /// <summary>Jump apex height in metres; the take-off speed follows from gravity. Spec 025: 0.6 (was 1.2).</summary>
+        public const float JumpHeight = 0.6f;
+        public const float CrouchSpeed = 1.25f;
+        /// <summary>m/s² towards a higher target speed. Spec 025: scaled with the speeds (was 30), so starting takes as long.</summary>
+        public const float Acceleration = 19f;
+        /// <summary>m/s² towards a lower target speed (stopping). Spec 025: scaled with the speeds (was 40).</summary>
+        public const float Deceleration = 25f;
         /// <summary>Degrees per second the character turns towards its move direction.</summary>
         public const float TurnRate = 720f;
 

@@ -16,24 +16,29 @@ namespace Worktown.Game.Player
     /// crouch flag (<see cref="CharacterAnimRules"/>). Carried items raise the right arm (holding pose on the arm only).
     /// Clips are played through a small PlayableGraph (no AnimatorController asset). A server without graphics turns
     /// all of it off.
+    /// Spec 025: the body is a Humanoid rig with retargeted Humanoid clips; root motion is never applied (the server
+    /// moves the body). Walking and running play the walk and jog clips as one blend on a shared phase, weighted and
+    /// timed by <see cref="CharacterAnimRules.Locomotion"/> from the clip speeds the art builder measured, so the cadence
+    /// fits the speed and the feet stay planted. Crouching plays the crouch idle standing and the crouch walk moving.
+    /// The hand anchor sits on the rig's real right hand bone, the holding pose is masked to the right arm.
     /// </summary>
     public sealed class CharacterVisual : MonoBehaviour
     {
-        /// <summary>Name of the hand anchor the art builder adds under the right arm bone.</summary>
+        /// <summary>Name of the hand anchor the art builder adds under the rig's right hand bone.</summary>
         public const string HandName = "HandR";
-        /// <summary>Bone of the Kenney Mini Characters rig the holding pose is masked to.</summary>
-        public const string RightArmBone = "arm-right";
-        /// <summary>m: the pack's crouch pose kneels about this far into the floor at 1.8 m; the model is lifted by it.</summary>
-        public const float CrouchLift = 0.19f;
         /// <summary>m/s: anything faster is a teleport (spawn, reconcile snap), not walking.</summary>
         private const float TeleportSpeed = 20f;
-        private const float LiftSpeed = 1.5f;
+
+        // Mixer inputs of the base layer.
+        private const int IdleInput = 0, WalkInput = 1, JogInput = 2, CrouchInput = 3, CrouchWalkInput = 4, InputCount = 5;
+        // Fade groups: idle, moving (walk + jog), crouch, crouch walk.
+        private const int IdleGroup = 0, MoveGroup = 1, CrouchGroup = 2, CrouchWalkGroup = 3, GroupCount = 4;
 
         [Tooltip("Prebuilt character wrappers, in ArtCatalogRules variant order. One is active.")]
         [SerializeField] private GameObject[] _variants = new GameObject[0];
         [Tooltip("The HandR anchor of each variant (same order).")]
         [SerializeField] private Transform[] _hands = new Transform[0];
-        [Tooltip("Parent of the variants: lifted while crouched (the emote wobble turns it too).")]
+        [Tooltip("Parent of the variants.")]
         [SerializeField] private Transform _container;
         [Tooltip("Transform whose movement drives the animation (the smoothed Graphic of a player, the customer root).")]
         [SerializeField] private Transform _tracked;
@@ -43,9 +48,22 @@ namespace Worktown.Game.Player
         [SerializeField] private FirstPersonBody _firstPerson;
         [SerializeField] private AnimationClip _idle;
         [SerializeField] private AnimationClip _walk;
-        [SerializeField] private AnimationClip _run;
+        [SerializeField] private AnimationClip _jog;
         [SerializeField] private AnimationClip _crouch;
+        [SerializeField] private AnimationClip _crouchWalk;
         [SerializeField] private AnimationClip _hold;
+        [Header("Spec 025: measured by the art builder on this body (m/s at rate 1, loop seconds)")]
+        [SerializeField] private float _walkClipSpeed;
+        [SerializeField] private float _walkLoopLength;
+        [SerializeField] private float _jogClipSpeed;
+        [SerializeField] private float _jogLoopLength;
+        [Tooltip("The library's sprint, measured for reference: it is not played (see spec 025, amendment notes).")]
+        [SerializeField] private float _sprintClipSpeed;
+        [SerializeField] private float _sprintLoopLength;
+        [SerializeField] private float _crouchWalkClipSpeed;
+        [SerializeField] private float _crouchWalkLoopLength;
+        [Tooltip("Normalized phase of the jog at which its left foot lands, minus the walk's (keeps the blend in step).")]
+        [SerializeField] private float _jogPhaseOffset;
 
         private NetworkObject _nob;
         private int _variant = -1;
@@ -54,9 +72,11 @@ namespace Worktown.Game.Player
         private AnimationMixerPlayable _base;
         private AnimationLayerMixerPlayable _layers;
         private AnimationClipPlayable[] _clips = new AnimationClipPlayable[0];
+        private AnimationClipPlayable _holdClip;
         private bool _hasHoldLayer;
-        private readonly float[] _weights = { 1f, 0f, 0f, 0f };
-        private readonly double[] _phase = new double[5];
+        private readonly float[] _groupWeights = { 1f, 0f, 0f, 0f };
+        private readonly double[] _groupPhase = new double[GroupCount]; // normalized loops
+        private double _holdPhase;
         private float _holdWeight;
         private int _holdFrame = -100;
         private CharacterAnimState _state = CharacterAnimState.Idle;
@@ -80,6 +100,12 @@ namespace Worktown.Game.Player
         public float Yaw => (_tracked != null ? _tracked : transform).eulerAngles.y;
 
         public CharacterAnimState State => _state;
+
+        /// <summary>Spec 025: the measured clips (m/s at rate 1 on this body, loop seconds).</summary>
+        public GaitClip WalkGait => new GaitClip(_walkClipSpeed, _walkLoopLength);
+        public GaitClip JogGait => new GaitClip(_jogClipSpeed, _jogLoopLength);
+        public GaitClip SprintGait => new GaitClip(_sprintClipSpeed, _sprintLoopLength);
+        public GaitClip CrouchWalkGait => new GaitClip(_crouchWalkClipSpeed, _crouchWalkLoopLength);
 
         /// <summary>Called every frame by an item this character carries: raise the right arm.</summary>
         public void MarkHolding() => _holdFrame = Time.frameCount;
@@ -124,32 +150,63 @@ namespace Worktown.Game.Player
 
             bool crouched = _player != null && _player.IsCrouched;
             _state = CharacterAnimRules.StateFor(_speed, crouched, _state);
-            float rate = CharacterAnimRules.PlaybackRate(_state, _speed);
             bool holding = Time.frameCount - _holdFrame <= 2;
             _holdWeight = CharacterAnimRules.FadeWeight(_holdWeight, holding, dt);
 
-            if (_container != null)
-            {
-                Vector3 local = _container.localPosition;
-                float lift = Mathf.MoveTowards(local.y, crouched ? CrouchLift : 0f, LiftSpeed * dt);
-                if (!Mathf.Approximately(lift, local.y)) _container.localPosition = new Vector3(local.x, lift, local.z);
-            }
-
             if (!_graph.IsValid()) return;
-            for (int i = 0; i < _weights.Length; i++)
-            {
-                _weights[i] = CharacterAnimRules.FadeWeight(_weights[i], i == (int)_state, dt);
-                _base.SetInputWeight(i, _weights[i]);
-                if (_weights[i] <= 0f) continue;
-                _phase[i] += dt * (i == (int)_state ? rate : 1f);
-                _clips[i].SetTime(CharacterAnimRules.LoopTime(_phase[i], _clips[i].GetAnimationClip().length));
-            }
+            int shown = GroupOf(_state);
+            for (int g = 0; g < GroupCount; g++)
+                _groupWeights[g] = CharacterAnimRules.FadeWeight(_groupWeights[g], g == shown, dt);
+
+            // Idle and crouch idle at rate 1.
+            Advance(IdleGroup, dt, 1f, _idle.length);
+            Advance(CrouchGroup, dt, 1f, _crouch.length);
+            SetClip(IdleInput, _groupWeights[IdleGroup], _groupPhase[IdleGroup]);
+            SetClip(CrouchInput, _groupWeights[CrouchGroup], _groupPhase[CrouchGroup]);
+
+            // Walk and run: one phase for both clips, the jog on the same step (phase offset).
+            LocomotionBlend blend = CharacterAnimRules.Locomotion(_speed, WalkGait, JogGait);
+            Advance(MoveGroup, dt, blend.Rate, blend.LoopLength);
+            float move = _groupWeights[MoveGroup];
+            SetClip(WalkInput, move * (1f - blend.Weight), _groupPhase[MoveGroup]);
+            SetClip(JogInput, move * blend.Weight, _groupPhase[MoveGroup] + _jogPhaseOffset);
+
+            Advance(CrouchWalkGroup, dt, CharacterAnimRules.CrouchRate(_speed, _crouchWalkClipSpeed), _crouchWalk.length);
+            SetClip(CrouchWalkInput, _groupWeights[CrouchWalkGroup], _groupPhase[CrouchWalkGroup]);
+
             if (_hasHoldLayer)
             {
                 _layers.SetInputWeight(1, _holdWeight);
-                _phase[4] += dt;
-                _clips[4].SetTime(CharacterAnimRules.LoopTime(_phase[4], _clips[4].GetAnimationClip().length));
+                _holdPhase += dt;
+                _holdClip.SetTime(CharacterAnimRules.LoopTime(_holdPhase, _hold.length));
             }
+        }
+
+        private static int GroupOf(CharacterAnimState state)
+        {
+            switch (state)
+            {
+                case CharacterAnimState.Walk:
+                case CharacterAnimState.Run: return MoveGroup;
+                case CharacterAnimState.Crouch: return CrouchGroup;
+                case CharacterAnimState.CrouchWalk: return CrouchWalkGroup;
+                default: return IdleGroup;
+            }
+        }
+
+        /// <summary>Moves a group's normalized phase on while it shows (a hidden group restarts where it stopped).</summary>
+        private void Advance(int group, float dt, float rate, float loopLength)
+        {
+            if (_groupWeights[group] <= 0f || loopLength <= 0f) return;
+            _groupPhase[group] = (_groupPhase[group] + dt * rate / loopLength) % 1.0;
+        }
+
+        private void SetClip(int input, float weight, double phase)
+        {
+            _base.SetInputWeight(input, weight);
+            if (weight <= 0f) return;
+            float length = _clips[input].GetAnimationClip().length;
+            _clips[input].SetTime(CharacterAnimRules.LoopTime(phase * length, length));
         }
 
         private void SelectVariant()
@@ -168,7 +225,12 @@ namespace Worktown.Game.Player
         {
             DestroyGraph();
             Animator animator = variant != null ? variant.GetComponentInChildren<Animator>(true) : null;
-            AnimationClip[] baseClips = { _idle, _walk, _run, _crouch };
+            var baseClips = new AnimationClip[InputCount];
+            baseClips[IdleInput] = _idle;
+            baseClips[WalkInput] = _walk;
+            baseClips[JogInput] = _jog;
+            baseClips[CrouchInput] = _crouch;
+            baseClips[CrouchWalkInput] = _crouchWalk;
             foreach (AnimationClip clip in baseClips)
             {
                 if (clip == null || animator == null)
@@ -177,19 +239,20 @@ namespace Worktown.Game.Player
                     return;
                 }
             }
-            animator.applyRootMotion = false;
+            animator.applyRootMotion = false; // root motion is in the clips, the server moves the body
 
             _graph = PlayableGraph.Create(name + " character");
             _graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
             var output = AnimationPlayableOutput.Create(_graph, "Character", animator);
-            _base = AnimationMixerPlayable.Create(_graph, baseClips.Length);
-            _clips = new AnimationClipPlayable[5];
-            for (int i = 0; i < baseClips.Length; i++)
+            _base = AnimationMixerPlayable.Create(_graph, InputCount);
+            _clips = new AnimationClipPlayable[InputCount];
+            int shown = GroupOf(_state);
+            for (int g = 0; g < GroupCount; g++) _groupWeights[g] = g == shown ? 1f : 0f;
+            for (int i = 0; i < InputCount; i++)
             {
-                _clips[i] = CreateClip(baseClips[i]);
+                _clips[i] = CreateClip(baseClips[i], true);
                 _graph.Connect(_clips[i], 0, _base, i);
-                _weights[i] = i == (int)_state ? 1f : 0f;
-                _base.SetInputWeight(i, _weights[i]);
+                _base.SetInputWeight(i, 0f);
             }
             _layers = AnimationLayerMixerPlayable.Create(_graph, 2);
             _graph.Connect(_base, 0, _layers, 0);
@@ -197,49 +260,31 @@ namespace Worktown.Game.Player
             _hasHoldLayer = _hold != null;
             if (_hasHoldLayer)
             {
-                _clips[4] = CreateClip(_hold);
-                _graph.Connect(_clips[4], 0, _layers, 1);
-                _layers.SetLayerMaskFromAvatarMask(1, RightArmMask(animator.transform));
+                _holdClip = CreateClip(_hold, false);
+                _graph.Connect(_holdClip, 0, _layers, 1);
+                _layers.SetLayerMaskFromAvatarMask(1, RightArmMask());
                 _layers.SetInputWeight(1, _holdWeight);
             }
             output.SetSourcePlayable(_layers);
             _graph.Play();
         }
 
-        private AnimationClipPlayable CreateClip(AnimationClip clip)
+        /// <summary>Spec 025: foot IK on for the base clips, so the retargeted feet land where the clip puts them.</summary>
+        private AnimationClipPlayable CreateClip(AnimationClip clip, bool footIk)
         {
             AnimationClipPlayable playable = AnimationClipPlayable.Create(_graph, clip);
-            playable.SetApplyFootIK(false);
+            playable.SetApplyFootIK(footIk);
             playable.SetSpeed(0); // the time is set every frame from the phase (loops, playback rate)
             return playable;
         }
 
-        /// <summary>A generic mask with only the right arm (and the hand anchor under it) active.</summary>
-        private static AvatarMask RightArmMask(Transform root)
+        /// <summary>Spec 025: a Humanoid mask with only the right arm and its fingers active.</summary>
+        private static AvatarMask RightArmMask()
         {
-            Transform[] all = root.GetComponentsInChildren<Transform>(true);
-            var mask = new AvatarMask { transformCount = all.Length };
-            for (int i = 0; i < all.Length; i++)
-            {
-                mask.SetTransformPath(i, PathOf(all[i], root));
-                mask.SetTransformActive(i, IsUnderArm(all[i], root));
-            }
+            var mask = new AvatarMask();
+            for (AvatarMaskBodyPart part = 0; part < AvatarMaskBodyPart.LastBodyPart; part++)
+                mask.SetHumanoidBodyPartActive(part, part == AvatarMaskBodyPart.RightArm || part == AvatarMaskBodyPart.RightFingers);
             return mask;
-        }
-
-        private static bool IsUnderArm(Transform t, Transform root)
-        {
-            for (Transform it = t; it != null && it != root; it = it.parent)
-                if (it.name == RightArmBone) return true;
-            return false;
-        }
-
-        private static string PathOf(Transform t, Transform root)
-        {
-            if (t == root) return string.Empty;
-            string path = t.name;
-            for (Transform it = t.parent; it != null && it != root; it = it.parent) path = it.name + "/" + path;
-            return path;
         }
 
         private void DestroyGraph()

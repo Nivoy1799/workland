@@ -56,6 +56,19 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void Spec025_CalmerNumbers()
+        {
+            Assert.AreEqual(2.5f, MovementRules.WalkSpeed);
+            Assert.AreEqual(5f, MovementRules.SprintSpeed);
+            Assert.AreEqual(1.25f, MovementRules.CrouchSpeed);
+            Assert.AreEqual(0.6f, MovementRules.JumpHeight);
+            // Acceleration and deceleration scale with the speeds: reaching walk speed and stopping from sprint take
+            // about as long as before (4 m/s at 30 m/s², 8 m/s at 40 m/s²).
+            Assert.AreEqual(4f / 30f, MovementRules.WalkSpeed / MovementRules.Acceleration, 0.01f);
+            Assert.AreEqual(8f / 40f, MovementRules.SprintSpeed / MovementRules.Deceleration, 0.01f);
+        }
+
+        [Test]
         public void Jump_ReachesConfiguredHeight()
         {
             float v = MovementRules.JumpSpeed();
@@ -90,7 +103,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void Acceleration_IsLimitedPerTick()
         {
-            Vector3 v = MovementRules.Accelerate(Vector3.zero, Vector3.forward * 4f, 1f / 30f);
+            Vector3 v = MovementRules.Accelerate(Vector3.zero, Vector3.forward * MovementRules.WalkSpeed, 1f / 30f);
             Assert.AreEqual(MovementRules.Acceleration / 30f, v.magnitude, 0.001f);
             Vector3 stopped = MovementRules.Accelerate(Vector3.forward * 0.5f, Vector3.zero, 1f / 30f);
             Assert.AreEqual(0f, stopped.magnitude, 0.001f);

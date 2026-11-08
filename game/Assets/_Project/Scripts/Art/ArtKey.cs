@@ -58,13 +58,11 @@ namespace Worktown.Game.Art
         // Spec 023: the kitchen cabinet fitted to a 1 x 1 x 1 m box (the scene builder stretches it to the worktop size).
         Worktop,
 
-        // Spec 024: Kenney Mini Characters scaled to 1.8 m. Players use MaleA / FemaleA, customers the other four
-        // (see ArtCatalogRules.PlayerCharacterKeys / CustomerCharacterKeys).
-        CharacterMaleA,
-        CharacterFemaleA,
-        CharacterMaleB,
-        CharacterMaleC,
-        CharacterFemaleB,
-        CharacterFemaleC
+        // Spec 024, spec 025: people at 1.75 m (Kenney Animated Characters body, Humanoid). Players use the two Player
+        // keys, customers the two Customer keys (see ArtCatalogRules.PlayerCharacterKeys / CustomerCharacterKeys).
+        CharacterPlayerMale,
+        CharacterPlayerFemale,
+        CharacterCustomerMale,
+        CharacterCustomerFemale
     }
 }

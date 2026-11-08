@@ -36,6 +36,11 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D27 | World rule: native vegan | The game world is native vegan: no animal products exist as goods, ingredients, recipes, items or generated text. Society is post non-vegan: it remembers a dark past of animal farming, people and animals now live together, and NPCs talk and joke about the past | 2026-11-07 | Decided by the human; core identity of the game. See docs/economy-and-professions.md |
 | D28 | How the dark past is referenced (was O9) | Only the game's own fictional history (a named past era, museums, NPC memories); no names of or direct comparisons to the Holocaust or other real atrocities in game text or AI-generated text | 2026-11-07 | Decided by the human; avoids hurting players and Steam/moderation problems |
 
+| D29 | Scale | Real-world metric (1 unit = 1 m); hand-held items get a fixed readability factor: cookware and tools x1.15, small items (under 15 cm) x1.5. Reference table in docs/art-direction.md | 2026-11-08 | Decided by the human after the spec 024 play-test: sizes were "all random" |
+| D30 | Character style | Normal human proportions, no chibi; players and customers from one pack family, animation speed from the measured stride | 2026-11-08 | Decided by the human; Mini Characters looked strange and their feet slid |
+| D31 | Movement speed | Walk 2.5 m/s, sprint 5 m/s, crouch 1.25 m/s (was 4 / 8 / 2) | 2026-11-08 | Decided by the human: calmer life-sim feel, animations can match |
+| D32 | Colour palette | One warm muted palette (16 named colours in docs/art-direction.md), defined once in code and once for UI; no other hard-coded colours | 2026-11-08 | Decided by the human |
+
 ## OPEN
 
 | # | Topic | Options | Needed by |

@@ -2,6 +2,7 @@
 
 Free CC0 art only, behind a swap layer: gameplay objects keep colliders and components, only a
 visual child comes from `ArtCatalog`. Switching to another pack means changing catalog entries.
+How things should look (sizes, proportions, colours, motion): `docs/art-direction.md`.
 
 ## Steps to add a model
 1. **Folder.** Copy only the used model and texture files, unmodified, plus the pack's licence file,
