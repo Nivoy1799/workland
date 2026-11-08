@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Worktown.Game.Art;
 using Worktown.Game.Cooking;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
@@ -23,9 +24,10 @@ namespace Worktown.Game.Player
     {
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-        public static readonly Color TakeColor = new Color(1f, 1f, 1f);
-        public static readonly Color UseColor = new Color(0.35f, 1f, 0.45f);
-        public static readonly Color RefuseColor = new Color(0.55f, 0.55f, 0.55f);
+        // Spec 026: palette colours (the guide keeps Interact for the highlight; using a station glows sage, refused grey).
+        public static readonly Color TakeColor = Palette.Interact;
+        public static readonly Color UseColor = Palette.Sage;
+        public static readonly Color RefuseColor = Palette.Steel;
         private const float TintAmount = 0.35f;
         private const float Brighten = 1.15f;
         private const float EmissionAmount = 0.35f;

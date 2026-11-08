@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
+using Worktown.Game.Art;
 using Worktown.Game.Npc;
 
 namespace Worktown.Game.UI
@@ -14,8 +15,8 @@ namespace Worktown.Game.UI
     /// </summary>
     public sealed class TicketRailView : NetworkBehaviour
     {
-        private static readonly Color TitleOpen = new Color(1f, 0.92f, 0.55f);
-        private static readonly Color TitleClosed = new Color(0.7f, 0.7f, 0.7f);
+        private static readonly Color TitleOpen = Palette.Mustard; // spec 026
+        private static readonly Color TitleClosed = Palette.Steel;
 
         public readonly SyncList<int> Tickets = new SyncList<int>();
         public readonly SyncVar<bool> ShiftOpen = new SyncVar<bool>(false);

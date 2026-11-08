@@ -11,7 +11,11 @@ every question has a default, and work continues on other items until you answer
 - **Merged since you left:** nothing yet.
 
 ## Open questions
-_None right now._
+1. **WSL test server: network MTU is 1280 again** (Tailscale). Clients connect to the WSL dedicated server but
+   nothing spawns (the spec 003 issue: FishNet's Tugboat sends packets up to 1350 bytes that must not be split).
+   Option A: you run `sudo ip link set dev eth0 mtu 1500` in WSL (or turn Tailscale off) when you want WSL tests.
+   Option B: nothing. **Default: B**, Claude tests with a local Windows host instead. Blocks nothing.
+   Real risk for players on VPN paths with the Tugboat transport; it goes on the netcode list (spec 004 load test).
 
 ## Things to try when you have 5 minutes
 - After 027b lands: open the game, press **F2**, switch between **Preset A** and **Preset B** while walking and

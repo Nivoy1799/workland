@@ -124,14 +124,16 @@ namespace Worktown.Game.Tests
                     {
                         count++;
                         float x = station.Index < crates ? -8.5f + station.Index * 2f : fixedX[station.Index - crates];
-                        var expected = new Vector3(x, 0.5f, 13f);
+                        // Spec 026: the body is as high as the furniture (0.90 m, the counter 1.05 m; was 1.0 m).
+                        float height = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
+                        var expected = new Vector3(x, height * 0.5f, 13f);
                         Transform body = station.transform.Find("Body");
                         Assert.IsNotNull(body, station.name + " lost its Body");
                         Assert.AreEqual(Vector3.zero, body.localPosition, station.name);
                         var box = body.GetComponent<BoxCollider>();
                         Assert.IsNotNull(box, station.name + " lost its BoxCollider");
                         Assert.AreEqual(Vector3.one, box.size);
-                        Assert.AreEqual(new Vector3(1.2f, 1f, 1.2f), body.localScale);
+                        Assert.AreEqual(new Vector3(1.2f, height, 1.2f), body.localScale);
                         Vector3 colliderCenter = box.bounds.center;
                         Assert.AreEqual(0f, Vector3.Distance(expected, colliderCenter), 0.001f, station.name + " moved");
                         Assert.IsNull(body.GetComponent<MeshRenderer>(), station.name + " still shows the cube");

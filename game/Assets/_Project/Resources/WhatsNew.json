@@ -318,6 +318,25 @@
         "Pick up a plate: the other player sees it in your right hand",
         "First person (V) looks the same as before: your shadow and the item in view"
       ]
+    },
+    {
+      "id": "2026-11-08-spec-026",
+      "date": "2026-11-08",
+      "title": "Real sizes, one set of colours",
+      "items": [
+        "Everything is built at real size next to a 1.75 m person: houses about 7.5 m to the ridge, trees 4 and 8 m, street lamps 4.5 m",
+        "Worktops and stove tops are at 0.90 m, the serving counter at 1.05 m; worktops are rows of 60 cm cabinets",
+        "Food and cookware are smaller and fit together: an apple is 12 cm, the pan 52 cm, the pot 35 cm",
+        "One warm, soft colour palette for the kitchen, the street, the labels and the menus",
+        "The street is spaced for the bigger houses; one house now stands south of the road"
+      ],
+      "test": [
+        "Walk along the kitchen in third person: the tops are at hip height, nothing floats above or sinks into them",
+        "First person: pick up the pan and the pot; cook something and look into them: the food is inside, not on the rim",
+        "Put plates and the board on the worktops: they lie flat on the top",
+        "Walk down the street: houses, trees and lamps look the right size next to you and do not overlap",
+        "Open the HUD, the F1 menu and the What's-new banner: warm muted colours, everything readable"
+      ]
     }
   ]
 }

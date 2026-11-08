@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using FishNet.Managing;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Worktown.Game.Art;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Game.Net;
@@ -37,11 +38,11 @@ namespace Worktown.Game.UI
         private VisualElement _toasts;
         // Spec 018: first-person crosshair dot and the prompt under it.
         private const float CrosshairSize = 4f;
-        private static readonly Color CrosshairIdle = new Color(1f, 1f, 1f, 0.55f);
-        private static readonly Color CrosshairOnTarget = new Color(1f, 0.85f, 0.3f, 1f);
+        private static readonly Color CrosshairIdle = Palette.WithAlpha(Palette.Cream, 0.55f); // spec 026: palette
+        private static readonly Color CrosshairOnTarget = Palette.Interact;
         // Spec 020: a grey prompt says why a click would do nothing.
-        private static readonly Color PromptAction = Color.white;
-        private static readonly Color PromptReason = new Color(0.72f, 0.72f, 0.72f, 1f);
+        private static readonly Color PromptAction = Palette.Cream;
+        private static readonly Color PromptReason = Palette.Steel;
         private VisualElement _crosshair;
         private Label _aimPrompt;
         private VisualElement _aimPromptRow;
@@ -231,8 +232,8 @@ namespace Worktown.Game.UI
             IStyle prompt = _aimPrompt.style;
             prompt.fontSize = 16;
             prompt.unityTextAlign = TextAnchor.MiddleCenter;
-            prompt.color = Color.white;
-            prompt.backgroundColor = new Color(0.04f, 0.04f, 0.06f, 0.8f);
+            prompt.color = PromptAction;
+            prompt.backgroundColor = Palette.Panel;
             prompt.paddingLeft = 12;
             prompt.paddingRight = 12;
             prompt.paddingTop = 4;

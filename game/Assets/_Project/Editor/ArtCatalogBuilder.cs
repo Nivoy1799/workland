@@ -30,8 +30,8 @@ namespace Worktown.Game.Editor
         public const string CharacterClipSource = "Assets/ThirdParty/Quaternius/UniversalAnimationLibrary/UAL1_Standard.fbx";
         /// <summary>Spec 025: prefix of the clip names in <see cref="CharacterClipSource"/>.</summary>
         private const string ClipPrefix = "Armature|";
-        /// <summary>Spec 025 (D29): character height in m.</summary>
-        public const float CharacterHeight = 1.75f;
+        /// <summary>Spec 025 (D29): character height in m (spec 026: from ArtSizeTable).</summary>
+        public static float CharacterHeight => ArtSizeTable.TargetSize(ArtKey.CharacterPlayerMale);
         /// <summary>
         /// Spec 025 amendment: the clips of the animation states. The walk state blends walk and jog (phase-synced), the
         /// run state plays the sprint, crouch plays the crouch idle standing and the crouch walk moving.
@@ -52,24 +52,31 @@ namespace Worktown.Game.Editor
         /// <summary>Spec 017: white material for the generic food pieces; FoodVisual tints them per ingredient.</summary>
         public const string FoodPieceMaterialPath = GrayboxSceneBuilder.Root + "/Art/FoodPiece.mat";
 
-        /// <summary>Station footprint the models are fitted into (matches the cube body).</summary>
-        private const float FitXZ = 1.2f;
-        private const float FitHeight = 1.1f;
+        /// <summary>Station footprint the models are fitted into (matches the cube body); the height comes from ArtSizeTable.</summary>
+        public const float FitXZ = 1.2f;
         /// <summary>Kenney furniture fronts face +Z; stations face the spawn at -Z.</summary>
         private const float StationYaw = 180f;
+        /// <summary>Spec 026: where the palette recolours of the Furniture Kit materials are kept.</summary>
+        private const string RecolourFolder = GrayboxSceneBuilder.Root + "/Art/Recolour";
 
-        private enum Fit { Station, Height, Scale, Max, Unit, Character }
+        /// <summary>
+        /// Spec 026: every fit uses the target size of its key from <see cref="ArtSizeTable"/> (no free scale factors).
+        /// Station: footprint into <see cref="FitXZ"/> (uniform in XZ), height to the target. Module: a worktop cabinet
+        /// of <see cref="ArtSizeTable.WorktopModuleWidth"/> x target height x <see cref="FitXZ"/>. Height / Max: uniform by
+        /// the height or the largest dimension. Tile: flat road tile, XZ to the target. Piece: a primitive at its real
+        /// size x the class factor. Character: the baked body to the target height.
+        /// </summary>
+        private enum Fit { Station, Module, Height, Max, Tile, Piece, Character }
 
         private sealed class Def
         {
             public ArtKey Key;
             public string Model = string.Empty;
             public Fit Mode;
-            public float Value;   // Height: target height in m. Scale: uniform scale.
             public float Yaw;
-            public Vector3 ScaleXyz = Vector3.zero; // Scale mode with a non-uniform scale when set
             public string Extra = null; // optional second model put on top of the first (Station mode)
             public PrimitiveType? Primitive; // spec 017: generic piece built from a Unity primitive (Model unused)
+            public Vector3 PieceReal = Vector3.zero; // spec 026, Piece mode: the piece's real size in m (x, y, z)
             public bool AlongZ; // spec 019, Max mode: turn the model so its longest horizontal side runs along Z
             public string Skin = null; // spec 025, Character mode: texture name of the skin material
         }
@@ -85,47 +92,50 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationBowl, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Station,
                       Yaw = StationYaw, Extra = Furniture + "kitchenBlender.fbx" },
 
-            Tile(ArtKey.Road, Roads + "road-straight.fbx"),
-            Tile(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx"),
-            Scaled(ArtKey.BuildingShop, Commercial + "building-a.fbx", 6f),
-            Scaled(ArtKey.BuildingHouseA, Suburban + "building-type-a.fbx", 5f),
-            Scaled(ArtKey.BuildingHouseC, Suburban + "building-type-c.fbx", 5f),
-            Scaled(ArtKey.BuildingHouseF, Suburban + "building-type-f.fbx", 5f),
-            Scaled(ArtKey.BuildingHouseK, Suburban + "building-type-k.fbx", 5f),
-            Scaled(ArtKey.PropTreeSmall, Suburban + "tree-small.fbx", 5f),
-            Scaled(ArtKey.PropTreeLarge, Suburban + "tree-large.fbx", 5f),
-            Scaled(ArtKey.PropPlanter, Suburban + "planter.fbx", 4f),
-            Scaled(ArtKey.PropLamp, Roads + "light-square.fbx", 5f),
-            Scaled(ArtKey.PropDumpster, Roads + "dumpster.fbx", 4f),
-            new Def { Key = ArtKey.PropTrashcan, Model = Furniture + "trashcan.fbx", Mode = Fit.Height, Value = 0.9f },
-            Scaled(ArtKey.PropFence, Suburban + "fence.fbx", 5f),
-            Scaled(ArtKey.PropAwning, Commercial + "detail-awning.fbx", 6f),
+            Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
+            Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
+            Fitted(ArtKey.BuildingShop, Commercial + "building-a.fbx", Fit.Height),
+            Fitted(ArtKey.BuildingHouseA, Suburban + "building-type-a.fbx", Fit.Height),
+            Fitted(ArtKey.BuildingHouseC, Suburban + "building-type-c.fbx", Fit.Height),
+            Fitted(ArtKey.BuildingHouseF, Suburban + "building-type-f.fbx", Fit.Height),
+            Fitted(ArtKey.BuildingHouseK, Suburban + "building-type-k.fbx", Fit.Height),
+            Fitted(ArtKey.PropTreeSmall, Suburban + "tree-small.fbx", Fit.Height),
+            Fitted(ArtKey.PropTreeLarge, Suburban + "tree-large.fbx", Fit.Height),
+            Fitted(ArtKey.PropPlanter, Suburban + "planter.fbx", Fit.Max),
+            Fitted(ArtKey.PropLamp, Roads + "light-square.fbx", Fit.Height),
+            Fitted(ArtKey.PropDumpster, Roads + "dumpster.fbx", Fit.Max),
+            Fitted(ArtKey.PropTrashcan, Furniture + "trashcan.fbx", Fit.Height),
+            Fitted(ArtKey.PropFence, Suburban + "fence.fbx", Fit.Max),
+            Fitted(ArtKey.PropAwning, Commercial + "detail-awning.fbx", Fit.Max),
 
-            // Spec 017: food. Hand-held food fits ~0.25 m, plates 0.35 m. Max = largest dimension in m.
+            // Spec 017: food. Spec 026: sizes from ArtSizeTable (real size x1.5, largest dimension).
             // No potato in the Food Kit: the egg is the stand-in, tinted potato brown by FoodVisual.
-            FoodDef(ArtKey.FoodPotato, "egg.fbx", 0.16f),
-            FoodDef(ArtKey.FoodApple, "apple.fbx", 0.18f),
-            FoodDef(ArtKey.FoodTomato, "tomato.fbx", 0.18f),
-            FoodDef(ArtKey.FoodOnion, "onion.fbx", 0.18f),
-            FoodDef(ArtKey.FoodAppleHalf, "apple-half.fbx", 0.15f),
-            FoodDef(ArtKey.FoodOnionHalf, "onion-half.fbx", 0.15f),
-            FoodDef(ArtKey.FoodTomatoSlice, "tomato-slice.fbx", 0.1f),
-            FoodDef(ArtKey.FoodFries, "fries.fbx", 0.22f),
-            Piece(ArtKey.FoodPieceHalf, PrimitiveType.Sphere, new Vector3(0.12f, 0.06f, 0.12f)),
-            Piece(ArtKey.FoodPieceSlice, PrimitiveType.Cylinder, new Vector3(0.085f, 0.009f, 0.085f)),
-            Piece(ArtKey.FoodPieceStick, PrimitiveType.Cube, new Vector3(0.025f, 0.025f, 0.13f)),
-            Piece(ArtKey.FoodPieceCube, PrimitiveType.Cube, new Vector3(0.05f, 0.05f, 0.05f)),
-            FoodDef(ArtKey.FoodPlate, "plate.fbx", 0.35f),
-            FoodDef(ArtKey.FoodBowl, "bowl.fbx", 0.3f),
-            FoodDef(ArtKey.FoodPan, "frying-pan.fbx", 0.55f),
-            FoodDef(ArtKey.FoodPot, "pot.fbx", 0.42f),
+            FoodDef(ArtKey.FoodPotato, "egg.fbx"),
+            FoodDef(ArtKey.FoodApple, "apple.fbx"),
+            FoodDef(ArtKey.FoodTomato, "tomato.fbx"),
+            FoodDef(ArtKey.FoodOnion, "onion.fbx"),
+            FoodDef(ArtKey.FoodAppleHalf, "apple-half.fbx"),
+            FoodDef(ArtKey.FoodOnionHalf, "onion-half.fbx"),
+            FoodDef(ArtKey.FoodTomatoSlice, "tomato-slice.fbx"),
+            FoodDef(ArtKey.FoodFries, "fries.fbx"),
+            // Generic pieces at their real size (m): a half fruit, a 1 cm slice, a fry-sized stick, a 3 cm cube.
+            Piece(ArtKey.FoodPieceHalf, PrimitiveType.Sphere, new Vector3(0.08f, 0.04f, 0.08f)),
+            Piece(ArtKey.FoodPieceSlice, PrimitiveType.Cylinder, new Vector3(0.07f, 0.01f, 0.07f)),
+            Piece(ArtKey.FoodPieceStick, PrimitiveType.Cube, new Vector3(0.015f, 0.015f, 0.09f)),
+            Piece(ArtKey.FoodPieceCube, PrimitiveType.Cube, new Vector3(0.03f, 0.03f, 0.03f)),
+            // Cookware (real size x1.15).
+            FoodDef(ArtKey.FoodPlate, "plate.fbx"),
+            FoodDef(ArtKey.FoodBowl, "bowl.fbx"),
+            FoodDef(ArtKey.FoodPan, "frying-pan.fbx"),
+            FoodDef(ArtKey.FoodPot, "pot.fbx"),
 
             // Spec 019: the cutting board on the board station, the knife (its long side along Z, see AlongZ).
-            new Def { Key = ArtKey.ToolCuttingBoard, Model = FoodKit + "cutting-board.fbx", Mode = Fit.Max, Value = 0.5f },
-            new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, Value = 0.3f, AlongZ = true },
+            new Def { Key = ArtKey.ToolCuttingBoard, Model = FoodKit + "cutting-board.fbx", Mode = Fit.Max },
+            new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, AlongZ = true },
 
-            // Spec 023: the cabinet squeezed into a 1 x 1 x 1 m box; the scene builder scales the instance to each worktop.
-            new Def { Key = ArtKey.Worktop, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Unit, Yaw = StationYaw },
+            // Spec 023, spec 026: one cabinet module (0.6 m wide, worktop high, station deep); the scene builder lines up
+            // as many as a worktop run needs instead of stretching one cabinet.
+            new Def { Key = ArtKey.Worktop, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Module, Yaw = StationYaw },
 
             // Spec 025: the Kenney body at 1.75 m, facing +Z (toes at +Z, right hand at +X checked in the import), one
             // skin each. Customers use the same skins for now; Customer tints them.
@@ -135,24 +145,31 @@ namespace Worktown.Game.Editor
             Character(ArtKey.CharacterCustomerFemale, "skaterFemaleA")
         };
 
+        /// <summary>
+        /// Spec 026: Furniture Kit material (by name) to the palette colour it is recoloured with; the kit's own light
+        /// peach wood and cool white metal clash with the warm muted palette. Unlisted materials (glass) keep their
+        /// colour. The other packs draw from one shared colour-map texture and are not tinted.
+        /// </summary>
+        private static readonly (string Material, string Palette)[] FurnitureRecolours =
+        {
+            ("wood", nameof(Palette.WoodLight)), ("woodDark", nameof(Palette.WoodDark)), ("metal", nameof(Palette.Steel)),
+            ("metalMedium", nameof(Palette.Steel)), ("metalDark", nameof(Palette.Charcoal)), ("carpetWhite", nameof(Palette.Cream))
+        };
+
         private static Def Character(ArtKey key, string skin) =>
-            new Def { Key = key, Model = CharacterBody, Mode = Fit.Character, Value = CharacterHeight, Skin = skin };
+            new Def { Key = key, Model = CharacterBody, Mode = Fit.Character, Skin = skin };
 
-        private static Def FoodDef(ArtKey key, string model, float maxSize) =>
-            new Def { Key = key, Model = FoodKit + model, Mode = Fit.Max, Value = maxSize };
+        private static Def FoodDef(ArtKey key, string model) =>
+            new Def { Key = key, Model = FoodKit + model, Mode = Fit.Max };
 
-        private static Def Piece(ArtKey key, PrimitiveType primitive, Vector3 size) =>
-            new Def { Key = key, Primitive = primitive, Mode = Fit.Scale, ScaleXyz = size };
+        private static Def Piece(ArtKey key, PrimitiveType primitive, Vector3 real) =>
+            new Def { Key = key, Primitive = primitive, Mode = Fit.Piece, PieceReal = real };
 
         private static Def Station(ArtKey key, string model) =>
             new Def { Key = key, Model = model, Mode = Fit.Station, Yaw = StationYaw };
 
-        private static Def Scaled(ArtKey key, string model, float scale) =>
-            new Def { Key = key, Model = model, Mode = Fit.Scale, Value = scale };
-
-        /// <summary>Road tiles are 1 m native; stretched in XZ only so they stay flat.</summary>
-        private static Def Tile(ArtKey key, string model) =>
-            new Def { Key = key, Model = model, Mode = Fit.Scale, ScaleXyz = new Vector3(5f, 1f, 5f) };
+        private static Def Fitted(ArtKey key, string model, Fit mode) =>
+            new Def { Key = key, Model = model, Mode = mode };
 
         public static string WrapperPath(ArtKey key) => WrapperFolder + "/Art_" + key + ".prefab";
 
@@ -190,37 +207,46 @@ namespace Worktown.Game.Editor
                 ? CreatePiece(def.Primitive.Value, root.transform)
                 : InstantiateModel(def.Model, root.transform, "Model");
             model.transform.localRotation = Quaternion.Euler(0f, def.Yaw, 0f);
+            if (def.Model.StartsWith(Furniture)) Recolour(model);
+            ArtSize size = ArtSizeTable.Of(def.Key);
+            float target = size.Target;
 
             switch (def.Mode)
             {
                 case Fit.Station:
                 {
+                    // Spec 026: the footprint keeps the 1.2 m station (uniform in XZ), the height is the target (0.90 m
+                    // worktop, 1.05 m counter); Kenney's furniture has flat colours, so the squash does not stretch a texture.
                     Bounds b = WorldBounds(model);
-                    float s = Mathf.Min(FitXZ / b.size.x, FitXZ / b.size.z, FitHeight / b.size.y);
-                    model.transform.localScale = Vector3.one * s;
+                    float xz = Mathf.Min(FitXZ / b.size.x, FitXZ / b.size.z);
+                    float y = target / b.size.y;
+                    ScaleBy(model, new Vector3(xz, y, xz));
                     CenterOnBottom(model);
                     if (def.Extra != null)
                     {
+                        // The blender keeps its proportions (the height scale of the base).
                         GameObject extra = InstantiateModel(def.Extra, root.transform, "Extra");
+                        if (def.Extra.StartsWith(Furniture)) Recolour(extra);
                         extra.transform.localRotation = Quaternion.Euler(0f, def.Yaw, 0f);
-                        extra.transform.localScale = Vector3.one * s;
+                        ScaleBy(extra, Vector3.one * y);
                         Bounds baseBounds = WorldBounds(model);
                         CenterOnBottom(extra);
                         extra.transform.localPosition += new Vector3(baseBounds.center.x, baseBounds.max.y, baseBounds.center.z);
                     }
                     break;
                 }
-                case Fit.Unit:
+                case Fit.Module:
                 {
+                    // Spec 026: one worktop cabinet, 0.6 m wide, worktop high and as deep as the stations.
                     Bounds b = WorldBounds(model);
-                    model.transform.localScale = new Vector3(1f / b.size.x, 1f / b.size.y, 1f / b.size.z);
+                    ScaleBy(model, new Vector3(ArtSizeTable.WorktopModuleWidth / b.size.x, target / b.size.y, FitXZ / b.size.z));
                     CenterOnBottom(model);
                     break;
                 }
                 case Fit.Height:
                 {
                     Bounds b = WorldBounds(model);
-                    model.transform.localScale = Vector3.one * (def.Value / b.size.y);
+                    ScaleBy(model, Vector3.one * (target / b.size.y));
                     CenterOnBottom(model);
                     break;
                 }
@@ -232,10 +258,28 @@ namespace Worktown.Game.Editor
                         model.transform.localRotation = Quaternion.Euler(0f, def.Yaw + 90f, 0f);
                         b = WorldBounds(model);
                     }
-                    float largest = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
-                    model.transform.localScale = Vector3.one * (def.Value / largest);
+                    ScaleBy(model, Vector3.one * (target / Largest(b.size)));
                     CenterOnBottom(model);
-                    if (def.Key.ToString().StartsWith("Tool")) Debug.Log("[Art] " + def.Key + " size " + WorldBounds(model).size.ToString("F3"));
+                    break;
+                }
+                case Fit.Tile:
+                {
+                    // Road tiles: stretched in XZ only so they stay flat.
+                    Bounds b = WorldBounds(model);
+                    float xz = target / Mathf.Max(b.size.x, b.size.z);
+                    ScaleBy(model, new Vector3(xz, 1f, xz));
+                    CenterOnBottom(model);
+                    break;
+                }
+                case Fit.Piece:
+                {
+                    // Spec 026: the generic piece at its real size x the class factor; the table's real size is its largest side.
+                    if (!Mathf.Approximately(Largest(def.PieceReal), size.Real))
+                        throw new InvalidOperationException(def.Key + ": piece of " + Largest(def.PieceReal) + " m, ArtSizeTable says " + size.Real);
+                    Vector3 s = def.PieceReal * ArtSizeTable.Factor(size.Class);
+                    if (def.Primitive == PrimitiveType.Cylinder) s.y *= 0.5f; // Unity's cylinder is 2 m high
+                    model.transform.localScale = s;
+                    CenterOnBottom(model);
                     break;
                 }
                 case Fit.Character:
@@ -244,24 +288,99 @@ namespace Worktown.Game.Editor
                     Material skin = SkinMaterial(def.Skin);
                     foreach (SkinnedMeshRenderer r in model.GetComponentsInChildren<SkinnedMeshRenderer>(true)) r.sharedMaterial = skin;
                     Bounds b = MeshBounds(model);
-                    model.transform.localScale = Vector3.one * (def.Value / b.size.y);
+                    ScaleBy(model, Vector3.one * (target / b.size.y));
                     b = MeshBounds(model);
-                    if (Mathf.Abs(b.size.y - def.Value) > def.Value * 0.01f)
-                        throw new InvalidOperationException(def.Key + ": height " + b.size.y + " m after scaling, expected " + def.Value);
+                    if (Mathf.Abs(b.size.y - target) > target * 0.01f)
+                        throw new InvalidOperationException(def.Key + ": height " + b.size.y + " m after scaling, expected " + target);
                     model.transform.localPosition -= new Vector3(b.center.x, b.min.y, b.center.z);
                     ConfigureAnimator(model);
                     AddHandAnchor(model, def.Key);
                     break;
                 }
                 default:
-                    model.transform.localScale = def.ScaleXyz != Vector3.zero ? def.ScaleXyz : Vector3.one * def.Value;
-                    if (def.Primitive.HasValue) CenterOnBottom(model);
-                    break;
+                    throw new InvalidOperationException(def.Key + ": unknown fit " + def.Mode);
             }
 
+            LogSize(def, size, model);
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, WrapperPath(def.Key));
             UnityEngine.Object.DestroyImmediate(root);
             return saved;
+        }
+
+        /// <summary>
+        /// Spec 026: multiplies the model's own scale (some pack models import with a root scale, e.g. the trashcan 0.47
+        /// and the bowl 0.93, which a plain assignment dropped, so they came out 2.1x and 1.08x too big).
+        /// </summary>
+        private static void ScaleBy(GameObject model, Vector3 factor) =>
+            model.transform.localScale = Vector3.Scale(model.transform.localScale, factor);
+
+        private static float Largest(Vector3 v) => Mathf.Max(v.x, Mathf.Max(v.y, v.z));
+
+        /// <summary>Spec 026: the built size against the table (ArtSizeTests fails the build outside the tolerance).</summary>
+        private static void LogSize(Def def, ArtSize size, GameObject model)
+        {
+            Bounds b = def.Mode == Fit.Character ? MeshBounds(model) : WorldBounds(model);
+            float built = size.Axis == SizeAxis.Height ? b.size.y : Largest(b.size);
+            string line = "[Art] " + def.Key + " size " + b.size.ToString("F3") + ": " + size.Axis.ToString().ToLowerInvariant() + " "
+                          + built.ToString("F3") + " m, target " + size.Target.ToString("F3") + " m (" + size.Class + ")";
+            if (ArtSizeTable.Fits(built, size.Target)) Debug.Log(line);
+            else Debug.LogWarning(line + ": outside the tolerance");
+        }
+
+        /// <summary>
+        /// Spec 026: replaces the Furniture Kit's own materials of a model with palette recolours (copies of the kit material
+        /// with the palette base colour, one per kit material name, in <see cref="RecolourFolder"/>). A material override
+        /// in the wrapper; the pack files are not touched.
+        /// </summary>
+        private static void Recolour(GameObject model)
+        {
+            foreach (Renderer renderer in model.GetComponentsInChildren<Renderer>(true))
+            {
+                Material[] materials = renderer.sharedMaterials;
+                bool changed = false;
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    Material recoloured = RecolourOf(materials[i]);
+                    if (recoloured == null) continue;
+                    materials[i] = recoloured;
+                    changed = true;
+                }
+                if (changed) renderer.sharedMaterials = materials;
+            }
+        }
+
+        private static Material RecolourOf(Material source)
+        {
+            if (source == null) return null;
+            string paletteName = null;
+            foreach ((string kitMaterial, string palette) in FurnitureRecolours)
+                if (kitMaterial == source.name) paletteName = palette;
+            if (paletteName == null) return null;
+            Color color = PaletteColour(paletteName);
+
+            EnsureFolder(RecolourFolder);
+            string path = RecolourFolder + "/Furniture_" + source.name + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(source) { name = "Furniture_" + source.name };
+                AssetDatabase.CreateAsset(material, path);
+            }
+            string colorProperty = material.HasProperty("_BaseColor") ? "_BaseColor" : "_Color";
+            if (material.GetColor(colorProperty) != color)
+            {
+                material.SetColor(colorProperty, color);
+                EditorUtility.SetDirty(material);
+            }
+            return material;
+        }
+
+        /// <summary>The <see cref="Palette"/> colour of that field name.</summary>
+        private static Color PaletteColour(string name)
+        {
+            foreach ((string Name, Color Color) entry in Palette.GuideColours)
+                if (entry.Name == name) return entry.Color;
+            throw new InvalidOperationException("no palette colour " + name);
         }
 
         /// <summary>Instantiates the pack model as a child; wrappers hold no colliders or scripts.</summary>

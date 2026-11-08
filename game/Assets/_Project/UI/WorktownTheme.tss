@@ -1,1 +1,3 @@
 @import url("unity-theme://default");
+/* Spec 026: the palette variables at the panel root, so every stylesheet below can use them. */
+@import url("Palette.uss");

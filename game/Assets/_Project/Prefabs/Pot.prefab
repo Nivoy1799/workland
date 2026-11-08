@@ -59,7 +59,7 @@ Transform:
   m_GameObject: {fileID: 3280213706099015124}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.40433428, z: 0}
+  m_LocalPosition: {x: 0, y: 0.37141746, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -135,7 +135,7 @@ TextMesh:
   m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4291880690
 --- !u!1 &6898782825922405330
 GameObject:
   m_ObjectHideFlags: 0
@@ -162,7 +162,7 @@ Transform:
   m_GameObject: {fileID: 6898782825922405330}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.13825071, z: 0}
+  m_LocalPosition: {x: 0, y: 0.11356309, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -183,7 +183,9 @@ MonoBehaviour:
   _catalog: {fileID: 11400000, guid: 210566b6c6918bf4f96ab353bce5ce68, type: 2}
   _fallback: {fileID: 0}
   _partScale: 0.6
-  _partRadius: 0.05
+  _partRadius: 0.041
+  _bowlPartScale: 0.45
+  _bowlPartRadius: 0.04
   _plateContentHeight: 0.015
   _bowlContentHeight: 0.03
 --- !u!1 &6963344484837105295
@@ -245,8 +247,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.33589378, y: 0.18433428, z: 0.42}
-  m_Center: {x: 0, y: 0.09216714, z: 0}
+  m_Size: {x: 0.27591276, y: 0.15141745, z: 0.345}
+  m_Center: {x: 0, y: 0.075708725, z: 0}
 --- !u!114 &4717353183024436819
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -54,9 +54,11 @@ namespace Worktown.Game.Editor
         private const string KnifePrefabPath = Root + "/Prefabs/Knife.prefab";
         private const string StoveButtonMaterialPath = Root + "/Settings/StoveButton.mat";
         // Spec 019: the knife's pickup collider (long side along Z, like its model).
-        private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.34f);
-        private const float StationWidth = 1.2f;
+        private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.345f); // spec 026: the 0.345 m knife
+        private const float StationWidth = ArtCatalogBuilder.FitXZ; // the station footprint, also the worktop depth
         private const float WorktopGapMargin = 0.02f;
+        /// <summary>Spec 026: name prefix of the cabinet modules under a worktop ("Module 1", "Module 2", ...).</summary>
+        public const string WorktopModuleName = "Module";
         private const string SteamMaterialPath = Root + "/Settings/Steam.mat";
         private const string WorktopMaterialPath = Root + "/Settings/Worktop.mat";
         private const string PlaceMarkerMaterialPath = Root + "/Settings/PlaceMarker.mat";
@@ -77,8 +79,18 @@ namespace Worktown.Game.Editor
         private const float StoveTopMinZ = 0.09f;
         private const float MinVesselColliderHeight = 0.06f;
         private const int PlateStackCount = 5;
-        private const float StationHeight = 1f;
+        // Spec 026: the knob row and its labels sit where they were on the 1.1 m stove (0.8 and 0.89 m above the floor),
+        // as fractions of the stove's height, so they stay on the same part of the scaled model.
+        private const float KnobRowFraction = 0.8f / 1.1f;
+        private const float KnobLabelFraction = 0.89f / 1.1f;
         private const float KitchenZ = 13f;
+
+        /// <summary>
+        /// Spec 026 (was a fixed 1.0 m): height of a station's body and furniture: the worktop height (0.90 m), the serving
+        /// counter 1.05 m. The station root sits at half of it.
+        /// </summary>
+        private static float StationHeightOf(StationKind kind) =>
+            kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         private const string UiThemePath = Root + "/UI/WorktownTheme.tss";
         private const string UiStylePath = Root + "/UI/Worktown.uss";
@@ -87,6 +99,7 @@ namespace Worktown.Game.Editor
         private const string DistanceConditionPath = Root + "/Settings/DistanceCondition40m.asset";
         private const string LoggingConfigurationPath = Root + "/Settings/FishNetLogging.asset";
         private const string GroundMaterialPath = Root + "/Settings/Ground.mat";
+        private const string WallMaterialPath = Root + "/Settings/Wall.mat"; // spec 026: the graybox boxes
         private const string PickupMaterialPath = Root + "/Settings/Pickup.mat";
         private const string DefaultPrefabObjectsPath = "Assets/DefaultPrefabObjects.asset";
         private const string RefreshPrefabsMenu = "Tools/Fish-Networking/Utility/Refresh Default Prefabs";
@@ -103,8 +116,9 @@ namespace Worktown.Game.Editor
             EnsureFolder(Root + "/Settings");
 
             ArtCatalog builtCatalog = ArtCatalogBuilder.Build(); // spec 015: wrappers and catalog first
-            Material groundMat = CreateMaterial(GroundMaterialPath, new Color(0.45f, 0.48f, 0.45f));
-            Material pickupMat = CreateMaterial(PickupMaterialPath, new Color(0.95f, 0.6f, 0.15f));
+            // Spec 026: palette colours; graybox fallbacks are Plaster (walls, floors) and Steel (machines).
+            Material groundMat = CreateMaterial(GroundMaterialPath, Palette.Plaster);
+            Material pickupMat = CreateMaterial(PickupMaterialPath, Palette.Mustard);
             PingMarker pingPrefab = CreatePingMarkerPrefab(pickupMat);
             NetworkObject playerPrefab = CreatePlayerPrefab(pingPrefab, builtCatalog);
             GameObject pickupPrefab = CreatePickupPrefab(pickupMat);
@@ -123,7 +137,7 @@ namespace Worktown.Game.Editor
             // Load after NewScene: opening a scene unloads unused assets, which destroys a catalog loaded earlier.
             var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>(ArtCatalogBuilder.CatalogPath);
             if (catalog == null) throw new InvalidOperationException("ArtCatalog missing: " + ArtCatalogBuilder.CatalogPath);
-            CreateEnvironment(groundMat);
+            CreateEnvironment(groundMat, CreateMaterial(WallMaterialPath, Palette.Plaster));
             CreateStreet(catalog);
             Transform[] spawns = CreateSpawnPoints();
             CreatePickups(pickupPrefab);
@@ -189,7 +203,7 @@ namespace Worktown.Game.Editor
 
             // Spec 012: emote bubble above the head (above a carried item) and social input.
             TextMesh bubbleLabel = CreateLabel(root.transform, new Vector3(0f, 3.2f, 0f), 56, 0.045f);
-            bubbleLabel.color = new Color(1f, 0.9f, 0.4f);
+            bubbleLabel.color = Palette.Mustard;
             var bubble = root.AddComponent<EmoteBubble>();
             SetField(bubble, "_label", bubbleLabel);
             SetField(bubble, "_body", character.Container); // spec 024: the person wobbles
@@ -397,14 +411,14 @@ namespace Worktown.Game.Editor
             UnityEngine.Object.DestroyImmediate(board.GetComponent<Collider>());
             board.transform.SetParent(root.transform, false);
             board.transform.localScale = new Vector3(RailSize.x, RailSize.y, 0.05f);
-            board.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/TicketRail.mat", new Color(0.22f, 0.16f, 0.12f));
+            board.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/TicketRail.mat", Palette.Charcoal);
             board.isStatic = true;
 
             TextMesh title = CreateLabel(root.transform, new Vector3(0f, RailSize.y * 0.5f + 0.04f, -0.03f), 60, 0.03f);
             title.name = "Title";
             title.text = "ORDERS";
 
-            Material cardMat = CreateMaterial(Root + "/Settings/TicketCard.mat", new Color(0.96f, 0.93f, 0.82f));
+            Material cardMat = CreateMaterial(Root + "/Settings/TicketCard.mat", Palette.Cream);
             var cards = new List<TextMesh>(TicketCards);
             var backs = new List<Renderer>(TicketCards);
             for (int i = 0; i < TicketCards; i++)
@@ -426,7 +440,7 @@ namespace Worktown.Game.Editor
                 TextMesh text = CreateLabel(root.transform, centre + new Vector3(0f, 0f, -0.04f), 48, 0.018f);
                 text.name = "Card text " + (i + 1);
                 text.anchor = TextAnchor.MiddleCenter;
-                text.color = new Color(0.12f, 0.1f, 0.08f);
+                text.color = Palette.Ink;
                 text.text = string.Empty;
                 cards.Add(text);
             }
@@ -485,8 +499,13 @@ namespace Worktown.Game.Editor
             var visual = visualObject.AddComponent<FoodVisual>();
             SetField(visual, "_catalog", catalog);
             SetField(visual, "_fallback", renderer);
-            SetField(visual, "_partScale", 0.5f);
-            SetField(visual, "_partRadius", 0.075f);
+            // Spec 026: a plated dish lays out its parts like the plate, a bowl dish like the bowl.
+            (_, float plateScale, float plateRadius) = VesselContents(VesselKind.Plate);
+            (_, float bowlScale, float bowlRadius) = VesselContents(VesselKind.Bowl);
+            SetField(visual, "_partScale", plateScale);
+            SetField(visual, "_partRadius", plateRadius);
+            SetField(visual, "_bowlPartScale", bowlScale);
+            SetField(visual, "_bowlPartRadius", bowlRadius);
             SetField(visual, "_plateContentHeight", ContentHeight(catalog, ArtKey.FoodPlate, PlateFill));
             SetField(visual, "_bowlContentHeight", ContentHeight(catalog, ArtKey.FoodBowl, BowlFill));
 
@@ -539,16 +558,20 @@ namespace Worktown.Game.Editor
 
         private static string VesselPrefabPath(VesselKind kind) => VesselPrefabFolder + "/" + kind + ".prefab";
 
-        /// <summary>Spec 021: how deep contents sit in each kind of cookware (fraction of its height), part scale and radius.</summary>
+        /// <summary>
+        /// Spec 021: how deep contents sit in each kind of cookware (fraction of its height), part scale and radius.
+        /// Spec 026: radii for the spec 026 cookware sizes (the spec 021 radii scaled with the smaller cookware, so the parts
+        /// stay inside; ScaleSceneTests checks it); the part scale is kept (the food models shrank about as much).
+        /// </summary>
         private static (float fill, float partScale, float partRadius) VesselContents(VesselKind kind)
         {
             switch (kind)
             {
-                case VesselKind.Board: return (BoardFill, 1f, 0.06f);
-                case VesselKind.Pan: return (PanFill, 0.65f, 0.06f);
-                case VesselKind.Pot: return (PotFill, 0.6f, 0.05f);
-                case VesselKind.Plate: return (PlateFill, 0.5f, 0.075f);
-                default: return (BowlFill, 0.45f, 0.06f);
+                case VesselKind.Board: return (BoardFill, 1f, 0.055f);
+                case VesselKind.Pan: return (PanFill, 0.65f, 0.056f);
+                case VesselKind.Pot: return (PotFill, 0.6f, 0.041f);
+                case VesselKind.Plate: return (PlateFill, 0.5f, 0.064f);
+                default: return (BowlFill, 0.45f, 0.041f);
             }
         }
 
@@ -569,12 +592,14 @@ namespace Worktown.Game.Editor
         {
             var root = new GameObject(kind.ToString());
             Bounds model = new Bounds(Vector3.zero, new Vector3(0.3f, 0.05f, 0.3f));
+            Vector2 body = Vector2.zero;
             var visual = new GameObject("Visual");
             visual.transform.SetParent(root.transform, false);
             if (catalog != null && catalog.TryGet(ArtCatalogRules.VesselKey(kind), out GameObject wrapper))
             {
                 var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, visual.transform);
                 model = LocalBounds(root, instance);
+                body = BaseCentre(instance);
             }
             else Debug.LogError("[Graybox] no model for " + kind + " in the art catalog");
 
@@ -586,7 +611,8 @@ namespace Worktown.Game.Editor
             (float fill, float partScale, float partRadius) = VesselContents(kind);
             var anchor = new GameObject("Contents");
             anchor.transform.SetParent(root.transform, false);
-            anchor.transform.localPosition = new Vector3(0f, model.max.y * fill, 0f);
+            // Spec 026: over the middle of the vessel's base, not of its bounds (the pan's handle moves those off the pan).
+            anchor.transform.localPosition = new Vector3(body.x, model.max.y * fill, body.y);
             var food = anchor.AddComponent<FoodVisual>();
             SetField(food, "_catalog", catalog);
             SetField(food, "_partScale", partScale);
@@ -621,6 +647,38 @@ namespace Worktown.Game.Editor
             foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
             b.center -= root.transform.position;
             return b;
+        }
+
+        /// <summary>
+        /// Spec 026: the XZ centre of a model's base (its vertices in the lowest quarter of its height), in world space with
+        /// the root at the origin. A pan's handle rises from the rim, so the base is the pan itself.
+        /// </summary>
+        private static Vector2 BaseCentre(GameObject model)
+        {
+            var points = new List<Vector3>();
+            foreach (MeshFilter filter in model.GetComponentsInChildren<MeshFilter>())
+            {
+                if (filter.sharedMesh == null) continue;
+                foreach (Vector3 v in filter.sharedMesh.vertices) points.Add(filter.transform.TransformPoint(v));
+            }
+            if (points.Count == 0) return Vector2.zero;
+            float minY = float.MaxValue, maxY = float.MinValue;
+            foreach (Vector3 p in points)
+            {
+                minY = Mathf.Min(minY, p.y);
+                maxY = Mathf.Max(maxY, p.y);
+            }
+            float limit = minY + (maxY - minY) * 0.25f;
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+            foreach (Vector3 p in points)
+            {
+                if (p.y > limit) continue;
+                minX = Mathf.Min(minX, p.x);
+                maxX = Mathf.Max(maxX, p.x);
+                minZ = Mathf.Min(minZ, p.z);
+                maxZ = Mathf.Max(maxZ, p.z);
+            }
+            return new Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
         }
 
         /// <summary>Spec 021: a scene instance of a prefab (cookware, the knife) resting on a spot of a place surface.</summary>
@@ -665,13 +723,22 @@ namespace Worktown.Game.Editor
             body.transform.localScale = new Vector3(width, height, StationWidth);
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
 
-            // Spec 023: the Furniture Kit cabinet stretched to the worktop; the cube and collider stay as they were.
+            // Spec 023, spec 026: a row of equal Furniture Kit cabinet modules (about 0.6 m each, see ArtSizeTable.WorktopModules)
+            // instead of one stretched cabinet; the cube, the collider and the place surface stay one piece.
             if (catalog != null && catalog.TryGet(ArtKey.Worktop, out GameObject wrapper))
             {
                 UnityEngine.Object.DestroyImmediate(body.GetComponent<MeshRenderer>());
-                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
-                visual.transform.localPosition = Vector3.zero;
-                visual.transform.localScale = new Vector3(width, height, StationWidth);
+                (int count, float w) = ArtSizeTable.WorktopModules(width);
+                float wrapperHeight = ArtCatalogBuilder.HeightOf(wrapper);
+                float x = -width * 0.5f;
+                for (int i = 0; i < count; i++)
+                {
+                    var module = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                    module.name = WorktopModuleName + " " + (i + 1);
+                    module.transform.localPosition = new Vector3(x + w * 0.5f, 0f, 0f);
+                    module.transform.localScale = new Vector3(w / ArtSizeTable.WorktopModuleWidth, height / wrapperHeight, 1f);
+                    x += w;
+                }
             }
             SetStaticRecursive(root);
 
@@ -689,7 +756,7 @@ namespace Worktown.Game.Editor
         private static PlaceSurface CreateTopSurface(Station station, string name, Vector2 centre, Vector2 size, int index)
         {
             float top = StationTop(station);
-            float colliderTop = Mathf.Max(top, StationHeight * 0.5f) + 0.005f;
+            float colliderTop = Mathf.Max(top, StationHeightOf(station.Kind) * 0.5f) + 0.005f;
             var go = new GameObject(name);
             go.transform.SetParent(station.transform, false);
             go.transform.localPosition = new Vector3(centre.x, 0f, centre.y);
@@ -739,7 +806,7 @@ namespace Worktown.Game.Editor
                 AssetDatabase.CreateAsset(material, PlaceMarkerMaterialPath);
             }
             else if (material.shader != shader) material.shader = shader;
-            material.SetColor("_BaseColor", new Color(0.35f, 1f, 0.45f, 0.45f));
+            material.SetColor("_BaseColor", Palette.WithAlpha(Palette.Sage, 0.45f)); // spec 026: the "use" colour
             material.SetFloat("_Surface", 1f); // transparent
             material.SetFloat("_Blend", 0f);   // alpha
             material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -771,15 +838,20 @@ namespace Worktown.Game.Editor
             var modes = new List<UnityEngine.Object>();
             var labels = new List<UnityEngine.Object>();
             var rings = new List<UnityEngine.Object>();
+            // Spec 026: the knob row follows the stove's height (station space: the root sits at half the height).
+            float rootY = station.transform.localPosition.y;
+            float stoveTop = rootY + StationTop(station);
+            float buttonY = stoveTop * KnobRowFraction - rootY;
+            float labelY = stoveTop * KnobLabelFraction - rootY;
             for (int b = 0; b < burners.Length; b++)
             {
                 float x = BurnerX[b];
-                switches.Add(CreateButton(station, "Switch " + b, new Vector3(x - 0.09f, 0.3f, -0.64f),
+                switches.Add(CreateButton(station, "Switch " + b, new Vector3(x - 0.09f, buttonY, -0.64f),
                     StationRules.StoveOption(b, StationRules.StoveSwitch), material));
-                CreateButtonLabel(station, "SwitchLabel " + b, new Vector3(x - 0.09f, 0.39f, -0.68f), "on/off");
-                modes.Add(CreateButton(station, "ModeButton " + b, new Vector3(x + 0.09f, 0.3f, -0.64f),
+                CreateButtonLabel(station, "SwitchLabel " + b, new Vector3(x - 0.09f, labelY, -0.68f), "on/off");
+                modes.Add(CreateButton(station, "ModeButton " + b, new Vector3(x + 0.09f, buttonY, -0.64f),
                     StationRules.StoveOption(b, StationRules.PanMode), material));
-                labels.Add(CreateButtonLabel(station, "ModeLabel " + b, new Vector3(x + 0.09f, 0.39f, -0.68f), "fry"));
+                labels.Add(CreateButtonLabel(station, "ModeLabel " + b, new Vector3(x + 0.09f, labelY, -0.68f), "fry"));
                 rings.Add(CreateBurnerRing(burners[b], material));
             }
             SetField(visual, "_switches", switches);
@@ -830,7 +902,7 @@ namespace Worktown.Game.Editor
         private static float StationTop(Station station)
         {
             Transform art = station.transform.Find("Art_" + ArtCatalogRules.StationKey(station.Kind));
-            return art != null ? ArtCatalogBuilder.BaseTopOf(art.gameObject) + art.localPosition.y : StationHeight * 0.5f;
+            return art != null ? ArtCatalogBuilder.BaseTopOf(art.gameObject) + art.localPosition.y : StationHeightOf(station.Kind) * 0.5f;
         }
 
         /// <summary>
@@ -842,34 +914,29 @@ namespace Worktown.Game.Editor
         {
             var parent = new GameObject("Kitchen");
             var stations = new List<Station>();
-            Color[] crateColors =
-            {
-                new Color(0.85f, 0.72f, 0.45f), new Color(0.80f, 0.15f, 0.15f),
-                new Color(0.95f, 0.35f, 0.20f), new Color(0.85f, 0.80f, 0.90f)
-            };
             for (int i = 0; i < DemoIngredients.All.Count; i++)
             {
                 string id = DemoIngredients.All[i].Id;
-                Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", crateColors[i]);
+                Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", FoodArtRules.IngredientColor((byte)i)); // spec 026: palette
                 stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
                     char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -8.5f + i * 2f, mat, i));
             }
-            Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", new Color(0.2f, 0.2f, 0.22f));
+            Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Steel);
             Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, stoveMat, 0);
             stations.Add(stoveA);
             Station stoveB = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 2", StoveBX, stoveMat, 0);
             stations.Add(stoveB);
             stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", CounterX,
-                CreateMaterial(Root + "/Settings/Station_Counter.mat", new Color(0.92f, 0.92f, 0.9f)), 0));
+                CreateMaterial(Root + "/Settings/Station_Counter.mat", Palette.WoodLight), 0));
             Station shelf = CreateStation(catalog, parent.transform, stations.Count, StationKind.PlateShelf, "Plates", PlateShelfX,
-                CreateMaterial(Root + "/Settings/Station_Plating.mat", new Color(0.86f, 0.84f, 0.72f)), 0);
+                CreateMaterial(Root + "/Settings/Station_Plating.mat", Palette.WoodLight), 0);
             CreatePlateStack(catalog, shelf);
             stations.Add(shelf);
 
             // Worktops at the stove top's height: before the first stove, between the stations, after the shelf.
             float height = stoveA.transform.position.y + StationTop(stoveA);
             float half = StationWidth * 0.5f + WorktopGapMargin;
-            Material worktopMat = CreateMaterial(WorktopMaterialPath, new Color(0.78f, 0.74f, 0.66f));
+            Material worktopMat = CreateMaterial(WorktopMaterialPath, Palette.WoodLight);
             var surfaces = new List<PlaceSurface>();
             PlaceSurface first = CreateWorktop(parent.transform, WorktopStartX, StoveAX - half, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(first);
@@ -971,27 +1038,28 @@ namespace Worktown.Game.Editor
         private static Station CreateStation(ArtCatalog catalog, Transform parent, int index, StationKind kind, string displayName,
             float x, Material material, int ingredientIndex)
         {
+            float height = StationHeightOf(kind); // spec 026: 0.90 m, the counter 1.05 m
             var root = new GameObject(displayName);
             root.transform.SetParent(parent, false);
-            root.transform.position = new Vector3(x, StationHeight * 0.5f, KitchenZ);
+            root.transform.position = new Vector3(x, height * 0.5f, KitchenZ);
 
             GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.name = "Body";
             body.transform.SetParent(root.transform, false);
-            body.transform.localScale = new Vector3(1.2f, StationHeight, 1.2f);
+            body.transform.localScale = new Vector3(StationWidth, height, StationWidth);
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
             body.isStatic = true;
 
             // Spec 015 swap layer: the cube body and its collider stay; the catalog visual is a sibling.
-            float labelY = StationHeight * 0.5f + 0.6f;
+            float labelY = height * 0.5f + 0.6f;
             if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(kind), out GameObject wrapper))
             {
                 UnityEngine.Object.DestroyImmediate(body.GetComponent<MeshRenderer>());
                 var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
-                visual.transform.localPosition = new Vector3(0f, -StationHeight * 0.5f, 0f);
+                visual.transform.localPosition = new Vector3(0f, -height * 0.5f, 0f);
                 SetStaticRecursive(visual);
                 // Raise the label only when the model is taller than the cube.
-                float top = ArtCatalogBuilder.TopOf(visual) - StationHeight * 0.5f;
+                float top = ArtCatalogBuilder.TopOf(visual) - height * 0.5f;
                 labelY = Mathf.Max(labelY, top + 0.1f);
             }
 
@@ -1039,7 +1107,7 @@ namespace Worktown.Game.Editor
             text.characterSize = characterSize;
             text.anchor = TextAnchor.LowerCenter;
             text.alignment = TextAlignment.Center;
-            text.color = Color.white;
+            text.color = Palette.Cream; // spec 026: world labels are Cream
             return text;
         }
 
@@ -1131,11 +1199,12 @@ namespace Worktown.Game.Editor
             return condition;
         }
 
-        private static void CreateEnvironment(Material groundMat)
+        private static void CreateEnvironment(Material groundMat, Material wallMat)
         {
             var light = new GameObject("Directional Light").AddComponent<Light>();
             light.type = LightType.Directional;
             light.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            light.color = Palette.Cream; // spec 026 (D32): one warm key light
 
             var cam = new GameObject("Main Camera");
             cam.tag = "MainCamera";
@@ -1176,6 +1245,7 @@ namespace Worktown.Game.Editor
                 box.transform.SetParent(walls.transform, false);
                 box.transform.localPosition = positions[i];
                 box.transform.localScale = sizes[i];
+                box.GetComponent<MeshRenderer>().sharedMaterial = wallMat;
                 box.isStatic = true;
             }
         }
@@ -1184,6 +1254,10 @@ namespace Worktown.Game.Editor
         /// Spec 015: a short visual-only street east of the kitchen. The customers walk along
         /// z = 10.8 (x 8.5 to 24) on the north side of the road; houses stand behind them.
         /// Nothing here has a collider, so movement and interaction do not change.
+        /// Spec 026: the buildings are at real size now (7.5 m to the ridge, up to 11.7 m wide), so the north row is spaced
+        /// for their widths and the widest house that no longer fits there (F) stands south of the road, east of the
+        /// crossroad's south arm (x 34 to 39), which stays open. Wrappers are centred now, so the lamps and the awning are
+        /// placed by their bounds: the lamp posts stay at the south edge of the road, the awning on the shop's front.
         /// </summary>
         private static void CreateStreet(ArtCatalog catalog)
         {
@@ -1192,25 +1266,53 @@ namespace Worktown.Game.Editor
             for (int i = 0; i < 6; i++)
                 PlaceArt(catalog, street.transform, i == 5 ? ArtKey.RoadCrossroad : ArtKey.Road, new Vector3(11.5f + i * 5f, 0.02f, 8f), 0f);
             // Facades north of the walking path, fronts facing the road (south).
-            PlaceArt(catalog, street.transform, ArtKey.BuildingShop, new Vector3(21f, 0f, 17f), 180f);
-            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseA, new Vector3(28f, 0f, 17f), 180f);
-            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseC, new Vector3(35f, 0f, 17f), 180f);
-            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseF, new Vector3(43f, 0f, 17f), 180f);
-            // One house south of the road, facing north.
+            GameObject shop = PlaceArt(catalog, street.transform, ArtKey.BuildingShop, new Vector3(21f, 0f, 17f), 180f);
+            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseA, new Vector3(31.5f, 0f, 17f), 180f);
+            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseC, new Vector3(43f, 0f, 17f), 180f);
+            // Two houses south of the road, facing north.
             PlaceArt(catalog, street.transform, ArtKey.BuildingHouseK, new Vector3(30f, 0f, 0.5f), 0f);
-            PlaceArt(catalog, street.transform, ArtKey.PropAwning, new Vector3(21f, 2.4f, 14.8f), 180f);
-            // Street lights along the south edge of the road, arms over the road.
-            foreach (float x in new[] { 14f, 26f, 38f })
-                PlaceArt(catalog, street.transform, ArtKey.PropLamp, new Vector3(x, 0f, 4.8f), 180f);
-            PlaceArt(catalog, street.transform, ArtKey.PropDumpster, new Vector3(24.2f, 0f, 15f), 0f);
+            PlaceArt(catalog, street.transform, ArtKey.BuildingHouseF, new Vector3(HouseFX, 0f, -0.5f), 0f);
+            // Spec 026: the awning hangs on the shop's front, its back edge 2 cm into the wall, its bottom at the mounting height.
+            if (shop != null)
+            {
+                float front = RendererBounds(shop).min.z;
+                GameObject awning = PlaceArt(catalog, street.transform, ArtKey.PropAwning, new Vector3(21f, AwningMountHeight, front), 180f);
+                if (awning != null)
+                {
+                    Bounds b = RendererBounds(awning);
+                    awning.transform.position += new Vector3(0f, 0f, front - b.size.z * 0.5f + AwningWallOverlap - b.center.z);
+                }
+            }
+            // Street lights along the south edge of the road, arms over the road (north); the back of each post at LampBackZ.
+            // Spec 026: the east one moved from x 38 to 33, off the crossroad's south arm (x 34 to 39).
+            foreach (float x in new[] { 14f, 26f, 33f })
+            {
+                GameObject lamp = PlaceArt(catalog, street.transform, ArtKey.PropLamp, new Vector3(x, 0f, LampBackZ), 180f);
+                if (lamp != null) lamp.transform.position += new Vector3(0f, 0f, LampBackZ - RendererBounds(lamp).min.z);
+            }
+            PlaceArt(catalog, street.transform, ArtKey.PropDumpster, new Vector3(24.5f, 0f, 15f), 0f); // spec 026: clear of the shop (was 24.2, 3 cm into it)
             PlaceArt(catalog, street.transform, ArtKey.PropTrashcan, new Vector3(22f, 0f, 13.2f), 0f);
             PlaceArt(catalog, street.transform, ArtKey.PropTreeLarge, new Vector3(-11f, 0f, 17f), 0f);
             PlaceArt(catalog, street.transform, ArtKey.PropTreeSmall, new Vector3(16f, 0f, 14.3f), 0f);
             PlaceArt(catalog, street.transform, ArtKey.PropPlanter, new Vector3(-10f, 0f, 14.2f), 0f);
             PlaceArt(catalog, street.transform, ArtKey.PropPlanter, new Vector3(15.5f, 0f, 16f), 0f);
-            // A fence behind the kitchen row.
+            // A fence behind the kitchen row (spec 026: the 2.4 m panels now meet exactly).
             for (int i = 0; i < 10; i++)
                 PlaceArt(catalog, street.transform, ArtKey.PropFence, new Vector3(-8.5f + i * 2.4f, 0f, 15.5f), 0f);
+        }
+
+        // Spec 026: see CreateStreet.
+        private const float HouseFX = 44.5f;          // east of the crossroad's south arm (x 34 to 39), inside the ground (x 50)
+        private const float AwningMountHeight = 2.3f; // bottom edge of the awning above the pavement (m)
+        private const float AwningWallOverlap = 0.02f; // the awning's back edge reaches 2 cm into the shop wall
+        private const float LampBackZ = 4.6f;         // back of the lamp posts, south of the road (z 5.5)
+
+        private static Bounds RendererBounds(GameObject go)
+        {
+            Renderer[] renderers = go.GetComponentsInChildren<Renderer>();
+            Bounds b = renderers[0].bounds;
+            foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
+            return b;
         }
 
         private static void SetStaticRecursive(GameObject root)
@@ -1219,12 +1321,13 @@ namespace Worktown.Game.Editor
                 t.gameObject.isStatic = true;
         }
 
-        private static void PlaceArt(ArtCatalog catalog, Transform parent, ArtKey key, Vector3 position, float yaw)
+        private static GameObject PlaceArt(ArtCatalog catalog, Transform parent, ArtKey key, Vector3 position, float yaw)
         {
-            if (catalog == null || !catalog.TryGet(key, out GameObject wrapper)) return;
+            if (catalog == null || !catalog.TryGet(key, out GameObject wrapper)) return null;
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, parent);
             instance.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
             SetStaticRecursive(instance);
+            return instance;
         }
 
         private static Transform[] CreateSpawnPoints()

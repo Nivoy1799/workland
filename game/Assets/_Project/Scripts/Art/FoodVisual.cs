@@ -21,6 +21,9 @@ namespace Worktown.Game.Art
         [SerializeField] private float _partScale = 0.5f;
         [Tooltip("Distance of the parts from the centre when there is more than one.")]
         [SerializeField] private float _partRadius = 0.08f;
+        [Tooltip("Spec 026: scale and distance of the parts in a bowl dish (the bowl is smaller than the plate).")]
+        [SerializeField] private float _bowlPartScale = 0.45f;
+        [SerializeField] private float _bowlPartRadius = 0.04f;
         [Tooltip("Height the parts sit at on a plate / in a bowl (set by the scene builder from the model).")]
         [SerializeField] private float _plateContentHeight = 0.015f;
         [SerializeField] private float _bowlContentHeight = 0.03f;
@@ -46,9 +49,11 @@ namespace Worktown.Game.Art
                 bool plated = look.Kind == FoodLook.KindPlated;
                 shown = Add(plated ? ArtKey.FoodPlate : ArtKey.FoodBowl, Vector3.zero, 0f, 1f, Color.white, false);
                 float height = plated ? _plateContentHeight : _bowlContentHeight;
+                float scale = plated ? _partScale : _bowlPartScale;
+                float radius = plated ? _partRadius : _bowlPartRadius;
                 int count = PartCount(parts, look.PartCount);
                 for (int i = 0; i < count; i++)
-                    AddPile(parts[i], FoodArtRules.PartPosition(i, count, _partRadius) + Vector3.up * height, _partScale);
+                    AddPile(parts[i], FoodArtRules.PartPosition(i, count, radius) + Vector3.up * height, scale);
             }
             ShowFallback(!shown, look);
         }

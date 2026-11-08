@@ -59,7 +59,7 @@ the way other players see them.
 **Contact sheet.** `ContactSheet.Layout(count, columns, cellSize)` (pure) plus a writer that downsamples each
 frame into one PNG with frame numbers. Output: `<out>/<tour>/NN-name.png`, `<out>/<tour>/sheet.png`.
 
-**Script.** `scripts/visual-check.sh [--tours look,walk,cook] [--out .verify/visual]`: starts the WSL server
+**Script.** `scripts/visual-check.sh [--tours look,walk,cook] [--out .verify/visual] [--server local|wsl]`: default `local` (a Windows `-host` window as server, because the WSL link has MTU 1280 while Tailscale runs, see spec 003); `wsl` starts the WSL server
 build, the observer, then the tour client (both windowed 1280x720), waits for both to exit (timeout per tour),
 stops the server, prints the sheet paths and the count of `Exception` lines in the client logs (non-zero
 exit if any exception or timeout).

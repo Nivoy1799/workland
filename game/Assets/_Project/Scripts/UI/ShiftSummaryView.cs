@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using Worktown.Game.Art;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 
@@ -99,14 +100,14 @@ namespace Worktown.Game.UI
             style.marginLeft = -170;
             style.paddingTop = 12;
             style.paddingBottom = 12;
-            _title = AddLabel(panel, 20, new Color(1f, 0.85f, 0.3f));
+            _title = AddLabel(panel, 20, Palette.Mustard);
             _title.style.unityFontStyleAndWeight = FontStyle.Bold;
             _title.style.marginBottom = 6;
-            _served = AddLabel(panel, 16, Color.white);
-            _earned = AddLabel(panel, 16, Color.white);
-            _stars = AddLabel(panel, 16, Color.white);
-            _missed = AddLabel(panel, 16, Color.white);
-            _footer = AddLabel(panel, 13, new Color(0.75f, 0.78f, 0.82f));
+            _served = AddLabel(panel, 16, Palette.Cream);
+            _earned = AddLabel(panel, 16, Palette.Cream);
+            _stars = AddLabel(panel, 16, Palette.Cream);
+            _missed = AddLabel(panel, 16, Palette.Cream);
+            _footer = AddLabel(panel, 13, Palette.Plaster);
             _footer.style.marginTop = 6;
             return panel;
         }

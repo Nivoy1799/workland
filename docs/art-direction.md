@@ -46,7 +46,12 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Shop (ground floor 4 m + 1 storey) | 7–8 | same | |
 | Tree small / large | 4 / 8 | same | |
 | Street lamp | 4.5 | same | |
-| Road lane / sidewalk | 3.0 / 2.0 wide | same | |
+| Road lane / sidewalk | 3.0 / 2.0 wide | same | target; today the road tiles are 5.0 m (two 2.5 m lanes) until a street layout spec |
+| Planter | 1.6 | same | added in spec 026 |
+| Dumpster | 1.8 | same | added in spec 026 |
+| Trash can (height) | 0.9 | same | added in spec 026 |
+| Fence section | 2.4 | same | added in spec 026 |
+| Awning | 2.4 | same | largest side (width); added in spec 026 |
 
 Fit by **target size in metres from this table**, never by a free scale factor (`Scaled(..., 5f)`
 style entries go away in spec 026).
