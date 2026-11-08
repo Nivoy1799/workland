@@ -301,11 +301,25 @@ namespace Worktown.Game.Editor
             SetField(visual, "_variantByOwner", byOwner);
             if (player != null) SetField(visual, "_player", player);
             if (firstPerson != null) SetField(visual, "_firstPerson", firstPerson);
-            SetField(visual, "_idle", ArtCatalogBuilder.CharacterClip("idle"));
-            SetField(visual, "_walk", ArtCatalogBuilder.CharacterClip("walk"));
-            SetField(visual, "_run", ArtCatalogBuilder.CharacterClip("sprint"));
-            SetField(visual, "_crouch", ArtCatalogBuilder.CharacterClip("crouch"));
-            SetField(visual, "_hold", ArtCatalogBuilder.CharacterClip("holding-right"));
+            AnimationClip walk = ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.WalkClip);
+            AnimationClip run = ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.RunClip);
+            SetField(visual, "_idle", ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.IdleClip));
+            SetField(visual, "_walk", walk);
+            SetField(visual, "_run", run);
+            SetField(visual, "_crouch", ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.CrouchClip));
+            SetField(visual, "_hold", ArtCatalogBuilder.HoldClip());
+
+            // Spec 025: the measured stride of the walk and run clips on this body (all variants share it).
+            var body = PrefabUtility.GetCorrespondingObjectFromSource(character.Variants[0]);
+            float walkSpeed = ArtCatalogBuilder.MeasureClipSpeed(body, walk);
+            float runSpeed = ArtCatalogBuilder.MeasureClipSpeed(body, run);
+            if (walkSpeed <= 0f || runSpeed <= 0f)
+                throw new InvalidOperationException(root.name + ": clip speed not measurable (walk " + walkSpeed + ", run " + runSpeed + ")");
+            SetField(visual, "_walkClipSpeed", walkSpeed);
+            SetField(visual, "_runClipSpeed", runSpeed);
+            Debug.Log("[Art] " + root.name + ": walk clip " + walk.name + " " + walkSpeed.ToString("F3") + " m/s, run clip " + run.name + " "
+                      + runSpeed.ToString("F3") + " m/s; rate at walk " + (MovementRules.WalkSpeed / walkSpeed).ToString("F2")
+                      + ", at sprint " + (MovementRules.SprintSpeed / runSpeed).ToString("F2"));
         }
 
         /// <summary>Spec 014: street entry east of the kitchen and the queue in front of the counter.</summary>

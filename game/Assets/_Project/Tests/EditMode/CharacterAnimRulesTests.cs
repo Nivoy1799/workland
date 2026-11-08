@@ -3,7 +3,7 @@ using Worktown.Game.Player;
 
 namespace Worktown.Game.Tests
 {
-    /// <summary>Spec 024 AC3: speed and crouch to the character's animation state.</summary>
+    /// <summary>Spec 024 AC3, spec 025 AC5: speed and crouch to the character's animation state and playback rate.</summary>
     public class CharacterAnimRulesTests
     {
         [Test]
@@ -12,15 +12,16 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CharacterAnimState.Idle, CharacterAnimRules.StateFor(0f, false));
             Assert.AreEqual(CharacterAnimState.Idle, CharacterAnimRules.StateFor(0.4f, false));
             Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(2f, false), "customer walk speed");
-            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(4f, false), "player walk speed");
-            Assert.AreEqual(CharacterAnimState.Run, CharacterAnimRules.StateFor(8f, false), "player sprint speed");
+            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(MovementRules.WalkSpeed, false), "player walk speed");
+            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(MovementRules.CrouchSpeed, false));
+            Assert.AreEqual(CharacterAnimState.Run, CharacterAnimRules.StateFor(MovementRules.SprintSpeed, false), "player sprint speed");
             Assert.AreEqual(CharacterAnimState.Run, CharacterAnimRules.StateFor(CharacterAnimRules.RunStartSpeed, false));
         }
 
         [Test]
         public void StateFor_CrouchFlagWinsOverEverySpeed()
         {
-            foreach (float speed in new[] { 0f, 2f, 4f, 8f })
+            foreach (float speed in new[] { 0f, 1.25f, 2.5f, 5f })
                 foreach (CharacterAnimState previous in new[] { CharacterAnimState.Idle, CharacterAnimState.Walk, CharacterAnimState.Run, CharacterAnimState.Crouch })
                     Assert.AreEqual(CharacterAnimState.Crouch, CharacterAnimRules.StateFor(speed, true, previous), speed + " " + previous);
             Assert.AreEqual(CharacterAnimState.Idle, CharacterAnimRules.StateFor(0f, false, CharacterAnimState.Crouch), "standing up again");
@@ -34,9 +35,9 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(0.3f, false, CharacterAnimState.Walk));
             Assert.AreEqual(CharacterAnimState.Idle, CharacterAnimRules.StateFor(0.3f, false, CharacterAnimState.Idle));
             Assert.AreEqual(CharacterAnimState.Idle, CharacterAnimRules.StateFor(0.2f, false, CharacterAnimState.Walk));
-            Assert.AreEqual(CharacterAnimState.Run, CharacterAnimRules.StateFor(5.5f, false, CharacterAnimState.Run));
-            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(5.5f, false, CharacterAnimState.Walk));
-            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(4.9f, false, CharacterAnimState.Run));
+            Assert.AreEqual(CharacterAnimState.Run, CharacterAnimRules.StateFor(3.5f, false, CharacterAnimState.Run));
+            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(3.5f, false, CharacterAnimState.Walk));
+            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(3.2f, false, CharacterAnimState.Run));
             Assert.AreEqual(CharacterAnimState.Idle, CharacterAnimRules.StateFor(0.1f, false, CharacterAnimState.Run));
         }
 
@@ -50,16 +51,47 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void PlaybackRate_FollowsSpeedWithinLimits()
+        public void RunThresholds_LieBetweenWalkAndSprint()
         {
-            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Idle, 3f));
-            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Crouch, 2f));
-            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, CharacterAnimRules.WalkClipSpeed), 1e-5f);
-            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, CharacterAnimRules.RunClipSpeed), 1e-5f);
-            Assert.AreEqual(CharacterAnimRules.MinRate, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 0.5f));
-            Assert.AreEqual(CharacterAnimRules.MaxRate, CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, 50f));
-            Assert.AreEqual(CharacterAnimRules.MinRate, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, float.NaN));
-            Assert.Greater(CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 4f), CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 2f));
+            Assert.AreEqual(3.75f, CharacterAnimRules.RunStartSpeed);
+            Assert.AreEqual(3.25f, CharacterAnimRules.RunStopSpeed);
+            Assert.Greater(CharacterAnimRules.RunStopSpeed, MovementRules.WalkSpeed, "walking never shows the run clip");
+            Assert.Less(CharacterAnimRules.RunStartSpeed, MovementRules.SprintSpeed, "sprinting always does");
+            Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(3.7f, false, CharacterAnimState.Walk));
+            Assert.AreEqual(CharacterAnimState.Run, CharacterAnimRules.StateFor(3.3f, false, CharacterAnimState.Run));
+        }
+
+        [Test]
+        public void PlaybackRate_IsSpeedOverClipSpeed_WithinLimits()
+        {
+            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Idle, 3f, 2f));
+            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Crouch, 2f, 2f));
+            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 1.7f, 1.7f), 1e-5f);
+            Assert.AreEqual(1.25f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 2.5f, 2f), 1e-5f);
+            Assert.AreEqual(0.8f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, 4f, 5f), 1e-5f);
+            Assert.AreEqual(CharacterAnimRules.MinRate, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 0.5f, 2f));
+            Assert.AreEqual(CharacterAnimRules.MaxRate, CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, 50f, 4f));
+            Assert.AreEqual(CharacterAnimRules.MinRate, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, float.NaN, 2f));
+            Assert.Greater(CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 2.5f, 2f), CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 2f, 2f));
+        }
+
+        [Test]
+        public void PlaybackRate_UnknownClipSpeed_PlaysAtOne()
+        {
+            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, 2.5f, 0f));
+            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, 5f, -1f));
+            Assert.AreEqual(1f, CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, 5f, float.NaN));
+        }
+
+        [Test]
+        public void FitsWithoutClamp_IsStrictlyInsideTheLimits()
+        {
+            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(2.5f, 2f));
+            Assert.IsFalse(CharacterAnimRules.FitsWithoutClamp(2.5f, 1f), "rate 2.5");
+            Assert.IsFalse(CharacterAnimRules.FitsWithoutClamp(1f, 2f), "rate 0.5");
+            Assert.IsFalse(CharacterAnimRules.FitsWithoutClamp(CharacterAnimRules.MaxRate * 2f, 2f), "exactly at the limit clamps");
+            Assert.IsFalse(CharacterAnimRules.FitsWithoutClamp(2f, 0f));
+            Assert.IsFalse(CharacterAnimRules.FitsWithoutClamp(2f, float.NaN));
         }
 
         [Test]

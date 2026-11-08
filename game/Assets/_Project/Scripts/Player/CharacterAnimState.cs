@@ -1,6 +1,6 @@
 namespace Worktown.Game.Player
 {
-    /// <summary>Spec 024: the base animation a character plays (one clip each from the Kenney Mini Characters).</summary>
+    /// <summary>Spec 024: the base animation a character plays (one clip each; spec 025: retargeted Humanoid clips).</summary>
     public enum CharacterAnimState : byte
     {
         Idle,

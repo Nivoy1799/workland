@@ -18,7 +18,7 @@ guide `docs/art-direction.md`.
 ## Depends on
 - Spec 024 (CharacterVisual, CharacterAnimRules, character art keys, hand drawing in Pickup).
 - Spec 010 (movement and prediction), 018 (first person: eye height, own body hidden).
-- **Download (asked separately before it happens, with file name, source and size):** one CC0
+- **Downloads (done, see Blockers: resolved):** one CC0
   character pack with normal human proportions and at least idle, walk and run clips, at most
   30 MB. Order of preference: Kenney (Animated Characters), then Quaternius (for example the
   Ultimate Animated Character Pack). Only the used files are kept, with the licence file and an
@@ -70,19 +70,19 @@ Hold pose: the pack's hold clip, masked to the right arm, or a fixed arm rotatio
 **First person.** Eye height stays 1.6 m (fits a 1.75 m body); own body hidden, shadow kept (spec 018).
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes, including `check-assets.sh` (only CC0, manifest rows match folders).
-- [ ] AC2: `StrideRules` tests: a synthetic gait (feet moving back at a known speed) gives that speed
+- [x] AC1: `bash scripts/verify.sh` passes, including `check-assets.sh` (only CC0, manifest rows match folders).
+- [x] AC2: `StrideRules` tests: a synthetic gait (feet moving back at a known speed) gives that speed
       ±2 %; a standing clip gives 0; bad input (no samples, NaN) gives 0.
-- [ ] AC3: `MovementRules` tests use the new numbers (walk 2.5, sprint 5, crouch 1.25, jump 0.6).
-- [ ] AC4: Art test on the built prefabs: character height 1.75 m ±0.05; measured walk clip speed
+- [x] AC3: `MovementRules` tests use the new numbers (walk 2.5, sprint 5, crouch 1.25, jump 0.6).
+- [ ] AC4 (no clamp met; walk clip range not, see notes, deviation 1): Art test on the built prefabs: character height 1.75 m ±0.05; measured walk clip speed
       between 0.8 and 2.5 m/s; `PlaybackRate` at 2.5 m/s (walk) and 5 m/s (run) lies strictly inside
       the clamp range, so it never clamps at full speed.
-- [ ] AC5: `CharacterAnimRules` tests for the new run thresholds and the rate from a given clip speed.
-- [ ] AC6: Screenshots (WSL server, two clients, third person): a person walking and one running,
+- [x] AC5: `CharacterAnimRules` tests for the new run thresholds and the rate from a given clip speed.
+- [x] AC6 (2026-11-08, partly: two third-person clients on the WSL server see each other and the customers as Kenney people, no exceptions; walking and running are left to the AC7 play-test because the demo client lost focus): Screenshots (WSL server, two clients, third person): a person walking and one running,
       next to a worktop, each beside a 1.75 m reference; first person view unchanged.
 - [ ] AC7 (manual, human): the people look normal, feet do not slide when walking or sprinting,
       the speed feels right.
-- [ ] AC8: `WhatsNew.json` entry `spec-025`.
+- [x] AC8: `WhatsNew.json` entry `spec-025`.
 
 ## Open questions (answered 2026-11-08: human approved all defaults)
 1. Jump apex 1.2 m is very high for a person. Lower it to **0.6 m** (yes) or keep 1.2?
@@ -100,7 +100,88 @@ Hold pose: the pack's hold clip, masked to the right arm, or a fixed arm rotatio
 - Play-test (AC7).
 
 ## Implementation notes
-(Builder fills this in.)
+Builder, 2026-11-08 (second pass, after the Resolved decision below). `scripts/verify.sh` green, 531/531 EditMode.
+
+**Import (Kenney body + Quaternius clips, both Humanoid).**
+- `Kenney/AnimatedCharactersProtagonists/Model/characterMedium.fbx` and
+  `Quaternius/UniversalAnimationLibrary/UAL1_Standard.fbx` import as Humanoid with `CreateFromThisModel`; both avatars
+  are valid and human (set by `ArtCatalogBuilder.ConfigureHumanoidImport`, only the `.meta` changes). Kenney mapping:
+  Hips, LeftUpLeg/RightUpLeg, LeftFoot/RightFoot, LeftToes/RightToes, Head, LeftHand/RightHand. UAL: pelvis, thigh_*,
+  foot_*, ball_*, hand_*. The Kenney fallback clips (`Animations/idle.fbx`, `run.fbx`, Generic `Root|Idle`, `Root|Run`)
+  are not used.
+- Body: 3.765 units native (T-pose, baked mesh), scaled 0.465 to 1.75 m, faces +Z (toes at +Z), right hand at +X.
+  The skinned renderer bounds of the import are loose (3.96, 0.19 below the feet), so height and pivot use the baked
+  mesh (`ArtCatalogBuilder.MeshBounds`; the art test bakes the same way).
+- One texture per skin through our own URP Lit materials `Art/CharacterSkin_skaterMaleA.mat` / `_skaterFemaleA.mat`.
+  Players: `CharacterPlayerMale` (skaterMaleA, even owner id) and `CharacterPlayerFemale` (skaterFemaleA, odd).
+  Customers: `CharacterCustomerMale` / `CharacterCustomerFemale` with the same two skins (two variants instead of four).
+- Held items: `HandR` empty on the rig's real right hand bone (`RightHand`, `Animator.GetBoneTransform`), half way to
+  the index finger. `Pickup.cs` unchanged (it only reads `Hand.position`).
+
+**Clips used** (`UAL1_Standard.fbx`, prefix `Armature|`): idle `Idle_Loop`, walk state `Jog_Fwd_Loop`, run state
+`Sprint_Loop`, crouch `Crouch_Idle_Loop`. No carry or hold clip in the library: the holding pose is a generated
+Humanoid clip `Art/CharacterHold.anim` (right arm muscles only: arm down -0.5, front-back 0.1, forearm stretch -0.3;
+upper arm at the side, forearm forwards), masked to the right arm and fingers with a Humanoid `AvatarMask`.
+
+**Measured stride** (`ArtCatalogBuilder.MeasureClipSpeed`: the wrapper at 1.75 m, the clip played through the Kenney
+avatar with foot IK on as in the game, 60 Hz, `StrideRules`). A foot is the point between ankle and ball, as low as
+the lower of the heel (ankle minus its rest height) and the ball; ankle-only or ball-only points miss heel strike or
+push-off (they differed by about 20 % on the jog).
+| Clip | m/s at rate 1 | rate at 2.0 | at 2.5 | at 3.75 | at 5 |
+|---|---|---|---|---|---|
+| Walk_Loop | 0.72 | 2.80 | 3.50 | | |
+| Jog_Fwd_Loop (walk state) | 3.55 | 0.56 | **0.70** | 1.06 | |
+| Sprint_Loop (run state) | 3.41 | | | 1.10 | **1.47** |
+| Crouch_Fwd_Loop (not used) | 0.53 | | | | |
+Walk 2.5 m/s and sprint 5 m/s stay strictly inside 0.6–1.6. Customers (2.0 m/s) are at 0.56 and clamp to 0.6, so
+their feet run about 7 % ahead of the ground (the guide allows 10 %).
+
+**Deviations and trade-offs (reviewer please check).**
+1. AC4 says the walk clip covers 0.8–2.5 m/s. The library's walk covers only 0.72 m/s on this body (legs are short:
+   hip joint at 35 % of the height), which would be rate 3.5 at 2.5 m/s. So the walk state plays the jog (3.55 m/s),
+   as the orchestrator allowed ("use the one that fits"). The art test checks the no-clamp part exactly and a
+   plausibility range of 0.8–5 m/s instead of 0.8–2.5. AC4 is left unticked for the reviewer to decide.
+2. Proportions (D30): the Kenney body is stylised too (head bone to crown about 28 % of the height, hip joint 35 %).
+   The human chose this body; recorded here only.
+3. Customer tint stays the light wish tint (`Customer.TintOf`, strength 0.4) with palette colours: meal Mustard,
+   snack Sage, drink SoftBlue, unknown Cream. Terracotta and DeepBlue are not used yet. Colours live in `Customer.cs`
+   until the spec 026 Palette.
+4. Crouch shows the crouch idle pose at rate 1, also while sneaking at 1.25 m/s (as in spec 024). `Crouch_Fwd_Loop`
+   would clamp there too (rate 2.36). Follow-up if sneaking needs moving feet.
+5. Spec 024 lift (`CharacterVisual.CrouchLift`) and the Mini Characters arm bone mask are removed; the Humanoid crouch
+   clip keeps the feet on the floor.
+6. Not done: deleting `ThirdParty/Kenney/MiniCharacters/` (+ `.meta`) and its `ASSETS.md` row. The permission system
+   denied the deletion. Nothing references the folder any more (the six old wrapper prefabs are deleted), so the
+   orchestrator can remove it and the row together.
+7. `WhatsNewTests`: the spec 024 entry is no longer the newest; a spec 025 test takes that role (same pattern as 023).
+8. Rebuild hygiene: the `DefaultPrefabObjects.asset` reorder and five re-saved `Settings/*.mat` were reverted. The
+   `Graybox.unity` diff is large (regenerated scene).
+
+First pack (Ultimate Animated Character Pack, removed): Generic only (feet not under the legs), walk 0.96 / run 2.95
+m/s at 1.75 m, near-black skin colour in the FBX. Details in the Blockers below.
 
 ## Blockers
-(Builder fills this in after 3 failed attempts.)
+**The pack chosen for this spec cannot meet AC4 or D30. A human decision is needed before the art swap.**
+1. **Strides too short for D31 (AC4).** Measured at 60 Hz, model at 1.75 m, with a draft of `StrideRules` (before the
+   steady-contact rule; a few % difference at most):
+   walk clip 0.96 m/s (Casual_Male 0.93), run clip 2.95 m/s (Casual_Male 2.84); `Walk_Carry` / `Run_Carry` are the
+   same. Playback rate at walk 2.5 m/s = 2.59, at sprint 5 m/s = 1.69, at customer 2.0 m/s = 2.08. All are above the
+   1.6 clamp, so feet slide about 38 % when walking and 6 % when sprinting (the guide allows 10 %). Without clamping,
+   these clips fit at most walk 1.54 m/s and sprint 4.7 m/s.
+2. **Proportions are stylised, not normal (D30).** From the bind pose: neck joint at 63 % of the height, so the head
+   is about a third of the body (D30: about 1/7); hip joint at 30 % (real people about 50 %). Short legs are the reason
+   for the short stride in point 1.
+Options (not mine to pick): (a) another CC0 pack with real proportions (spec order: Kenney Animated Characters first);
+(b) keep this pack and change D31 to about walk 1.5 / sprint 4.5 m/s; (c) keep the speeds and accept foot sliding or a
+much wider rate clamp (breaks the D31 note "feet may slide at most 10 %"). Measurements: one probe run, not kept in git.
+
+**Resolved 2026-11-08 (human chose a variant of option a):** Kenney bodies with Quaternius animations.
+- Downloaded (approved): Kenney Animated Characters Protagonists 1.1 (0.58 MB zip) and Quaternius Universal Animation
+  Library [Standard] v3.0 (15 MB zip). Kept only:
+  - `Kenney/AnimatedCharactersProtagonists/`: `Model/characterMedium.fbx`, `Skins/skaterMaleA.png`,
+    `Skins/skaterFemaleA.png`, `Animations/idle.fbx` and `run.fbx` (fallback), `License.txt`;
+  - `Quaternius/UniversalAnimationLibrary/`: `UAL1_Standard.fbx` (no root motion) and `License.txt`.
+- The Ultimate Animated Character Pack files and their manifest row are removed.
+- Plan: the Kenney body is imported as Humanoid, and the UAL walk / jog / sprint (and crouch / carry if present) clips
+  are retargeted onto it. If the Kenney rig does not map to Humanoid, the Kenney idle / run clips are used and that is
+  reported. Players use the two skater skins. Customers use the same skins with palette tints until more skins exist.

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
 using Worktown.Game.Art;
 using Worktown.Game.Player;
 
@@ -21,11 +23,27 @@ namespace Worktown.Game.Editor
         private const string Commercial = "Assets/ThirdParty/Kenney/CityKitCommercial/";
         private const string Roads = "Assets/ThirdParty/Kenney/CityKitRoads/";
         private const string FoodKit = "Assets/ThirdParty/Kenney/FoodKit/";
-        private const string MiniCharacters = "Assets/ThirdParty/Kenney/MiniCharacters/";
-        /// <summary>Spec 024: every character plays the clips of this file (all six share one rig and bone names).</summary>
-        public const string CharacterClipSource = MiniCharacters + "character-male-a.fbx";
-        /// <summary>Spec 024: character height in m.</summary>
-        public const float CharacterHeight = 1.8f;
+        private const string Protagonists = "Assets/ThirdParty/Kenney/AnimatedCharactersProtagonists/";
+        /// <summary>Spec 025: the body of every person (Kenney Animated Characters, Humanoid rig, one texture per skin).</summary>
+        public const string CharacterBody = Protagonists + "Model/characterMedium.fbx";
+        /// <summary>Spec 025: every person plays Humanoid clips from this file, retargeted onto the Kenney body.</summary>
+        public const string CharacterClipSource = "Assets/ThirdParty/Quaternius/UniversalAnimationLibrary/UAL1_Standard.fbx";
+        /// <summary>Spec 025: prefix of the clip names in <see cref="CharacterClipSource"/>.</summary>
+        private const string ClipPrefix = "Armature|";
+        /// <summary>Spec 025 (D29): character height in m.</summary>
+        public const float CharacterHeight = 1.75f;
+        /// <summary>
+        /// Spec 025: the clips of the four animation states. The library's walk covers only about 0.7 m/s on this body
+        /// (short legs), so the walk state (2.5 m/s) plays the jog; the run state (5 m/s) plays the sprint.
+        /// </summary>
+        public const string IdleClip = "Idle_Loop";
+        public const string WalkClip = "Jog_Fwd_Loop";
+        public const string RunClip = "Sprint_Loop";
+        public const string CrouchClip = "Crouch_Idle_Loop";
+        /// <summary>Spec 025: the generated holding pose (the library has no carry clip).</summary>
+        public const string HoldClipPath = GrayboxSceneBuilder.Root + "/Art/CharacterHold.anim";
+        /// <summary>Spec 025: samples per second when the stride of a clip is measured.</summary>
+        public const int StrideSampleRate = 60;
         /// <summary>Spec 017: white material for the generic food pieces; FoodVisual tints them per ingredient.</summary>
         public const string FoodPieceMaterialPath = GrayboxSceneBuilder.Root + "/Art/FoodPiece.mat";
 
@@ -48,6 +66,7 @@ namespace Worktown.Game.Editor
             public string Extra = null; // optional second model put on top of the first (Station mode)
             public PrimitiveType? Primitive; // spec 017: generic piece built from a Unity primitive (Model unused)
             public bool AlongZ; // spec 019, Max mode: turn the model so its longest horizontal side runs along Z
+            public string Skin = null; // spec 025, Character mode: texture name of the skin material
         }
 
         private static readonly Def[] Defs =
@@ -103,17 +122,16 @@ namespace Worktown.Game.Editor
             // Spec 023: the cabinet squeezed into a 1 x 1 x 1 m box; the scene builder scales the instance to each worktop.
             new Def { Key = ArtKey.Worktop, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Unit, Yaw = StationYaw },
 
-            // Spec 024: Kenney Mini Characters, 1.8 m, facing +Z (feet and the right arm at +X checked in the import).
-            Character(ArtKey.CharacterMaleA, "character-male-a.fbx"),
-            Character(ArtKey.CharacterFemaleA, "character-female-a.fbx"),
-            Character(ArtKey.CharacterMaleB, "character-male-b.fbx"),
-            Character(ArtKey.CharacterMaleC, "character-male-c.fbx"),
-            Character(ArtKey.CharacterFemaleB, "character-female-b.fbx"),
-            Character(ArtKey.CharacterFemaleC, "character-female-c.fbx")
+            // Spec 025: the Kenney body at 1.75 m, facing +Z (toes at +Z, right hand at +X checked in the import), one
+            // skin each. Customers use the same skins for now; Customer tints them.
+            Character(ArtKey.CharacterPlayerMale, "skaterMaleA"),
+            Character(ArtKey.CharacterPlayerFemale, "skaterFemaleA"),
+            Character(ArtKey.CharacterCustomerMale, "skaterMaleA"),
+            Character(ArtKey.CharacterCustomerFemale, "skaterFemaleA")
         };
 
-        private static Def Character(ArtKey key, string model) =>
-            new Def { Key = key, Model = MiniCharacters + model, Mode = Fit.Character, Value = CharacterHeight };
+        private static Def Character(ArtKey key, string skin) =>
+            new Def { Key = key, Model = CharacterBody, Mode = Fit.Character, Value = CharacterHeight, Skin = skin };
 
         private static Def FoodDef(ArtKey key, string model, float maxSize) =>
             new Def { Key = key, Model = FoodKit + model, Mode = Fit.Max, Value = maxSize };
@@ -162,7 +180,7 @@ namespace Worktown.Game.Editor
         private static GameObject BuildWrapper(Def def)
         {
             var root = new GameObject("Art_" + def.Key);
-            if (def.Mode == Fit.Character) ConfigureCharacterImport(def.Model);
+            if (def.Mode == Fit.Character) ConfigureHumanoidImport(def.Model);
             GameObject model = def.Primitive.HasValue
                 ? CreatePiece(def.Primitive.Value, root.transform)
                 : InstantiateModel(def.Model, root.transform, "Model");
@@ -217,9 +235,15 @@ namespace Worktown.Game.Editor
                 }
                 case Fit.Character:
                 {
-                    Bounds b = WorldBounds(model);
+                    // Spec 025: the skinned bounds of the import are loose; the baked mesh gives the real height and feet.
+                    Material skin = SkinMaterial(def.Skin);
+                    foreach (SkinnedMeshRenderer r in model.GetComponentsInChildren<SkinnedMeshRenderer>(true)) r.sharedMaterial = skin;
+                    Bounds b = MeshBounds(model);
                     model.transform.localScale = Vector3.one * (def.Value / b.size.y);
-                    CenterOnBottom(model);
+                    b = MeshBounds(model);
+                    if (Mathf.Abs(b.size.y - def.Value) > def.Value * 0.01f)
+                        throw new InvalidOperationException(def.Key + ": height " + b.size.y + " m after scaling, expected " + def.Value);
+                    model.transform.localPosition -= new Vector3(b.center.x, b.min.y, b.center.z);
                     ConfigureAnimator(model);
                     AddHandAnchor(model, def.Key);
                     break;
@@ -249,17 +273,17 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>
-        /// Spec 024: the character FBX files import as a Generic rig with an avatar of their own, so the instance gets an
-        /// Animator (the pack ships without .meta files; the default is no avatar and no Animator). Clip settings stay
-        /// at the import defaults: CharacterVisual loops the clips itself.
+        /// Spec 025: the body and the clip file import as Humanoid with an avatar of their own, so Unity retargets the clips
+        /// onto the body (both rigs map cleanly). Clip settings stay at the import defaults: CharacterVisual loops the
+        /// clips itself. Only the .meta import settings change, never the pack files.
         /// </summary>
-        private static void ConfigureCharacterImport(string path)
+        public static void ConfigureHumanoidImport(string path)
         {
             if (!(AssetImporter.GetAtPath(path) is ModelImporter importer)) throw new InvalidOperationException("Pack model missing: " + path);
             bool changed = false;
-            if (importer.animationType != ModelImporterAnimationType.Generic)
+            if (importer.animationType != ModelImporterAnimationType.Human)
             {
-                importer.animationType = ModelImporterAnimationType.Generic;
+                importer.animationType = ModelImporterAnimationType.Human;
                 changed = true;
             }
             if (importer.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel)
@@ -280,71 +304,182 @@ namespace Worktown.Game.Editor
         {
             Animator animator = model.GetComponent<Animator>();
             if (animator == null) animator = model.AddComponent<Animator>();
+            if (animator.avatar == null || !animator.avatar.isHuman) throw new InvalidOperationException(model.name + ": no Humanoid avatar");
             animator.runtimeAnimatorController = null;
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
         }
 
         /// <summary>
-        /// Spec 024: an empty <see cref="CharacterVisual.HandName"/> under the right arm bone at the end of the arm, where
-        /// carried items are drawn. All six characters share one rig, so the point is measured once on the plain arm of
-        /// <see cref="CharacterClipSource"/> (female-a has something extra on her right arm that would push it outwards).
+        /// Spec 025: an empty <see cref="CharacterVisual.HandName"/> on the rig's real right hand bone, in the palm (half way
+        /// to the index finger), where carried items are drawn.
         /// </summary>
         private static void AddHandAnchor(GameObject model, ArtKey key)
         {
-            Transform arm = FindDeep(model.transform, CharacterVisual.RightArmBone);
-            if (arm == null) throw new InvalidOperationException(key + ": no bone " + CharacterVisual.RightArmBone);
+            Animator animator = model.GetComponent<Animator>();
+            Transform bone = animator.GetBoneTransform(HumanBodyBones.RightHand);
+            if (bone == null) throw new InvalidOperationException(key + ": the avatar has no right hand");
+            Transform finger = animator.GetBoneTransform(HumanBodyBones.RightIndexProximal);
             var hand = new GameObject(CharacterVisual.HandName);
-            hand.transform.SetParent(arm, false);
-            hand.transform.localPosition = HandInBoneSpace();
-            Bounds b = WorldBounds(model);
-            Debug.Log("[Art] " + key + " height " + b.size.y.ToString("F2") + " m, hand at " + hand.transform.position.ToString("F2")
-                      + " (bone space " + hand.transform.localPosition.ToString("F3") + ")");
+            hand.transform.SetParent(bone, false);
+            hand.transform.localPosition = finger != null && finger.parent == bone ? finger.localPosition * 0.5f : Vector3.zero;
+            Bounds b = MeshBounds(model);
+            Debug.Log("[Art] " + key + " height " + b.size.y.ToString("F3") + " m, feet at " + b.min.y.ToString("F3") + ", hand on "
+                      + bone.name + " at " + hand.transform.position.ToString("F2"));
+        }
+
+        /// <summary>Spec 025: the URP Lit material of one skin texture of the body (shared by every wrapper with that skin).</summary>
+        private static Material SkinMaterial(string skin)
+        {
+            string texturePath = Protagonists + "Skins/" + skin + ".png";
+            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+            if (texture == null) throw new InvalidOperationException("Skin missing: " + texturePath);
+            string path = GrayboxSceneBuilder.Root + "/Art/CharacterSkin_" + skin + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                AssetDatabase.CreateAsset(material, path);
+            }
+            bool changed = false;
+            if (material.GetTexture("_BaseMap") != texture) { material.SetTexture("_BaseMap", texture); changed = true; }
+            if (material.GetColor("_BaseColor") != Color.white) { material.SetColor("_BaseColor", Color.white); changed = true; }
+            if (!Mathf.Approximately(material.GetFloat("_Smoothness"), 0.2f)) { material.SetFloat("_Smoothness", 0.2f); changed = true; }
+            if (changed) EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        /// <summary>Spec 025: the clip of that name (without the "Armature|" prefix) from <see cref="CharacterClipSource"/>.</summary>
+        public static AnimationClip CharacterClip(string name)
+        {
+            ConfigureHumanoidImport(CharacterClipSource);
+            foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(CharacterClipSource))
+                if (asset is AnimationClip clip && clip.name == ClipPrefix + name)
+                {
+                    if (!clip.humanMotion) throw new InvalidOperationException(clip.name + " is not a Humanoid clip");
+                    return clip;
+                }
+            throw new InvalidOperationException("Clip " + name + " missing in " + CharacterClipSource);
         }
 
         /// <summary>
-        /// Spec 024: the end of the right arm in bone space: the centre of the arm vertices in the outer 20 % of its reach
-        /// (bind pose, so it holds in every animated pose).
+        /// Spec 025: the holding pose (the clip library has none): a Humanoid clip with only right arm muscles, the upper arm
+        /// down at the side and slightly forward, the forearm forwards at waist height. CharacterVisual masks it to the arm.
         /// </summary>
-        private static Vector3 HandInBoneSpace()
+        public static AnimationClip HoldClip()
         {
-            var reference = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(CharacterClipSource));
-            try
-            {
-                Transform arm = FindDeep(reference.transform, CharacterVisual.RightArmBone);
-                var points = new List<Vector3>();
-                foreach (SkinnedMeshRenderer skin in reference.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-                {
-                    int bone = Array.IndexOf(skin.bones, arm);
-                    if (bone < 0 || skin.sharedMesh == null) continue;
-                    Vector3[] vertices = skin.sharedMesh.vertices;
-                    BoneWeight[] weights = skin.sharedMesh.boneWeights;
-                    Matrix4x4 bind = skin.sharedMesh.bindposes[bone];
-                    for (int v = 0; v < vertices.Length && v < weights.Length; v++)
-                        if (weights[v].boneIndex0 == bone && weights[v].weight0 >= 0.5f) points.Add(bind.MultiplyPoint3x4(vertices[v]));
-                }
-                if (points.Count == 0) throw new InvalidOperationException(CharacterClipSource + ": no vertices on " + CharacterVisual.RightArmBone);
-                float reach = 0f;
-                foreach (Vector3 p in points) reach = Mathf.Max(reach, p.magnitude);
-                Vector3 sum = Vector3.zero;
-                int count = 0;
-                foreach (Vector3 p in points)
-                {
-                    if (p.magnitude < reach * 0.8f) continue;
-                    sum += p;
-                    count++;
-                }
-                return sum / count;
-            }
-            finally { UnityEngine.Object.DestroyImmediate(reference); }
+            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(HoldClipPath);
+            bool created = clip == null;
+            if (created) clip = new AnimationClip { name = "CharacterHold" };
+            clip.ClearCurves();
+            void Muscle(string muscle, float value) => AnimationUtility.SetEditorCurve(clip,
+                EditorCurveBinding.FloatCurve(string.Empty, typeof(Animator), muscle), AnimationCurve.Constant(0f, 1f, value));
+            Muscle("Right Shoulder Down-Up", 0f);
+            Muscle("Right Shoulder Front-Back", 0f);
+            Muscle("Right Arm Down-Up", -0.5f);
+            Muscle("Right Arm Front-Back", 0.1f);
+            Muscle("Right Arm Twist In-Out", 0f);
+            Muscle("Right Forearm Stretch", -0.3f);
+            Muscle("Right Forearm Twist In-Out", 0f);
+            Muscle("Right Hand Down-Up", 0f);
+            Muscle("Right Hand In-Out", 0f);
+            if (created) AssetDatabase.CreateAsset(clip, HoldClipPath);
+            EditorUtility.SetDirty(clip);
+            if (!clip.humanMotion) throw new InvalidOperationException(HoldClipPath + " is not a Humanoid clip");
+            return clip;
         }
 
-        /// <summary>Spec 024: the clip of that name from <see cref="CharacterClipSource"/>.</summary>
-        public static AnimationClip CharacterClip(string name)
+        /// <summary>
+        /// Spec 025: the m/s a clip covers at playback rate 1 on a character wrapper (1.75 m). Samples the clip on the body
+        /// through its Humanoid avatar at <see cref="StrideSampleRate"/> Hz (foot IK on, as CharacterVisual plays it) and
+        /// passes the feet to <see cref="StrideRules"/>. A foot is the point between the ankle and the ball of the foot, as
+        /// low as the lower of the heel (the ankle minus its rest height) and the ball, so heel strike and push-off count.
+        /// </summary>
+        public static float MeasureClipSpeed(GameObject wrapperPrefab, AnimationClip clip)
         {
-            foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(CharacterClipSource))
-                if (asset is AnimationClip clip && clip.name == name) return clip;
-            throw new InvalidOperationException("Clip " + name + " missing in " + CharacterClipSource);
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapperPrefab);
+            PlayableGraph graph = default;
+            try
+            {
+                instance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                Animator animator = instance.GetComponentInChildren<Animator>(true);
+                Transform leftAnkle = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+                Transform rightAnkle = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+                Transform leftBall = animator.GetBoneTransform(HumanBodyBones.LeftToes);
+                Transform rightBall = animator.GetBoneTransform(HumanBodyBones.RightToes);
+                if (leftAnkle == null || rightAnkle == null || leftBall == null || rightBall == null)
+                    throw new InvalidOperationException(wrapperPrefab.name + ": the avatar has no feet and toes");
+                float heel = leftAnkle.position.y - leftBall.position.y;
+
+                graph = PlayableGraph.Create("Stride " + clip.name);
+                var output = AnimationPlayableOutput.Create(graph, "Stride", animator);
+                AnimationClipPlayable playable = AnimationClipPlayable.Create(graph, clip);
+                playable.SetApplyFootIK(true);
+                output.SetSourcePlayable(playable);
+
+                int samples = Mathf.Max(2, Mathf.RoundToInt(clip.length * StrideSampleRate));
+                var times = new List<float>();
+                var left = new List<Vector3>();
+                var right = new List<Vector3>();
+                for (int i = 0; i <= samples; i++)
+                {
+                    float t = clip.length * i / samples;
+                    playable.SetTime(t);
+                    graph.Evaluate(0f);
+                    times.Add(t);
+                    left.Add(FootPoint(instance.transform, leftAnkle, leftBall, heel));
+                    right.Add(FootPoint(instance.transform, rightAnkle, rightBall, heel));
+                }
+                return StrideRules.ClipSpeed(times, left, right);
+            }
+            finally
+            {
+                if (graph.IsValid()) graph.Destroy();
+                UnityEngine.Object.DestroyImmediate(instance);
+            }
+        }
+
+        private static Vector3 FootPoint(Transform root, Transform ankle, Transform ball, float heel)
+        {
+            Vector3 a = root.InverseTransformPoint(ankle.position);
+            Vector3 b = root.InverseTransformPoint(ball.position);
+            return new Vector3((a.x + b.x) * 0.5f, Mathf.Min(a.y - heel, b.y), (a.z + b.z) * 0.5f);
+        }
+
+        /// <summary>Spec 025: world bounds of the baked (posed) meshes, tighter than the skinned renderer bounds of the import.</summary>
+        public static Bounds MeshBounds(GameObject go)
+        {
+            bool any = false;
+            var b = new Bounds();
+            var baked = new Mesh();
+            try
+            {
+                foreach (Renderer renderer in go.GetComponentsInChildren<Renderer>())
+                {
+                    if (renderer is SkinnedMeshRenderer skin)
+                    {
+                        // useScale: the vertices come out in the renderer's local space, so its full matrix gives world space
+                        // (checked against the bone positions in the import inspection).
+                        skin.BakeMesh(baked, true);
+                        foreach (Vector3 v in baked.vertices)
+                        {
+                            Vector3 w = skin.transform.TransformPoint(v);
+                            if (!any) b = new Bounds(w, Vector3.zero);
+                            else b.Encapsulate(w);
+                            any = true;
+                        }
+                    }
+                    else
+                    {
+                        if (!any) b = renderer.bounds;
+                        else b.Encapsulate(renderer.bounds);
+                        any = true;
+                    }
+                }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(baked); }
+            if (!any) throw new InvalidOperationException(go.name + " has no renderer");
+            return b;
         }
 
         /// <summary>Spec 024: first transform of that name under <paramref name="parent"/> (inactive ones included).</summary>

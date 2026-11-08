@@ -12,15 +12,16 @@ namespace Worktown.Game.Player
         public const float WalkStartSpeed = 0.5f;
         /// <summary>...and a walking one stops below this one (hysteresis, no flicker near the threshold).</summary>
         public const float WalkStopSpeed = 0.25f;
-        /// <summary>m/s: running starts here (between walk 4 and sprint 8) and stops below <see cref="RunStopSpeed"/>.</summary>
-        public const float RunStartSpeed = 6f;
-        public const float RunStopSpeed = 5f;
+        /// <summary>m/s: running starts here (spec 025: between walk 2.5 and sprint 5) and stops below <see cref="RunStopSpeed"/>.</summary>
+        public const float RunStartSpeed = 3.75f;
+        public const float RunStopSpeed = 3.25f;
 
-        /// <summary>m/s the walk / sprint clips cover at playback rate 1 (estimated from the 1.8 m model's stride).</summary>
-        public const float WalkClipSpeed = 2.4f;
-        public const float RunClipSpeed = 4.5f;
+        /// <summary>
+        /// Spec 025: limits of the playback rate. Inside them the feet stay planted; the clip speeds at rate 1 are measured
+        /// from the clips (<see cref="StrideRules"/>) by the art builder and passed in.
+        /// </summary>
         public const float MinRate = 0.6f;
-        public const float MaxRate = 1.8f;
+        public const float MaxRate = 1.6f;
 
         /// <summary>Seconds a clip takes to fade in or out.</summary>
         public const float FadeSeconds = 0.15f;
@@ -33,7 +34,7 @@ namespace Worktown.Game.Player
 
         /// <summary>
         /// The state for a speed (m/s, horizontal) and the crouch flag, given the state shown last frame. Crouch wins over
-        /// every speed (the pack has one crouch pose). NaN, infinite or negative speeds count as standing still.
+        /// every speed (one crouch pose). NaN, infinite or negative speeds count as standing still.
         /// </summary>
         public static CharacterAnimState StateFor(float speed, bool crouched, CharacterAnimState previous)
         {
@@ -45,16 +46,25 @@ namespace Worktown.Game.Player
             return speed >= runAt ? CharacterAnimState.Run : CharacterAnimState.Walk;
         }
 
-        /// <summary>Playback rate of the state's clip, so the feet roughly keep up with the ground (1 for idle and crouch).</summary>
-        public static float PlaybackRate(CharacterAnimState state, float speed)
+        /// <summary>
+        /// Spec 025: playback rate of the state's clip, so the feet keep up with the ground: speed / clip speed (the m/s the
+        /// clip covers at rate 1), clamped to <see cref="MinRate"/>..<see cref="MaxRate"/>. 1 for idle and crouch, and for
+        /// an unknown clip speed (0, negative, NaN). A bad speed counts as standing still.
+        /// </summary>
+        public static float PlaybackRate(CharacterAnimState state, float speed, float clipSpeed)
         {
+            if (state != CharacterAnimState.Walk && state != CharacterAnimState.Run) return 1f;
+            if (float.IsNaN(clipSpeed) || float.IsInfinity(clipSpeed) || clipSpeed <= 0f) return 1f;
             if (float.IsNaN(speed) || float.IsInfinity(speed) || speed < 0f) speed = 0f;
-            switch (state)
-            {
-                case CharacterAnimState.Walk: return Clamp(speed / WalkClipSpeed, MinRate, MaxRate);
-                case CharacterAnimState.Run: return Clamp(speed / RunClipSpeed, MinRate, MaxRate);
-                default: return 1f;
-            }
+            return Clamp(speed / clipSpeed, MinRate, MaxRate);
+        }
+
+        /// <summary>Spec 025: true when <paramref name="speed"/> plays the clip without hitting the rate limits (feet planted).</summary>
+        public static bool FitsWithoutClamp(float speed, float clipSpeed)
+        {
+            if (float.IsNaN(clipSpeed) || float.IsInfinity(clipSpeed) || clipSpeed <= 0f) return false;
+            float rate = speed / clipSpeed;
+            return rate > MinRate && rate < MaxRate;
         }
 
         /// <summary>Exponential smoothing of the measured speed; a bad sample (NaN, infinite, negative) is ignored.</summary>

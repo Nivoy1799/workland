@@ -11,14 +11,17 @@ namespace Worktown.Game.Npc
     /// color through SyncVars. Display only: customers never touch prices or payouts.
     /// Spec 022: the ordered dish id and the mood are SyncVars too; the label is the ticket (dish name) while it
     /// waits and what it says on the way out, coloured by mood.
-    /// Spec 024: the body is a low-poly person (a CharacterVisual on the same object picks one of four and animates it);
-    /// the wish colour is a light tint over the character's own colours.
+    /// Spec 024: the body is a low-poly person (a CharacterVisual on the same object picks one of the customer variants
+    /// and animates it); the wish colour is a light tint over the character's own colours (spec 025: palette colours).
     /// </summary>
     public sealed class Customer : NetworkBehaviour
     {
-        private static readonly Color MealColor = new Color(0.95f, 0.55f, 0.2f);
-        private static readonly Color SnackColor = new Color(0.4f, 0.8f, 0.35f);
-        private static readonly Color DrinkColor = new Color(0.35f, 0.6f, 0.95f);
+        // Spec 025: customer tints from the palette in docs/art-direction.md (Mustard, Sage, SoftBlue; Cream for an
+        // unknown wish). They move to the shared Palette class in spec 026.
+        private static readonly Color MealColor = new Color(0xD9 / 255f, 0xA4 / 255f, 0x41 / 255f);  // Mustard #D9A441
+        private static readonly Color SnackColor = new Color(0x8F / 255f, 0xA7 / 255f, 0x7E / 255f); // Sage #8FA77E
+        private static readonly Color DrinkColor = new Color(0x7F / 255f, 0xA3 / 255f, 0xB8 / 255f); // SoftBlue #7FA3B8
+        private static readonly Color OtherColor = new Color(0xF2 / 255f, 0xE6 / 255f, 0xD0 / 255f); // Cream #F2E6D0
         private static readonly Color TicketColor = new Color(1f, 0.92f, 0.55f);
         private static readonly Color HappyColor = new Color(0.55f, 1f, 0.55f);
         private static readonly Color OkColor = new Color(1f, 0.75f, 0.35f);
@@ -146,7 +149,7 @@ namespace Worktown.Game.Npc
                 case "meal": return MealColor;
                 case "snack": return SnackColor;
                 case "drink": return DrinkColor;
-                default: return Color.gray;
+                default: return OtherColor;
             }
         }
     }

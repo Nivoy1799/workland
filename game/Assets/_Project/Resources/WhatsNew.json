@@ -299,6 +299,25 @@
         "Customers at the counter are people, the order text is still above their heads",
         "Send an emote (G): the bubble is above the head and the person wobbles"
       ]
+    },
+    {
+      "id": "2026-11-08-spec-025",
+      "date": "2026-11-08",
+      "title": "New people, calmer steps",
+      "items": [
+        "Players and customers are new people at a real height of 1.75 m, with new idle, jog, sprint and crouch animations",
+        "Calmer movement: walking 2.5 m/s, sprinting 5 m/s, sneaking 1.25 m/s, and a lower jump",
+        "The steps match how fast you really move, so feet no longer slide over the ground",
+        "Carried items sit in the right hand, with the forearm held forward",
+        "Customers are tinted in warm, soft colours by what they want"
+      ],
+      "test": [
+        "Two players: walk and sprint in front of each other; the feet stay on the ground and do not slide",
+        "Start and stop walking: it feels as quick as before, only slower",
+        "Jump: about half as high as before",
+        "Pick up a plate: the other player sees it in your right hand",
+        "First person (V) looks the same as before: your shadow and the item in view"
+      ]
     }
   ]
 }

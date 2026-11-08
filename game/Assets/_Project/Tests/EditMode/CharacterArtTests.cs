@@ -9,7 +9,7 @@ using Worktown.Game.Player;
 
 namespace Worktown.Game.Tests
 {
-    /// <summary>Spec 024 AC2: character art keys, wrappers and the player and customer prefabs that use them.</summary>
+    /// <summary>Spec 024 AC2, spec 025 AC4: character art keys, wrappers and the player and customer prefabs that use them.</summary>
     public class CharacterArtTests
     {
         private const string CatalogPath = "Assets/_Project/Art/ArtCatalog.asset";
@@ -39,20 +39,20 @@ namespace Worktown.Game.Tests
         [Test]
         public void PlayerAndCustomerKeys_AreDistinctCharacters()
         {
-            Assert.AreEqual(ArtKey.CharacterMaleA, ArtCatalogRules.PlayerCharacterKey(0));
-            Assert.AreEqual(ArtKey.CharacterFemaleA, ArtCatalogRules.PlayerCharacterKey(1));
-            Assert.AreEqual(ArtKey.CharacterMaleA, ArtCatalogRules.PlayerCharacterKey(2));
+            Assert.AreEqual(ArtKey.CharacterPlayerMale, ArtCatalogRules.PlayerCharacterKey(0), "even owner id");
+            Assert.AreEqual(ArtKey.CharacterPlayerFemale, ArtCatalogRules.PlayerCharacterKey(1), "odd owner id");
+            Assert.AreEqual(ArtKey.CharacterPlayerMale, ArtCatalogRules.PlayerCharacterKey(2));
             var customers = new HashSet<ArtKey>();
-            for (int id = 0; id < 4; id++) customers.Add(ArtCatalogRules.CustomerCharacterKey(id));
-            Assert.AreEqual(4, customers.Count, "four ids in a row show four different customers");
+            for (int id = 0; id < 2; id++) customers.Add(ArtCatalogRules.CustomerCharacterKey(id));
+            Assert.AreEqual(2, customers.Count, "two ids in a row show two different customers");
             Assert.AreEqual(ArtCatalogRules.CustomerCharacterKey(1), ArtCatalogRules.CustomerCharacterKey(5));
             foreach (ArtKey key in ArtCatalogRules.PlayerCharacterKeys())
                 Assert.IsFalse(customers.Contains(key), key + " is a player character, not a customer");
-            Assert.AreEqual(6, new HashSet<ArtKey>(AllCharacterKeys()).Count);
+            Assert.AreEqual(4, new HashSet<ArtKey>(AllCharacterKeys()).Count);
         }
 
         [Test]
-        public void Catalog_HasEveryCharacterKey_WithAnAnimatedWrapperOf1_8m()
+        public void Catalog_HasEveryCharacterKey_WithAHumanoidWrapperOf1_75m()
         {
             var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>(CatalogPath);
             Assert.IsNotNull(catalog, "ArtCatalog.asset missing; run Worktown/Build Graybox Scene");
@@ -69,17 +69,19 @@ namespace Worktown.Game.Tests
                     Assert.IsNotNull(animator, key + " has no Animator");
                     Assert.IsNull(animator.runtimeAnimatorController, key + ": CharacterVisual plays the clips");
                     Assert.IsFalse(animator.applyRootMotion, key.ToString());
-                    Renderer[] renderers = instance.GetComponentsInChildren<Renderer>(true);
-                    Assert.Greater(renderers.Length, 0, key.ToString());
-                    Bounds b = renderers[0].bounds;
-                    foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
-                    Assert.AreEqual(1.8f, b.size.y, 0.02f, key + " height");
+                    Assert.IsNotNull(animator.avatar, key + " has no avatar");
+                    Assert.IsTrue(animator.avatar.isHuman, key + ": Humanoid, so the library clips retarget onto it");
+                    Assert.Greater(instance.GetComponentsInChildren<Renderer>(true).Length, 0, key.ToString());
+                    Bounds b = MeshBounds(instance);
+                    Assert.AreEqual(1.75f, b.size.y, 0.05f, key + " height (D29)");
                     Assert.AreEqual(0f, b.min.y, 0.02f, key + " stands on its pivot");
                     Assert.AreEqual(0f, b.center.x, 0.05f, key + " centred");
+                    foreach (SkinnedMeshRenderer r in instance.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                        Assert.IsNotNull(r.sharedMaterial.GetTexture("_BaseMap"), key + ": skin texture");
 
                     Transform hand = FindDeep(instance.transform, CharacterVisual.HandName);
                     Assert.IsNotNull(hand, key + " has no hand anchor");
-                    Assert.AreEqual(CharacterVisual.RightArmBone, hand.parent.name, key.ToString());
+                    Assert.AreSame(animator.GetBoneTransform(HumanBodyBones.RightHand), hand.parent, key + ": on the real right hand bone");
                     Assert.Greater(hand.position.x, 0.2f, key + ": the right hand is on the right (+X, model faces +Z)");
                     Assert.Greater(hand.position.y, 0.5f, key.ToString());
                 }
@@ -153,6 +155,59 @@ namespace Worktown.Game.Tests
             Assert.Greater(strength, 0f);
             Assert.GreaterOrEqual(Mathf.Min(meal.r, Mathf.Min(meal.g, meal.b)), 1f - strength - 0.001f,
                 "a light tint, not a solid colour");
+        }
+
+        [TestCase(PlayerPrefabPath)]
+        [TestCase(CustomerPrefabPath)]
+        public void MeasuredClipSpeeds_PlayWalkAndSprintWithoutClamping(string prefabPath)
+        {
+            // Spec 025 AC4: the art builder measured the walk and run clips on the 1.75 m body (StrideRules); at full walk
+            // and sprint speed the playback rate stays strictly inside the clamp range, so the feet do not slide.
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            Assert.IsNotNull(prefab);
+            var visual = prefab.GetComponent<CharacterVisual>();
+            float walk = visual.WalkClipSpeed;
+            float run = visual.RunClipSpeed;
+            // Deviation from the AC4 text (0.8 to 2.5 m/s): the walk state plays the library's jog (its walk covers only
+            // about 0.7 m/s on this body), so the plausible range is wider. See the spec's Implementation notes.
+            Assert.That(walk, Is.InRange(0.8f, 5f), "measured walk clip speed");
+            Assert.That(run, Is.InRange(0.8f, 8f), "measured run clip speed");
+            float walkRate = CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, MovementRules.WalkSpeed, walk);
+            float runRate = CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, MovementRules.SprintSpeed, run);
+            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(MovementRules.WalkSpeed, walk), "walk rate " + walkRate);
+            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(MovementRules.SprintSpeed, run), "sprint rate " + runRate);
+            Assert.Greater(walkRate, CharacterAnimRules.MinRate);
+            Assert.Less(walkRate, CharacterAnimRules.MaxRate);
+            Assert.Greater(runRate, CharacterAnimRules.MinRate);
+            Assert.Less(runRate, CharacterAnimRules.MaxRate);
+            // Around the switch between the two states neither clip clamps either.
+            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(CharacterAnimRules.RunStopSpeed, run), "run clip at the stop speed");
+            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(CharacterAnimRules.RunStartSpeed, walk), "walk clip at the run start speed");
+        }
+
+        /// <summary>World bounds of the baked (posed) skinned meshes; the import's renderer bounds are loose.</summary>
+        private static Bounds MeshBounds(GameObject go)
+        {
+            bool any = false;
+            var b = new Bounds();
+            var baked = new Mesh();
+            try
+            {
+                foreach (SkinnedMeshRenderer skin in go.GetComponentsInChildren<SkinnedMeshRenderer>())
+                {
+                    skin.BakeMesh(baked, true);
+                    foreach (Vector3 v in baked.vertices)
+                    {
+                        Vector3 w = skin.transform.TransformPoint(v);
+                        if (!any) b = new Bounds(w, Vector3.zero);
+                        else b.Encapsulate(w);
+                        any = true;
+                    }
+                }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(baked); }
+            Assert.IsTrue(any, go.name + " has no skinned mesh");
+            return b;
         }
 
         private static void AssertVariants(SerializedObject visual, ArtKey[] keys)

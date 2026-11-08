@@ -16,24 +16,22 @@ namespace Worktown.Game.Player
     /// crouch flag (<see cref="CharacterAnimRules"/>). Carried items raise the right arm (holding pose on the arm only).
     /// Clips are played through a small PlayableGraph (no AnimatorController asset). A server without graphics turns
     /// all of it off.
+    /// Spec 025: the body is a Humanoid rig; the clips are retargeted Humanoid clips, played at the rate that keeps the
+    /// feet planted (speed / the clip speed the art builder measured, see <see cref="StrideRules"/>). The hand anchor
+    /// sits on the rig's real right hand bone, the holding pose is masked to the right arm.
     /// </summary>
     public sealed class CharacterVisual : MonoBehaviour
     {
-        /// <summary>Name of the hand anchor the art builder adds under the right arm bone.</summary>
+        /// <summary>Name of the hand anchor the art builder adds under the rig's right hand bone.</summary>
         public const string HandName = "HandR";
-        /// <summary>Bone of the Kenney Mini Characters rig the holding pose is masked to.</summary>
-        public const string RightArmBone = "arm-right";
-        /// <summary>m: the pack's crouch pose kneels about this far into the floor at 1.8 m; the model is lifted by it.</summary>
-        public const float CrouchLift = 0.19f;
         /// <summary>m/s: anything faster is a teleport (spawn, reconcile snap), not walking.</summary>
         private const float TeleportSpeed = 20f;
-        private const float LiftSpeed = 1.5f;
 
         [Tooltip("Prebuilt character wrappers, in ArtCatalogRules variant order. One is active.")]
         [SerializeField] private GameObject[] _variants = new GameObject[0];
         [Tooltip("The HandR anchor of each variant (same order).")]
         [SerializeField] private Transform[] _hands = new Transform[0];
-        [Tooltip("Parent of the variants: lifted while crouched (the emote wobble turns it too).")]
+        [Tooltip("Parent of the variants.")]
         [SerializeField] private Transform _container;
         [Tooltip("Transform whose movement drives the animation (the smoothed Graphic of a player, the customer root).")]
         [SerializeField] private Transform _tracked;
@@ -46,6 +44,10 @@ namespace Worktown.Game.Player
         [SerializeField] private AnimationClip _run;
         [SerializeField] private AnimationClip _crouch;
         [SerializeField] private AnimationClip _hold;
+        [Tooltip("Spec 025: m/s the walk clip covers at rate 1 on this body, measured by the art builder.")]
+        [SerializeField] private float _walkClipSpeed;
+        [Tooltip("Spec 025: m/s the run clip covers at rate 1 on this body, measured by the art builder.")]
+        [SerializeField] private float _runClipSpeed;
 
         private NetworkObject _nob;
         private int _variant = -1;
@@ -80,6 +82,10 @@ namespace Worktown.Game.Player
         public float Yaw => (_tracked != null ? _tracked : transform).eulerAngles.y;
 
         public CharacterAnimState State => _state;
+
+        /// <summary>Spec 025: measured m/s of the walk / run clip at playback rate 1.</summary>
+        public float WalkClipSpeed => _walkClipSpeed;
+        public float RunClipSpeed => _runClipSpeed;
 
         /// <summary>Called every frame by an item this character carries: raise the right arm.</summary>
         public void MarkHolding() => _holdFrame = Time.frameCount;
@@ -124,16 +130,10 @@ namespace Worktown.Game.Player
 
             bool crouched = _player != null && _player.IsCrouched;
             _state = CharacterAnimRules.StateFor(_speed, crouched, _state);
-            float rate = CharacterAnimRules.PlaybackRate(_state, _speed);
+            float clipSpeed = _state == CharacterAnimState.Run ? _runClipSpeed : _walkClipSpeed;
+            float rate = CharacterAnimRules.PlaybackRate(_state, _speed, clipSpeed);
             bool holding = Time.frameCount - _holdFrame <= 2;
             _holdWeight = CharacterAnimRules.FadeWeight(_holdWeight, holding, dt);
-
-            if (_container != null)
-            {
-                Vector3 local = _container.localPosition;
-                float lift = Mathf.MoveTowards(local.y, crouched ? CrouchLift : 0f, LiftSpeed * dt);
-                if (!Mathf.Approximately(lift, local.y)) _container.localPosition = new Vector3(local.x, lift, local.z);
-            }
 
             if (!_graph.IsValid()) return;
             for (int i = 0; i < _weights.Length; i++)
@@ -186,7 +186,7 @@ namespace Worktown.Game.Player
             _clips = new AnimationClipPlayable[5];
             for (int i = 0; i < baseClips.Length; i++)
             {
-                _clips[i] = CreateClip(baseClips[i]);
+                _clips[i] = CreateClip(baseClips[i], true);
                 _graph.Connect(_clips[i], 0, _base, i);
                 _weights[i] = i == (int)_state ? 1f : 0f;
                 _base.SetInputWeight(i, _weights[i]);
@@ -197,49 +197,31 @@ namespace Worktown.Game.Player
             _hasHoldLayer = _hold != null;
             if (_hasHoldLayer)
             {
-                _clips[4] = CreateClip(_hold);
+                _clips[4] = CreateClip(_hold, false);
                 _graph.Connect(_clips[4], 0, _layers, 1);
-                _layers.SetLayerMaskFromAvatarMask(1, RightArmMask(animator.transform));
+                _layers.SetLayerMaskFromAvatarMask(1, RightArmMask());
                 _layers.SetInputWeight(1, _holdWeight);
             }
             output.SetSourcePlayable(_layers);
             _graph.Play();
         }
 
-        private AnimationClipPlayable CreateClip(AnimationClip clip)
+        /// <summary>Spec 025: foot IK on for the base clips, so the retargeted feet land where the clip puts them.</summary>
+        private AnimationClipPlayable CreateClip(AnimationClip clip, bool footIk)
         {
             AnimationClipPlayable playable = AnimationClipPlayable.Create(_graph, clip);
-            playable.SetApplyFootIK(false);
+            playable.SetApplyFootIK(footIk);
             playable.SetSpeed(0); // the time is set every frame from the phase (loops, playback rate)
             return playable;
         }
 
-        /// <summary>A generic mask with only the right arm (and the hand anchor under it) active.</summary>
-        private static AvatarMask RightArmMask(Transform root)
+        /// <summary>Spec 025: a Humanoid mask with only the right arm and its fingers active.</summary>
+        private static AvatarMask RightArmMask()
         {
-            Transform[] all = root.GetComponentsInChildren<Transform>(true);
-            var mask = new AvatarMask { transformCount = all.Length };
-            for (int i = 0; i < all.Length; i++)
-            {
-                mask.SetTransformPath(i, PathOf(all[i], root));
-                mask.SetTransformActive(i, IsUnderArm(all[i], root));
-            }
+            var mask = new AvatarMask();
+            for (AvatarMaskBodyPart part = 0; part < AvatarMaskBodyPart.LastBodyPart; part++)
+                mask.SetHumanoidBodyPartActive(part, part == AvatarMaskBodyPart.RightArm || part == AvatarMaskBodyPart.RightFingers);
             return mask;
-        }
-
-        private static bool IsUnderArm(Transform t, Transform root)
-        {
-            for (Transform it = t; it != null && it != root; it = it.parent)
-                if (it.name == RightArmBone) return true;
-            return false;
-        }
-
-        private static string PathOf(Transform t, Transform root)
-        {
-            if (t == root) return string.Empty;
-            string path = t.name;
-            for (Transform it = t.parent; it != null && it != root; it = it.parent) path = it.name + "/" + path;
-            return path;
         }
 
         private void DestroyGraph()

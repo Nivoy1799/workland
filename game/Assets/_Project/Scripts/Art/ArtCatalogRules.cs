@@ -53,11 +53,11 @@ namespace Worktown.Game.Art
         }
 
         /// <summary>Spec 024: the player characters, in variant order (index = <see cref="CharacterVariant"/> of the owner id).</summary>
-        public static ArtKey[] PlayerCharacterKeys() => new[] { ArtKey.CharacterMaleA, ArtKey.CharacterFemaleA };
+        public static ArtKey[] PlayerCharacterKeys() => new[] { ArtKey.CharacterPlayerMale, ArtKey.CharacterPlayerFemale };
 
         /// <summary>Spec 024: the customer characters, in variant order (index = <see cref="CharacterVariant"/> of the object id).</summary>
         public static ArtKey[] CustomerCharacterKeys() =>
-            new[] { ArtKey.CharacterMaleB, ArtKey.CharacterMaleC, ArtKey.CharacterFemaleB, ArtKey.CharacterFemaleC };
+            new[] { ArtKey.CharacterCustomerMale, ArtKey.CharacterCustomerFemale };
 
         /// <summary>
         /// Spec 024: which of <paramref name="count"/> character variants an id shows (owner client id for players, object
@@ -70,7 +70,7 @@ namespace Worktown.Game.Art
             return index < 0 ? index + count : index;
         }
 
-        /// <summary>Spec 024: the character of the player with this owner client id (even = MaleA, odd = FemaleA).</summary>
+        /// <summary>Spec 024: the character of the player with this owner client id (even = male, odd = female).</summary>
         public static ArtKey PlayerCharacterKey(int ownerClientId)
         {
             ArtKey[] keys = PlayerCharacterKeys();
