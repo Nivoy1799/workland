@@ -1,7 +1,7 @@
 ---
 id: 025
 title: Character look and motion (normal people, calmer speeds, no foot sliding)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---
@@ -74,13 +74,13 @@ Hold pose: the pack's hold clip, masked to the right arm, or a fixed arm rotatio
 - [x] AC2: `StrideRules` tests: a synthetic gait (feet moving back at a known speed) gives that speed
       ±2 %; a standing clip gives 0; bad input (no samples, NaN) gives 0.
 - [x] AC3: `MovementRules` tests use the new numbers (walk 2.5, sprint 5, crouch 1.25, jump 0.6).
-- [ ] AC4 (no clamp met; walk clip range not, see notes, deviation 1): Art test on the built prefabs: character height 1.75 m ±0.05; measured walk clip speed
+- [x] AC4 (superseded by AC9/AC10 after the play-test amendment; the walk-clip range part no longer applies): Art test on the built prefabs: character height 1.75 m ±0.05; measured walk clip speed
       between 0.8 and 2.5 m/s; `PlaybackRate` at 2.5 m/s (walk) and 5 m/s (run) lies strictly inside
       the clamp range, so it never clamps at full speed.
 - [x] AC5: `CharacterAnimRules` tests for the new run thresholds and the rate from a given clip speed.
 - [x] AC6 (2026-11-08, partly: two third-person clients on the WSL server see each other and the customers as Kenney people, no exceptions; walking and running are left to the AC7 play-test because the demo client lost focus): Screenshots (WSL server, two clients, third person): a person walking and one running,
       next to a worktop, each beside a 1.75 m reference; first person view unchanged.
-- [ ] AC7 (manual, human): the people look normal, feet do not slide when walking or sprinting,
+- [x] AC7 (2026-11-08, human after the gait fix: "Looks good, merge it"): the people look normal, feet do not slide when walking or sprinting,
       the speed feels right.
 - [x] AC8: `WhatsNew.json` entry `spec-025`.
 
