@@ -33,6 +33,11 @@ chili, tahini), drinks (lemonade, iced tea, soda). Existing dishes (soups, salad
 | 027a | **Shop floor plan**: counter between kitchen and guests, guests queue on the street side, all controls face the cook, work triangle (docs/feel.md 6) | feel |
 | 027b | **Feel pass 1**: predicted pickup and place visuals, arcs instead of teleports, forgiving sticky aim, ghost preview, click and tock sounds, movement and camera numbers, F2 tuning panel with A/B presets (docs/feel.md 1-5, 8, 9) | feel |
 | 027c | **Feel pass 2, cooking**: progress rings, sound by heat, perfect and burn cues, serve reward (docs/feel.md 7) | feel |
+| 027d | **World labels and customer looks**: small station signs instead of big floating names, order bubbles that never overlap, item status as icons, more customer variety (skins and tints) | feel, look |
+
+Findings from the first visual check (spec 027 sheets, 2026-11-09) that go into 027b: aim prefers the pan over the
+free spot next to it; the remote cook keeps a stride pose while standing and turning; the third-person camera
+sits too far back and high.
 | 028 | Street-food ingredients and content audit (flatbread, wrap, seitan, falafel mix, lettuce, cucumber, sauces; rename `cheese`; forbidden-word test) | 1, D27 |
 | 029 | Deep fryer: basket, oil, timer and browning, shake, drain, burn (fries, falafel) | 2 |
 | 030 | Griddle with flipping: two-sided doneness (seitan strips, vegetables, flatbread toasting) | 2 |
