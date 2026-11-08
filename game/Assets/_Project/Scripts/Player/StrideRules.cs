@@ -62,6 +62,25 @@ namespace Worktown.Game.Player
             return Mathf.Max(0f, (float)(travel / contact));
         }
 
+        /// <summary>
+        /// Spec 025 amendment: the normalized time (0..1 of the loop) at which the foot is furthest forward (+Z), about where
+        /// it lands. Two clips blended on the same normalized phase step together when these match. 0 for bad input.
+        /// </summary>
+        public static float FootForwardPhase(IReadOnlyList<float> times, IReadOnlyList<Vector3> foot)
+        {
+            if (times == null || foot == null || times.Count < 2 || foot.Count != times.Count) return 0f;
+            float start = times[0];
+            float length = times[times.Count - 1] - start;
+            if (!IsFinite(length) || length <= 0f) return 0f;
+            int best = -1;
+            for (int i = 0; i < times.Count; i++)
+            {
+                if (!IsFinite(times[i]) || !IsFinite(foot[i])) return 0f;
+                if (best < 0 || foot[i].z > foot[best].z) best = i;
+            }
+            return Mathf.Repeat((times[best] - start) / length, 1f);
+        }
+
         /// <summary>On the ground over one interval: low, and not moving forwards (a foot moving forwards swings or slides).</summary>
         private static bool Planted(Vector3 from, Vector3 to, float ground) =>
             (from.y + to.y) * 0.5f <= ground + PlantedHeight && to.z <= from.z;

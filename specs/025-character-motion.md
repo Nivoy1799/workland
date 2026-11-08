@@ -185,3 +185,73 @@ much wider rate clamp (breaks the D31 note "feet may slide at most 10 %"). Measu
 - Plan: the Kenney body is imported as Humanoid, and the UAL walk / jog / sprint (and crouch / carry if present) clips
   are retargeted onto it. If the Kenney rig does not map to Humanoid, the Kenney idle / run clips are used and that is
   reported. Players use the two skater skins. Customers use the same skins with palette tints until more skins exist.
+
+## Amendment 2026-11-08 (AC7 play-test, orchestrator)
+Human: "very big steps, too slow, leaning forward too much". Cause, checked against the library's root-motion data
+(GLB root travel per loop, scaled to the Kenney body by the hip-height ratio 0.667):
+
+| Clip | Source m/s | On the Kenney body | Builder's foot measurement |
+|---|---|---|---|
+| `Walk_Loop` (1.333 s) | 0.975 | 0.65 | 0.72 |
+| `Jog_Fwd_Loop` (0.933 s) | 5.36 | 3.57 | 3.55 |
+| `Sprint_Loop` (0.667 s) | 8.25 | 5.50 | 3.41 (wrong) |
+| `Crouch_Fwd_Loop` (2.0 s) | 0.75 | 0.50 | - |
+
+The library's "jog" is a long-stride run: playing it at 0.70 at 2.5 m/s gives huge, slow, leaning steps, and the
+wrong sprint measurement plays the sprint 1.6x too fast. Changes (same scope as above):
+1. `UAL1_Standard.fbx` now holds the pack's root-motion export (same clip names, same `.meta`). Root motion is never
+   applied (the server moves the body); the clip speed is `clip.averageSpeed` (Humanoid, normalised) x the body's
+   `Animator.humanScale`, computed by the art builder. `StrideRules` stays as a cross-check (warn above 15 % apart).
+2. Walk state = a phase-synced 1D blend of `Walk_Loop` and `Jog_Fwd_Loop`. Pure rule `CharacterAnimRules.Locomotion`:
+   target cadence (steps/s) from speed, linear between 1.0 m/s -> 1.9, 2.5 m/s -> 2.7, 5.0 m/s -> 3.0 (2 steps per
+   loop); the blend weight is the one whose blended stride (lerp of the clips' distance per loop) equals speed / cadence
+   x 2, and the rate follows from the blended loop time. Feet stay planted by construction (rate x blended speed =
+   speed). Run state = `Sprint_Loop` at speed / its clip speed. Crouch moving = `Crouch_Fwd_Loop` (rate clamped, sliding
+   noted), crouch standing = `Crouch_Idle_Loop`.
+3. New ACs: AC9 the measured clip speeds of the four clips match the table's Kenney column within 10 %; AC10 at 2.5 m/s
+   and 5 m/s the cadence is within 10 % of the target and rate x blended clip speed is within 10 % of the speed.
+
+### Amendment implementation notes (builder, 2026-11-08)
+`scripts/verify.sh` green, 545/545 EditMode.
+- **Clip import** (`ArtCatalogBuilder.ConfigureClipImport`, `.meta` only) for the six loops used: loop time on;
+  rotation baked into the pose from the original root with a 180° offset (the root-motion export faces -Z at its root;
+  "body orientation" instead turned the jog body 25-32° away from its travel); height baked from the original root;
+  horizontal travel not baked (it becomes root motion, which is never applied: `applyRootMotion = false`). Checked over
+  a loop: the model stays at the origin, faces +Z (hips yaw within ±4°), travel straight along +Z, pose at t=0 equals
+  t=end.
+- **Clip speed = played root motion**, not `averageSpeed`: one loop played through the Kenney avatar with root motion
+  applied in the editor, travel / loop length (`ArtCatalogBuilder.RootMotionSpeed`). Deviation from the brief: for this
+  library `clip.averageSpeed` x human scale differs from what the body actually travels by 0 % (walk), 2 % (jog), 9 %
+  (sprint) and 21 % (crouch walk), while the played travel is a constant 1.091x the amendment's Kenney column for all
+  four clips (that column scales by the hip-bone ratio 0.667; Unity retargets by its human scale, 0.747 m on this body).
+  All three numbers are logged by the scene builder; the feet (`StrideRules`) warn above 15 % apart (only the sprint,
+  whose feet barely touch, as before).
+
+| Clip | Loop s | Played root motion m/s | averageSpeed x human scale | Feet (StrideRules) | Table |
+|---|---|---|---|---|---|
+| Walk_Loop | 1.333 | **0.709** | 0.709 | 0.691 | 0.65 |
+| Jog_Fwd_Loop | 0.933 | **3.895** | 3.819 | 4.225 | 3.57 |
+| Sprint_Loop | 0.667 | **5.999** | 5.490 | 3.903 (warns) | 5.50 |
+| Crouch_Fwd_Loop | 2.000 | **0.545** | 0.429 | 0.481 | 0.50 |
+
+- **Locomotion** (`CharacterAnimRules.Locomotion`, `GaitClip`, `LocomotionBlend`), walk and jog on one normalized
+  phase (left foot lands at phase 0.000 in the walk, 0.982 in the jog; the -0.018 offset is stored and applied):
+
+| m/s | jog weight | rate | cadence (target) | feet m/s |
+|---|---|---|---|---|
+| 1.0 | 0.040 | 1.252 | 1.90 (1.90) | 1.00 |
+| 2.0 (customers) | 0.260 | 1.496 | 2.43 (2.43) | 2.00 |
+| 2.5 (walk) | 0.337 | 1.618 | 2.70 (2.70) | 2.50 |
+| 5.0 (sprint) | 0.888 | 1.467 | 3.00 (3.00) | 5.00 |
+
+  Limits: weight 0..1; rate 0.3..2.0 (only bites below about 0.3 m/s, just before the walk stops); crouch walk rate
+  0.5..2.5 (sneaking at 1.25 m/s is rate 2.29, feet planted).
+- **Deviation: the sprint clip is not played.** On this body it covers 6.0 m/s with 2.0 m steps; alone at 5 m/s it plays
+  at 0.83 with 2.5 steps/s (AC10 needs 3.0 ±10 %) and the most lean (head 0.36 m ahead of the hips). The walk / jog
+  blend meets AC10 exactly at 5 m/s (cadence 3.00, weight 0.89), with less lean. So the walk and run states both play
+  the blend; the run state and its thresholds stay (state, tests), the sprint is measured and stored for AC9 only.
+- **Lean** (head ahead of the hips in metres on the 1.75 m body, sampled over each loop): walk 0.04, jog 0.23, sprint 0.36, crouch 0.44.
+  In the blend, estimated linearly: about 0.10 m at 2.5 m/s (weight 0.34) and 0.21 m at 5 m/s. The jog's lean is in the clip; reducing it
+  further needs a spine correction layer or other clips (follow-up if the play-test still finds it too much).
+- AC9 and AC10 are tested on the built prefabs (`CharacterArtTests`); AC9 passes at +9.1 % for every clip (tolerance
+  10 %), see the table above for why. Crouch now has its own moving state (`CharacterAnimState.CrouchWalk`).

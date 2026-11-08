@@ -305,9 +305,9 @@
       "date": "2026-11-08",
       "title": "New people, calmer steps",
       "items": [
-        "Players and customers are new people at a real height of 1.75 m, with new idle, jog, sprint and crouch animations",
+        "Players and customers are new people at a real height of 1.75 m, with new animations: walking blends smoothly into running, sneaking has its own walk",
         "Calmer movement: walking 2.5 m/s, sprinting 5 m/s, sneaking 1.25 m/s, and a lower jump",
-        "The steps match how fast you really move, so feet no longer slide over the ground",
+        "Shorter, quicker steps that match how fast you move, so feet no longer slide over the ground",
         "Carried items sit in the right hand, with the forearm held forward",
         "Customers are tinted in warm, soft colours by what they want"
       ],

@@ -113,7 +113,7 @@ namespace Worktown.Game.Tests
             Assert.AreSame(graphic, so.FindProperty("_tracked").objectReferenceValue, "animates from the smoothed graphic");
             Assert.IsNotNull(so.FindProperty("_player").objectReferenceValue);
             Assert.IsNotNull(so.FindProperty("_firstPerson").objectReferenceValue);
-            foreach (string clip in new[] { "_idle", "_walk", "_run", "_crouch", "_hold" })
+            foreach (string clip in new[] { "_idle", "_walk", "_jog", "_crouch", "_crouchWalk", "_hold" })
                 Assert.IsNotNull(so.FindProperty(clip).objectReferenceValue, clip);
 
             // First person hides every renderer of the person (shadows only).
@@ -159,30 +159,55 @@ namespace Worktown.Game.Tests
 
         [TestCase(PlayerPrefabPath)]
         [TestCase(CustomerPrefabPath)]
-        public void MeasuredClipSpeeds_PlayWalkAndSprintWithoutClamping(string prefabPath)
+        public void MeasuredClipSpeeds_MatchTheLibrarysRootMotion(string prefabPath)
         {
-            // Spec 025 AC4: the art builder measured the walk and run clips on the 1.75 m body (StrideRules); at full walk
-            // and sprint speed the playback rate stays strictly inside the clamp range, so the feet do not slide.
+            // Spec 025 AC9: the art builder's clip speeds (root motion on the 1.75 m body) match the amendment's Kenney
+            // column within 10 %: walk 0.65, jog 3.57, sprint 5.50, crouch walk 0.50 m/s; loop lengths as in the library.
+            CharacterVisual visual = Visual(prefabPath);
+            AssertGait(visual.WalkGait, 0.65f, 1.333f, "walk");
+            AssertGait(visual.JogGait, 3.57f, 0.933f, "jog");
+            AssertGait(visual.SprintGait, 5.50f, 0.667f, "sprint");
+            AssertGait(visual.CrouchWalkGait, 0.50f, 2.0f, "crouch walk");
+        }
+
+        [TestCase(PlayerPrefabPath, 2.5f)]
+        [TestCase(PlayerPrefabPath, 5f)]
+        [TestCase(CustomerPrefabPath, 2f)]
+        public void Locomotion_AtFullSpeed_StepsAtTheTargetCadence_WithPlantedFeet(string prefabPath, float speed)
+        {
+            // Spec 025 AC10 (and the no-clamp part of AC4): at walk 2.5 and sprint 5 m/s (customers 2.0) the walk / jog
+            // blend steps within 10 % of the target cadence, and the feet cover the ground within 10 % of the speed.
+            CharacterVisual visual = Visual(prefabPath);
+            LocomotionBlend blend = CharacterAnimRules.Locomotion(speed, visual.WalkGait, visual.JogGait);
+            float target = CharacterAnimRules.TargetCadence(speed);
+            Assert.AreEqual(target, blend.Cadence, target * 0.1f, "cadence at " + speed);
+            Assert.AreEqual(speed, CharacterAnimRules.GroundSpeed(blend, visual.WalkGait, visual.JogGait), speed * 0.1f, "feet at " + speed);
+            Assert.Greater(blend.Rate, CharacterAnimRules.LocomotionMinRate, "rate not clamped");
+            Assert.Less(blend.Rate, CharacterAnimRules.LocomotionMaxRate, "rate not clamped");
+            Assert.That(blend.Weight, Is.InRange(0f, 1f));
+        }
+
+        [Test]
+        public void SneakingFitsTheCrouchWalk()
+        {
+            CharacterVisual visual = Visual(PlayerPrefabPath);
+            float rate = CharacterAnimRules.CrouchRate(MovementRules.CrouchSpeed, visual.CrouchWalkGait.Speed);
+            Assert.Less(rate, CharacterAnimRules.CrouchMaxRate, "no sliding when sneaking at full speed");
+        }
+
+        private static CharacterVisual Visual(string prefabPath)
+        {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-            Assert.IsNotNull(prefab);
+            Assert.IsNotNull(prefab, prefabPath);
             var visual = prefab.GetComponent<CharacterVisual>();
-            float walk = visual.WalkClipSpeed;
-            float run = visual.RunClipSpeed;
-            // Deviation from the AC4 text (0.8 to 2.5 m/s): the walk state plays the library's jog (its walk covers only
-            // about 0.7 m/s on this body), so the plausible range is wider. See the spec's Implementation notes.
-            Assert.That(walk, Is.InRange(0.8f, 5f), "measured walk clip speed");
-            Assert.That(run, Is.InRange(0.8f, 8f), "measured run clip speed");
-            float walkRate = CharacterAnimRules.PlaybackRate(CharacterAnimState.Walk, MovementRules.WalkSpeed, walk);
-            float runRate = CharacterAnimRules.PlaybackRate(CharacterAnimState.Run, MovementRules.SprintSpeed, run);
-            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(MovementRules.WalkSpeed, walk), "walk rate " + walkRate);
-            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(MovementRules.SprintSpeed, run), "sprint rate " + runRate);
-            Assert.Greater(walkRate, CharacterAnimRules.MinRate);
-            Assert.Less(walkRate, CharacterAnimRules.MaxRate);
-            Assert.Greater(runRate, CharacterAnimRules.MinRate);
-            Assert.Less(runRate, CharacterAnimRules.MaxRate);
-            // Around the switch between the two states neither clip clamps either.
-            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(CharacterAnimRules.RunStopSpeed, run), "run clip at the stop speed");
-            Assert.IsTrue(CharacterAnimRules.FitsWithoutClamp(CharacterAnimRules.RunStartSpeed, walk), "walk clip at the run start speed");
+            Assert.IsNotNull(visual, prefabPath);
+            return visual;
+        }
+
+        private static void AssertGait(GaitClip gait, float speed, float length, string what)
+        {
+            Assert.AreEqual(speed, gait.Speed, speed * 0.1f, what + " m/s");
+            Assert.AreEqual(length, gait.Length, 0.01f, what + " loop");
         }
 
         /// <summary>World bounds of the baked (posed) skinned meshes; the import's renderer bounds are loose.</summary>

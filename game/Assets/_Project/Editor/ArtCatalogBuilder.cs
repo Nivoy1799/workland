@@ -33,13 +33,18 @@ namespace Worktown.Game.Editor
         /// <summary>Spec 025 (D29): character height in m.</summary>
         public const float CharacterHeight = 1.75f;
         /// <summary>
-        /// Spec 025: the clips of the four animation states. The library's walk covers only about 0.7 m/s on this body
-        /// (short legs), so the walk state (2.5 m/s) plays the jog; the run state (5 m/s) plays the sprint.
+        /// Spec 025 amendment: the clips of the animation states. The walk state blends walk and jog (phase-synced), the
+        /// run state plays the sprint, crouch plays the crouch idle standing and the crouch walk moving.
         /// </summary>
         public const string IdleClip = "Idle_Loop";
-        public const string WalkClip = "Jog_Fwd_Loop";
+        public const string WalkClip = "Walk_Loop";
+        public const string JogClip = "Jog_Fwd_Loop";
         public const string RunClip = "Sprint_Loop";
         public const string CrouchClip = "Crouch_Idle_Loop";
+        public const string CrouchWalkClip = "Crouch_Fwd_Loop";
+        private static readonly string[] LoopClips = { IdleClip, WalkClip, JogClip, RunClip, CrouchClip, CrouchWalkClip };
+        /// <summary>Spec 025 amendment: the root-motion export faces -Z at its original root; turned to face +Z like the body.</summary>
+        private const float RootRotationOffset = 180f;
         /// <summary>Spec 025: the generated holding pose (the library has no carry clip).</summary>
         public const string HoldClipPath = GrayboxSceneBuilder.Root + "/Art/CharacterHold.anim";
         /// <summary>Spec 025: samples per second when the stride of a clip is measured.</summary>
@@ -349,10 +354,154 @@ namespace Worktown.Game.Editor
             return material;
         }
 
+        /// <summary>
+        /// Spec 025 amendment: <see cref="CharacterClipSource"/> is the library's root-motion export. Root motion is never
+        /// applied (the server moves the body), so for the loops we play: the horizontal travel stays out of the pose (it
+        /// becomes root motion, which is dropped; <c>averageSpeed</c> keeps it, that is the clip speed); rotation and height
+        /// are baked into the pose from the original root, so the model neither turns nor sinks over a loop.
+        /// </summary>
+        public static void ConfigureClipImport()
+        {
+            ConfigureHumanoidImport(CharacterClipSource);
+            var importer = (ModelImporter)AssetImporter.GetAtPath(CharacterClipSource);
+            ModelImporterClipAnimation[] clips = importer.clipAnimations;
+            bool changed = false;
+            if (clips == null || clips.Length == 0)
+            {
+                clips = importer.defaultClipAnimations;
+                changed = true;
+            }
+            foreach (ModelImporterClipAnimation clip in clips)
+            {
+                if (Array.IndexOf(LoopClips, clip.name.Replace(ClipPrefix, string.Empty)) < 0) continue;
+                changed |= Set(clip.loopTime, true, v => clip.loopTime = v);
+                changed |= Set(clip.lockRootRotation, true, v => clip.lockRootRotation = v);
+                changed |= Set(clip.keepOriginalOrientation, true, v => clip.keepOriginalOrientation = v);
+                if (!Mathf.Approximately(clip.rotationOffset, RootRotationOffset)) { clip.rotationOffset = RootRotationOffset; changed = true; }
+                changed |= Set(clip.lockRootHeightY, true, v => clip.lockRootHeightY = v);
+                changed |= Set(clip.keepOriginalPositionY, true, v => clip.keepOriginalPositionY = v);
+                changed |= Set(clip.lockRootPositionXZ, false, v => clip.lockRootPositionXZ = v);
+            }
+            if (!changed) return;
+            importer.clipAnimations = clips;
+            importer.SaveAndReimport();
+        }
+
+        private static bool Set(bool current, bool wanted, Action<bool> apply)
+        {
+            if (current == wanted) return false;
+            apply(wanted);
+            return true;
+        }
+
+        /// <summary>
+        /// Spec 025 amendment: the m/s a Humanoid clip covers at rate 1 on a character wrapper (1.75 m): one loop played
+        /// through the body's avatar with root motion applied (in the editor only; the game never applies it), the travel
+        /// of the body over the loop divided by the loop length. Unity's own retargeting scales the travel to the body.
+        /// The clip's <c>averageSpeed</c> x the human scale gives the same for the walk but differs by up to 21 % for the
+        /// others with this library (see the spec's notes); it is logged by <see cref="AverageSpeedOnBody"/> for comparison.
+        /// </summary>
+        public static float RootMotionSpeed(GameObject wrapperPrefab, AnimationClip clip)
+        {
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapperPrefab);
+            PlayableGraph graph = default;
+            try
+            {
+                instance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                Animator animator = instance.GetComponentInChildren<Animator>(true);
+                animator.applyRootMotion = true;
+                graph = PlayableGraph.Create("Root motion " + clip.name);
+                graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+                var output = AnimationPlayableOutput.Create(graph, "Root motion", animator);
+                output.SetSourcePlayable(AnimationClipPlayable.Create(graph, clip));
+                graph.Play();
+                graph.Evaluate(0f);
+                Vector3 start = animator.transform.position;
+                int steps = Mathf.Max(2, Mathf.RoundToInt(clip.length * StrideSampleRate * 2));
+                for (int i = 0; i < steps; i++) graph.Evaluate(clip.length / steps);
+                Vector3 travel = animator.transform.position - start;
+                return new Vector2(travel.x, travel.z).magnitude / clip.length;
+            }
+            finally
+            {
+                if (graph.IsValid()) graph.Destroy();
+                UnityEngine.Object.DestroyImmediate(instance);
+            }
+        }
+
+        /// <summary>Spec 025 amendment: <c>clip.averageSpeed</c> x the body's human scale (m/s), for comparison only.</summary>
+        public static float AverageSpeedOnBody(GameObject wrapperPrefab, AnimationClip clip)
+        {
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapperPrefab);
+            try
+            {
+                Vector3 v = clip.averageSpeed;
+                return new Vector2(v.x, v.z).magnitude * BodyHumanScale(instance.GetComponentInChildren<Animator>(true));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(instance); }
+        }
+
+        /// <summary>Spec 025 amendment: the avatar's human scale in metres on the scaled body.</summary>
+        public static float BodyHumanScale(Animator animator) => animator.humanScale * animator.transform.lossyScale.y;
+
+        /// <summary>
+        /// Spec 025 amendment: the normalized clip time at which the left foot is furthest forward (about where it lands),
+        /// so walk and jog can be blended on the same step.
+        /// </summary>
+        public static float LeftFootForwardPhase(GameObject wrapperPrefab, AnimationClip clip)
+        {
+            Sample(wrapperPrefab, clip, out List<float> times, out List<Vector3> left, out _);
+            return StrideRules.FootForwardPhase(times, left);
+        }
+
+        /// <summary>Spec 025: the feet of the wrapper over one loop of the clip (see <see cref="MeasureClipSpeed"/>).</summary>
+        private static void Sample(GameObject wrapperPrefab, AnimationClip clip, out List<float> times, out List<Vector3> left, out List<Vector3> right)
+        {
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapperPrefab);
+            PlayableGraph graph = default;
+            times = new List<float>();
+            left = new List<Vector3>();
+            right = new List<Vector3>();
+            try
+            {
+                instance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                Animator animator = instance.GetComponentInChildren<Animator>(true);
+                Transform leftAnkle = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+                Transform rightAnkle = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+                Transform leftBall = animator.GetBoneTransform(HumanBodyBones.LeftToes);
+                Transform rightBall = animator.GetBoneTransform(HumanBodyBones.RightToes);
+                if (leftAnkle == null || rightAnkle == null || leftBall == null || rightBall == null)
+                    throw new InvalidOperationException(wrapperPrefab.name + ": the avatar has no feet and toes");
+                float heel = leftAnkle.position.y - leftBall.position.y;
+
+                graph = PlayableGraph.Create("Stride " + clip.name);
+                var output = AnimationPlayableOutput.Create(graph, "Stride", animator);
+                AnimationClipPlayable playable = AnimationClipPlayable.Create(graph, clip);
+                playable.SetApplyFootIK(true);
+                output.SetSourcePlayable(playable);
+
+                int samples = Mathf.Max(2, Mathf.RoundToInt(clip.length * StrideSampleRate));
+                for (int i = 0; i <= samples; i++)
+                {
+                    float t = clip.length * i / samples;
+                    playable.SetTime(t);
+                    graph.Evaluate(0f);
+                    times.Add(t);
+                    left.Add(FootPoint(instance.transform, leftAnkle, leftBall, heel));
+                    right.Add(FootPoint(instance.transform, rightAnkle, rightBall, heel));
+                }
+            }
+            finally
+            {
+                if (graph.IsValid()) graph.Destroy();
+                UnityEngine.Object.DestroyImmediate(instance);
+            }
+        }
+
         /// <summary>Spec 025: the clip of that name (without the "Armature|" prefix) from <see cref="CharacterClipSource"/>.</summary>
         public static AnimationClip CharacterClip(string name)
         {
-            ConfigureHumanoidImport(CharacterClipSource);
+            ConfigureClipImport();
             foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(CharacterClipSource))
                 if (asset is AnimationClip clip && clip.name == ClipPrefix + name)
                 {
@@ -390,53 +539,16 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>
-        /// Spec 025: the m/s a clip covers at playback rate 1 on a character wrapper (1.75 m). Samples the clip on the body
+        /// Spec 025: the m/s a clip covers at playback rate 1 on a character wrapper (1.75 m), from its feet (a cross-check
+        /// of <see cref="RootMotionSpeed"/>; it under-reads the sprint, whose feet barely touch). Samples the clip on the body
         /// through its Humanoid avatar at <see cref="StrideSampleRate"/> Hz (foot IK on, as CharacterVisual plays it) and
         /// passes the feet to <see cref="StrideRules"/>. A foot is the point between the ankle and the ball of the foot, as
         /// low as the lower of the heel (the ankle minus its rest height) and the ball, so heel strike and push-off count.
         /// </summary>
         public static float MeasureClipSpeed(GameObject wrapperPrefab, AnimationClip clip)
         {
-            var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapperPrefab);
-            PlayableGraph graph = default;
-            try
-            {
-                instance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
-                Animator animator = instance.GetComponentInChildren<Animator>(true);
-                Transform leftAnkle = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
-                Transform rightAnkle = animator.GetBoneTransform(HumanBodyBones.RightFoot);
-                Transform leftBall = animator.GetBoneTransform(HumanBodyBones.LeftToes);
-                Transform rightBall = animator.GetBoneTransform(HumanBodyBones.RightToes);
-                if (leftAnkle == null || rightAnkle == null || leftBall == null || rightBall == null)
-                    throw new InvalidOperationException(wrapperPrefab.name + ": the avatar has no feet and toes");
-                float heel = leftAnkle.position.y - leftBall.position.y;
-
-                graph = PlayableGraph.Create("Stride " + clip.name);
-                var output = AnimationPlayableOutput.Create(graph, "Stride", animator);
-                AnimationClipPlayable playable = AnimationClipPlayable.Create(graph, clip);
-                playable.SetApplyFootIK(true);
-                output.SetSourcePlayable(playable);
-
-                int samples = Mathf.Max(2, Mathf.RoundToInt(clip.length * StrideSampleRate));
-                var times = new List<float>();
-                var left = new List<Vector3>();
-                var right = new List<Vector3>();
-                for (int i = 0; i <= samples; i++)
-                {
-                    float t = clip.length * i / samples;
-                    playable.SetTime(t);
-                    graph.Evaluate(0f);
-                    times.Add(t);
-                    left.Add(FootPoint(instance.transform, leftAnkle, leftBall, heel));
-                    right.Add(FootPoint(instance.transform, rightAnkle, rightBall, heel));
-                }
-                return StrideRules.ClipSpeed(times, left, right);
-            }
-            finally
-            {
-                if (graph.IsValid()) graph.Destroy();
-                UnityEngine.Object.DestroyImmediate(instance);
-            }
+            Sample(wrapperPrefab, clip, out List<float> times, out List<Vector3> left, out List<Vector3> right);
+            return StrideRules.ClipSpeed(times, left, right);
         }
 
         private static Vector3 FootPoint(Transform root, Transform ankle, Transform ball, float heel)

@@ -21,11 +21,98 @@ namespace Worktown.Game.Tests
         [Test]
         public void StateFor_CrouchFlagWinsOverEverySpeed()
         {
-            foreach (float speed in new[] { 0f, 1.25f, 2.5f, 5f })
-                foreach (CharacterAnimState previous in new[] { CharacterAnimState.Idle, CharacterAnimState.Walk, CharacterAnimState.Run, CharacterAnimState.Crouch })
-                    Assert.AreEqual(CharacterAnimState.Crouch, CharacterAnimRules.StateFor(speed, true, previous), speed + " " + previous);
+            // Spec 025 amendment: crouched and moving is the crouch walk, crouched and still the crouch idle.
+            var all = new[] { CharacterAnimState.Idle, CharacterAnimState.Walk, CharacterAnimState.Run, CharacterAnimState.Crouch, CharacterAnimState.CrouchWalk };
+            foreach (float speed in new[] { 1.25f, 2.5f, 5f })
+                foreach (CharacterAnimState previous in all)
+                    Assert.AreEqual(CharacterAnimState.CrouchWalk, CharacterAnimRules.StateFor(speed, true, previous), speed + " " + previous);
+            foreach (CharacterAnimState previous in all)
+                Assert.AreEqual(CharacterAnimState.Crouch, CharacterAnimRules.StateFor(0f, true, previous), "still, " + previous);
+            Assert.AreEqual(CharacterAnimState.CrouchWalk, CharacterAnimRules.StateFor(0.3f, true, CharacterAnimState.CrouchWalk), "hysteresis");
+            Assert.AreEqual(CharacterAnimState.Crouch, CharacterAnimRules.StateFor(0.3f, true, CharacterAnimState.Crouch));
             Assert.AreEqual(CharacterAnimState.Idle, CharacterAnimRules.StateFor(0f, false, CharacterAnimState.Crouch), "standing up again");
             Assert.AreEqual(CharacterAnimState.Walk, CharacterAnimRules.StateFor(2f, false, CharacterAnimState.Crouch));
+        }
+
+        // Spec 025 amendment: clips like the library's on the 1.75 m body (m/s at rate 1, loop seconds).
+        private static readonly GaitClip Walk = new GaitClip(0.7f, 1.333f);
+        private static readonly GaitClip Jog = new GaitClip(3.9f, 0.933f);
+
+        [Test]
+        public void TargetCadence_IsLinearThroughTheThreePoints()
+        {
+            Assert.AreEqual(1.9f, CharacterAnimRules.TargetCadence(1f), 1e-4f);
+            Assert.AreEqual(2.7f, CharacterAnimRules.TargetCadence(2.5f), 1e-4f);
+            Assert.AreEqual(3.0f, CharacterAnimRules.TargetCadence(5f), 1e-4f);
+            Assert.AreEqual(2.3f, CharacterAnimRules.TargetCadence(1.75f), 1e-4f);
+            Assert.AreEqual(2.85f, CharacterAnimRules.TargetCadence(3.75f), 1e-4f);
+            Assert.AreEqual(3.0f, CharacterAnimRules.TargetCadence(9f), 1e-4f, "held above the last point");
+            Assert.AreEqual(1.9f - 0.5f * 0.8f / 1.5f, CharacterAnimRules.TargetCadence(0.5f), 1e-4f, "first slope continues");
+            Assert.AreEqual(1.9f - 0.8f / 1.5f, CharacterAnimRules.TargetCadence(0f), 1e-4f, "standing still");
+            Assert.AreEqual(CharacterAnimRules.TargetCadence(0f), CharacterAnimRules.TargetCadence(float.NaN), 1e-4f, "bad speed counts as 0");
+            Assert.AreEqual(CharacterAnimRules.TargetCadence(0f), CharacterAnimRules.TargetCadence(-3f), 1e-4f);
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(2.0f)]
+        [TestCase(2.5f)]
+        [TestCase(3.75f)]
+        [TestCase(5.0f)]
+        public void Locomotion_HitsTheTargetCadence_WithPlantedFeet(float speed)
+        {
+            LocomotionBlend blend = CharacterAnimRules.Locomotion(speed, Walk, Jog);
+            Assert.That(blend.Weight, Is.InRange(0f, 1f));
+            Assert.Greater(blend.Rate, CharacterAnimRules.LocomotionMinRate);
+            Assert.Less(blend.Rate, CharacterAnimRules.LocomotionMaxRate);
+            Assert.AreEqual(CharacterAnimRules.TargetCadence(speed), blend.Cadence, 1e-3f, "cadence");
+            Assert.AreEqual(speed, CharacterAnimRules.GroundSpeed(blend, Walk, Jog), 1e-3f, "feet planted");
+        }
+
+        [Test]
+        public void Locomotion_JogWeightGrowsWithSpeed()
+        {
+            float last = -1f;
+            for (float speed = 0.25f; speed <= 5f; speed += 0.25f)
+            {
+                float weight = CharacterAnimRules.Locomotion(speed, Walk, Jog).Weight;
+                Assert.GreaterOrEqual(weight, last, "at " + speed);
+                last = weight;
+            }
+            Assert.AreEqual(0f, CharacterAnimRules.Locomotion(0.5f, Walk, Jog).Weight, "slow: the walk alone");
+            Assert.Greater(CharacterAnimRules.Locomotion(5f, Walk, Jog).Weight, 0.5f, "fast: mostly the jog");
+        }
+
+        [Test]
+        public void Locomotion_EdgesAndBadInput()
+        {
+            LocomotionBlend still = CharacterAnimRules.Locomotion(0f, Walk, Jog);
+            Assert.AreEqual(0f, still.Weight);
+            Assert.AreEqual(CharacterAnimRules.LocomotionMinRate, still.Rate, "rate clamped at the bottom");
+            LocomotionBlend fast = CharacterAnimRules.Locomotion(50f, Walk, Jog);
+            Assert.AreEqual(1f, fast.Weight, "weight clamped");
+            Assert.AreEqual(CharacterAnimRules.LocomotionMaxRate, fast.Rate, "rate clamped at the top");
+            Assert.AreEqual(0f, CharacterAnimRules.Locomotion(float.NaN, Walk, Jog).Weight);
+            Assert.AreEqual(0f, CharacterAnimRules.Locomotion(-2f, Walk, Jog).Weight);
+
+            LocomotionBlend noWalk = CharacterAnimRules.Locomotion(2.5f, new GaitClip(0f, 1f), Jog);
+            Assert.AreEqual(0f, noWalk.Weight);
+            Assert.AreEqual(1f, noWalk.Rate, "unknown walk clip plays at 1");
+            LocomotionBlend noJog = CharacterAnimRules.Locomotion(1.2f, Walk, new GaitClip(float.NaN, 1f));
+            Assert.AreEqual(0f, noJog.Weight, "without a jog the walk plays alone");
+            Assert.AreEqual(1.2f / Walk.Speed, noJog.Rate, 1e-4f);
+            LocomotionBlend shortJog = CharacterAnimRules.Locomotion(1.2f, Walk, new GaitClip(0.5f, 0.5f));
+            Assert.AreEqual(0f, shortJog.Weight, "a jog that does not step further is not blended");
+        }
+
+        [Test]
+        public void CrouchRate_FollowsSpeedWithinLimits()
+        {
+            Assert.AreEqual(2f, CharacterAnimRules.CrouchRate(1f, 0.5f), 1e-5f);
+            Assert.AreEqual(CharacterAnimRules.CrouchMaxRate, CharacterAnimRules.CrouchRate(5f, 0.5f));
+            Assert.AreEqual(CharacterAnimRules.CrouchMinRate, CharacterAnimRules.CrouchRate(0.1f, 0.5f));
+            Assert.AreEqual(1f, CharacterAnimRules.CrouchRate(1f, 0f));
+            Assert.AreEqual(CharacterAnimRules.CrouchMinRate, CharacterAnimRules.CrouchRate(float.NaN, 0.5f));
+            Assert.Less(MovementRules.CrouchSpeed / 0.545f, CharacterAnimRules.CrouchMaxRate, "sneaking fits the library's crouch walk");
         }
 
         [Test]

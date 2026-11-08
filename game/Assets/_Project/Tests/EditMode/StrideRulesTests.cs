@@ -103,6 +103,21 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void FootForwardPhase_FindsWhereTheFootIsFurthestForward()
+        {
+            // Left foot lands (is furthest forward) at the start of its stance: phase 0; the right one half a loop later.
+            Gait(1.4f, 1f, 0.6f, out List<float> times, out List<Vector3> left, out List<Vector3> right);
+            float l = StrideRules.FootForwardPhase(times, left);
+            float r = StrideRules.FootForwardPhase(times, right);
+            Assert.That(Mathf.Min(l, 1f - l), Is.LessThan(0.03f), "left lands at phase 0 (or 1)");
+            Assert.AreEqual(0.5f, r, 0.03f);
+            Assert.AreEqual(0f, StrideRules.FootForwardPhase(new float[0], new Vector3[0]));
+            Assert.AreEqual(0f, StrideRules.FootForwardPhase(times, right.GetRange(0, 3)));
+            var nan = new List<Vector3>(left) { [2] = new Vector3(float.NaN, 0f, 0f) };
+            Assert.AreEqual(0f, StrideRules.FootForwardPhase(times, nan));
+        }
+
+        [Test]
         public void FeetSlidingForwardsOnTheGround_DoNotCount()
         {
             var times = new List<float>();

@@ -529,12 +529,20 @@ MonoBehaviour:
   _player: {fileID: 3705120154012621235}
   _firstPerson: {fileID: 6882486339157007149}
   _idle: {fileID: 7994627924475153551, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
-  _walk: {fileID: -8815886378510225334, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
-  _run: {fileID: -4950333804767787469, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
+  _walk: {fileID: -7003542030617561338, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
+  _jog: {fileID: -8815886378510225334, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
   _crouch: {fileID: -7993625790543202706, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
+  _crouchWalk: {fileID: 4366774653929184976, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
   _hold: {fileID: 7400000, guid: 72510990fbbee10458e6f8400002904e, type: 2}
-  _walkClipSpeed: 3.5500245
-  _runClipSpeed: 3.411266
+  _walkClipSpeed: 0.7089418
+  _walkLoopLength: 1.3333334
+  _jogClipSpeed: 3.8952515
+  _jogLoopLength: 0.9333334
+  _sprintClipSpeed: 5.998675
+  _sprintLoopLength: 0.6666667
+  _crouchWalkClipSpeed: 0.5453399
+  _crouchWalkLoopLength: 2
+  _jogPhaseOffset: -0.017857075
 --- !u!114 &4119733508252766766
 MonoBehaviour:
   m_ObjectHideFlags: 0

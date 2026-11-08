@@ -302,24 +302,54 @@ namespace Worktown.Game.Editor
             if (player != null) SetField(visual, "_player", player);
             if (firstPerson != null) SetField(visual, "_firstPerson", firstPerson);
             AnimationClip walk = ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.WalkClip);
-            AnimationClip run = ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.RunClip);
+            AnimationClip jog = ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.JogClip);
+            AnimationClip sprint = ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.RunClip);
+            AnimationClip crouchWalk = ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.CrouchWalkClip);
             SetField(visual, "_idle", ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.IdleClip));
             SetField(visual, "_walk", walk);
-            SetField(visual, "_run", run);
+            SetField(visual, "_jog", jog);
             SetField(visual, "_crouch", ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.CrouchClip));
+            SetField(visual, "_crouchWalk", crouchWalk);
             SetField(visual, "_hold", ArtCatalogBuilder.HoldClip());
 
-            // Spec 025: the measured stride of the walk and run clips on this body (all variants share it).
+            // Spec 025 amendment: the clip speeds on this body (all variants share it), from the root motion; the feet
+            // (StrideRules) are a cross-check.
             var body = PrefabUtility.GetCorrespondingObjectFromSource(character.Variants[0]);
-            float walkSpeed = ArtCatalogBuilder.MeasureClipSpeed(body, walk);
-            float runSpeed = ArtCatalogBuilder.MeasureClipSpeed(body, run);
-            if (walkSpeed <= 0f || runSpeed <= 0f)
-                throw new InvalidOperationException(root.name + ": clip speed not measurable (walk " + walkSpeed + ", run " + runSpeed + ")");
-            SetField(visual, "_walkClipSpeed", walkSpeed);
-            SetField(visual, "_runClipSpeed", runSpeed);
-            Debug.Log("[Art] " + root.name + ": walk clip " + walk.name + " " + walkSpeed.ToString("F3") + " m/s, run clip " + run.name + " "
-                      + runSpeed.ToString("F3") + " m/s; rate at walk " + (MovementRules.WalkSpeed / walkSpeed).ToString("F2")
-                      + ", at sprint " + (MovementRules.SprintSpeed / runSpeed).ToString("F2"));
+            SetGait(visual, body, "_walk", walk);
+            SetGait(visual, body, "_jog", jog);
+            SetGait(visual, body, "_sprint", sprint);
+            SetGait(visual, body, "_crouchWalk", crouchWalk);
+            float offset = ArtCatalogBuilder.LeftFootForwardPhase(body, jog) - ArtCatalogBuilder.LeftFootForwardPhase(body, walk);
+            offset = Mathf.Repeat(offset + 0.5f, 1f) - 0.5f;
+            SetField(visual, "_jogPhaseOffset", offset);
+
+            var so = new SerializedObject(visual);
+            var walkGait = new GaitClip(so.FindProperty("_walkClipSpeed").floatValue, walk.length);
+            var jogGait = new GaitClip(so.FindProperty("_jogClipSpeed").floatValue, jog.length);
+            foreach (float speed in new[] { 1f, CustomerRules.WalkSpeed, MovementRules.WalkSpeed, MovementRules.SprintSpeed })
+            {
+                LocomotionBlend blend = CharacterAnimRules.Locomotion(speed, walkGait, jogGait);
+                Debug.Log("[Art] " + root.name + " at " + speed.ToString("F2") + " m/s: jog weight " + blend.Weight.ToString("F3") + ", rate "
+                          + blend.Rate.ToString("F3") + ", cadence " + blend.Cadence.ToString("F2") + " steps/s (target "
+                          + CharacterAnimRules.TargetCadence(speed).ToString("F2") + "), feet "
+                          + CharacterAnimRules.GroundSpeed(blend, walkGait, jogGait).ToString("F2") + " m/s");
+            }
+            Debug.Log("[Art] " + root.name + ": jog phase offset " + offset.ToString("F3"));
+        }
+
+        /// <summary>Spec 025 amendment: stores a clip's measured speed and loop length; warns when the feet disagree.</summary>
+        private static void SetGait(CharacterVisual visual, GameObject body, string prefix, AnimationClip clip)
+        {
+            float speed = ArtCatalogBuilder.RootMotionSpeed(body, clip);
+            if (speed <= 0f) throw new InvalidOperationException(clip.name + ": no root motion, clip speed unknown");
+            float feet = ArtCatalogBuilder.MeasureClipSpeed(body, clip);
+            float average = ArtCatalogBuilder.AverageSpeedOnBody(body, clip);
+            SetField(visual, prefix + "ClipSpeed", speed);
+            SetField(visual, prefix + "LoopLength", clip.length);
+            string line = "[Art] " + clip.name + ": " + speed.ToString("F3") + " m/s (root motion), feet " + feet.ToString("F3")
+                          + ", averageSpeed x human scale " + average.ToString("F3") + ", loop " + clip.length.ToString("F3") + " s";
+            if (Mathf.Abs(feet - speed) > speed * 0.15f) Debug.LogWarning(line + ": the feet differ by more than 15 %");
+            else Debug.Log(line);
         }
 
         /// <summary>Spec 014: street entry east of the kitchen and the queue in front of the counter.</summary>
