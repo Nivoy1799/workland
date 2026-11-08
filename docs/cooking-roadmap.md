@@ -30,6 +30,9 @@ chili, tahini), drinks (lemonade, iced tea, soda). Existing dishes (soups, salad
 |---|---|---|
 | 026 | Scale and palette pass (in progress) | look |
 | 027 | Visual check tool: scripted tour and walking frames without window focus | quality |
+| 027a | **Shop floor plan**: counter between kitchen and guests, guests queue on the street side, all controls face the cook, work triangle (docs/feel.md 6) | feel |
+| 027b | **Feel pass 1**: predicted pickup and place visuals, arcs instead of teleports, forgiving sticky aim, ghost preview, click and tock sounds, movement and camera numbers, F2 tuning panel with A/B presets (docs/feel.md 1-5, 8, 9) | feel |
+| 027c | **Feel pass 2, cooking**: progress rings, sound by heat, perfect and burn cues, serve reward (docs/feel.md 7) | feel |
 | 028 | Street-food ingredients and content audit (flatbread, wrap, seitan, falafel mix, lettuce, cucumber, sauces; rename `cheese`; forbidden-word test) | 1, D27 |
 | 029 | Deep fryer: basket, oil, timer and browning, shake, drain, burn (fries, falafel) | 2 |
 | 030 | Griddle with flipping: two-sided doneness (seitan strips, vegetables, flatbread toasting) | 2 |
@@ -42,7 +45,10 @@ chili, tahini), drinks (lemonade, iced tea, soda). Existing dishes (soups, salad
 | 037 | Business: price menu, equipment shop and upgrades, shop rating unlocks items | 6 |
 | 038 | First-shift onboarding (guided tutorial) | 7 |
 
-Each spec follows docs/art-direction.md (sizes, palette, measured animation) and the full pipeline:
+**Feel comes before features** (human, 2026-11-08: "most important it should feel good"). 027a–027c run
+before any new station, and every later spec has docs/feel.md acceptance criteria of its own.
+
+Each spec follows docs/art-direction.md (sizes, palette, measured animation), docs/feel.md, and the full pipeline:
 builder, tester, reviewer, visual check, verify.sh. Numbers such as prices, timings and patience are
 **provisional defaults** chosen by the orchestrator, listed in each spec under "Defaults to review", and
 tuned later by the human.
