@@ -1,7 +1,7 @@
 ---
 id: 026
 title: Scale and palette pass (apply the visual guide to the whole world)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
@@ -81,7 +81,7 @@ saturation at most 70 %).
 - [ ] AC7 (manual, human): sizes feel right, colours belong together, nothing floats or sinks.
 - [ ] AC8: `WhatsNew.json` entry `spec-026`.
 
-## Open questions (defaults in bold)
+## Open questions (answered 2026-11-08: human approved all defaults)
 1. Kenney textures that clash with the palette (for example the bright cabinet doors): **recolour
    with a palette tint** (yes) or leave the original texture colours?
 2. Graybox fallback primitives (slots without a model): **Plaster** for walls and floors, **Steel** for
