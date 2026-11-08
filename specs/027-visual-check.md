@@ -83,7 +83,47 @@ exit if any exception or timeout).
 - Run `scripts/visual-check.sh` once and attach the sheets to the implementation notes (paths).
 
 ## Implementation notes
-(Builder fills this in.)
+- **Dev-only (AC3):** `Scripts/Dev` is its own assembly `Worktown.Game.Dev` with the define constraint
+  `UNITY_EDITOR || DEVELOPMENT_BUILD` and `autoReferenced: false`; nothing in Worktown.Game references it. The hooks in
+  Worktown.Game sit inside `#if DEVELOPMENT_BUILD || UNITY_EDITOR`: `PlayerController.IIntentSource` (nested
+  interface) + `IntentSource`, `PlayerCameraRig.IntentSource`, `PickupInteractor.DevClick/DevSend*`. `DevBuildTests`
+  checks the constraint with Unity's own (internal) evaluator against release/dev/editor define sets, that no release
+  asmdef references the Dev assembly, and that every hook line in Scripts/ is inside the guard. Both current builds
+  are development builds, so `Worktown.Game.Dev.dll` ships in them.
+- **Intents (netcode-adjacent, please review):** when an intent source is set, `BuildMoveData` builds the same
+  `MoveData(move, Camera.main yaw, sprint, crouch, ConsumeJump(), firstPerson)` as from the devices; replicate,
+  reconcile, sanitising and the server are untouched. No MoveData field or RPC changed (surface tests unchanged).
+- **Scope addition (directed by the orchestrator):** `PlayerCameraRig.cs` also changed, so look and view come from the
+  intent source (degrees, no sensitivity; a scripted view change is never saved to PlayerPrefs). Release behaviour is
+  the same; the wheel value is now read before the view branch instead of inside it.
+- **`-demo-cookware`** moved from PickupInteractor to `Dev/CookSequence.cs` (same steps, same `[Demo]` log lines),
+  started by `TourRunner` (RuntimeInitializeOnLoadMethod, only with `-tour`, `-observe` or `-demo-cookware`, never in
+  batch mode). It walks via `TourActor` (steering + aiming through the intents). Arrival is now 0.12 m (was 0.25 m).
+- **No focus:** scripted runs set `Application.runInBackground = true` (the player setting is off, which pauses an
+  unfocused window). Shots use `ScreenCapture.CaptureScreenshotAsTexture` at end of frame; PNG encoding and
+  downsampling run on worker threads (`ImageConversion.EncodeArrayToPNG`), so there is no Texture2D sheet writer.
+- **Script:** the tour client starts first and the observer 3 s later (its window takes the focus). In local mode the
+  tour client retries the connection until the `-host -observe` window is up. The observer and the walker sync by
+  what they see (observer at its spot and still; tour player starts moving after standing 0.5 s), no RPCs. In local
+  mode the observer is the host, so it sees the server's copy of the tour player (smoothed), not a pure remote client's
+  view; `--server wsl` gives the exact remote view (not run here, MTU issue).
+- **Extras:** `LookAt`, `WaitObserver` steps; `sheet.txt` maps cell numbers to names; walks stop when blocked (no
+  progress for 1.5 s: fine within 0.5 m, else a timeout). Observer routes use their own hub (1.75, 0): in the first
+  run both players met at (-1.75, 0) and blocked each other. Walk segments are x 16 to 22 to 14 to 16 (camera at
+  x 18 sees about +-4.9 m at 4 m).
+- **Run (2026-11-09, local, a focused observer window in front of the tour client):**
+  `.verify/visual/look/sheet.png`, `.verify/visual/walk/sheet.png`, `.verify/visual/walk-observer/sheet.png`,
+  `.verify/visual/cook/sheet.png`, `.verify/visual/cook-observer/sheet.png` (gitignored, regenerate with the script).
+  Full `--tours look,walk,cook` run passed (exit 0 everywhere, 0 Exception lines); look and cook were then rerun after
+  moving the scale person to the first worktop (the queue crowded the last one) and reframing the cook observer.
+  The walk-observer sheet shows the person crossing the frame in all 72 frames (walk, sprint, crouch).
+- **AC5:** `-host -view first -skip-whatsnew -demo-cookware` with a second client window in front finished the
+  sequence ("cookware demo done ... pot holds 2 ingredients", same log lines). One step logs "aiming gave PutInto
+  instead of Place" (the potato next to the pan: the aim lands on the pan) and sends the place request directly, as
+  the demo's fallback is meant to.
+- **Tests:** 669/669 EditMode (598 before + 71: TourRules, ContactSheet, ScriptedIntentSource, DevBuild, LaunchArgs).
+- **Follow-ups seen in the shots (feel/layout):** see the builder report; the main ones are the queue standing on the
+  cook's side of the counter, overlapping floating dish labels, and walk/sprint poses.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

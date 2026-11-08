@@ -3,7 +3,6 @@ using FishNet.Connection;
 using FishNet.Object;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.LowLevel;
 using Worktown.Game.Cooking;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
@@ -28,7 +27,6 @@ namespace Worktown.Game.Net
         private const float MinRequestInterval = 0.2f;
         // Spec 019: the client waits a little longer than the server's limit, so no stroke is silently dropped.
         private const float ClientStrokeInterval = MinRequestInterval + 0.03f;
-        private const string DemoCookwareArg = "-demo-cookware";
 
         // Server only: time of the last accepted request from this player.
         private float _serverLastRequestTime = float.NegativeInfinity;
@@ -109,10 +107,7 @@ namespace Worktown.Game.Net
             // Spec 020: owner-only highlight and world label fade.
             if (TryGetComponent(out InteractionHighlight highlight)) highlight.Activate(this);
             if (TryGetComponent(out WorldLabelFade labels)) labels.Activate();
-            if (!Debug.isDebugBuild) return;
-            // Spec 021 AC8, development builds only: move the pan, fill the pot, switch it on, with the normal requests.
-            if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), DemoCookwareArg) >= 0)
-                StartCoroutine(DemoCookware());
+            // Spec 021 AC8 -demo-cookware moved to Scripts/Dev (spec 027): it walks through the player's intents now.
         }
 
         public override void OnStopClient()
@@ -631,207 +626,17 @@ namespace Worktown.Game.Net
                 Debug.Log("[Pickup] " + LastResult);
         }
 
-        // ---- Spec 021 AC8: dev-only intent script for the screenshot run (development builds only) ----
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        // ---- Spec 027: hooks for the dev tours and -demo-cookware (Scripts/Dev), development builds only ----
+        // The tour clicks like a player (DevClick: the action under the dot) or, when the aim fails, sends the same
+        // request the click would have sent. All of them go through the normal ServerRpcs; the server decides as always.
 
-        // PlayerCameraRig's mouse sensitivity (degrees per count); the aim loop below only needs it roughly.
-        private const float DemoDegreesPerCount = 0.12f;
-
-        /// <summary>
-        /// <c>-demo-cookware</c>: the owner walks with simulated W/A/S/D keys and turns the first-person view with
-        /// simulated mouse movement (a screenshot run has no real input), and each step aims and does what a click
-        /// would do (<see cref="ExecuteAction"/>, so the normal RequestPickup / RequestPlace / RequestStation /
-        /// RequestUse go out; no server shortcut). Steps: pick up the pan from the first stove, put it on the second
-        /// stove's free burner, take a potato and put it on that stove's counter next to the pan, take a potato and an
-        /// onion and put both into the pot, switch the pot's burner on, then look at the stove for 40 s. If an aim
-        /// does not give the expected action in 3 s it logs a warning and sends the same request directly. Expects the
-        /// first spawn point; needs <c>-view first -skip-whatsnew</c> and window focus (one client only).
-        /// </summary>
-        private System.Collections.IEnumerator DemoCookware()
-        {
-            yield return new WaitForSeconds(6f);
-            Station potatoCrate = null, onionCrate = null;
-            var stoves = new List<Station>();
-            foreach (Station s in FindObjectsByType<Station>(FindObjectsSortMode.None))
-            {
-                if (s.Kind == StationKind.Crate && s.IngredientIndex == 0) potatoCrate = s;
-                else if (s.Kind == StationKind.Crate && s.IngredientIndex == 3) onionCrate = s;
-                else if (s.Kind == StationKind.Stove) stoves.Add(s);
-            }
-            stoves.Sort((a, b) => a.transform.position.x.CompareTo(b.transform.position.x));
-            Station stoveA = stoves.Count > 0 ? stoves[0] : null;
-            Station stoveB = stoves.Count > 1 ? stoves[1] : null;
-            Vessel pan = null, pot = null;
-            foreach (Vessel v in FindObjectsByType<Vessel>(FindObjectsSortMode.None))
-            {
-                if (v.Kind == VesselKind.Pan) pan = v;
-                else if (v.Kind == VesselKind.Pot) pot = v;
-            }
-            if (potatoCrate == null || onionCrate == null || stoveA == null || stoveB == null || pan == null || pot == null)
-            {
-                Debug.LogWarning("[Demo] crates, two stoves, the pan or the pot not found");
-                yield break;
-            }
-            PlaceSurface freeBurner = null, stoveTop = null;
-            foreach (PlaceSurface s in FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
-            {
-                if (s.GetComponentInParent<Station>() != stoveB) continue;
-                if (!s.IsBurner) stoveTop = s;
-                else if (Vector3.Distance(s.SpotWorldPosition(0), pot.transform.position) > 0.2f) freeBurner = s;
-            }
-            PlaceSurface potBurner = null;
-            foreach (PlaceSurface s in FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
-                if (s.IsBurner && Vector3.Distance(s.SpotWorldPosition(0), pot.transform.position) <= 0.2f) potBurner = s;
-            StationButton potSwitch = null;
-            foreach (StationButton b in FindObjectsByType<StationButton>(FindObjectsSortMode.None))
-                if (potBurner != null && b.Station != null && b.Station.Index == potBurner.StoveIndex
-                    && b.Option == StationRules.StoveOption(potBurner.Burner, StationRules.StoveSwitch)) potSwitch = b;
-            if (freeBurner == null || stoveTop == null || potSwitch == null)
-            {
-                Debug.LogWarning("[Demo] the second stove has no free burner, no stove top or no switch for the pot");
-                yield break;
-            }
-
-            float laneZ = stoveA.transform.position.z - 1.7f;
-            float standZ = stoveA.transform.position.z - 1.3f;
-            Vector3 atA = new Vector3(stoveA.transform.position.x, 0f, standZ);
-            Vector3 atB = new Vector3(stoveB.transform.position.x, 0f, standZ);
-            Debug.Log("[Demo] walking to the first stove (" + Time.time.ToString("0.0") + " s)");
-            yield return DemoWalk(new Vector3(-1.75f, 0f, transform.position.z));
-            yield return DemoWalk(new Vector3(-1.75f, 0f, laneZ));
-            yield return DemoWalk(new Vector3(atA.x, 0f, laneZ));
-            yield return DemoWalk(atA);
-            NetworkObject panObject = pan.NetworkObject;
-            yield return DemoUse("pick up the pan", ContentPoint(pan), InteractionAction.PickUp, () => SendPickup(panObject));
-
-            yield return DemoLevelView();
-            yield return DemoWalk(atB);
-            Vector3 burnerSpot = freeBurner.SpotWorldPosition(0);
-            yield return DemoUse("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => SendPlace(freeBurner.Index, 0));
-            Debug.Log("[Demo] the pan is on the burner (" + Time.time.ToString("0.0") + " s)");
-
-            yield return DemoBuy("take a potato", potatoCrate, laneZ);
-            yield return DemoWalk(new Vector3(atB.x, 0f, laneZ));
-            yield return DemoWalk(atB);
-            int nextToPan = PlaceSpots.NearestFree(stoveTop.Size, stoveTop.ToTopPlane(burnerSpot), null);
-            yield return DemoUse("put the potato on the stove top next to the pan", stoveTop.SpotWorldPosition(nextToPan),
-                InteractionAction.Place, () => SendPlace(stoveTop.Index, nextToPan));
-            Debug.Log("[Demo] potato next to the pan (" + Time.time.ToString("0.0") + " s)");
-
-            NetworkObject potObject = pot.NetworkObject;
-            foreach (Station crate in new[] { potatoCrate, onionCrate })
-            {
-                yield return DemoBuy("take " + DemoIngredients.All[crate.IngredientIndex].Id, crate, laneZ);
-                yield return DemoWalk(new Vector3(atB.x, 0f, laneZ));
-                yield return DemoWalk(atB);
-                yield return DemoUse("put it into the pot", ContentPoint(pot), InteractionAction.PutInto,
-                    () => SendUse(potObject, VesselRules.ActionUse));
-            }
-            yield return DemoUse("switch the pot's burner on", potSwitch.transform.position, InteractionAction.Press,
-                () => SendStation(potSwitch.Station.Index, potSwitch.Option));
-            Debug.Log("[Demo] cookware demo done (" + Time.time.ToString("0.0") + " s): pot holds " + pot.ContentCount + " ingredients");
-            yield return DemoAim((pan.transform.position + pot.transform.position) * 0.5f + Vector3.up * 0.1f, 40f, null);
-        }
-
-        /// <summary>Walks along the lane to the crate and takes one (aims at it, clicks; or sends the request directly).</summary>
-        private System.Collections.IEnumerator DemoBuy(string what, Station crate, float laneZ)
-        {
-            yield return DemoLevelView();
-            yield return DemoWalk(new Vector3(transform.position.x, 0f, laneZ));
-            yield return DemoWalk(new Vector3(crate.transform.position.x + 1f, 0f, laneZ));
-            yield return DemoUse(what, crate.transform.position, InteractionAction.Buy, () => SendStation(crate.Index, 0));
-            yield return DemoLevelView();
-        }
-
-        /// <summary>Where a vessel draws its contents (inside the pot, on the board); its position if none.</summary>
-        private static Vector3 ContentPoint(Component vessel)
-        {
-            Transform anchor = vessel.transform.Find("Contents");
-            return anchor != null ? anchor.position : vessel.transform.position + Vector3.up * 0.05f;
-        }
-
-        /// <summary>Aims at <paramref name="point"/>, then does what a click would do (or sends the request directly).</summary>
-        private System.Collections.IEnumerator DemoUse(string what, Vector3 point, InteractionAction expected, System.Action fallback)
-        {
-            Debug.Log("[Demo] " + what + " (" + Time.time.ToString("0.0") + " s)");
-            yield return DemoAim(point, 3f, expected);
-            if (CurrentAction == expected)
-            {
-                Debug.Log("[Demo] click: '" + InteractionRules.PromptFor(CurrentHeld, CurrentAim) + "'");
-                ExecuteAction();
-            }
-            else
-            {
-                Debug.LogWarning("[Demo] aiming gave " + CurrentAction + " instead of " + expected + "; sending the request directly");
-                fallback();
-            }
-            yield return new WaitForSeconds(1.5f);
-        }
-
-        /// <summary>Holds the movement keys towards <paramref name="target"/> (relative to the camera) until there.</summary>
-        private System.Collections.IEnumerator DemoWalk(Vector3 target)
-        {
-            const float Arrived = 0.25f;
-            float giveUp = Time.unscaledTime + 20f;
-            Keyboard keyboard = Keyboard.current;
-            while (keyboard != null && Time.unscaledTime < giveUp)
-            {
-                Vector3 delta = target - transform.position;
-                delta.y = 0f;
-                if (delta.magnitude < Arrived) break;
-                Camera cam = Camera.main;
-                Vector3 forward = cam != null ? Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized : transform.forward;
-                Vector3 right = Vector3.Cross(Vector3.up, forward);
-                float ahead = Vector3.Dot(delta, forward);
-                float side = Vector3.Dot(delta, right);
-                var keys = new List<Key>(2);
-                if (ahead > Arrived * 0.5f) keys.Add(Key.W);
-                else if (ahead < -Arrived * 0.5f) keys.Add(Key.S);
-                if (side > Arrived * 0.5f) keys.Add(Key.D);
-                else if (side < -Arrived * 0.5f) keys.Add(Key.A);
-                InputSystem.QueueStateEvent(keyboard, new KeyboardState(keys.ToArray()));
-                yield return null;
-            }
-            if (keyboard != null) InputSystem.QueueStateEvent(keyboard, new KeyboardState());
-            yield return new WaitForSeconds(0.3f);
-        }
-
-        /// <summary>Looks straight ahead (towards the kitchen, +Z) again before walking (the walk steers by the camera's forward).</summary>
-        private System.Collections.IEnumerator DemoLevelView()
-        {
-            Camera cam = Camera.main;
-            if (cam == null) yield break;
-            yield return DemoAim(cam.transform.position + Vector3.forward * 5f, 1.5f, null);
-        }
-
-        /// <summary>
-        /// Turns the first-person view towards <paramref name="point"/> with simulated mouse movement, for up to
-        /// <paramref name="seconds"/>; stops early once on target and (if given) the action is <paramref name="until"/>.
-        /// </summary>
-        private System.Collections.IEnumerator DemoAim(Vector3 point, float seconds, InteractionAction? until)
-        {
-            float end = Time.unscaledTime + seconds;
-            Mouse mouse = Mouse.current;
-            while (mouse != null && Time.unscaledTime < end)
-            {
-                Camera cam = Camera.main;
-                if (cam == null) yield break;
-                Vector3 dir = point - cam.transform.position;
-                if (dir.sqrMagnitude < 0.0001f) yield break;
-                dir.Normalize();
-                Vector3 forward = cam.transform.forward;
-                float yawError = Mathf.DeltaAngle(Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg, Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg);
-                float downError = (Mathf.Asin(Mathf.Clamp(forward.y, -1f, 1f)) - Mathf.Asin(Mathf.Clamp(dir.y, -1f, 1f))) * Mathf.Rad2Deg;
-                bool onTarget = Mathf.Abs(yawError) < 0.4f && Mathf.Abs(downError) < 0.4f;
-                if (until.HasValue && onTarget && CurrentAction == until.Value) yield break;
-                if (!onTarget)
-                {
-                    // Half the error per frame: converges without overshoot even if the sensitivity is a bit off.
-                    var counts = new Vector2(Mathf.Clamp(yawError * 0.5f / DemoDegreesPerCount, -60f, 60f),
-                        Mathf.Clamp(-downError * 0.5f / DemoDegreesPerCount, -60f, 60f));
-                    InputSystem.QueueStateEvent(mouse, new MouseState { delta = counts });
-                }
-                yield return null;
-            }
-        }
+        /// <summary>Spec 027: does what a left click does now (<see cref="CurrentAction"/> on <see cref="Target"/>).</summary>
+        public void DevClick() => ExecuteAction();
+        public void DevSendPickup(NetworkObject target) => SendPickup(target);
+        public void DevSendPlace(int surfaceIndex, int spotIndex) => SendPlace(surfaceIndex, spotIndex);
+        public void DevSendStation(int stationIndex, int option) => SendStation(stationIndex, option);
+        public void DevSendUse(NetworkObject target, int action) => SendUse(target, action);
+#endif
     }
 }

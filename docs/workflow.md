@@ -70,6 +70,17 @@ can do the job; the spec's `builder:` field says which one.
 3. Then: `Use the tester subagent on specs/NNN-name.md`, then
    `Use the reviewer subagent to review branch spec/NNN-name against specs/NNN-name.md.`
 
+## Visual check (spec 027)
+After a development build (`WorktownBuild.BuildAll`), `bash scripts/visual-check.sh [--tours look,walk,cook]
+[--out .verify/visual] [--server local|wsl]` (Git Bash) runs each tour with two 1280x720 windows: the tour client
+(`-connect ... -tour <name>`) and, started second so it has the focus, the observer (`-host -observe <name>` by
+default, or a client of the WSL dedicated server with `--server wsl`). The tour moves through the player's normal
+intents, so it needs no window focus. Results: `<out>/<tour>/sheet.png` (the tour player's own view) and
+`<out>/<tour>-observer/sheet.png` (the fixed observer camera: walking frames every 0.1 s 4 m to the side, guests' view
+while cooking); `sheet.txt` names each numbered cell, the logs sit next to them. Look at the sheets (agents: Read the
+PNGs) before calling a visual spec done. The tours live in `Scripts/Dev/TourRules.cs` (scene coordinates); the Dev
+assembly only exists in the editor and development builds.
+
 ## What's new entries
 Every spec that changes something playable adds one entry to
 `game/Assets/_Project/Resources/WhatsNew.json` as part of "done": an id ending in `spec-NNN`,

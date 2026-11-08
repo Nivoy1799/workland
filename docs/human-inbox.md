@@ -3,12 +3,20 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-08 23:20)
-- **Running:** spec 026 (sizes and palette), builder working.
-- **Next:** 027 visual check tool, then the feel work: 027a shop floor plan, 027b feel pass 1 (movement and
-  interaction), 027c feel pass 2 (cooking feedback). Then the cooking stations (028+). See docs/cooking-roadmap.md.
+## Status (updated 2026-11-09 00:40)
+- **Running:** spec 027 (visual check tool), builder working.
+- **Next:** 027a shop floor plan (spec written: specs/027a-shop-floor-plan.md), 027b feel pass 1 (movement
+  and interaction), 027c feel pass 2 (cooking feedback). Then the cooking stations (028+). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
-- **Merged since you left:** nothing yet.
+- **Merged since you left:**
+  - **Spec 026, sizes and palette:**
+    - every model is at real size (person 1.75 m, worktops 0.90 m, counter 1.05 m, food 1.5x for readability);
+    - houses are moved so they don't overlap;
+    - worktops are built from 0.6 m cabinet modules;
+    - the warm palette is used everywhere, with tests that block stray sizes and colours;
+    - the review found and fixed an awning stuck inside the shop and a lamp in a house.
+    - Play-test (AC7) is open for you.
+  - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
 1. **WSL test server: network MTU is 1280 again** (Tailscale). Clients connect to the WSL dedicated server but

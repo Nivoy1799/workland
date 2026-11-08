@@ -39,6 +39,12 @@ namespace Worktown.Game.Player
         public bool IsFirstPerson => IsBound && Mode == ViewMode.FirstPerson;
         public Transform ViewHold => _viewHold;
 
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        /// <summary>Spec 027, development builds only: while set, look and view come from the script, not the devices.
+        /// Set by the owner's PlayerController.</summary>
+        public PlayerController.IIntentSource IntentSource { get; set; }
+#endif
+
         /// <summary>
         /// Points both cameras at the local player: third person orbits the smoothed graphic, first person
         /// sits at the eyes. Starts in the <c>-view</c> mode, else the saved one, else first person.
@@ -102,11 +108,26 @@ namespace Worktown.Game.Player
         private void LateUpdate()
         {
             if (_input == null) return;
-            if (_input.ConsumeToggleView()) SetMode(ViewRules.Toggle(Mode), keepLook: true, save: true);
-
-            Vector2 look = _input.Look;
-            if (_input.IsGamepadLook) look *= StickSensitivity * Time.deltaTime;
-            else look *= MouseSensitivity;
+            Vector2 look;
+            float zoom;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (IntentSource != null)
+            {
+                // Spec 027: scripted look in degrees, no sensitivity; a scripted view change is never saved.
+                ViewMode? wanted = IntentSource.View;
+                if (wanted.HasValue && wanted.Value != Mode) SetMode(wanted.Value, keepLook: true, save: false);
+                look = IntentSource.ConsumeLook();
+                zoom = 0f;
+            }
+            else
+#endif
+            {
+                if (_input.ConsumeToggleView()) SetMode(ViewRules.Toggle(Mode), keepLook: true, save: true);
+                look = _input.Look;
+                if (_input.IsGamepadLook) look *= StickSensitivity * Time.deltaTime;
+                else look *= MouseSensitivity;
+                zoom = _input.Zoom;
+            }
 
             if (Mode == ViewMode.FirstPerson)
             {
@@ -121,7 +142,7 @@ namespace Worktown.Game.Player
             _orbit.VerticalAxis.Value = Mathf.Clamp(_orbit.VerticalAxis.Value - look.y,
                 _orbit.VerticalAxis.Range.x, _orbit.VerticalAxis.Range.y);
             // The wheel zooms only in third person.
-            _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - _input.Zoom * ZoomStep,
+            _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - zoom * ZoomStep,
                 _orbit.RadialAxis.Range.x, _orbit.RadialAxis.Range.y);
         }
 
