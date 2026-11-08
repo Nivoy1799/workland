@@ -20,6 +20,14 @@ namespace Worktown.Game.Net.Rules
         public int LatencyMs { get; private set; }
         /// <summary>Spec 018: <c>-view first|third</c>, the start view for screenshots and tests. Null = not given.</summary>
         public ViewMode? View { get; private set; }
+        /// <summary>Spec 027 (dev builds): <c>-tour name</c>, the scripted visual check this client runs. Empty = none.
+        /// Only valid with <c>-connect</c>.</summary>
+        public string Tour { get; private set; } = string.Empty;
+        /// <summary>Spec 027: <c>-observe name</c>, watch that tour from its fixed observer camera. Empty = none.
+        /// Valid with <c>-connect</c> or <c>-host</c>.</summary>
+        public string Observe { get; private set; } = string.Empty;
+        /// <summary>Spec 027: <c>-tour-out dir</c>, where the tour and the observer write their images. Empty = default.</summary>
+        public string TourOut { get; private set; } = string.Empty;
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -71,11 +79,32 @@ namespace Worktown.Game.Net.Rules
                         result.View = view;
                         i++;
                         break;
+                    case "-tour":
+                        if (!HasValue(args, i)) return Fail("-tour needs a tour name");
+                        result.Tour = args[++i];
+                        break;
+                    case "-observe":
+                        if (!HasValue(args, i)) return Fail("-observe needs a tour name");
+                        result.Observe = args[++i];
+                        break;
+                    case "-tour-out":
+                        if (!HasValue(args, i)) return Fail("-tour-out needs a directory");
+                        result.TourOut = args[++i];
+                        break;
                 }
             }
 
             if (modeFlags > 1) return Fail("only one of -server, -host, -connect, -steam is allowed");
+            if (result.Tour.Length > 0 && result.Observe.Length > 0) return Fail("-tour and -observe exclude each other");
+            if (result.Tour.Length > 0 && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
+            if (result.Observe.Length > 0 && result.Mode != LaunchMode.ClientTugboat && result.Mode != LaunchMode.Host)
+                return Fail("-observe needs -connect or -host");
             return result;
+        }
+
+        private static bool HasValue(IReadOnlyList<string> args, int i)
+        {
+            return i + 1 < args.Count && !string.IsNullOrWhiteSpace(args[i + 1]) && !args[i + 1].StartsWith("-");
         }
 
         private static LaunchArgs Fail(string error)

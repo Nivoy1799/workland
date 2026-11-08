@@ -5,6 +5,7 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "Worktown.Game",
+        "Worktown.Game.Dev",
         "Worktown.Sim"
     ],
     "includePlatforms": [

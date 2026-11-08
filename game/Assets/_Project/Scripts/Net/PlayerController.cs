@@ -90,6 +90,41 @@ namespace Worktown.Game.Net
 
         public bool IsCrouched => IsOwner || IsServerStarted ? _crouched : CrouchedForOthers.Value;
 
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        /// <summary>
+        /// Spec 027, development builds only: a scripted source of the same intents the devices give (move, look,
+        /// sprint, crouch, jump, view). The owner's MoveData is built from it exactly as from the devices, so
+        /// prediction and the server's validation stay the same; the camera rig reads look and view from it.
+        /// </summary>
+        public interface IIntentSource
+        {
+            /// <summary>Move input relative to the camera (x right, y forward), length 0..1, like the Move action.</summary>
+            Vector2 Move { get; }
+            bool Sprint { get; }
+            /// <summary>Held crouch state (the device input is a toggle; this is its result).</summary>
+            bool Crouch { get; }
+            /// <summary>True once per requested jump.</summary>
+            bool ConsumeJump();
+            /// <summary>Look delta in degrees since the last call (x yaw right, y pitch up).</summary>
+            Vector2 ConsumeLook();
+            /// <summary>The wanted view; null leaves the view as it is.</summary>
+            ViewMode? View { get; }
+        }
+
+        private IIntentSource _intents;
+
+        /// <summary>Spec 027, owner only: replaces device input while set; null means the devices, as before.</summary>
+        public IIntentSource IntentSource
+        {
+            get => _intents;
+            set
+            {
+                _intents = value;
+                if (_rig != null) _rig.IntentSource = value;
+            }
+        }
+#endif
+
         private void Awake()
         {
             _controller = GetComponent<CharacterController>();
@@ -116,6 +151,9 @@ namespace Worktown.Game.Net
             _input.Activate();
             _rig = rig;
             rig.Bind(_graphic != null ? _graphic : transform, _eyes, _input);
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            rig.IntentSource = _intents;
+#endif
             // Spec 018: owner-only first-person visuals.
             if (TryGetComponent(out FirstPersonBody body)) body.Activate(rig);
             if (TryGetComponent(out HeldItemView held)) held.Activate(rig, GetComponent<PickupInteractor>());
@@ -146,6 +184,11 @@ namespace Worktown.Game.Net
             Camera cam = Camera.main;
             float cameraYaw = cam != null ? cam.transform.eulerAngles.y : _yaw;
             bool firstPerson = _rig != null && _rig.IsFirstPerson;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            // Spec 027: the same MoveData as from the devices, only the inputs come from the script.
+            if (_intents != null)
+                return new MoveData(_intents.Move, cameraYaw, _intents.Sprint, _intents.Crouch, _intents.ConsumeJump(), firstPerson);
+#endif
             return new MoveData(_input.Move, cameraYaw, _input.Sprint, _input.Crouch, _input.ConsumeJump(), firstPerson);
         }
 

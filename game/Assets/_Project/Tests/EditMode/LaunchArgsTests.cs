@@ -122,5 +122,74 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(LaunchMode.Menu, a.Mode);
             Assert.IsFalse(a.IsValid);
         }
+
+        // ---- Spec 027: -tour, -observe, -tour-out ----
+
+        [Test]
+        public void Tour_WithConnect_Parses()
+        {
+            var a = Parse("Worktown.exe", "-connect", "127.0.0.1", "-tour", "walk", "-tour-out", "C:/out/visual", "-skip-whatsnew");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual("walk", a.Tour);
+            Assert.AreEqual("C:/out/visual", a.TourOut);
+            Assert.AreEqual(string.Empty, a.Observe);
+            Assert.AreEqual(LaunchMode.ClientTugboat, a.Mode);
+        }
+
+        [Test]
+        public void NoTourFlags_LeaveThemEmpty()
+        {
+            var a = Parse("-connect", "127.0.0.1");
+            Assert.AreEqual(string.Empty, a.Tour);
+            Assert.AreEqual(string.Empty, a.Observe);
+            Assert.AreEqual(string.Empty, a.TourOut);
+        }
+
+        [TestCase("-tour", "walk")]
+        [TestCase("-host", "-tour", "walk")]
+        [TestCase("-server", "-tour", "walk")]
+        [TestCase("-steam", "76561197960287930", "-tour", "walk")]
+        public void Tour_OnlyWithConnect(params string[] args)
+        {
+            var a = LaunchArgs.Parse(args);
+            Assert.IsFalse(a.IsValid);
+            Assert.AreEqual(LaunchMode.Menu, a.Mode);
+            Assert.AreEqual(string.Empty, a.Tour);
+        }
+
+        [TestCase("-host")]
+        [TestCase("-connect", "127.0.0.1")]
+        public void Observe_WithHostOrConnect_Parses(params string[] mode)
+        {
+            var args = new System.Collections.Generic.List<string>(mode) { "-observe", "walk" };
+            var a = LaunchArgs.Parse(args);
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual("walk", a.Observe);
+        }
+
+        [TestCase("-observe", "walk")]
+        [TestCase("-server", "-observe", "walk")]
+        public void Observe_NeedsAPlayer(params string[] args)
+        {
+            Assert.IsFalse(LaunchArgs.Parse(args).IsValid);
+        }
+
+        [TestCase("-connect", "127.0.0.1", "-tour")]
+        [TestCase("-connect", "127.0.0.1", "-tour", "-view", "first")]
+        [TestCase("-connect", "127.0.0.1", "-observe")]
+        [TestCase("-connect", "127.0.0.1", "-tour", "walk", "-tour-out")]
+        [TestCase("-connect", "127.0.0.1", "-tour", " ")]
+        public void TourFlags_NeedAValue(params string[] args)
+        {
+            var a = LaunchArgs.Parse(args);
+            Assert.IsFalse(a.IsValid);
+            Assert.AreEqual(LaunchMode.Menu, a.Mode);
+        }
+
+        [Test]
+        public void TourAndObserve_ExcludeEachOther()
+        {
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-tour", "walk", "-observe", "walk").IsValid);
+        }
     }
 }
