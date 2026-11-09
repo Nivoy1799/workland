@@ -57,6 +57,9 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Paprika | 0.10 | 0.15 | x1.5; added in spec 030 |
 | Eggplant | 0.20 | same | over 15 cm: real size; added in spec 030 |
 | Mushroom | 0.06 | 0.09 | x1.5; added in spec 030 |
+| Wrapped wrap (paper) | 0.25 | same | over 15 cm: real size; the folded wrap in wrap paper; added in spec 031 |
+| Takeaway box | 0.20 | same | over 15 cm: real size; the Kenney styrofoam box; added in spec 031 |
+| Paper bag | 0.28 | same | over 15 cm: real size; the Kenney bag; added in spec 031 |
 | Small house (2 storeys, to the ridge) | 7–8 | same | |
 | Shop (ground floor 4 m + 1 storey) | 7–8 | same | |
 | Tree small / large | 4 / 8 | same | |

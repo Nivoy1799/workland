@@ -127,7 +127,12 @@ namespace Worktown.Sim.Tests.Cooking
             Assert.Equal(0.6f, Griddle.CombineSides(0.5f, 0.7f, w), 5);
             Assert.Equal(0.1f, Griddle.CombineSides(0.6f, 0.1f, w), 5);
             Assert.Equal(0.95f, Griddle.CombineSides(0.95f, 0.6f, w), 5);
-            Assert.Equal(0.625f, Griddle.CombineSides(0.25f, 1f, new DonenessWindow(0.5f, 0.75f)), 5); // equally far out on both ends: the mean
+            // 030 review: equally far out on both ends stays outside (the burnt side), never the mean inside the window.
+            DonenessWindow tie = new DonenessWindow(0.5f, 0.75f);
+            float combined = Griddle.CombineSides(0.25f, 1f, tie);
+            Assert.True(Griddle.Distance(combined, tie) > 0f, "outside the window: " + combined);
+            Assert.Equal(1f, combined, 5);
+            Assert.Equal(1f, Griddle.CombineSides(1f, 0.25f, tie), 5);
         }
 
         [Fact]

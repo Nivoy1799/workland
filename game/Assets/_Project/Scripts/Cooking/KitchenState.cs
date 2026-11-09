@@ -125,6 +125,8 @@ namespace Worktown.Game.Cooking
             _baskets.Clear();
             _griddleOn.Clear();
             _grill.Clear();
+            _builds.Clear();
+            _squeezes.Clear();
         }
 
         /// <summary>Spec 021: a vessel left the world (sold plate, lost cookware): its contents and position go with it.</summary>
@@ -135,6 +137,7 @@ namespace Worktown.Game.Cooking
             _assembly.Remove(vesselId);
             _baskets.Remove(vesselId);
             _grill.Remove(vesselId);
+            _builds.Remove(vesselId); // spec 031
             ClearBoard(vesselId);
         }
 
@@ -150,6 +153,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: return HeatCount(vesselId);
                 case VesselKind.Griddle: return HeatCount(vesselId); // spec 030
+                case VesselKind.Assembly: return LayerCount(vesselId); // spec 031
                 default: return CountIn(vesselId);
             }
         }
@@ -168,6 +172,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Pot: return TryPutOnHeat(foodObjectId, vesselId, kind, tick);
                 case VesselKind.Basket: return TryPutInBasket(foodObjectId, vesselId, tick);
                 case VesselKind.Griddle: return TryPutOnGriddle(foodObjectId, vesselId, tick); // spec 030
+                case VesselKind.Assembly: return TryPutOnBuild(foodObjectId, vesselId); // spec 031
                 default: return TryAddToVessel(foodObjectId, vesselId, kind);
             }
         }
@@ -189,6 +194,7 @@ namespace Worktown.Game.Cooking
                     if (BasketStateOf(vesselId, tick) == BasketState.Lowered) return CookOutcome.BasketLowered;
                     return TryPreviewHeatTake(vesselId, tick, tickRate, out result);
                 case VesselKind.Griddle: return TryPreviewGriddleTake(vesselId, tick, tickRate, out result); // spec 030
+                case VesselKind.Assembly: return TryPreviewBuildTake(vesselId, out result); // spec 031
                 case VesselKind.Bowl: return TryPreviewTake(vesselId, kind, out result);
                 case VesselKind.Pot: return HeatCount(vesselId) > 0 ? CookOutcome.PourInstead : CookOutcome.StationEmpty;
                 default: return CookOutcome.InvalidOption;
@@ -207,6 +213,7 @@ namespace Worktown.Game.Cooking
                     if (_baskets.TryGetValue(vesselId, out BasketRecord basket)) basket.Shaken = false; // the next fry starts fresh
                     break;
                 case VesselKind.Griddle: ClearGriddle(vesselId); break; // spec 030
+                case VesselKind.Assembly: ClearBuild(vesselId); break; // spec 031
                 default: ClearVessel(vesselId); break;
             }
         }
@@ -260,6 +267,7 @@ namespace Worktown.Game.Cooking
             switch (kind)
             {
                 case VesselKind.Board: return BoardName(vesselId);
+                case VesselKind.Assembly: return BuildName(vesselId); // spec 031
                 case VesselKind.Pan:
                 case VesselKind.Griddle: // spec 030
                 case VesselKind.Basket: // spec 029
@@ -277,6 +285,9 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Board:
                     string name = BoardName(vesselId);
                     return name == null ? new string[0] : new[] { name };
+                case VesselKind.Assembly: // spec 031: the label is the take name
+                    string build = BuildName(vesselId);
+                    return build == null ? new string[0] : new[] { build };
                 case VesselKind.Pan:
                 case VesselKind.Griddle: // spec 030
                 case VesselKind.Basket: // spec 029
@@ -293,6 +304,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Board:
                     FoodLook? look = BoardLook(vesselId);
                     return look.HasValue ? new[] { look.Value } : new FoodLook[0];
+                case VesselKind.Assembly: return BuildLooks(vesselId); // spec 031: one look per layer, in order
                 case VesselKind.Pan:
                 case VesselKind.Griddle: return GriddleLooks(vesselId); // spec 030
                 case VesselKind.Basket: // spec 029
@@ -628,6 +640,73 @@ namespace Worktown.Game.Cooking
                 names.Add(HeatLabelRules.Label(NameOf(preview ?? session.Food)));
             }
             return names;
+        }
+
+        /// <summary>
+        /// 030 review: the label lines and the title (what a take would give, <see cref="ResultName"/>) of any cookware from ONE
+        /// preview per food, so a refresh runs the sim op once per food instead of once for the label and again for the title.
+        /// Gives exactly what <see cref="ContentNames"/> and <see cref="ResultName"/> give.
+        /// </summary>
+        public IReadOnlyList<string> ContentNamesAndTitle(int vesselId, VesselKind kind, uint tick, double tickRate, out string title)
+        {
+            if (!VesselRules.IsHeat(kind))
+            {
+                title = ResultName(vesselId, kind, tick, tickRate);
+                return ContentNames(vesselId, kind, tick, tickRate);
+            }
+            title = null;
+            if (_grill.TryGetValue(vesselId, out GrillRecord spot))
+            {
+                if (spot.Food == null) return new string[0];
+                CookOutcome took = TryPreviewGriddleTake(vesselId, tick, tickRate, out Item grilled);
+                if ((took == CookOutcome.Ok || took == CookOutcome.TooShort) && grilled != null) title = NameOf(grilled);
+                return new[] { HeatLabelRules.GriddleLabel(NameOf(grilled ?? spot.Food), spot.BDown ? 1 : 0) };
+            }
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions) || sessions.Count == 0) return new string[0];
+            bool shaken = false, greasy = false;
+            if (_baskets.TryGetValue(vesselId, out BasketRecord basket))
+            {
+                shaken = basket.Shaken;
+                greasy = BasketStateOf(vesselId, tick) == BasketState.Draining;
+            }
+            var names = new List<string>(sessions.Count);
+            var cooked = new List<Item>(sessions.Count);
+            bool allMade = true;
+            foreach (HeatSession session in sessions)
+            {
+                CookOutcome one = CookOne(session, tick, tickRate, shaken, greasy, out Item preview);
+                names.Add(HeatLabelRules.Label(NameOf(preview ?? session.Food)));
+                if ((one == CookOutcome.Ok || one == CookOutcome.TooShort) && preview != null) cooked.Add(preview);
+                else allMade = false;
+            }
+            if (!allMade) return names;
+            if (cooked.Count == 1) title = NameOf(cooked[0]);
+            else
+            {
+                OperationResult mixed = _factory.Apply("mix", cooked, NoParams);
+                if (mixed.Ok && mixed.Item != null) title = NameOf(mixed.Item);
+            }
+            return names;
+        }
+
+        /// <summary>
+        /// 030 review: a stamp of how long the food in a heat vessel has cooked (the sum of its sessions' cooked ticks, both
+        /// griddle sides), -1 when it is empty. The periodic label refresh skips a vessel whose stamp did not change: food on a
+        /// heat that is off is not previewed again. Changes that are not time (a flip, a drain, a put-in) refresh at once.
+        /// </summary>
+        public long HeatStamp(int vesselId, uint tick)
+        {
+            if (_grill.TryGetValue(vesselId, out GrillRecord spot))
+            {
+                if (spot.Food == null) return -1;
+                long a = spot.Sides[0] != null ? spot.Sides[0].CookedTicks(tick) : 0;
+                long b = spot.Sides[1] != null ? spot.Sides[1].CookedTicks(tick) : 0;
+                return a + b;
+            }
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions) || sessions.Count == 0) return -1;
+            long sum = 0;
+            foreach (HeatSession session in sessions) sum += session.CookedTicks(tick);
+            return sum;
         }
 
         /// <summary>All label lines joined with " + "; null if the vessel is empty.</summary>
@@ -1129,6 +1208,269 @@ namespace Worktown.Game.Cooking
                 if (on) Down.Start(tick);
                 else Down.Stop(tick);
             }
+        }
+
+        // ---- Spec 031: the assembly board ----
+
+        private sealed class BuildRecord
+        {
+            public int Board;
+            /// <summary>The build on the spot (the sim item is the whole state), null when empty.</summary>
+            public Item Build;
+            /// <summary>The top layer is a squeeze of this sauce for this many seconds (the next squeeze of it adds to it).</summary>
+            public string TopSauce;
+            public float TopSauceSeconds;
+        }
+
+        private sealed class SqueezeRecord
+        {
+            public int Owner;
+            public uint StartTick;
+        }
+
+        private readonly Dictionary<int, BuildRecord> _builds = new Dictionary<int, BuildRecord>();
+        private readonly Dictionary<int, int> _buildSpotOf = new Dictionary<int, int>();
+        private readonly Dictionary<long, SqueezeRecord> _squeezes = new Dictionary<long, SqueezeRecord>();
+
+        private static long SqueezeKey(int board, int dispenser) => ((long)board << 8) | (uint)dispenser;
+
+        /// <summary>The build spot vessel <paramref name="vesselId"/> belongs to assembly board <paramref name="board"/> (empty).</summary>
+        public void RegisterAssemblySpot(int vesselId, int board)
+        {
+            if (!_builds.TryGetValue(vesselId, out BuildRecord known) || known.Board != board)
+                _builds[vesselId] = new BuildRecord { Board = board };
+            _buildSpotOf[board] = vesselId;
+        }
+
+        /// <summary>The build spot of board <paramref name="board"/>, or -1.</summary>
+        public int BuildSpotOf(int board) => _buildSpotOf.TryGetValue(board, out int id) ? id : -1;
+
+        /// <summary>The build on the spot, or null.</summary>
+        public Item BuildOn(int vesselId) => _builds.TryGetValue(vesselId, out BuildRecord r) ? r.Build : null;
+
+        /// <summary>How many layers the build on the spot has.</summary>
+        public int LayerCount(int vesselId) => Assembly.LayersOf(BuildOn(vesselId)).Count;
+
+        /// <summary>The spot's synced mode byte (<see cref="BuildRules.Mode"/>).</summary>
+        public byte BuildMode(int vesselId) => BuildRules.ModeOf(BuildOn(vesselId));
+
+        private string BuildName(int vesselId)
+        {
+            Item build = BuildOn(vesselId);
+            return build != null ? NameOf(build) : null;
+        }
+
+        private IReadOnlyList<FoodLook> BuildLooks(int vesselId)
+        {
+            IReadOnlyList<Item> layers = Assembly.LayersOf(BuildOn(vesselId));
+            var looks = new FoodLook[layers.Count];
+            for (int i = 0; i < layers.Count; i++) looks[i] = FoodLookRules.From(layers[i]);
+            return looks;
+        }
+
+        /// <summary>
+        /// What the build with <paramref name="layer"/> on top would be, without changing anything: the next layer of an open
+        /// build (a new build when the spot is empty); a squeeze of the sauce that is already on top adds its seconds to that layer
+        /// (one squeeze held twice is one amount). StationEmpty never; BuildClosed on a closed build; VesselFull at
+        /// <see cref="CookingLimits.MaxBuildLayers"/>; AlreadyPlated for finished food; SimRefused when the sim says no.
+        /// </summary>
+        public CookOutcome TryPreviewLayer(int vesselId, Item layer, out Item build, float squeezeSeconds = -1f, string sauce = null)
+        {
+            build = null;
+            if (!_builds.TryGetValue(vesselId, out BuildRecord spot)) return CookOutcome.NotAVessel;
+            if (layer == null) return CookOutcome.NotFood;
+            if (AssemblyRules.IsPlated(layer)) return CookOutcome.AlreadyPlated;
+            var layers = new List<Item>(Assembly.LayersOf(spot.Build));
+            if (spot.Build != null && spot.Build.OperationId != Assembly.AssembleOperationId) return CookOutcome.BuildClosed; // closed or packed
+            if (spot.Build != null && Assembly.PackOf(spot.Build) != null) return CookOutcome.BuildClosed;
+            if (sauce != null && spot.TopSauce == sauce && layers.Count > 0)
+            {
+                OperationResult more = _factory.Apply(Assembly.SqueezeOperationId, new[] { SauceBase(sauce) },
+                    Assembly.SqueezeParams(spot.TopSauceSeconds + squeezeSeconds));
+                if (!more.Ok || more.Item == null) return CookOutcome.SimRefused;
+                layers[layers.Count - 1] = more.Item;
+            }
+            else
+            {
+                if (layers.Count >= CookingLimits.MaxBuildLayers) return CookOutcome.VesselFull;
+                layers.Add(layer);
+            }
+            OperationResult made = _factory.Apply(Assembly.AssembleOperationId, layers, NoParams);
+            if (!made.Ok || made.Item == null) return CookOutcome.SimRefused;
+            build = made.Item;
+            return CookOutcome.Ok;
+        }
+
+        private Item SauceBase(string sauce) => _factory.CreateBase(sauce).Item;
+
+        /// <summary>
+        /// Puts the held food on the build: the next layer (a build taken off earlier goes back on an empty spot as it was). On
+        /// success the food no longer exists as an item in the world. Refusals change nothing.
+        /// </summary>
+        public CookOutcome TryPutOnBuild(int foodObjectId, int vesselId)
+        {
+            if (!_builds.TryGetValue(vesselId, out BuildRecord spot)) return CookOutcome.NotAVessel;
+            if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
+            if (Assembly.IsBuild(item))
+            {
+                // A build back on the board: only on an empty spot, and only an unplated one (a finished one is sold).
+                if (spot.Build != null) return CookOutcome.VesselFull;
+                if (Assembly.BuildNode(item) == null || item.OperationId == "plate") return CookOutcome.AlreadyPlated;
+                spot.Build = item;
+                spot.TopSauce = null;
+                _items.Remove(foodObjectId);
+                return CookOutcome.Ok;
+            }
+            CookOutcome fits = TryPreviewLayer(vesselId, item, out Item build);
+            if (fits != CookOutcome.Ok) return fits;
+            spot.Build = build;
+            spot.TopSauce = null;
+            _items.Remove(foodObjectId);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Folds the open build on bread (sim close "folded"). StationEmpty, BuildClosed, NothingToFold; no change then.</summary>
+        public CookOutcome TryFold(int vesselId)
+        {
+            if (!_builds.TryGetValue(vesselId, out BuildRecord spot)) return CookOutcome.NotAVessel;
+            if (spot.Build == null) return CookOutcome.StationEmpty;
+            if (spot.Build.OperationId != Assembly.AssembleOperationId) return CookOutcome.BuildClosed;
+            if (!Assembly.HasBreadBase(spot.Build) || Assembly.LayersOf(spot.Build).Count < 2) return CookOutcome.NothingToFold;
+            OperationResult folded = _factory.Apply(Assembly.CloseOperationId, new[] { spot.Build }, Assembly.CloseParams(Assembly.Folded));
+            if (!folded.Ok || folded.Item == null) return CookOutcome.SimRefused;
+            spot.Build = folded.Item;
+            spot.TopSauce = null;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// What packaging <paramref name="packaging"/> (<see cref="BuildRules.Paper"/>, Box, Bag) makes of the build, without changing
+        /// it: paper wraps a folded build, a box or bag packs a folded one on bread or an open one without. StationEmpty,
+        /// BuildClosed (finished), FoldFirst (bread not folded), NothingToFold (paper without bread), SimRefused.
+        /// </summary>
+        public CookOutcome TryPreviewPackaging(int vesselId, int packaging, out Item result)
+        {
+            result = null;
+            if (!_builds.TryGetValue(vesselId, out BuildRecord spot)) return CookOutcome.NotAVessel;
+            if (!BuildRules.TryStep(packaging, out string opId, out IReadOnlyDictionary<string, ParamValue> parameters))
+                return CookOutcome.InvalidOption;
+            CookOutcome fits = BuildRules.CanPackage(packaging, LayerCount(vesselId), BuildMode(vesselId));
+            if (fits != CookOutcome.Ok) return fits;
+            OperationResult made = _factory.Apply(opId, new[] { spot.Build }, parameters);
+            if (!made.Ok || made.Item == null) return made.Error == OperationError.StepOrder ? CookOutcome.FoldFirst : CookOutcome.SimRefused;
+            result = made.Item;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>The build on the spot becomes <paramref name="build"/> (a preview the caller has paid for).</summary>
+        public void CommitBuild(int vesselId, Item build, string topSauce = null, float topSauceSeconds = 0f)
+        {
+            if (!_builds.TryGetValue(vesselId, out BuildRecord spot)) return;
+            spot.Build = build;
+            spot.TopSauce = topSauce;
+            spot.TopSauceSeconds = topSauceSeconds;
+        }
+
+        /// <summary>Taking the build off: it as it is (StationEmpty when there is none). The caller hands it over, then clears.</summary>
+        public CookOutcome TryPreviewBuildTake(int vesselId, out Item result)
+        {
+            result = BuildOn(vesselId);
+            return result != null ? CookOutcome.Ok : CookOutcome.StationEmpty;
+        }
+
+        private void ClearBuild(int vesselId)
+        {
+            if (!_builds.TryGetValue(vesselId, out BuildRecord spot)) return;
+            spot.Build = null;
+            spot.TopSauce = null;
+        }
+
+        /// <summary>
+        /// A player presses dispenser <paramref name="dispenser"/> of board <paramref name="board"/>: the squeeze starts at
+        /// <paramref name="tick"/> (the server's clock). StationEmpty (nothing on the board), BuildClosed, DispenserBusy (someone
+        /// else squeezes it); a second press by the same player restarts it. Nothing is charged or changed but the squeeze record.
+        /// </summary>
+        public CookOutcome TryStartSqueeze(int board, int dispenser, int owner, uint tick)
+        {
+            if (BuildRules.SauceOf(dispenser) == null) return CookOutcome.InvalidOption;
+            int spot = BuildSpotOf(board);
+            if (spot < 0) return CookOutcome.UnknownStation;
+            CookOutcome can = BuildRules.CanSqueeze(LayerCount(spot), BuildMode(spot));
+            if (can != CookOutcome.Ok) return can;
+            long key = SqueezeKey(board, dispenser);
+            if (_squeezes.TryGetValue(key, out SqueezeRecord busy) && busy.Owner != owner) return CookOutcome.DispenserBusy;
+            _squeezes[key] = new SqueezeRecord { Owner = owner, StartTick = tick };
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Whether dispenser <paramref name="dispenser"/> of board <paramref name="board"/> is squeezing, and by whom.</summary>
+        public bool IsSqueezing(int board, int dispenser, out int owner, out uint startTick)
+        {
+            owner = -1;
+            startTick = 0;
+            if (!_squeezes.TryGetValue(SqueezeKey(board, dispenser), out SqueezeRecord r)) return false;
+            owner = r.Owner;
+            startTick = r.StartTick;
+            return true;
+        }
+
+        /// <summary>
+        /// The player lets go (or the server stops the squeeze at <see cref="BuildRules.AutoStopSeconds"/>): the squeeze ends now and
+        /// the result is previewed: the sauce for the seconds between the press and <paramref name="tick"/> as the next layer (or
+        /// added to the same sauce on top). The record is gone whatever happens next. InvalidOption when this player was not
+        /// squeezing it; the preview's refusals (StationEmpty, BuildClosed, VesselFull, SimRefused). Nothing changes on the board:
+        /// the caller charges the sauce, then <see cref="CommitBuild"/>s the build with the top sauce and seconds.
+        /// </summary>
+        public CookOutcome TryEndSqueeze(int board, int dispenser, int owner, uint tick, double tickRate, out Item build, out float seconds)
+        {
+            build = null;
+            seconds = 0f;
+            long key = SqueezeKey(board, dispenser);
+            if (!_squeezes.TryGetValue(key, out SqueezeRecord r) || r.Owner != owner) return CookOutcome.InvalidOption;
+            _squeezes.Remove(key);
+            seconds = Cap(BuildRules.SqueezeSeconds(r.StartTick, tick, tickRate), BuildRules.AutoStopSeconds);
+            string sauce = BuildRules.SauceOf(dispenser);
+            int spot = BuildSpotOf(board);
+            if (spot < 0) return CookOutcome.UnknownStation;
+            if (BuildOn(spot) == null) return CookOutcome.StationEmpty;
+            _builds.TryGetValue(spot, out BuildRecord rec);
+            bool merge = rec.TopSauce == sauce;
+            float total = merge ? rec.TopSauceSeconds + seconds : seconds;
+            OperationResult squeezed = _factory.Apply(Assembly.SqueezeOperationId, new[] { SauceBase(sauce) }, Assembly.SqueezeParams(seconds));
+            if (!squeezed.Ok || squeezed.Item == null) return CookOutcome.SimRefused;
+            CookOutcome made = TryPreviewLayer(spot, squeezed.Item, out build, seconds, sauce);
+            if (made != CookOutcome.Ok) return made;
+            seconds = total; // what the top layer holds now
+            return CookOutcome.Ok;
+        }
+
+        private static float Cap(float seconds, float cap) => seconds > cap ? cap : seconds;
+
+        /// <summary>A squeeze that started before <paramref name="tick"/> minus <see cref="BuildRules.AutoStopSeconds"/>, or false.</summary>
+        public bool TryFindOverdueSqueeze(uint tick, double tickRate, out int board, out int dispenser, out int owner)
+        {
+            board = dispenser = owner = -1;
+            foreach (KeyValuePair<long, SqueezeRecord> kv in _squeezes)
+            {
+                if (BuildRules.SqueezeSeconds(kv.Value.StartTick, tick, tickRate) < BuildRules.AutoStopSeconds) continue;
+                board = (int)(kv.Key >> 8);
+                dispenser = (int)(kv.Key & 0xFF);
+                owner = kv.Value.Owner;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Drops a squeeze without a result (the player left).</summary>
+        public void CancelSqueeze(int board, int dispenser) => _squeezes.Remove(SqueezeKey(board, dispenser));
+
+        /// <summary>The board's synced byte: a squeezing bit per dispenser.</summary>
+        public byte AssemblyFlags(int board)
+        {
+            byte flags = 0;
+            for (int d = 0; d < BuildRules.DispenserCount; d++)
+                if (_squeezes.ContainsKey(SqueezeKey(board, d))) flags = BuildRules.WithSqueezing(flags, d, true);
+            return flags;
         }
 
         // ---- Spec 013/021: plate and bowl ----

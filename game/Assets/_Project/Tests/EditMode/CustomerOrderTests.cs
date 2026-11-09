@@ -125,11 +125,11 @@ namespace Worktown.Game.Tests
         [Test]
         public void Orders_AreDeterministicForASeed()
         {
-            List<byte> first = DrawMany(CustomerRules.OrderSeed, 40);
-            CollectionAssert.AreEqual(first, DrawMany(CustomerRules.OrderSeed, 40));
-            CollectionAssert.AreNotEqual(first, DrawMany(CustomerRules.OrderSeed + 1, 40), "another seed, other orders");
+            List<byte> first = DrawMany(CustomerRules.OrderSeed, 80);
+            CollectionAssert.AreEqual(first, DrawMany(CustomerRules.OrderSeed, 80));
+            CollectionAssert.AreNotEqual(first, DrawMany(CustomerRules.OrderSeed + 1, 80), "another seed, other orders");
             var kinds = new HashSet<byte>(first);
-            Assert.AreEqual(Menu.All.Count, kinds.Count, "40 orders use the whole menu");
+            Assert.AreEqual(Menu.All.Count, kinds.Count, "80 orders use the whole menu (spec 031: 13 dishes, was 40 for 9)");
         }
 
         [Test]

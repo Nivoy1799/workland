@@ -43,6 +43,7 @@ namespace Worktown.Game.Net.Rules
             bool hasFood = target.ContentCount > 0;
             if (target.Vessel == VesselKind.Basket) return BasketAction(held, target, hasFood);
             if (target.Vessel == VesselKind.Griddle) return GriddleAction(held, target, hasFood); // spec 030
+            if (target.Vessel == VesselKind.Assembly) return BuildAction(held, target); // spec 031
             if (held.IsKnife)
                 return target.Vessel == VesselKind.Board && hasFood ? InteractionAction.Cut : InteractionAction.None;
             if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
@@ -75,6 +76,64 @@ namespace Worktown.Game.Net.Rules
             if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
             if (held.IsVessel) return TipsInto(held, hasFood) ? InteractionAction.Take : InteractionAction.None;
             return !held.IsHolding && hasFood ? InteractionAction.Take : InteractionAction.None;
+        }
+
+        // ---- Spec 031: the assembly board ----
+
+        /// <summary>Spec 031: the key word of a held action ("Hold · squeeze garlic-herb sauce").</summary>
+        public const string HoldKey = "Hold";
+
+        /// <summary>
+        /// Spec 031, the build spot (fixed to its board, never picked up): food goes on as the next layer while the build is open
+        /// and has room; empty hands fold an open build on bread (<see cref="BuildRules.FoldsByHand"/>) and take anything else off.
+        /// The knife, the spatula, cookware and finished food do nothing here.
+        /// </summary>
+        private static InteractionAction BuildAction(Held held, AimTarget target)
+        {
+            int layers = target.ContentCount;
+            if (held.IsFood)
+            {
+                if (held.IsPlated) return layers == 0 ? InteractionAction.PutInto : InteractionAction.None; // a finished build back on an empty board
+                return layers < VesselRules.Capacity(VesselKind.Assembly) && (layers == 0 || BuildRules.IsOpen(target.Mode))
+                    ? InteractionAction.PutInto : InteractionAction.None;
+            }
+            if (held.IsHolding || layers == 0) return InteractionAction.None;
+            return BuildRules.FoldsByHand(layers, target.Mode) ? InteractionAction.Fold : InteractionAction.Take;
+        }
+
+        /// <summary>Spec 031, a tool on the board: a dispenser squeezes onto an open build, a packaging fits as <see cref="BuildRules.CanPackage"/> says.</summary>
+        private static InteractionAction ToolAction(AimTarget target)
+        {
+            int tool = target.Option;
+            if (BuildRules.IsDispenser(tool))
+                return BuildRules.CanSqueeze(target.ContentCount, target.Mode) == CookOutcome.Ok ? InteractionAction.Squeeze : InteractionAction.None;
+            if (BuildRules.IsPackaging(tool))
+                return BuildRules.CanPackage(BuildRules.PackagingOf(tool), target.ContentCount, target.Mode) == CookOutcome.Ok
+                    ? InteractionAction.Pack : InteractionAction.None;
+            return InteractionAction.None;
+        }
+
+        /// <summary>Spec 031: why a tool does nothing now (shown grey), or null.</summary>
+        public static string ToolReason(AimTarget target)
+        {
+            int tool = target.Option;
+            CookOutcome why = BuildRules.IsDispenser(tool) ? BuildRules.CanSqueeze(target.ContentCount, target.Mode)
+                : BuildRules.CanPackage(BuildRules.PackagingOf(tool), target.ContentCount, target.Mode);
+            switch (why)
+            {
+                case CookOutcome.StationEmpty: return "Start with a wrap or flatbread on the board";
+                case CookOutcome.BuildClosed: return BuildRules.IsDispenser(tool) ? "It is closed" : "It is packed already";
+                case CookOutcome.FoldFirst: return "Fold it first";
+                case CookOutcome.NothingToFold: return "Paper is for a wrap or a flatbread";
+                default: return null;
+            }
+        }
+
+        /// <summary>Spec 031: "Click · wrap in paper ($35)", "Click · into a box ($40)", "Click · into a bag ($35)".</summary>
+        public static string PackPrompt(int packaging, long price)
+        {
+            string what = packaging == BuildRules.Paper ? "wrap in paper" : packaging == BuildRules.Box ? "into a box" : "into a bag";
+            return Click(what + (price >= 0 ? " (" + EconomyRules.Money(price) + ")" : string.Empty));
         }
 
         /// <summary>Spec 030: the text a flip by hand gets, as the prompt's hint and the server's refusal (CookOutcome.NoSpatula).</summary>
@@ -129,6 +188,8 @@ namespace Worktown.Game.Net.Rules
                 case StationKind.Crate: return held.IsHolding ? InteractionAction.None : InteractionAction.Buy;
                 case StationKind.PlateShelf: return held.IsHolding ? InteractionAction.None : InteractionAction.Take;
                 case StationKind.Counter: return SellsAtCounter(held) ? InteractionAction.Sell : InteractionAction.None;
+                case StationKind.Assembly: // spec 031: a dispenser or the packaging rack; the board's body itself does nothing
+                    return target.Vessel == VesselKind.Assembly ? ToolAction(target) : InteractionAction.None;
                 default: return InteractionAction.None; // the stove's body: its knobs, buttons and burners do the work
             }
         }
@@ -180,6 +241,7 @@ namespace Worktown.Game.Net.Rules
                 case AimKind.Spot: return held.IsHolding ? "No room here" : null;
                 case AimKind.Vessel: return VesselReason(held, target);
                 case AimKind.Station:
+                    if (target.Station == StationKind.Assembly) return target.Vessel == VesselKind.Assembly ? ToolReason(target) : null; // spec 031
                     if (target.Station != StationKind.Counter || !held.IsVessel) return null;
                     if (held.Vessel == VesselKind.Plate) return "Put food on the plate first";
                     return held.HasContents ? "Pour it onto a plate first" : null;
@@ -189,6 +251,12 @@ namespace Worktown.Game.Net.Rules
 
         private static string VesselReason(Held held, AimTarget target)
         {
+            if (target.Vessel == VesselKind.Assembly) // spec 031
+            {
+                if (!held.IsFood) return null;
+                if (target.ContentCount > 0 && !BuildRules.IsOpen(target.Mode)) return "It is closed";
+                return target.ContentCount >= VesselRules.Capacity(VesselKind.Assembly) ? "The build is full" : "Take the finished one to the counter";
+            }
             if (target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Lowered)
                 return held.IsHolding ? "Raise the basket first" : null; // spec 029
             if (target.Vessel == VesselKind.Griddle && held.IsSpatula) return "Put food on the griddle first"; // spec 030
@@ -213,6 +281,9 @@ namespace Worktown.Game.Net.Rules
                         ? FryerButtonPrompt(target.Option, target.StoveFlags)
                         : ButtonPrompt(target.Option, target.StoveFlags);
                 case InteractionAction.Shake: return Click("shake the basket");
+                case InteractionAction.Squeeze: return HoldKey + " · squeeze " + (string.IsNullOrEmpty(target.Name) ? "sauce" : target.Name); // spec 031
+                case InteractionAction.Fold: return Click("fold " + TakeWhat(target));
+                case InteractionAction.Pack: return PackPrompt(BuildRules.PackagingOf(target.Option), target.Price);
                 case InteractionAction.Flip: return Click("flip " + TakeWhat(target)); // spec 030
                 case InteractionAction.Cut: return "Drag down · cut   Right click · turn";
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));
@@ -273,6 +344,7 @@ namespace Worktown.Game.Net.Rules
             {
                 case VesselKind.Board: return "on the board";
                 case VesselKind.Griddle: return "on the griddle"; // spec 030
+                case VesselKind.Assembly: return "on the board"; // spec 031
                 case VesselKind.Plate: return "on the plate";
                 default: return "into the " + VesselRules.Name(kind);
             }

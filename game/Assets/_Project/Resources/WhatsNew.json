@@ -502,6 +502,25 @@
         "Hold a plate and click grilled food: does it slide onto the plate? Serve Grilled veggies to a guest",
         "Is the griddle close enough to the board, the fryer and the plates?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-031",
+      "date": "2026-11-09",
+      "title": "The assembly board: wraps, flatbreads and boxes",
+      "items": [
+        "An assembly board stands after the plates, by the plate shelf: put a wrap or flatbread on it, then the fillings, the salad and the sauce",
+        "Every layer drops onto the stack; the order counts a little, missing parts count more, extra parts do not count",
+        "Hold left click on a sauce dispenser to squeeze: about half a second to one and a half seconds is the right amount",
+        "Click the build with empty hands to fold it, then click the wrap paper on the rack; a box or a bag comes from the rack too",
+        "On the menu: Seitan wrap, Falafel wrap, Seitan flatbread (folded, in a bag) and Veggie box (fries, grilled vegetables and sauce in a box)"
+      ],
+      "test": [
+        "Build a falafel wrap: wrap, falafel, lettuce slices, garlic-herb sauce. Does each layer land on the stack with a plop?",
+        "Hold the garlic-herb dispenser: does the bottle tip over the build with a ribbon and a squeeze sound while you hold?",
+        "Fold it, then wrap it in paper: are both short and clear? Serve it to a guest who ordered a Falafel wrap",
+        "Try paper before folding: does it say Fold it first, with nothing charged?",
+        "Is the board close enough to the plates and the counter?"
+      ]
     }
   ]
 }

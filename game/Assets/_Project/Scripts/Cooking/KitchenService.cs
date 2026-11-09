@@ -58,7 +58,12 @@ namespace Worktown.Game.Cooking
         private readonly List<Vessel> _basketList = new List<Vessel>();
         // Spec 030: the griddle spots (key: griddle station index and spot), found on the first server frame.
         private readonly Dictionary<long, Vessel> _griddleSpots = new Dictionary<long, Vessel>();
+        // Spec 031: the build spot of each assembly board (key: the board's station index), and who squeezes which dispenser.
+        private readonly Dictionary<int, Vessel> _assemblySpots = new Dictionary<int, Vessel>();
+        private readonly Dictionary<long, PickupInteractor> _squeezers = new Dictionary<long, PickupInteractor>();
         private uint _lastHeatTick;
+        // 030 review: the cooked-ticks stamp of each heat vessel at its last periodic label refresh.
+        private readonly Dictionary<Vessel, long> _labelStamps = new Dictionary<Vessel, long>();
         private bool _heatChecked;
 
         private sealed class HomeSlot
@@ -99,10 +104,13 @@ namespace Worktown.Game.Cooking
                 _initAttempts = 0;
                 _burnerSurface.Clear();
                 _heatSync.Clear();
+                _labelStamps.Clear();
                 _heatChecked = false;
                 _baskets.Clear();
                 _basketList.Clear();
                 _griddleSpots.Clear();
+                _assemblySpots.Clear(); // spec 031
+                _squeezers.Clear();
             }
         }
 
@@ -118,6 +126,12 @@ namespace Worktown.Game.Cooking
             Station station = _stations[stationIndex];
             // Spec 028b: stock checks its option (the slot) and the reach to that slot's anchor itself (StockRules).
             if (station.Kind == StationKind.Crate || StockLayout.IsStock(station.Kind)) return TakeIngredient(player, station, option);
+            // Spec 031: a dispenser's release ends the squeeze wherever the player is now (the press was in reach).
+            if (station.Kind == StationKind.Assembly && BuildRules.TryParseSqueeze(option, out _, out bool press) && !press)
+            {
+                EnsureInitialized();
+                return UseAssembly(player, station, option);
+            }
             if (!StationRules.IsInReach(player.transform.position, station.transform.position))
                 return CookOutcome.TooFar;
             EnsureInitialized();
@@ -128,6 +142,7 @@ namespace Worktown.Game.Cooking
                 case StationKind.Stove: return UseBurner(station, option);
                 case StationKind.Fryer: return UseFryer(station, option);
                 case StationKind.Griddle: return UseGriddle(station, option); // spec 030
+                case StationKind.Assembly: return UseAssembly(player, station, option); // spec 031
                 case StationKind.PlateShelf: return TakePlate(player);
                 default: return CookOutcome.UnknownStation;
             }
@@ -250,6 +265,118 @@ namespace Worktown.Game.Cooking
             return tipped;
         }
 
+        // ---- Spec 031: the assembly board ----
+
+        /// <summary>
+        /// Spec 031: the board's tools (RequestStation; reach to the board was checked): a dispenser's press and release
+        /// (<see cref="BuildRules.SqueezeStartOption"/> / <see cref="BuildRules.SqueezeStopOption"/>), the server measuring the time
+        /// between their arrivals in its own ticks; a packaging (<see cref="BuildRules.PackagingOption"/>).
+        /// </summary>
+        private CookOutcome UseAssembly(PickupInteractor player, Station board, int option)
+        {
+            if (!_assemblySpots.TryGetValue(board.Index, out Vessel spot) || spot == null) return CookOutcome.UnknownStation;
+            if (BuildRules.TryParseSqueeze(option, out int d, out bool start))
+                return start ? StartSqueeze(player, board, d) : StopSqueeze(player, board, d);
+            if (BuildRules.TryParsePackaging(option, out int p)) return Package(player, spot, p);
+            return CookOutcome.InvalidOption;
+        }
+
+        private CookOutcome StartSqueeze(PickupInteractor player, Station board, int d)
+        {
+            CookOutcome started = _kitchen.TryStartSqueeze(board.Index, d, player.OwnerId, Tick);
+            if (started != CookOutcome.Ok) return started;
+            _squeezers[BurnerKey(board.Index, d)] = player;
+            RefreshAssembly(board);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// The release: the sauce for the time held goes on the build (or on the same sauce on top), its price is charged first;
+        /// a refused step changes nothing and charges nothing. A release with no squeeze of this player (refused at the press,
+        /// or already stopped by the server) is harmless: Ok, nothing happens.
+        /// </summary>
+        private CookOutcome StopSqueeze(PickupInteractor player, Station board, int d)
+        {
+            if (!_kitchen.IsSqueezing(board.Index, d, out int owner, out _) || owner != player.OwnerId) return CookOutcome.Ok;
+            return EndSqueeze(player, board, d);
+        }
+
+        private CookOutcome EndSqueeze(PickupInteractor player, Station board, int d)
+        {
+            _squeezers.Remove(BurnerKey(board.Index, d));
+            CookOutcome made = _kitchen.TryEndSqueeze(board.Index, d, player.OwnerId, Tick, TickRate, out Item build, out float seconds);
+            RefreshAssembly(board);
+            if (made != CookOutcome.Ok) return made;
+            string sauce = BuildRules.SauceOf(d);
+            CookOutcome paid = Charge(player, sauce, out long cost);
+            if (paid != CookOutcome.Ok) return paid;
+            int spotId = _kitchen.BuildSpotOf(board.Index);
+            _kitchen.CommitBuild(spotId, build, sauce, seconds);
+            if (_assemblySpots.TryGetValue(board.Index, out Vessel spot)) RefreshVessel(spot);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " squeezed " + sauce + " for " + seconds.ToString("0.00") + " s ("
+                + EconomyRules.Money(cost) + "): " + KitchenState.NameOf(build) + " q=" + KitchenState.QualityOf(build).ToString("0.00"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 031: wrap paper, a box or a bag from the rack onto the build: checked in the sim, paid, then applied.</summary>
+        private CookOutcome Package(PickupInteractor player, Vessel spot, int p)
+        {
+            CookOutcome fits = _kitchen.TryPreviewPackaging(spot.ObjectId, p, out Item packed);
+            if (fits != CookOutcome.Ok) return fits;
+            CookOutcome paid = Charge(player, BuildRules.PackagingId(p), out long cost);
+            if (paid != CookOutcome.Ok) return paid;
+            _kitchen.CommitBuild(spot.ObjectId, packed);
+            RefreshVessel(spot);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " used the " + BuildRules.PackagingName(p) + " (" + EconomyRules.Money(cost)
+                + "): " + KitchenState.NameOf(packed) + " q=" + KitchenState.QualityOf(packed).ToString("0.00"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 031: empty hands (or anything) fold the open build on bread (RequestUse action ActionFold).</summary>
+        private CookOutcome Fold(PickupInteractor player, Vessel spot)
+        {
+            if (spot.Kind != VesselKind.Assembly) return CookOutcome.InvalidOption;
+            CookOutcome folded = _kitchen.TryFold(spot.ObjectId);
+            if (folded != CookOutcome.Ok) return folded;
+            RefreshVessel(spot);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " folded " + _kitchen.ResultName(spot.ObjectId, VesselKind.Assembly, Tick, TickRate));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 031: the price of <paramref name="grocerId"/> from the player's wallet (free without an economy).</summary>
+        private CookOutcome Charge(PickupInteractor player, string grocerId, out long cost)
+        {
+            cost = 0;
+            if (_economy == null) return CookOutcome.Ok;
+            return StockRules.PaidOutcome(_economy.TryBuy(player.NetworkObject, grocerId, out cost));
+        }
+
+        /// <summary>Spec 031: the board's light byte (who squeezes).</summary>
+        private void RefreshAssembly(Station board)
+        {
+            if (board == null || !board.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            contents.ServerSetStoveFlags(_kitchen.AssemblyFlags(board.Index));
+        }
+
+        /// <summary>Spec 031: a squeeze held past <see cref="BuildRules.AutoStopSeconds"/> ends as if released (or is dropped when the player left).</summary>
+        private void StopOverdueSqueezes(uint tick, double tickRate)
+        {
+            while (_kitchen.TryFindOverdueSqueeze(tick, tickRate, out int board, out int d, out int owner))
+            {
+                Station station = board >= 0 && board < _stations.Length ? _stations[board] : null;
+                long key = BurnerKey(board, d);
+                if (_squeezers.TryGetValue(key, out PickupInteractor player) && player != null && player.OwnerId == owner && station != null)
+                {
+                    CookOutcome ended = EndSqueeze(player, station, d);
+                    if (ended != CookOutcome.Ok) Debug.Log("[Kitchen] the held squeeze ended: " + ended);
+                    continue;
+                }
+                _squeezers.Remove(key);
+                _kitchen.CancelSqueeze(board, d);
+                RefreshAssembly(station);
+            }
+        }
+
         // ---- cookware (RequestUse) ----
 
         /// <summary>
@@ -271,6 +398,7 @@ namespace Worktown.Game.Cooking
             if (action == VesselRules.ActionStroke || action == VesselRules.ActionTurn) return Cut(player, vessel, action);
             if (action == VesselRules.ActionShake) return Shake(player, vessel);
             if (action == VesselRules.ActionFlip) return Flip(player, vessel); // spec 030
+            if (action == VesselRules.ActionFold) return Fold(player, vessel); // spec 031
             if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
 
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
@@ -390,8 +518,10 @@ namespace Worktown.Game.Cooking
             if (vessel.Kind == VesselKind.Pan) mode = _kitchen.PanIsSaute(id) ? Vessel.ModeSaute : Vessel.ModeFry;
             else if (vessel.Kind == VesselKind.Basket) mode = _kitchen.BasketMode(id, tick); // spec 029
             else if (vessel.Kind == VesselKind.Griddle) mode = _kitchen.GriddleMode(id, tick, rate); // spec 030
-            vessel.ServerSet(_kitchen.ContentNames(id, vessel.Kind, tick, rate), _kitchen.ContentLooks(id, vessel.Kind, tick, rate),
-                _kitchen.ResultName(id, vessel.Kind, tick, rate), mode);
+            else if (vessel.Kind == VesselKind.Assembly) mode = _kitchen.BuildMode(id); // spec 031
+            // 030 review: one preview per food for the label and the title.
+            IReadOnlyList<string> names = _kitchen.ContentNamesAndTitle(id, vessel.Kind, tick, rate, out string title);
+            vessel.ServerSet(names, _kitchen.ContentLooks(id, vessel.Kind, tick, rate), title, mode);
         }
 
         /// <summary>Server: the stove's knob and button lights (two bits per burner).</summary>
@@ -450,6 +580,15 @@ namespace Worktown.Game.Cooking
                 _griddleSpots[BurnerKey(gs.Griddle.Index, gs.Spot)] = spot;
                 RefreshVessel(spot);
             }
+            // Spec 031: the build spots of the assembly boards.
+            _assemblySpots.Clear();
+            foreach (AssemblySpot a in FindObjectsByType<AssemblySpot>(FindObjectsSortMode.None))
+            {
+                if (a.Board == null || !a.TryGetComponent(out Vessel spot) || !spot.IsSpawned) continue;
+                _kitchen.RegisterAssemblySpot(spot.ObjectId, a.Board.Index);
+                _assemblySpots[a.Board.Index] = spot;
+                RefreshVessel(spot);
+            }
             // Spec 029: the fryer baskets (scene objects next to their fryer).
             _baskets.Clear();
             _basketList.Clear();
@@ -466,6 +605,7 @@ namespace Worktown.Game.Cooking
                 if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
                 else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
                 else if (station != null && station.Kind == StationKind.Griddle) RefreshGriddle(station); // spec 030
+                else if (station != null && station.Kind == StationKind.Assembly) RefreshAssembly(station); // spec 031
             }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
         }
@@ -506,7 +646,11 @@ namespace Worktown.Game.Cooking
                 if (vessel == null || !vessel.IsSpawned)
                 {
                     _vessels.RemoveAt(i); // its id may be reused; KitchenState entries were removed when it went
-                    if (vessel != null) _heatSync.Remove(vessel);
+                    if (vessel != null)
+                    {
+                        _heatSync.Remove(vessel);
+                        _labelStamps.Remove(vessel);
+                    }
                     continue;
                 }
                 if (vessel.Kind == VesselKind.Plate && VesselRules.IsLost(true, vessel.transform.position.y))
@@ -554,6 +698,7 @@ namespace Worktown.Game.Cooking
             _kitchen.RemoveVessel(vessel.ObjectId);
             _vessels.Remove(vessel);
             _heatSync.Remove(vessel); // a pooled object that comes back starts fresh
+            _labelStamps.Remove(vessel);
             if (vessel.IsSpawned) _networkManager.ServerManager.Despawn(vessel.NetworkObject);
         }
 
@@ -569,10 +714,18 @@ namespace Worktown.Game.Cooking
             // second (HeatSync's rate; only changes are sent), and the name in the hands never differs from the label for long.
             if (_labelsDirty || CookingTime.ElapsedTicks(_lastLabelTick, tick) >= HeatSync.MinTicks(tickRate) || tick < _lastLabelTick)
             {
+                bool all = _labelsDirty;
                 _labelsDirty = false;
                 _lastLabelTick = tick;
                 foreach (Vessel vessel in _vessels)
-                    if (vessel != null && VesselRules.IsHeat(vessel.Kind) && _kitchen.HeatCount(vessel.ObjectId) > 0) RefreshVessel(vessel);
+                {
+                    if (vessel == null || !VesselRules.IsHeat(vessel.Kind) || _kitchen.HeatCount(vessel.ObjectId) == 0) continue;
+                    // 030 review: only food that cooked since the last refresh (a heat that is off changes no name).
+                    long stamp = _kitchen.HeatStamp(vessel.ObjectId, tick);
+                    if (!all && _labelStamps.TryGetValue(vessel, out long last) && last == stamp) continue;
+                    _labelStamps[vessel] = stamp;
+                    RefreshVessel(vessel);
+                }
             }
             if (!_heatChecked || tick != _lastHeatTick)
             {
@@ -585,6 +738,7 @@ namespace Worktown.Game.Cooking
                     if (basket != null && _kitchen.SettleDrain(basket.ObjectId, tick)) RefreshVessel(basket);
                 }
                 PublishHeat(tick, tickRate);
+                StopOverdueSqueezes(tick, tickRate); // spec 031
             }
             WatchHomes();
         }

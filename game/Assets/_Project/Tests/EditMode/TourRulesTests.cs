@@ -157,7 +157,7 @@ namespace Worktown.Game.Tests
         public void LookTour_HasTheStandardShots()
         {
             string[] shots = Get(TourRules.LookTour).Steps.Where(s => s.Kind == TourStepKind.Shot).Select(s => s.Name).ToArray();
-            CollectionAssert.AreEqual(new[] { "kitchen-third", "stock-third", "stock-first", "fridge-slot", "shelf-slot", "griddle-first", "fryer-first", "stove-first", "pan-first", "worktop-first", "scale-person", "counter-guests", "street-third" }, shots);
+            CollectionAssert.AreEqual(new[] { "kitchen-third", "stock-third", "stock-first", "fridge-slot", "shelf-slot", "griddle-first", "fryer-first", "stove-first", "pan-first", "worktop-first", "assembly-first", "scale-person", "counter-guests", "street-third" }, shots);
         }
 
         [Test]

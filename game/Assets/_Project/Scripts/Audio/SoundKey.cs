@@ -25,6 +25,12 @@ namespace Worktown.Game.Audio
         Rattle,
         Drip,
         /// <summary>Spec 030: the flip on the griddle, a short "tssh" (a burst of sizzle as the raw side hits the plate).</summary>
-        Flip
+        Flip,
+        /// <summary>Spec 031: a layer lands on the build (a soft "plop"), the sauce squeeze (loop while held), the fold of a wrap and the
+        /// crinkle of wrap paper, a box or a bag.</summary>
+        Plop,
+        Squeeze,
+        Fold,
+        Paper
     }
 }

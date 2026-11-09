@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Worktown.Game.Cooking;
+using Worktown.Sim.Cooking;
 using Worktown.Sim.Core;
 
 namespace Worktown.Game.Npc
@@ -27,6 +28,11 @@ namespace Worktown.Game.Npc
         public const byte GrilledVeggies = 8;
         /// <summary>Spec 030: a flatbread toasted on both sides on the griddle.</summary>
         public const byte ToastedFlatbread = 9;
+        /// <summary>Spec 031: built on the assembly board (recipe templates; order matching compares the layers).</summary>
+        public const byte SeitanWrap = 10;
+        public const byte FalafelWrap = 11;
+        public const byte SeitanFlatbread = 12;
+        public const byte VeggieBox = 13;
 
         private static readonly IReadOnlyList<string> Sticks = new[] { "sticks" };
         private static readonly IReadOnlyList<string> Slices = new[] { "slices" };
@@ -38,6 +44,8 @@ namespace Worktown.Game.Npc
         private static readonly IReadOnlyList<string> BoilOp = new[] { "boil" };
         private static readonly IReadOnlyList<string> GriddleOp = new[] { Worktown.Sim.Cooking.Griddle.OperationId }; // spec 030
         private static readonly IReadOnlyList<string> ToastOp = new[] { Worktown.Sim.Cooking.Griddle.ToastOperationId };
+        /// <summary>030 review: "Grilled veggies" takes only the grill vegetables (seitan is no vegetable).</summary>
+        private static readonly IReadOnlyList<string> GrillVegetables = new[] { "paprika", "eggplant", "mushroom" };
 
         /// <summary>
         /// The menu, in id order. Fries, potato soup and fried apple are one ingredient (sim market snack); onion soup,
@@ -65,11 +73,27 @@ namespace Worktown.Game.Npc
                 new[] { new DishNeed("falafel_mix", null, DeepFryOp, "medium") }, false, false, 1),
             // Spec 030: the griddle's "time" bucket is its shorter side, so "medium" means both sides grilled (at least 9 s each).
             new MenuDish(GrilledVeggies, "Grilled veggies", "meal", "paprika",
-                new[] { new DishNeed("paprika", null, GriddleOp, "medium"), new DishNeed(null, null, GriddleOp, "medium") },
+                new[] { new DishNeed("paprika", null, GriddleOp, "medium"), new DishNeed(null, null, GriddleOp, "medium", GrillVegetables) },
                 false, false, 3),
             new MenuDish(ToastedFlatbread, "Toasted flatbread", "snack", "flatbread",
                 new[] { new DishNeed("flatbread", null, ToastOp, "medium") }, false, false, 1),
+            // Spec 031: the assembly board. Needs list the required layers (for the stock check); the match is by the template.
+            new MenuDish(SeitanWrap, "Seitan wrap", "meal", "seitan", BuildNeeds("wrap", "seitan", "lettuce", "chili_sauce"), false, false,
+                CookingLimits.MaxBuildLayers, RecipeTemplates.SeitanWrapId),
+            new MenuDish(FalafelWrap, "Falafel wrap", "meal", "falafel_mix", BuildNeeds("wrap", "falafel_mix", "lettuce", "garlic_herb_sauce"),
+                false, false, CookingLimits.MaxBuildLayers, RecipeTemplates.FalafelWrapId),
+            new MenuDish(SeitanFlatbread, "Seitan flatbread", "meal", "seitan", BuildNeeds("flatbread", "seitan", "red_cabbage", "garlic_herb_sauce"),
+                false, false, CookingLimits.MaxBuildLayers, RecipeTemplates.SeitanFlatbreadId),
+            new MenuDish(VeggieBox, "Veggie box", "meal", "potato", BuildNeeds("potato", "paprika", "garlic_herb_sauce"), false, false,
+                CookingLimits.MaxBuildLayers, RecipeTemplates.VeggieBoxId),
         };
+
+        private static IReadOnlyList<DishNeed> BuildNeeds(params string[] bases)
+        {
+            var needs = new DishNeed[bases.Length];
+            for (int i = 0; i < bases.Length; i++) needs[i] = new DishNeed(bases[i], null, null, null);
+            return needs;
+        }
 
         /// <summary>What the crates sell (spec 007 demo ingredients): potato, apple, tomato, onion.</summary>
         public static readonly IReadOnlyList<string> CrateIngredients = CrateIds();

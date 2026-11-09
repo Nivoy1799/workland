@@ -24,6 +24,9 @@ namespace Worktown.Game.Cooking
         Fryer,
         /// <summary>Spec 030: a flat griddle with six spots (<see cref="VesselKind.Griddle"/>) and a power knob on its front
         /// (<see cref="GriddleRules"/>).</summary>
-        Griddle
+        Griddle,
+        /// <summary>Spec 031: the assembly board: one build spot (<see cref="VesselKind.Assembly"/>), two sauce dispensers held to
+        /// squeeze and a packaging rack (wrap paper, box, bag) on its top (<see cref="BuildRules"/>; the tools are its slots).</summary>
+        Assembly
     }
 }

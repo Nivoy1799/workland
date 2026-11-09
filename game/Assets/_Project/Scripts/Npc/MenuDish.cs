@@ -9,8 +9,9 @@ namespace Worktown.Game.Npc
     public sealed class MenuDish
     {
         public MenuDish(byte id, string name, string market, string main, IReadOnlyList<DishNeed> needs,
-            bool needsMix, bool noHeat, int maxIngredients)
+            bool needsMix, bool noHeat, int maxIngredients, string template = null)
         {
+            Template = template;
             Id = id;
             Name = name;
             Market = market;
@@ -42,5 +43,12 @@ namespace Worktown.Game.Npc
 
         /// <summary>At most this many different ingredients; more is one step wrong.</summary>
         public int MaxIngredients { get; }
+
+        /// <summary>
+        /// Spec 031: a dish built on the assembly board: the id of its sim recipe template (RecipeTemplates). Order matching then
+        /// compares the layers, the close and the pack (OrderRules); <see cref="Needs"/> only list what it is made of (stock checks).
+        /// Null for the other dishes.
+        /// </summary>
+        public string Template { get; }
     }
 }

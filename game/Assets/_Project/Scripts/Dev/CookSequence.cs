@@ -86,6 +86,8 @@ namespace Worktown.Game.Dev
             Vector3 atB = new Vector3(stoveB.transform.position.x, 0f, standZ);
             // Spec 029 (AC5, AC6): first an order of fries from potato to the counter, through the fryer.
             if (capture != null) yield return FryFries(actor, capture, laneZ);
+            // Spec 031 (AC5): then one falafel wrap on the assembly board, layer by layer, folded, in paper, to the counter.
+            if (capture != null) yield return BuildFalafelWrap(actor, capture, laneZ);
             // Spec 030 (AC5, AC6): then "Grilled veggies" with seitan strips on the griddle (flips, grill marks), to the counter.
             if (capture != null) yield return GrillVeggies(actor, capture, laneZ);
             Debug.Log("[Demo] walking to the first stove (" + Time.time.ToString("0.0") + " s)");
@@ -456,6 +458,195 @@ namespace Worktown.Game.Dev
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
             Debug.Log("[Demo] fries: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("Fries order: exact order")) Debug.LogWarning("[Demo] fries: no exact Fries order was served");
+        }
+
+        /// <summary>Spec 031: how long the tour holds the garlic-herb dispenser (the right amount is 0.5 to 1.5 s).</summary>
+        public const float SqueezeSeconds = 1.0f;
+
+        /// <summary>
+        /// Spec 031 AC5: one falafel wrap from stock to the counter on the assembly board, layer by layer. A wrap from the dry shelf
+        /// onto the board (frames of the drop); falafel mix from the fridge into basket 0 of the fryer (still on from the fries),
+        /// down, up at Perfect, drained, taken by hand onto the wrap (frames); lettuce from the fridge cut into slices on the
+        /// cutting board, onto the falafel (frames); the garlic-herb dispenser held for <see cref="SqueezeSeconds"/> (frames of the
+        /// ribbon); the fold (frames), the wrap paper from the rack (frames); taken and served at the counter (the reward). A shot
+        /// of the stack after every layer. The observer films the board close-up.
+        /// </summary>
+        private static IEnumerator BuildFalafelWrap(TourActor actor, CookCapture capture, float laneZ)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            AssemblySpot assemblySpot = UnityEngine.Object.FindFirstObjectByType<AssemblySpot>();
+            Station board = assemblySpot != null ? assemblySpot.Board : null;
+            Vessel spot = assemblySpot != null ? assemblySpot.GetComponent<Vessel>() : null;
+            Station fryer = null, counter = null;
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+            {
+                if (s.Kind == StationKind.Fryer) fryer = s;
+                else if (s.Kind == StationKind.Counter) counter = s;
+            }
+            Vessel basket = null, cutting = null;
+            foreach (FryerBasket fb in UnityEngine.Object.FindObjectsByType<FryerBasket>(FindObjectsSortMode.None))
+                if (fb.Basket == 0 && fb.Fryer == fryer) basket = fb.GetComponent<Vessel>();
+            foreach (Vessel v in UnityEngine.Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+                if (v.Kind == VesselKind.Board) cutting = v;
+            StationButton lower = null;
+            foreach (StationButton b in UnityEngine.Object.FindObjectsByType<StationButton>(FindObjectsSortMode.None))
+                if (fryer != null && b.Station == fryer && b.Option == FryerRules.BasketOption(0)) lower = b;
+            Knife knife = UnityEngine.Object.FindFirstObjectByType<Knife>();
+            StockSlot wrapSlot = FindSlot("wrap"), falafelSlot = FindSlot("falafel_mix"), lettuceSlot = FindSlot("lettuce");
+            StockSlot garlic = null, paper = null;
+            if (board != null)
+            {
+                board.TryGetSlot(0, out garlic);
+                board.TryGetSlot(BuildRules.DispenserCount + BuildRules.Paper, out paper);
+            }
+            if (spot == null || board == null || fryer == null || counter == null || basket == null || cutting == null || lower == null
+                || knife == null || wrapSlot == null || falafelSlot == null || lettuceSlot == null || garlic == null || paper == null)
+            {
+                Debug.LogWarning("[Demo] wrap: the assembly board, its tools, the fryer, the board, the knife or a stock slot is missing");
+                actor.CountTimeout("cook: assembly setup missing");
+                yield break;
+            }
+            NetworkObject spotObject = spot.NetworkObject, basketObject = basket.NetworkObject, cuttingObject = cutting.NetworkObject;
+            NetworkObject knifeObject = knife.GetComponent<NetworkObject>();
+            Vector3 knifeHome = knife.transform.position;
+            Vector3 atBoard = new Vector3(board.transform.position.x, 0f, laneZ);
+            Vector3 atFryer = new Vector3(fryer.transform.position.x, 0f, laneZ);
+            Debug.Log("[Demo] wrap: start (" + Time.time.ToString("0.0") + " s); plates to the board "
+                + TourActor.FlatDistance(spot.transform.position, NearestPlate(board.transform.position)).ToString("0.00") + " m");
+
+            // 1. The wrap: the base.
+            yield return TakeFrom(actor, wrapSlot, laneZ);
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return capture.Shot("assembly-board");
+            yield return actor.Use("put the wrap on the board", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse), capture.Before("wrap-aim", "wrap-onto-board", frames));
+            yield return StackShot(actor, capture, spot, "stack-1-wrap");
+
+            // 2. The falafel, from the fryer.
+            yield return TakeFrom(actor, falafelSlot, laneZ);
+            yield return actor.WalkTo(atFryer, false, false);
+            yield return actor.Use("put the falafel mix into the basket", ContentPoint(basket), InteractionAction.PutInto,
+                () => me.DevSendUse(basketObject, VesselRules.ActionUse));
+            yield return actor.Use("lower the basket", lower.transform.position, InteractionAction.Press,
+                () => me.DevSendStation(fryer.Index, FryerRules.LowerOption(0)));
+            float start = Time.unscaledTime;
+            yield return actor.AimAt(ContentPoint(basket) + Vector3.up * WatchAbove, 0.8f);
+            float nextShot = 0f;
+            while (Time.unscaledTime - start < FryWait && basket.Zone != HeatZone.Perfect)
+            {
+                float at = Time.unscaledTime - start;
+                if (at >= nextShot)
+                {
+                    LogBasket("falafel", at, basket);
+                    yield return capture.Shot("falafel-" + Mathf.RoundToInt(at).ToString("00") + "s-" + basket.Zone.ToString().ToLowerInvariant());
+                    nextShot += FryShotEvery * 2f;
+                }
+                yield return null;
+            }
+            if (basket.Zone != HeatZone.Perfect) actor.CountTimeout("cook: the falafel did not reach Perfect (" + basket.Zone + ")");
+            yield return new WaitForSecondsRealtime(1f);
+            yield return actor.Use("raise the basket", lower.transform.position, InteractionAction.Press,
+                () => me.DevSendStation(fryer.Index, FryerRules.RaiseOption(0)));
+            float drainStart = Time.unscaledTime;
+            while (FryerRules.StateOf(basket.Mode.Value) != BasketState.Raised && Time.unscaledTime - drainStart < 5f) yield return null;
+            yield return actor.Use("take the falafel", ContentPoint(basket), InteractionAction.Take, () => me.DevSendUse(basketObject, VesselRules.ActionUse));
+            Debug.Log("[Demo] wrap: holding '" + HeldName(me) + "'");
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return actor.Use("put the falafel on the wrap", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse), capture.Before("falafel-aim", "falafel-onto-wrap", frames));
+            yield return StackShot(actor, capture, spot, "stack-2-falafel");
+
+            // 3. The lettuce, cut into slices on the cutting board.
+            yield return TakeFrom(actor, lettuceSlot, laneZ);
+            yield return actor.WalkTo(new Vector3(cutting.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("put the lettuce on the cutting board", ContentPoint(cutting), InteractionAction.PutInto,
+                () => me.DevSendUse(cuttingObject, VesselRules.ActionUse));
+            yield return actor.Use("pick up the knife", knife.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(knifeObject));
+            yield return actor.AimAt(ContentPoint(cutting), 0.6f);
+            foreach (int action in new[] { VesselRules.ActionStroke, VesselRules.ActionStroke })
+            {
+                me.DevSendUse(cuttingObject, action);
+                yield return new WaitForSeconds(0.7f);
+            }
+            Debug.Log("[Demo] wrap: the cutting board holds " + cutting.Title.Value);
+            PlaceSurface prep = SurfaceUnder(knifeHome);
+            if (prep != null)
+            {
+                int knifeSpot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
+                yield return actor.Use("put the knife back", prep.SpotWorldPosition(knifeSpot), InteractionAction.Place,
+                    () => me.DevSendPlace(prep.Index, knifeSpot));
+            }
+            yield return actor.Use("take the lettuce slices", ContentPoint(cutting), InteractionAction.Take,
+                () => me.DevSendUse(cuttingObject, VesselRules.ActionUse));
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return actor.Use("put the lettuce on the falafel", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse), capture.Before("lettuce-aim", "lettuce-onto-wrap", frames));
+            yield return StackShot(actor, capture, spot, "stack-3-lettuce");
+
+            // 4. The garlic-herb sauce: hold the dispenser.
+            yield return actor.AimAt(garlic.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Squeeze);
+            yield return capture.Shot("sauce-aim");
+            if (me.CurrentAction != InteractionAction.Squeeze) Debug.LogWarning("[Demo] wrap: the dispenser offers " + me.CurrentAction);
+            Debug.Log("[Demo] wrap: press the garlic-herb dispenser: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
+            me.DevSqueezePress(garlic);
+            float pressed = Time.unscaledTime;
+            if (capture.Frames != null) yield return capture.Frames("sauce-squeeze", SqueezeSeconds + 0.4f);
+            while (Time.unscaledTime - pressed < SqueezeSeconds) yield return null;
+            me.DevSqueezeRelease();
+            float released = Time.unscaledTime;
+            while ((me.DevSqueezeBusy || spot.ContentCount < 4) && Time.unscaledTime - released < 3f) yield return null;
+            Debug.Log("[Demo] wrap: held the dispenser " + (released - pressed).ToString("0.00") + " s; the build is '" + spot.Title.Value + "'");
+            if (spot.ContentCount < 4) actor.CountTimeout("cook: no sauce layer on the build");
+            yield return StackShot(actor, capture, spot, "stack-4-sauce");
+
+            // 5. Fold, then the wrap paper.
+            yield return actor.Use("fold the wrap", ContentPoint(spot), InteractionAction.Fold,
+                () => me.DevSendUse(spotObject, VesselRules.ActionFold), capture.Before("fold-aim", "fold", frames));
+            yield return StackShot(actor, capture, spot, "folded");
+            yield return actor.Use("wrap it in paper", paper.Anchor, InteractionAction.Pack,
+                () => me.DevSendStation(board.Index, BuildRules.PackagingOption(BuildRules.Paper)), capture.Before("paper-aim", "paper", frames));
+            yield return StackShot(actor, capture, spot, "wrapped");
+            Debug.Log("[Demo] wrap: the board holds '" + spot.Title.Value + "', mode " + spot.Mode.Value);
+
+            // 6. Take it and serve it.
+            yield return actor.Use("take the falafel wrap", ContentPoint(spot), InteractionAction.Take,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse), capture.Before("take-wrap-aim", null, 0f));
+            yield return actor.Look(0f, -35f, 0.6f);
+            yield return capture.Shot("wrap-in-hand");
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
+            LogOrders();
+            Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
+            yield return actor.Use("serve the falafel wrap at the counter", counterTop, InteractionAction.Sell,
+                () => me.DevSendStation(counter.Index, 0), capture.Before("wrap-serve-aim", "wrap-served", RewardFramesSeconds));
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            yield return new WaitForSecondsRealtime(0.5f);
+            string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
+            Debug.Log("[Demo] wrap: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
+            if (!latest.Contains("falafel wrap")) actor.CountTimeout("cook: the falafel wrap was not sold");
+            if (!latest.Contains("Falafel wrap order: exact order")) Debug.LogWarning("[Demo] wrap: no exact Falafel wrap order was served");
+        }
+
+        /// <summary>Spec 031: a look down at the stack, a shot, and the stack's state in the log.</summary>
+        private static IEnumerator StackShot(TourActor actor, CookCapture capture, Vessel spot, string name)
+        {
+            yield return actor.AimAt(ContentPoint(spot), 0.5f);
+            var view = spot.GetComponent<Worktown.Game.Art.BuildStackView>();
+            Debug.Log("[Build] " + name + ": " + spot.ContentCount + " layers, drawn " + (view != null ? view.ShownLayers : -1) + ", mode "
+                + spot.Mode.Value + ", label '" + string.Join(" + ", spot.Names) + "'");
+            yield return capture.Shot(name);
+        }
+
+        private static Vector3 NearestPlate(Vector3 from)
+        {
+            Vector3 best = from + Vector3.right * 99f;
+            foreach (Vessel v in UnityEngine.Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+                if (v.Kind == VesselKind.Plate && TourActor.FlatDistance(v.transform.position, from) < TourActor.FlatDistance(best, from))
+                    best = v.transform.position;
+            return best;
         }
 
         /// <summary>Spec 030: seconds between the shots while the griddle cooks, and the longest the griddle part waits.</summary>

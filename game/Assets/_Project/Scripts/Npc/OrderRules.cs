@@ -39,6 +39,7 @@ namespace Worktown.Game.Npc
         public static OrderMatch Match(Item served, MenuDish ordered)
         {
             if (served == null || ordered == null) return OrderMatch.Wrong;
+            if (ordered.Template != null) return MatchBuild(served, ordered); // spec 031
             var parts = new List<Part>();
             bool mixed = false;
             Collect(served, null, null, null, parts, ref mixed);
@@ -46,6 +47,29 @@ namespace Worktown.Game.Npc
             if (ordered.Main != null && !HasBase(parts, ordered.Main)) return OrderMatch.Wrong;
 
             int misses = Misses(ordered, parts, mixed);
+            if (misses == 0) return OrderMatch.Exact;
+            return misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
+        }
+
+        /// <summary>
+        /// Spec 031: a dish built on the assembly board matches by its recipe template, layer by layer: no build, or the main
+        /// ingredient missing, is Wrong; then one step short (a required layer missing or prepared wrong, the close or the pack
+        /// short of the template) is Close, none is Exact, more is Wrong. The layer order and the sauce amount only cost score
+        /// (forgiving), never the match; extra layers are neutral.
+        /// </summary>
+        public static OrderMatch MatchBuild(Item served, MenuDish ordered)
+        {
+            RecipeTemplate template = RecipeTemplates.ById(ordered.Template);
+            if (served == null || template == null || !Assembly.IsBuild(served)) return OrderMatch.Wrong;
+            if (ordered.Main != null)
+            {
+                bool main = false;
+                foreach (Item layer in Assembly.LayersOf(served))
+                    if (Assembly.BaseOf(layer) == ordered.Main) main = true;
+                if (!main) return OrderMatch.Wrong;
+            }
+            TemplateScore s = RecipeTemplates.Score(served, template);
+            int misses = s.Missing + s.WrongPrep + s.CloseShort + s.PackShort;
             if (misses == 0) return OrderMatch.Exact;
             return misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
         }
@@ -115,6 +139,7 @@ namespace Worktown.Game.Npc
                 Part part = parts[i];
                 if (part.BaseId == null || claimed.Contains(part.BaseId)) continue;
                 if (need.BaseId != null && part.BaseId != need.BaseId) continue;
+                if (need.AnyOf != null && !Contains(need.AnyOf, part.BaseId)) continue; // 030 review
                 int m = PartMisses(need, part);
                 if (m >= bestMisses) continue;
                 best = i;

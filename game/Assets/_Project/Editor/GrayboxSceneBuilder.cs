@@ -97,7 +97,13 @@ namespace Worktown.Game.Editor
         // The kitchen keeps its length; the serving counter, the queue and the rail move with the plate shelf.
         private const float StoveAX = FryerX + FryerHalfGap + StationHalfGap;
         private const float StoveBX = StoveAX + 2f * StationHalfGap;
-        private const float PlateShelfX = StoveBX + 2f * StationHalfGap + BetweenWidth;
+        // Spec 031: the assembly board at the end of the dish flow, between the plates and the plate shelf (the serving counter is
+        // opposite the shelf): the plating worktop is one plate pair wide (0.74 m) and the board (0.9 m) follows it, so stove B to the
+        // shelf stays under 3 m, the plates are 0.6 m from the board and the shelf 1.1 m.
+        private const float PlatingWidth = 0.74f;
+        private const float AssemblyHalfGap = AssemblyArtRules.Width * 0.5f + WorktopGapMargin;
+        private const float AssemblyX = StoveBX + StationHalfGap + PlatingWidth + AssemblyHalfGap;
+        private const float PlateShelfX = AssemblyX + AssemblyHalfGap + StationHalfGap;
         private const float KitchenMaxX = PlateShelfX + StationHalfGap + 2f * BetweenWidth;
         /// <summary>Spec 027a: the serving counter stands in the front counter, opposite the plate shelf.</summary>
         private const float CounterX = PlateShelfX;
@@ -1123,6 +1129,124 @@ namespace Worktown.Game.Editor
             SetField(steamView, "_steamHeight", 0.06f);
         }
 
+        /// <summary>Spec 031: the assembly board's name (its sign and the server log) and its parts' object names.</summary>
+        public const string AssemblyName = "Assembly";
+        public const string AssemblySpotName = "Build spot";
+        public const string AssemblyToolName = "Tool";
+
+        /// <summary>
+        /// Spec 031: the assembly board's top (<see cref="AssemblyArtRules"/>): the build spot on its cutting board, its own scene
+        /// NetworkObject (never moves; no Pickup), a Vessel of kind Assembly with its AssemblySpot and the BuildStackView; and the five
+        /// tools as the station's slots (slot option = tool, <see cref="BuildRules"/>): the garlic-herb and chili dispensers (their
+        /// bottles, each with a SauceDispenserView), the wrap paper, the boxes and the bags of the rack.
+        /// </summary>
+        private static void BuildAssembly(ArtCatalog catalog, Station board, Transform parent)
+        {
+            float rootY = board.transform.localPosition.y;
+            float top = AssemblyArtRules.Top - rootY;
+            Vector2 p = AssemblyArtRules.SpotPosition;
+            var root = new GameObject(AssemblySpotName);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(board.transform.TransformPoint(new Vector3(p.x, top + AssemblyArtRules.BoardThickness, p.y)),
+                board.transform.rotation);
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = new Vector3(AssemblyArtRules.SpotSize, AssemblyArtRules.SpotColliderHeight, AssemblyArtRules.SpotSize);
+            collider.center = new Vector3(0f, AssemblyArtRules.SpotColliderHeight * 0.5f, 0f);
+            var anchor = new GameObject(Vessel.ContentsName);
+            anchor.transform.SetParent(root.transform, false);
+            anchor.transform.localPosition = new Vector3(0f, 0.001f, 0f);
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, 0.40f, 0f), 40, 0.03f);
+            label.text = string.Empty;
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            var vessel = root.AddComponent<Vessel>();
+            SetField(vessel, "_kind", (int)VesselKind.Assembly);
+            SetField(vessel, "_label", label);
+            SetField(root.AddComponent<AssemblySpot>(), "_board", board);
+            var stack = root.AddComponent<BuildStackView>();
+            SetField(stack, "_catalog", catalog);
+
+            Material ribbon = CreateMaterial(Root + "/Settings/SauceRibbon.mat", Palette.Cream);
+            Material paper = CreateMaterial(Root + "/Settings/WrapPaper.mat", Palette.Cream);
+            var slots = new List<StockSlot>();
+            for (int tool = 0; tool < BuildRules.ToolCount; tool++)
+            {
+                Vector2 at = AssemblyArtRules.ToolPosition(tool);
+                var slotObject = new GameObject(AssemblyToolName + " " + tool);
+                slotObject.transform.SetParent(board.transform, false);
+                var slot = slotObject.AddComponent<StockSlot>();
+                SetField(slot, "_station", board);
+                SetField(slot, "_option", tool);
+                SetField(slot, "_ingredientIndex", -1);
+                slots.Add(slot);
+                float itemHeight = 0.06f;
+                if (BuildRules.IsDispenser(tool))
+                {
+                    string sauce = BuildRules.SauceOf(tool);
+                    int ingredient = StockLayout.IngredientIndexOf(sauce);
+                    var look = new FoodLook((byte)ingredient, FoodLook.ShapeWhole, 0, 0, 0, 0);
+                    GameObject bottle = null;
+                    if (catalog != null && FoodArtRules.TryGetPiece(look, out FoodPiece piece) && catalog.TryGet(piece.Key, out GameObject prefab))
+                    {
+                        itemHeight = ArtCatalogBuilder.HeightOf(prefab);
+                        bottle = (GameObject)PrefabUtility.InstantiatePrefab(prefab, slotObject.transform);
+                        bottle.name = "Bottle";
+                        if (piece.Tinted)
+                        {
+                            Material tint = CreateMaterial(Root + "/Settings/Sample_" + sauce + ".mat", FoodArtRules.IngredientColor((byte)ingredient));
+                            foreach (Renderer r in bottle.GetComponentsInChildren<Renderer>()) r.sharedMaterial = tint;
+                        }
+                    }
+                    else Debug.LogError("[Graybox] no bottle model for " + sauce);
+                    slotObject.transform.localPosition = new Vector3(at.x, top + 0.02f + itemHeight * 0.5f, at.y);
+                    if (bottle != null) bottle.transform.localPosition = new Vector3(0f, -itemHeight * 0.5f, 0f);
+                    var view = slotObject.AddComponent<SauceDispenserView>();
+                    SetField(view, "_board", board);
+                    SetField(view, "_dispenser", tool);
+                    SetField(view, "_stack", stack);
+                    SetField(view, "_bottle", bottle != null ? bottle.transform : null);
+                    SetField(view, "_ribbonMaterial", ribbon);
+                    SetField(view, "_bottleHeight", itemHeight);
+                    continue;
+                }
+                int packaging = BuildRules.PackagingOf(tool);
+                if (packaging == BuildRules.Paper)
+                {
+                    itemHeight = 0.024f;
+                    for (int n = 0; n < 4; n++)
+                    {
+                        GameObject sheet = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        sheet.name = "Sheet " + n;
+                        UnityEngine.Object.DestroyImmediate(sheet.GetComponent<Collider>());
+                        sheet.transform.SetParent(slotObject.transform, false);
+                        sheet.transform.localPosition = new Vector3(0f, -itemHeight * 0.5f + 0.003f + n * 0.006f, 0f);
+                        sheet.transform.localRotation = Quaternion.Euler(0f, n * 7f - 10f, 0f);
+                        sheet.transform.localScale = new Vector3(0.22f, 0.005f, 0.22f);
+                        sheet.GetComponent<MeshRenderer>().sharedMaterial = paper;
+                    }
+                }
+                else
+                {
+                    ArtKey key = packaging == BuildRules.Box ? ArtKey.PropTakeawayBox : ArtKey.PropPaperBag;
+                    if (catalog != null && catalog.TryGet(key, out GameObject prefab))
+                    {
+                        float h = ArtCatalogBuilder.HeightOf(prefab);
+                        int count = packaging == BuildRules.Box ? 2 : 1;
+                        itemHeight = h * count;
+                        for (int n = 0; n < count; n++)
+                        {
+                            var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, slotObject.transform);
+                            instance.transform.localPosition = new Vector3(0f, -itemHeight * 0.5f + n * h, 0f);
+                            instance.transform.localRotation = Quaternion.Euler(0f, 180f + n * 6f, 0f);
+                        }
+                    }
+                    else Debug.LogError("[Graybox] no model for " + key);
+                }
+                slotObject.transform.localPosition = new Vector3(at.x, top + 0.012f + itemHeight * 0.5f, at.y);
+            }
+            SetField(board, "_slots", slots);
+        }
+
         /// <summary>Spec 030: the steel deck behind the griddle's plate, a place surface at the plate's height.</summary>
         private static PlaceSurface CreateGriddleDeck(Station griddle, int index)
         {
@@ -1262,6 +1386,10 @@ namespace Worktown.Game.Editor
             Station griddle = CreateStation(catalog, parent.transform, stations.Count, StationKind.Griddle, GriddleName, GriddleX, KitchenZ, 0f,
                 stoveMat, 0, GriddleArtRules.Width);
             stations.Add(griddle);
+            // Spec 031: the assembly board after the plates (appended last, so the earlier station indices stay).
+            Station assembly = CreateStation(catalog, parent.transform, stations.Count, StationKind.Assembly, AssemblyName, AssemblyX, KitchenZ, 0f,
+                CreateMaterial(Root + "/Settings/Station_Assembly.mat", Palette.WoodLight), 0, AssemblyArtRules.Width);
+            stations.Add(assembly);
 
             // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, the pass at the
             // right end (spec 029b: it stood between the stoves; created in the same order, so the surface indices stay),
@@ -1276,7 +1404,7 @@ namespace Worktown.Game.Editor
             PlaceSurface[] burnersA = CreateStoveSurfaces(stoveA, surfaces);
             surfaces.Add(CreateWorktop(parent.transform, PlateShelfX + half + BetweenWidth, KitchenMaxX, height, surfaces.Count, worktopMat, catalog));
             PlaceSurface[] burnersB = CreateStoveSurfaces(stoveB, surfaces);
-            PlaceSurface plating = CreateWorktop(parent.transform, StoveBX + half, PlateShelfX - half, height, surfaces.Count, worktopMat, catalog);
+            PlaceSurface plating = CreateWorktop(parent.transform, StoveBX + half, StoveBX + half + PlatingWidth, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(plating);
             PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, PlateShelfX + half + BetweenWidth, height, surfaces.Count,
                 worktopMat, catalog);
@@ -1300,6 +1428,9 @@ namespace Worktown.Game.Editor
             griddle.gameObject.AddComponent<NetworkObject>();
             griddle.gameObject.AddComponent<StationContents>();
             BuildGriddle(catalog, griddle, parent.transform);
+            assembly.gameObject.AddComponent<NetworkObject>();
+            assembly.gameObject.AddComponent<StationContents>();
+            BuildAssembly(catalog, assembly, parent.transform);
 
             // Spec 021: the cookware lying on top at the start (each one's home spot, where a lost one comes back).
             NetworkObject Prefab(VesselKind kind) => vesselPrefabs.Find(p => p.GetComponent<Vessel>().Kind == kind);
@@ -1312,8 +1443,8 @@ namespace Worktown.Game.Editor
             PlaceOnSpot(spatulaPrefab, griddleDeck, SpotNear(griddleDeck, 0.375f, 0.125f), "Spatula");
             PlaceOnSpot(Prefab(VesselKind.Pan), burnersA[0], 0, "Pan");
             PlaceOnSpot(Prefab(VesselKind.Pot), burnersB[0], 0, "Pot");
-            PlaceOnSpot(Prefab(VesselKind.Plate), plating, SpotNear(plating, -0.3f, -0.125f), "Plate 1");
-            PlaceOnSpot(Prefab(VesselKind.Plate), plating, SpotNear(plating, 0.3f, -0.125f), "Plate 2");
+            PlaceOnSpot(Prefab(VesselKind.Plate), plating, SpotNear(plating, -0.25f, -0.125f), "Plate 1"); // spec 031: one pair wide
+            PlaceOnSpot(Prefab(VesselKind.Plate), plating, SpotNear(plating, 0.25f, -0.125f), "Plate 2");
             PlaceOnSpot(Prefab(VesselKind.Bowl), last, SpotNear(last, -0.3f, -0.125f), "Bowl");
 
             new GameObject("KitchenSounds").AddComponent<KitchenSounds>(); // spec 023, client only
@@ -1579,7 +1710,7 @@ namespace Worktown.Game.Editor
                 // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules. Spec 028b: the
                 // stock models are built at their own size (StockArt).
                 // Spec 029: the graybox fryer is built at its own size too.
-                if (!stock && kind != StationKind.Fryer && kind != StationKind.Griddle) // spec 030: the graybox griddle too
+                if (!stock && kind != StationKind.Fryer && kind != StationKind.Griddle && kind != StationKind.Assembly) // spec 030/031: graybox at its size
                     visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(width / StationWidth, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
                 // Spec 028b: the fridge's open doors stand out of the body; the sign stays on the body's front.

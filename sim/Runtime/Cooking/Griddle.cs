@@ -84,15 +84,17 @@ namespace Worktown.Sim.Cooking
 
         /// <summary>
         /// The doneness of an item from its two sides: the mean when both are inside the ideal window, else the side further
-        /// from the window (equal distances: the mean). So one raw side reads raw, one burnt side reads burnt, and only two good
-        /// sides rate as good (ItemRater reads the item's doneness).
+        /// from the window; on an outside tie the side over the window (the burnt one). So one raw side reads raw, one burnt side
+        /// reads burnt, and only two good sides rate as good (ItemRater reads the item's doneness). 030 review: the mean only when
+        /// both distances are 0, so a raw side and a burnt side equally far out never average back into the window.
         /// </summary>
         public static float CombineSides(float sideA, float sideB, DonenessWindow window)
         {
             float da = Distance(sideA, window), db = Distance(sideB, window);
+            if (da <= 0f && db <= 0f) return ItemCanonical.Clamp01((sideA + sideB) * 0.5f);
             if (da > db) return ItemCanonical.Clamp01(sideA);
             if (db > da) return ItemCanonical.Clamp01(sideB);
-            return ItemCanonical.Clamp01((sideA + sideB) * 0.5f);
+            return ItemCanonical.Clamp01(Math.Max(sideA, sideB)); // an outside tie: the over side
         }
 
         /// <summary>How far a doneness lies outside the window (0 inside).</summary>

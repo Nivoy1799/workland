@@ -49,6 +49,14 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 029: a shake needs a lowered basket with food.</summary>
         NotLowered,
         /// <summary>Spec 030: a flip needs the spatula in the hands ("Use the spatula").</summary>
-        NoSpatula
+        NoSpatula,
+        /// <summary>Spec 031: the build is closed (folded, wrapped or packed): nothing more goes on, it is closed once.</summary>
+        BuildClosed,
+        /// <summary>Spec 031: a wrap or flatbread is folded before it goes in paper or a bag.</summary>
+        FoldFirst,
+        /// <summary>Spec 031: someone else is squeezing that dispenser.</summary>
+        DispenserBusy,
+        /// <summary>Spec 031: only a build on a wrap or flatbread folds.</summary>
+        NothingToFold
     }
 }

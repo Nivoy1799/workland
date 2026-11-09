@@ -102,6 +102,8 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.ToolFryerBasket, Mode = Fit.Graybox },
             // Spec 030: no griddle model in the packs either: a graybox steel plate on a steel cabinet with a front panel.
             new Def { Key = ArtKey.StationGriddle, Mode = Fit.Graybox },
+            // Spec 031: no assembly board in the packs: a graybox worktop cabinet with a wooden cutting board on top.
+            new Def { Key = ArtKey.StationAssembly, Mode = Fit.Graybox },
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -154,6 +156,13 @@ namespace Worktown.Game.Editor
             // Spec 029: a falafel ball (tinted brown by FoodVisual) and the empty fries box stacked at the fryer.
             Piece(ArtKey.FoodFalafelBall, PrimitiveType.Sphere, new Vector3(0.035f, 0.035f, 0.035f)),
             FoodDef(ArtKey.PropFriesBox, "fries-empty.fbx"),
+            // Spec 031: a flat layer (a bread base or a sauce, tinted), the folded wrap and the paper wrap (tinted primitives), the
+            // Kenney takeaway box and bag (their own colours).
+            Piece(ArtKey.FoodLayerDisc, PrimitiveType.Cylinder, new Vector3(0.25f, 0.008f, 0.25f)),
+            Piece(ArtKey.FoodWrapFolded, PrimitiveType.Sphere, new Vector3(0.25f, 0.06f, 0.12f)),
+            Piece(ArtKey.FoodWrapPaper, PrimitiveType.Sphere, new Vector3(0.25f, 0.075f, 0.135f)),
+            FoodDef(ArtKey.PropTakeawayBox, "styrofoam.fbx"),
+            FoodDef(ArtKey.PropPaperBag, "bag.fbx"),
             // Cookware (real size x1.15).
             FoodDef(ArtKey.FoodPlate, "plate.fbx"),
             FoodDef(ArtKey.FoodBowl, "bowl.fbx"),
@@ -816,6 +825,7 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationFryer) return BuildFryer(parent);
             if (key == ArtKey.ToolFryerBasket) return BuildBasket(parent);
             if (key == ArtKey.StationGriddle) return BuildGriddle(parent); // spec 030
+            if (key == ArtKey.StationAssembly) return BuildAssembly(parent); // spec 031
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -955,6 +965,40 @@ namespace Worktown.Game.Editor
             Box(model, "Trough", new Vector3(0f, h - t - 0.01f, Z(frontEdge - 0.015f)), new Vector3(pw, 0.02f, 0.03f), dark);
             float deckFront = pz + pd * 0.5f + 0.02f;
             Box(model, "Deck", new Vector3(0f, h - t * 0.5f, Z((deckFront + d * 0.5f) * 0.5f)), new Vector3(w, t, d * 0.5f - deckFront), steel);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 031: the graybox assembly board as the wrapper's "Model" (<see cref="AssemblyArtRules"/>, station z mirrored: the front
+        /// on +Z): a wooden cabinet with two door panels and a worktop, the cutting board the build lies on at the front left, a low
+        /// shelf the two sauce dispensers stand on at the back, and the packaging rack (a low frame) along the right edge.
+        /// </summary>
+        private static GameObject BuildAssembly(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material wood = GrayboxMaterial("AssemblyWood", Palette.WoodLight);
+            Material dark = GrayboxMaterial("AssemblyWoodDark", Palette.WoodDark);
+            Material board = GrayboxMaterial("AssemblyBoard", Palette.Shade(Palette.WoodLight, 0.88f));
+            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            const float w = AssemblyArtRules.Width, d = AssemblyArtRules.Depth, h = AssemblyArtRules.Top;
+            const float slab = 0.03f;
+            float Z(float stationZ) => -stationZ; // the wrapper's front is +Z (turned half way round: x mirrors too)
+            float X(float stationX) => -stationX;
+            Box(model, "Cabinet", new Vector3(0f, (h - slab) * 0.5f, 0f), new Vector3(w, h - slab, d), wood);
+            Box(model, "Worktop", new Vector3(0f, h - slab * 0.5f, 0f), new Vector3(w + 0.02f, slab, d + 0.02f), dark);
+            for (int side = -1; side <= 1; side += 2)
+                Box(model, side < 0 ? "Door left" : "Door right", new Vector3(side * w * 0.25f, (h - slab) * 0.5f, Z(-d * 0.5f - 0.005f)),
+                    new Vector3(w * 0.5f - 0.03f, h - slab - 0.1f, 0.01f), dark);
+            Vector2 spot = AssemblyArtRules.SpotPosition;
+            Box(model, "Cutting board", new Vector3(X(spot.x), h + AssemblyArtRules.BoardThickness * 0.5f, Z(spot.y)),
+                new Vector3(AssemblyArtRules.BoardWidth, AssemblyArtRules.BoardThickness, AssemblyArtRules.BoardDepth), board);
+            Vector2 sauce = AssemblyArtRules.ToolPosition(0), chili = AssemblyArtRules.ToolPosition(1);
+            Box(model, "Dispenser shelf", new Vector3(X((sauce.x + chili.x) * 0.5f), h + 0.006f, Z(sauce.y)), new Vector3(0.36f, 0.012f, 0.16f), steel);
+            Vector2 paper = AssemblyArtRules.ToolPosition(2), bags = AssemblyArtRules.ToolPosition(4);
+            float rackLength = bags.y - paper.y + 0.26f, rackZ = (paper.y + bags.y) * 0.5f;
+            Box(model, "Rack floor", new Vector3(X(paper.x), h + 0.006f, Z(rackZ)), new Vector3(0.26f, 0.012f, rackLength), dark);
+            Box(model, "Rack back", new Vector3(X(paper.x + 0.125f), h + 0.0075f, Z(rackZ)), new Vector3(0.012f, 0.015f, rackLength), dark);
             return model;
         }
 

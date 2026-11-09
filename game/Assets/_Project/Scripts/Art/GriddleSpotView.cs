@@ -54,6 +54,8 @@ namespace Worktown.Game.Art
         /// <summary>True while a flip arc is drawn (for tests and the tour log).</summary>
         public bool IsFlipping => GriddleArtRules.IsFlipping(Time.unscaledTime - _flipStart);
         public bool IsPredicting => _predicting;
+        /// <summary>030 review: our own predicted flips the synced counter has not shown yet (expired after the confirm timeout).</summary>
+        public int OwedFlips => _owed > 0 && Time.unscaledTime > _owedUntil ? 0 : _owed;
         /// <summary>The frame the predicted flip was first drawn (for the click-to-visual log); -1 before.</summary>
         public int PredictionDrawnFrame { get; private set; } = -1;
         /// <summary>Grill marks are drawn on the food's top now (for tests and the tour log).</summary>
@@ -107,6 +109,8 @@ namespace Worktown.Game.Art
             float now = Time.unscaledTime;
             byte mode = _vessel.Mode.Value;
             int flips = GriddleRules.FlipsOf(mode);
+            // 030 review: owed flips expire every frame, not only when the counter moves, so a refused flip never leaves the marks swapped.
+            if (_owed > 0 && now > _owedUntil) _owed = 0;
             if (!_started)
             {
                 _started = true; // a join: the counter is a baseline, nothing flips
@@ -116,7 +120,6 @@ namespace Worktown.Game.Art
             {
                 int steps = GriddleRules.FlipsBetween(_seenFlips, flips);
                 _seenFlips = flips;
-                if (now > _owedUntil) _owed = 0;
                 for (int i = 0; i < steps; i++)
                 {
                     if (_owed > 0)

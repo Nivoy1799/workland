@@ -123,9 +123,11 @@ namespace Worktown.Game.Tests
                 // shelf; the back line at z 14.3.
                 // Spec 029: the fryer (index 6, 0.8 m wide) after the prep run moved the stoves, the counter and the shelf 0.84 m right.
                 // Spec 030: the griddle (index 7, 1.02 m wide) between the prep run (now one board wide) and the fryer; nothing else moved.
-                float[] fixedX = { 2.36f, 3.60f, 7.48f, 8.72f, 11.22f, 11.22f, 6.44f, 5.49f }; // spec 029b: stove B and the plates moved left
+                // Spec 031: the assembly board (index 8, 0.9 m wide) after the plating worktop (now 0.74 m) moved the plate shelf and the
+                // counter 0.42 m right.
+                float[] fixedX = { 2.36f, 3.60f, 7.48f, 8.72f, 11.64f, 11.64f, 6.44f, 5.49f, 10.55f }; // spec 029b: stove B and the plates moved left
                 StationKind[] kinds = { StationKind.Shelf, StationKind.Fridge, StationKind.Stove, StationKind.Stove, StationKind.Counter, StationKind.PlateShelf,
-                    StationKind.Fryer, StationKind.Griddle };
+                    StationKind.Fryer, StationKind.Griddle, StationKind.Assembly };
                 int count = 0;
                 foreach (GameObject root in scene.GetRootGameObjects())
                 {
@@ -141,7 +143,8 @@ namespace Worktown.Game.Tests
                         float depth = station.Kind == StationKind.Counter ? 0.7f : stock ? StockArt.DepthOf(station.Kind) : 1.2f;
                         float z = station.Kind == StationKind.Counter ? 11.85f : stock ? 14.9f - depth * 0.5f : 14.3f;
                         bool fryer = station.Kind == StationKind.Fryer;
-                        float width = fryer ? FryerArt.Width : station.Kind == StationKind.Griddle ? GriddleArtRules.Width : 1.2f;
+                        float width = fryer ? FryerArt.Width : station.Kind == StationKind.Griddle ? GriddleArtRules.Width
+                            : station.Kind == StationKind.Assembly ? AssemblyArtRules.Width : 1.2f;
                         // Spec 029: the fryer's collider stops under its oil wells (the aim finds a lowered basket).
                         float colliderHeight = fryer ? FryerArt.BodyColliderTop : height;
                         var expected = new Vector3(x, colliderHeight * 0.5f, z);
@@ -173,7 +176,7 @@ namespace Worktown.Game.Tests
                         if (stock) Assert.AreEqual(box.bounds.size.y, b.size.y, 0.01f, station.name + " cabinet as high as its body");
                     }
                 }
-                Assert.AreEqual(8, count, "the dry shelf, the fridge, two stoves, the counter, the plate shelf, (spec 029) the fryer and (spec 030) the griddle");
+                Assert.AreEqual(9, count, "the dry shelf, the fridge, two stoves, the counter, the plate shelf, (spec 029) the fryer, (spec 030) the griddle and (spec 031) the assembly board");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

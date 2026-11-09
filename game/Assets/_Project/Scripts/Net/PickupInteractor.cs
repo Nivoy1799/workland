@@ -89,6 +89,12 @@ namespace Worktown.Game.Net
         // Spec 030: the griddle spots (fixed vessels without a Pickup, like the baskets).
         private GriddleSpot[] _allGriddleSpots;
         private Vessel[] _griddleVessels = new Vessel[0];
+        // Spec 031: the assembly boards' build spots (fixed vessels) and the held sauce squeeze (press and release, owner only).
+        private AssemblySpot[] _allAssemblySpots;
+        private float _nextAssemblyLookup;
+        private Vessel[] _assemblyVessels = new Vessel[0];
+        private readonly SqueezeHold _squeeze = new SqueezeHold();
+        private Worktown.Game.Art.SauceDispenserView _squeezeView;
         // Spec 028b: the copy of a taken ingredient flying into the hand until the server's food is there (owner only).
         private Worktown.Game.Art.StockTakeLook _pendingTake;
         private string _pendingTakeName;
@@ -119,7 +125,7 @@ namespace Worktown.Game.Net
         private readonly List<PendingLook> _ending = new List<PendingLook>();
         private System.Func<PendingLook, ItemSnapshot> _snapshotOf;
 
-        private enum QueuedKind : byte { None, Click, Drop, Key }
+        private enum QueuedKind : byte { None, Click, Drop, Key, Flip } // 030 review: the right-click flip queues too
 
         private struct SpotState
         {
@@ -138,6 +144,8 @@ namespace Worktown.Game.Net
             public Worktown.Game.Art.BasketView Basket;
             /// <summary>Spec 030: a griddle spot's predicted flip.</summary>
             public Worktown.Game.Art.GriddleSpotView Griddle;
+            /// <summary>Spec 031: an assembly board's predicted fold or packaging.</summary>
+            public Worktown.Game.Art.BuildStackView Build;
             public int ClickFrame;
             public bool VisualLogged;
         }
@@ -215,8 +223,11 @@ namespace Worktown.Game.Net
                 if (look.Take != null) look.Take.Confirm(); // spec 028b: the copy just goes
                 if (look.Basket != null) look.Basket.EndPrediction(); // spec 029: back to the synced pose
                 if (look.Griddle != null) look.Griddle.EndPrediction(false); // spec 030
+                if (look.Build != null) look.Build.EndPrediction(false); // spec 031
             }
             _ending.Clear();
+            _squeeze.Reset(); // spec 031: the server stops a squeeze left running
+            if (_squeezeView != null) _squeezeView.Predict(false);
             _pendingTake = null;
             _pendingPickUp = null;
             ClearQueuedClick();
@@ -246,6 +257,10 @@ namespace Worktown.Game.Net
             bool blocked = keyboard == null || wheel || keyboard.tKey.isPressed
                 || (_inputReader != null && _inputReader.IsUiOpen);
 
+            if (!firstPerson || blocked)
+            {
+                if (!_squeeze.Idle) UpdateSqueeze(null, false, false); // spec 031: a view change or a menu lets go of the dispenser
+            }
             if (blocked)
             {
                 _gesture.Reset();
@@ -314,6 +329,12 @@ namespace Worktown.Game.Net
             bool click = _click.Update(pressed, delta.x, delta.y, Time.unscaledTime);
             // The first click on a free cursor only locks it (spec 010): that press is no click.
             if (pressed && !(locked && _lockedLastFrame)) _click.Cancel();
+            // Spec 031: holding on a sauce dispenser squeezes; that press and its release make no click.
+            if (UpdateSqueeze(mouse, pressed, locked))
+            {
+                _click.Cancel();
+                click = false;
+            }
 
             if (armed)
             {
@@ -331,11 +352,12 @@ namespace Worktown.Game.Net
                 Queue(QueuedKind.Click, true);
             }
             else if (((mouse != null && locked && mouse.rightButton.wasPressedThisFrame) || (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame))
-                     && InteractionRules.RightClickFlips(CurrentAim) && Target is Vessel spot
-                     && Time.unscaledTime - _lastSendTime >= _clientInterval)
+                     && InteractionRules.RightClickFlips(CurrentAim) && Target is Vessel)
             {
                 // Spec 030: the right click on a griddle spot flips; without the spatula the server answers "Use the spatula".
-                FlipWithLook(spot);
+                // 030 review: through the click buffer like a left click, so a right click inside the request interval waits and is
+                // never swallowed.
+                Queue(QueuedKind.Flip, true);
             }
 
             bool drop = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
@@ -378,6 +400,10 @@ namespace Worktown.Game.Net
                 case QueuedKind.Key:
                     HandleThirdPersonKey(FindHeldPickup() != null);
                     break;
+                case QueuedKind.Flip:
+                    // 030 review: a right-click flip, sent now or after the request interval (still on the same spot with food).
+                    if (InteractionRules.RightClickFlips(CurrentAim) && Target is Vessel spot) FlipWithLook(spot);
+                    break;
             }
         }
 
@@ -392,6 +418,7 @@ namespace Worktown.Game.Net
                 return; // review of spec 027b: the target, the spot or the action changed since the click
 
             if (kind == QueuedKind.Key && !firstPerson && TargetId(Target) != _queuedTarget) return;
+            if (kind == QueuedKind.Flip && TargetId(Target) != _queuedTarget) return; // 030 review: aimed elsewhere since
             Act(kind);
         }
 
@@ -433,6 +460,24 @@ namespace Worktown.Game.Net
                 case InteractionAction.Flip:
                     if (Target is Vessel spot) FlipWithLook(spot); // spec 030: the arc and the tssh at the click
                     break;
+                case InteractionAction.Fold:
+                    // Spec 031: the wrap closes over the fillings at the click (its swish comes with the look).
+                    if (Target is Vessel foldSpot)
+                        BuildStepWithLook(foldSpot, BuildRules.Mode(BuildRules.CloseFolded, BuildRules.PackNone, true), 0, false, null);
+                    break;
+                case InteractionAction.Pack when Target is StockSlot rack:
+                {
+                    // Spec 031: wrap paper, a box or a bag from the rack onto the build, its look at the click.
+                    Vessel rackSpot = BuildSpotOf(rack.Station, out Worktown.Game.Art.BuildStackView rackStack);
+                    int packaging = BuildRules.PackagingOf(rack.Option);
+                    byte seen = rackStack != null ? rackStack.SeenMode : rackSpot != null ? rackSpot.Mode.Value : (byte)0;
+                    byte next = packaging == BuildRules.Paper
+                        ? BuildRules.Mode(BuildRules.CloseWrapped, BuildRules.PackNone, BuildRules.OnBread(seen))
+                        : BuildRules.Mode(BuildRules.CloseOf(seen), packaging == BuildRules.Box ? BuildRules.PackBox : BuildRules.PackBag, BuildRules.OnBread(seen));
+                    PlaySound(SoundKey.Pick, rack.Anchor);
+                    BuildStepWithLook(rackSpot, next, BuildRules.PackagingOption(packaging), true, rack.Station);
+                    break;
+                }
                 case InteractionAction.PutInto:
                 case InteractionAction.Pour:
                 case InteractionAction.Take:
@@ -655,10 +700,12 @@ namespace Worktown.Game.Net
             PlaySound(SoundKey.Flip, spot.transform.position);
             float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
                 TimeManager != null ? (float)TimeManager.TickDelta : 0f);
+            int ahead = view.OwedFlips; // 030 review: our earlier flips still on their way count before this one
             view.PredictFlip(timeout);
             if (_snapshotOf == null) _snapshotOf = Snapshot;
             var pending = new PendingLook { Griddle = view, ClickFrame = Time.frameCount };
-            _looks.Add(pending, view, new FeelPrediction(PredictionKind.Flip, OwnerId, Snapshot(pending), Time.unscaledTime, timeout),
+            _looks.Add(pending, view, new FeelPrediction(PredictionKind.Flip, OwnerId, FeelRules.FlipStart(Snapshot(pending), ahead),
+                Time.unscaledTime, timeout),
                 _lastRequest);
         }
 
@@ -709,6 +756,13 @@ namespace Worktown.Game.Net
                 Vessel spotVessel = look.Griddle.GetComponent<Vessel>();
                 return new ItemSnapshot(spotVessel != null && spotVessel.ContentCount > 0, -1, Vector3.zero, look.Griddle.SyncedFlips);
             }
+            // Spec 031: a fold or packaging is about the build spot's synced close and pack bits (gone once the board is empty).
+            if (look.Build != null)
+            {
+                Vessel buildVessel = look.Build.GetComponent<Vessel>();
+                return new ItemSnapshot(buildVessel != null && buildVessel.ContentCount > 0, -1, Vector3.zero,
+                    buildVessel != null ? buildVessel.Mode.Value & 0x0F : 0);
+            }
             Pickup item = look.Item;
             if (item == null || !item.IsSpawned) return ItemSnapshot.Gone;
             Vessel vessel = look.Vessel;
@@ -735,6 +789,7 @@ namespace Worktown.Game.Net
                     Debug.Log("[Feel] click to confirm: " + ms.ToString("0") + " ms (" + p.Kind + ")");
                     if (look.Item != null) look.Item.EndPrediction(true);
                     if (look.Griddle != null) look.Griddle.EndPrediction(true); // spec 030
+                    if (look.Build != null) look.Build.EndPrediction(true); // spec 031
                     if (look.Basket != null) look.Basket.EndPrediction();
                     if (look.Take != null)
                     {
@@ -758,6 +813,11 @@ namespace Worktown.Game.Net
                     look.Griddle.EndPrediction(false); // spec 030: it turns back over
                     nopeAt = look.Griddle.transform.position;
                 }
+                if (look.Build != null)
+                {
+                    look.Build.EndPrediction(false); // spec 031: it opens back up
+                    nopeAt = look.Build.transform.position;
+                }
                 if (look.Take != null)
                 {
                     nopeAt = look.Take.transform.position;
@@ -777,6 +837,7 @@ namespace Worktown.Game.Net
             else if ((object)look.Take != null) drawn = look.Take.DrawnFrame; // the copy may be gone already; its number stays
             else if (look.Basket != null) drawn = look.Basket.PredictionDrawnFrame;
             else if (look.Griddle != null) drawn = look.Griddle.PredictionDrawnFrame; // spec 030
+            else if (look.Build != null) drawn = look.Build.PredictionDrawnFrame; // spec 031
             if (drawn < 0) return;
             look.VisualLogged = true;
             int frames = drawn - look.ClickFrame;
@@ -817,7 +878,7 @@ namespace Worktown.Game.Net
             if (held.TryGetComponent(out Spatula _)) return Held.Spatula; // spec 030
             if (held.TryGetComponent(out Vessel vessel)) return Held.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value);
             if (held.TryGetComponent(out Food food))
-                return Held.Food(food.DisplayName.Value, food.Look.Value.Kind == FoodLook.KindPlated);
+                return Held.Food(food.DisplayName.Value, FoodLookRules.IsFinished(food.Look.Value)); // spec 031: a finished build too
             return Held.Item("box");
         }
 
@@ -836,8 +897,12 @@ namespace Worktown.Game.Net
                 case PlaceSurface surface:
                     return AimTarget.Spot(TargetSpot, surface.IsBurner);
                 case Vessel vessel:
+                    // Spec 031: the build as this client sees it (its own pending fold or packaging first), so a second click never repeats it.
+                    if (vessel.Kind == VesselKind.Assembly && vessel.TryGetComponent(out Worktown.Game.Art.BuildStackView stackView))
+                        return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value, stackView.SeenMode);
                     return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value, vessel.Mode.Value);
                 case StockSlot slot:
+                    if (slot.Station != null && slot.Station.Kind == StationKind.Assembly) return DescribeTool(slot); // spec 031
                     return DescribeStock(slot.IngredientIndex); // spec 028b: a slot takes like a crate
                 case Station station:
                     return station.Kind == StationKind.Crate ? DescribeStock(station.IngredientIndex) : AimTarget.OnStation(station.Kind);
@@ -850,6 +915,146 @@ namespace Worktown.Game.Net
                 default:
                     return AimTarget.Nothing;
             }
+        }
+
+        /// <summary>Spec 031: a ray over the assembly board means the tool it passes within this distance of (m); else the board.</summary>
+        private const float ToolAimRadius = 0.12f;
+
+        /// <summary>
+        /// Spec 031: the tool of the assembly board <paramref name="board"/> the ray passes nearest (within <see cref="ToolAimRadius"/> of
+        /// its anchor), or null. The tools have no colliders (they never block a ray), so the ray that aims at a bottle hits the
+        /// board's top behind it; the distance to the ray, not to that hit point, says which tool is meant.
+        /// </summary>
+        private static StockSlot ToolOnRay(Station board, Ray ray)
+        {
+            StockSlot best = null;
+            float bestSqr = ToolAimRadius * ToolAimRadius;
+            for (int option = 0; option < board.SlotCount; option++)
+            {
+                if (!board.TryGetSlot(option, out StockSlot slot)) continue;
+                float sqr = Vector3.Cross(ray.direction, slot.Anchor - ray.origin).sqrMagnitude; // the direction is unit length
+                if (sqr >= bestSqr) continue;
+                bestSqr = sqr;
+                best = slot;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Spec 031: a tool on the assembly board as the rules see it: the dispenser's sauce or the packaging and its price, the
+        /// board's byte, and the build as this client sees it (its layers, and its mode with our own pending step first).
+        /// </summary>
+        private AimTarget DescribeTool(StockSlot slot)
+        {
+            Station board = slot.Station;
+            int tool = slot.Option;
+            byte flags = board.TryGetComponent(out StationContents contents) ? contents.StoveFlags.Value : (byte)0;
+            Vessel spot = BuildSpotOf(board, out Worktown.Game.Art.BuildStackView view);
+            int layers = spot != null ? spot.ContentCount : 0;
+            byte mode = view != null ? view.SeenMode : spot != null ? spot.Mode.Value : (byte)0;
+            _prices ??= Worktown.Sim.Economy.EconomyCatalog.CreateDefault();
+            string name;
+            long price = -1;
+            if (BuildRules.IsDispenser(tool))
+            {
+                string sauce = BuildRules.SauceOf(tool);
+                int index = StockLayout.IngredientIndexOf(sauce);
+                name = index >= 0 ? DemoIngredients.All[index].DisplayName : "sauce";
+                if (_prices.TryGetGrocerPrice(sauce, out long p)) price = p;
+            }
+            else
+            {
+                int packaging = BuildRules.PackagingOf(tool);
+                name = BuildRules.PackagingName(packaging);
+                if (_prices.TryGetGrocerPrice(BuildRules.PackagingId(packaging), out long p)) price = p;
+            }
+            return AimTarget.AssemblyTool(tool, flags, name, price, layers, mode);
+        }
+
+        /// <summary>Spec 031: the build spot of an assembly board and its view, or null.</summary>
+        private Vessel BuildSpotOf(Station board, out Worktown.Game.Art.BuildStackView view)
+        {
+            RefreshInteractables();
+            view = null;
+            for (int i = 0; i < _allAssemblySpots.Length; i++)
+            {
+                if (_allAssemblySpots[i] == null || _allAssemblySpots[i].Board != board) continue;
+                Vessel spot = _assemblyVessels[i];
+                if (spot != null) spot.TryGetComponent(out view);
+                return spot;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Spec 031: holding left click on a dispenser squeezes (first person). The look starts at the press and ends at the
+        /// release, or when the aim leaves the dispenser; the press and the release go out as RequestStation start and stop,
+        /// each when the request interval allows (<see cref="SqueezeHold"/>: never swallowed). Returns true while the squeeze
+        /// owns the left button (no click is made from it).
+        /// </summary>
+        private bool UpdateSqueeze(Mouse mouse, bool pressed, bool locked)
+        {
+            if (_devSqueeze) return PollSqueeze(); // spec 031: a tour holds the dispenser (DevSqueezePress / DevSqueezeRelease)
+            StockSlot tool = Target as StockSlot;
+            bool onDispenser = CurrentAction == InteractionAction.Squeeze && tool != null && tool.Station != null
+                && BuildRules.IsDispenser(tool.Option);
+            if (_squeeze.Held)
+            {
+                bool same = onDispenser && tool.Station.Index == _squeeze.Board && tool.Option == _squeeze.Dispenser;
+                if (!pressed || !locked || !same)
+                {
+                    _squeeze.Release();
+                    if (_squeezeView != null) _squeezeView.Predict(false);
+                }
+            }
+            else if (onDispenser && locked && _lockedLastFrame && mouse != null && mouse.leftButton.wasPressedThisFrame
+                     && _squeeze.Press(tool.Station.Index, tool.Option))
+            {
+                _squeezeView = tool.GetComponent<Worktown.Game.Art.SauceDispenserView>();
+                if (_squeezeView != null) _squeezeView.Predict(true); // the look in the press's frame
+            }
+
+            PollSqueeze();
+            return _squeeze.Held || onDispenser;
+        }
+
+        private bool _devSqueeze;
+
+        /// <summary>Spec 031: sends the squeeze's start or stop when the request interval allows.</summary>
+        private bool PollSqueeze()
+        {
+            bool canSend = Time.unscaledTime - _lastSendTime >= _clientInterval;
+            switch (_squeeze.Poll(canSend))
+            {
+                case SqueezeHold.Send.Start:
+                    SendStation(_squeeze.Board, BuildRules.SqueezeStartOption(_squeeze.Dispenser));
+                    break;
+                case SqueezeHold.Send.Stop:
+                    SendStation(_squeeze.Board, BuildRules.SqueezeStopOption(_squeeze.Dispenser));
+                    if (_devSqueeze && !_squeeze.Held) _devSqueeze = false;
+                    break;
+            }
+            return _squeeze.Held;
+        }
+
+        /// <summary>
+        /// Spec 031: a fold (the spot) or a packaging (a rack tool) with its look now: the stack shows the new mode at the click
+        /// (the fold closes, the paper goes round, the box comes down), judged like any predicted look: confirmed when the
+        /// spot's synced mode moves on, a refusal or the timeout turns it back with "nope".
+        /// </summary>
+        private void BuildStepWithLook(Vessel spot, byte mode, int option, bool viaStation, Station board)
+        {
+            if (spot == null) return;
+            if (viaStation) SendStation(board.Index, option);
+            else SendUse(spot.NetworkObject, VesselRules.ActionFold);
+            if (!spot.TryGetComponent(out Worktown.Game.Art.BuildStackView view)) return;
+            float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+                TimeManager != null ? (float)TimeManager.TickDelta : 0f);
+            view.PredictStep(mode, timeout);
+            if (_snapshotOf == null) _snapshotOf = Snapshot;
+            var pending = new PendingLook { Build = view, ClickFrame = Time.frameCount };
+            _looks.Add(pending, view, new FeelPrediction(PredictionKind.BuildStep, OwnerId, Snapshot(pending), Time.unscaledTime, timeout),
+                _lastRequest);
         }
 
         /// <summary>A crate or (spec 028b) a stock slot of ingredient <paramref name="i"/>: its name ("red cabbage") and grocer price.</summary>
@@ -992,6 +1197,8 @@ namespace Worktown.Game.Net
                 Station station = hitCollider.GetComponentInParent<Station>();
                 Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
                 StockSlot slot = station != null && station.SlotCount > 0 ? station.NearestSlot(_rayHits[i].point) : null;
+                // Spec 031: on the assembly board a ray means a tool only near it (elsewhere it is the board itself).
+                if (station != null && station.Kind == StationKind.Assembly) slot = ToolOnRay(station, ray);
                 if (slot != null)
                     AddAimHit(distance, AimKind.Station, slot); // spec 028b: the fridge or shelf means its slot nearest the hit; reach to its anchor
                 else if (station != null)
@@ -1088,6 +1295,16 @@ namespace Worktown.Game.Net
                 _griddleVessels = new Vessel[_allGriddleSpots.Length];
                 for (int i = 0; i < _allGriddleSpots.Length; i++) _griddleVessels[i] = _allGriddleSpots[i].GetComponent<Vessel>();
             }
+            if (_allAssemblySpots == null || HasMissing(_allAssemblySpots)
+                || (_allAssemblySpots.Length == 0 && Time.unscaledTime >= _nextAssemblyLookup))
+            {
+                // Spec 031: looked up once like the griddle spots; again (at most once a second) while none is found: a scene
+                // NetworkObject stays inactive on a client until the server spawns it, and an empty first look must not stick.
+                _nextAssemblyLookup = Time.unscaledTime + 1f;
+                _allAssemblySpots = FindObjectsByType<AssemblySpot>(FindObjectsSortMode.None);
+                _assemblyVessels = new Vessel[_allAssemblySpots.Length];
+                for (int i = 0; i < _allAssemblySpots.Length; i++) _assemblyVessels[i] = _allAssemblySpots[i].GetComponent<Vessel>();
+            }
         }
 
         private static bool HasMissing<TItem>(TItem[] items) where TItem : UnityEngine.Object
@@ -1150,10 +1367,16 @@ namespace Worktown.Game.Net
                 if (spot == null || !spot.IsSpawned) continue;
                 AddCone(ray, spot, PlaceSpots.None, spot.ContentPoint, hands, Describe(spot), range, feel.AimCone, spot.transform.position);
             }
-            if (!hands.IsHolding)
-                foreach (StockSlot slot in _allSlots) // spec 028b: reach to the slot's anchor, as the server measures it
-                    if (slot != null && slot.Station != null)
-                        AddCone(ray, slot, PlaceSpots.None, slot.Anchor, hands, Describe(slot), range, feel.AimCone);
+            for (int i = 0; i < _assemblyVessels.Length; i++)
+            {
+                // Spec 031: the build spot competes at its contents, reach to its pivot (as the server does).
+                Vessel build = _assemblyVessels[i];
+                if (build == null || !build.IsSpawned) continue;
+                AddCone(ray, build, PlaceSpots.None, build.ContentPoint, hands, Describe(build), range, feel.AimCone, build.transform.position);
+            }
+            foreach (StockSlot slot in _allSlots) // spec 028b: reach to the slot's anchor, as the server measures it
+                if (slot != null && slot.Station != null && (!hands.IsHolding || slot.Station.Kind == StationKind.Assembly)) // spec 031: tools with any hands
+                    AddCone(ray, slot, PlaceSpots.None, slot.Anchor, hands, Describe(slot), range, feel.AimCone);
             if (held != null)
             {
                 foreach (PlaceSurface surface in _allSurfaces)
@@ -1236,6 +1459,7 @@ namespace Worktown.Game.Net
             Transform self = candidate is Vessel fixedVessel && VesselRules.IsFixed(fixedVessel.Kind) ? fixedVessel.transform : null;
             if (self != null && self.TryGetComponent(out FryerBasket fb)) own = fb.Fryer;
             if (self != null && self.TryGetComponent(out GriddleSpot gs)) own = gs.Griddle; // spec 030: on its griddle
+            if (self != null && self.TryGetComponent(out AssemblySpot asp)) own = asp.Board; // spec 031: on its board
             int count = Physics.RaycastNonAlloc(new Ray(eye, to.normalized), _sightHits, distance, Physics.DefaultRaycastLayers,
                 QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
@@ -1533,6 +1757,22 @@ namespace Worktown.Game.Net
         public void DevSendPlace(int surfaceIndex, int spotIndex) => SendPlace(surfaceIndex, spotIndex);
         public void DevSendStation(int stationIndex, int option) => SendStation(stationIndex, option);
         public void DevSendUse(NetworkObject target, int action) => SendUse(target, action);
+        /// <summary>Spec 031, tours: press a sauce dispenser like a held left click (the look now, the start when allowed).</summary>
+        public void DevSqueezePress(StockSlot dispenser)
+        {
+            if (dispenser == null || dispenser.Station == null || !_squeeze.Press(dispenser.Station.Index, dispenser.Option)) return;
+            _devSqueeze = true;
+            _squeezeView = dispenser.GetComponent<Worktown.Game.Art.SauceDispenserView>();
+            if (_squeezeView != null) _squeezeView.Predict(true);
+        }
+        /// <summary>Spec 031, tours: let go of the dispenser (the look ends now, the stop goes out when allowed).</summary>
+        public void DevSqueezeRelease()
+        {
+            _squeeze.Release();
+            if (_squeezeView != null) _squeezeView.Predict(false);
+        }
+        /// <summary>Spec 031, tours: the squeeze still has a request to send.</summary>
+        public bool DevSqueezeBusy => !_squeeze.Idle;
 #endif
     }
 }

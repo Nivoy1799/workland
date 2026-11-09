@@ -52,6 +52,8 @@ namespace Worktown.Game.Art
             World(ArtKey.StationFryer, WorktopHeight, SizeAxis.Height, Worktop),
             // Spec 030: the griddle, worktop high (its steel plate is the top).
             World(ArtKey.StationGriddle, WorktopHeight, SizeAxis.Height, Worktop),
+            // Spec 031: the assembly board, worktop high.
+            World(ArtKey.StationAssembly, WorktopHeight, SizeAxis.Height, Worktop),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).
@@ -105,6 +107,13 @@ namespace Worktown.Game.Art
             Small(ArtKey.FoodPaprika, 0.10f, "Paprika"),
             Food(ArtKey.FoodEggplant, 0.20f, "Eggplant"),
             Small(ArtKey.FoodMushroom, 0.06f, "Mushroom"),
+            // Spec 031: the build. A flat layer is the wrap's size; the folded wrap too; the paper a little bigger; the box and the bag
+            // are over 15 cm (real size).
+            Food(ArtKey.FoodLayerDisc, 0.25f, "Wrap"),
+            Food(ArtKey.FoodWrapFolded, 0.25f, "Wrap"),
+            Food(ArtKey.FoodWrapPaper, 0.25f, "Wrapped wrap (paper)"),
+            Food(ArtKey.PropTakeawayBox, 0.20f, "Takeaway box"),
+            Food(ArtKey.PropPaperBag, 0.28f, "Paper bag"),
 
             // Cookware and tools (x1.15).
             Cookware(ArtKey.FoodPlate, 0.26f, "Plate"),

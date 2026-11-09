@@ -348,6 +348,81 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>Spec 031: a layer lands on the build: a soft low "plop" (a falling sine with a short wet noise).</summary>
+        public static float[] Plop()
+        {
+            var rng = new System.Random(3101);
+            var s = new float[(int)(SampleRate * 0.14f)];
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float freq = 320f - 900f * t;
+                float body = (float)Math.Sin(2.0 * Math.PI * Math.Max(90f, freq) * t) * 0.45f * (float)Math.Exp(-t / 0.035f);
+                band += ((float)(rng.NextDouble() * 2.0 - 1.0) - band) * 0.3f;
+                float wet = band * 0.25f * (float)Math.Exp(-t / 0.02f);
+                s[i] = (body + wet) * Math.Min(1f, t / 0.002f);
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// Spec 031: the sauce squeeze loop (1 s): a soft, slightly bubbly low-passed noise with a slow wobble, faded in and out at
+        /// the ends so the loop has no click.
+        /// </summary>
+        public static float[] Squeeze()
+        {
+            var rng = new System.Random(3102);
+            var s = new float[SampleRate];
+            float band = 0f, slow = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                band += (noise - band) * 0.18f;
+                slow += (noise - slow) * 0.02f;
+                float wobble = 0.7f + 0.3f * (float)Math.Sin(2.0 * Math.PI * 7.0 * t);
+                float edge = Math.Min(1f, Math.Min(t, 1f - t) / 0.03f);
+                s[i] = (band * 0.5f + slow * 0.9f) * wobble * edge;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 031: the fold of a wrap: a soft cloth-like swish (band noise swelling and falling over 0.25 s).</summary>
+        public static float[] Fold()
+        {
+            var rng = new System.Random(3103);
+            var s = new float[(int)(SampleRate * 0.3f)];
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                band += ((float)(rng.NextDouble() * 2.0 - 1.0) - band) * 0.12f;
+                float env = (float)Math.Sin(Math.PI * Math.Min(1f, t / 0.26f));
+                s[i] = band * 0.9f * env * env;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 031: wrap paper, a box or a bag: a dry crinkle of short high-passed bursts.</summary>
+        public static float[] Paper()
+        {
+            var rng = new System.Random(3104);
+            var s = new float[(int)(SampleRate * 0.35f)];
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                float crackle = rng.NextDouble() < 0.02 ? 1f : 0.35f;
+                float env = (float)Math.Exp(-t / 0.15f) * Math.Min(1f, t / 0.004f);
+                s[i] = high * 0.22f * crackle * env;
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -377,11 +452,15 @@ namespace Worktown.Game.Audio
                 case SoundKey.Rattle: return Rattle();
                 case SoundKey.Drip: return Drip();
                 case SoundKey.Flip: return Flip();
+                case SoundKey.Plop: return Plop(); // spec 031
+                case SoundKey.Squeeze: return Squeeze();
+                case SoundKey.Fold: return Fold();
+                case SoundKey.Paper: return Paper();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }
 
-        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer;
+        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer || key == SoundKey.Squeeze;
 
         public static AudioClip CreateClip(SoundKey key)
         {

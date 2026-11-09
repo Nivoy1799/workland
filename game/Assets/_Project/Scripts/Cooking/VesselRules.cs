@@ -23,6 +23,8 @@ namespace Worktown.Game.Cooking
         public const int ActionShake = 3;
         /// <summary>Spec 030: flip the food on a griddle spot (the spatula in the hands).</summary>
         public const int ActionFlip = 4;
+        /// <summary>Spec 031: fold the open build on bread on an assembly board.</summary>
+        public const int ActionFold = 5;
 
         /// <summary>How many things it holds: board and pan one (open question 2), pot four, plate and bowl the sim limits.</summary>
         public static int Capacity(VesselKind kind)
@@ -36,6 +38,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Bowl: return CookingLimits.MaxMixInputs;
                 case VesselKind.Basket: return 1; // spec 029: one portion
                 case VesselKind.Griddle: return 1; // spec 030: one item per spot
+                case VesselKind.Assembly: return CookingLimits.MaxBuildLayers; // spec 031: the layers of one build
                 default: return 0;
             }
         }
@@ -45,7 +48,7 @@ namespace Worktown.Game.Cooking
             kind == VesselKind.Pan || kind == VesselKind.Pot || kind == VesselKind.Basket || kind == VesselKind.Griddle; // spec 030: a griddle spot
 
         /// <summary>Spec 030: cookware fixed to its station (no Pickup, never carried): a fryer basket, a griddle spot.</summary>
-        public static bool IsFixed(VesselKind kind) => kind == VesselKind.Basket || kind == VesselKind.Griddle;
+        public static bool IsFixed(VesselKind kind) => kind == VesselKind.Basket || kind == VesselKind.Griddle || kind == VesselKind.Assembly; // spec 031: the build spot
 
         /// <summary>Spec 029: the cookware that cooks on a burner (pan, pot); a basket hangs in its fryer.</summary>
         public static bool StandsOnBurner(VesselKind kind) => kind == VesselKind.Pan || kind == VesselKind.Pot;
@@ -79,7 +82,8 @@ namespace Worktown.Game.Cooking
         public static bool TakesOutByHand(VesselKind kind)
         {
             return kind == VesselKind.Board || kind == VesselKind.Pan || kind == VesselKind.Bowl || kind == VesselKind.Basket
-                || kind == VesselKind.Griddle; // spec 030
+                || kind == VesselKind.Griddle // spec 030
+                || kind == VesselKind.Assembly; // spec 031: the finished build
         }
 
         /// <summary>Plates do not come back when lost (the shelf gives new ones); all other cookware has a home spot.</summary>
@@ -137,6 +141,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Bowl: return "bowl";
                 case VesselKind.Basket: return "basket";
                 case VesselKind.Griddle: return "griddle";
+                case VesselKind.Assembly: return "build"; // spec 031
                 default: return "it";
             }
         }

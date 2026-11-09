@@ -124,6 +124,65 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(1, kitchen.ContentCount(Spot0, VesselKind.Griddle));
             Assert.AreEqual(1, VesselRules.Capacity(VesselKind.Griddle));
             Assert.AreEqual(6, GriddleRules.SpotsPerGriddle);
+            // 030 review: a real plated item (the counter's plate op) never goes on a spot, and stays in the hands.
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateIngredient("paprika", out Item raw));
+            kitchen.Register(44, raw);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPlate(44, out Item plated));
+            Assert.IsTrue(AssemblyRules.IsPlated(plated));
+            kitchen.Register(45, plated);
+            KitchenState fresh = Kitchen();
+            fresh.Register(45, plated);
+            Assert.AreEqual(CookOutcome.AlreadyPlated, fresh.TryPutInto(45, Spot0, VesselKind.Griddle, Start));
+            Assert.IsTrue(fresh.TryGet(45, out _), "refused: still in the hands");
+            Assert.AreEqual(0, fresh.ContentCount(Spot0, VesselKind.Griddle));
+        }
+
+        // ---- 030 review: flips never stack ----
+
+        [Test]
+        public void ManyFlips_WithTheSameTotalsPerSide_GiveTheSameHashAndQuality()
+        {
+            // Once: 12 s on side 1, flip, 12 s on side 2.
+            KitchenState once = Grilling();
+            once.TryFlip(Spot0, Real(12));
+            Assert.AreEqual(CookOutcome.Ok, once.TryPreviewGriddleTake(Spot0, Real(24), Rate, out Item a));
+            // Five flips: 4 + 4 + 4 + 4 + 4 + 4 s, alternating, also 12 s per side.
+            KitchenState many = Grilling();
+            for (int i = 1; i <= 5; i++) Assert.AreEqual(CookOutcome.Ok, many.TryFlip(Spot0, Real(4 * i)));
+            Assert.AreEqual(5, many.FlipsOf(Spot0));
+            GriddleSides sides = many.GriddleSidesOf(Spot0, Real(24), Rate);
+            Assert.AreEqual(sides.SideA, sides.SideB, 0.01f);
+            Assert.AreEqual(CookOutcome.Ok, many.TryPreviewGriddleTake(Spot0, Real(24), Rate, out Item b));
+            Assert.AreEqual(a.Hash, b.Hash, "the same item");
+            Assert.AreEqual(KitchenState.QualityOf(a), KitchenState.QualityOf(b), 1e-5f, "flipping more never rates higher");
+        }
+
+        [Test]
+        public void TwoQuickFlips_OneCounterStep_ConfirmsOnlyTheFirst()
+        {
+            // 030 review: the second flip's start counts our first flip still on its way.
+            ItemSnapshot first = FeelRules.FlipStart(new ItemSnapshot(true, -1, Vector3.zero, 1), 0);
+            ItemSnapshot second = FeelRules.FlipStart(new ItemSnapshot(true, -1, Vector3.zero, 1), 1);
+            var oneStep = new ItemSnapshot(true, -1, Vector3.zero, 2);
+            var twoSteps = new ItemSnapshot(true, -1, Vector3.zero, 3);
+            Assert.AreEqual(PredictionPhase.Confirmed, FeelRules.Judge(PredictionKind.Flip, 3, first, oneStep));
+            Assert.AreEqual(PredictionPhase.Pending, FeelRules.Judge(PredictionKind.Flip, 3, second, oneStep));
+            Assert.AreEqual(PredictionPhase.Confirmed, FeelRules.Judge(PredictionKind.Flip, 3, second, twoSteps));
+            Assert.AreEqual(1, FeelRules.FlipSteps(3, 0), "the counter wraps at 4");
+        }
+
+        [Test]
+        public void LabelAndTitle_FromOnePreview_EqualTheSeparateReads_AndAnOffHeatKeepsItsStamp()
+        {
+            KitchenState kitchen = Grilling();
+            IReadOnlyList<string> names = kitchen.ContentNamesAndTitle(Spot0, VesselKind.Griddle, Real(13), Rate, out string title);
+            CollectionAssert.AreEqual(kitchen.ContentNames(Spot0, VesselKind.Griddle, Real(13), Rate), names);
+            Assert.AreEqual(kitchen.ResultName(Spot0, VesselKind.Griddle, Real(13), Rate), title);
+            long stamp = kitchen.HeatStamp(Spot0, Real(13));
+            kitchen.TryToggleGriddle(Griddle, Real(13));
+            Assert.AreEqual(stamp, kitchen.HeatStamp(Spot0, Real(40)), "off: no new cooked ticks, no new preview");
+            Assert.AreEqual(-1, kitchen.HeatStamp(Spot1, Real(40)), "empty");
+
         }
 
         // ---- AC3: zones per side ----
@@ -389,6 +448,20 @@ namespace Worktown.Game.Tests
             again.TryPreviewTake(plate, VesselKind.Plate, out Item unflipped);
             Assert.AreEqual(OrderMatch.Close, OrderRules.Match(unflipped, dish), KitchenState.NameOf(unflipped));
             Assert.Less(KitchenState.QualityOf(unflipped), KitchenState.QualityOf(veggies));
+
+            // 030 review: seitan is no vegetable: paprika with grilled seitan strips is one need short (Close), never Exact.
+            KitchenState seitan = Kitchen();
+            Ingredient(seitan, "paprika", 3, 43);
+            Ingredient(seitan, "seitan", 3, 44);
+            seitan.TryPutInto(43, Spot0, VesselKind.Griddle, Start);
+            seitan.TryPutInto(44, Spot1, VesselKind.Griddle, Start);
+            seitan.TryToggleGriddle(Griddle, Start);
+            seitan.TryFlip(Spot0, Real(11));
+            seitan.TryFlip(Spot1, Real(13));
+            seitan.TryPour(Spot0, VesselKind.Griddle, plate, VesselKind.Plate, Real(24), Rate, out _);
+            seitan.TryPour(Spot1, VesselKind.Griddle, plate, VesselKind.Plate, Real(26), Rate, out _);
+            seitan.TryPreviewTake(plate, VesselKind.Plate, out Item withSeitan);
+            Assert.AreNotEqual(OrderMatch.Exact, OrderRules.Match(withSeitan, dish), KitchenState.NameOf(withSeitan));
 
             KitchenState bread = Grilling("flatbread", 0);
             bread.TryFlip(Spot0, Real(5));

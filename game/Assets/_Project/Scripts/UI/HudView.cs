@@ -308,6 +308,10 @@ namespace Worktown.Game.UI
                 case CookOutcome.BasketLowered: return "Raise the basket first";
                 case CookOutcome.NotLowered: return "Lower the basket with food first";
                 case CookOutcome.NoSpatula: return Worktown.Game.Net.Rules.InteractionRules.UseTheSpatula; // spec 030
+                case CookOutcome.BuildClosed: return "It is closed already"; // spec 031
+                case CookOutcome.FoldFirst: return "Fold it first";
+                case CookOutcome.DispenserBusy: return "Someone is using that sauce";
+                case CookOutcome.NothingToFold: return "Only a wrap or a flatbread folds";
                 default: return outcome.ToString();
             }
         }

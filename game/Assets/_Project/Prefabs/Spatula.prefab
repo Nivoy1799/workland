@@ -221,7 +221,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8f2334944bb4e1a4fa5f87f7c614f61f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Cooking.Spatula
-  _griddleIndex: 0
 --- !u!1001 &2254412315859963229
 PrefabInstance:
   m_ObjectHideFlags: 0

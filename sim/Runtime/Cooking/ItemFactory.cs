@@ -63,6 +63,15 @@ namespace Worktown.Sim.Cooking
             if (op.Heat?.Grill != null && NumberOf(resolved, "time") > NumberOf(resolved, Griddle.LongSideParam))
                 return Fail(OperationError.InvalidParam);
 
+            // Spec 031: close and pack steps go in order (fold before paper or a bag; only bread folds; a box needs no close).
+            string? stepChoice = null;
+            if (op.Kind == OperationKind.Close || op.Kind == OperationKind.Pack)
+            {
+                foreach (var r in resolved) stepChoice = r.Bucket.Id;
+                OperationError step = Assembly.CheckStep(op.Id, stepChoice, flat[0]);
+                if (step != OperationError.None) return Fail(step);
+            }
+
             // 4. canonical order
             if (op.Commutative) flat.Sort(ItemCanonical.CompareItems);
 
@@ -82,6 +91,18 @@ namespace Worktown.Sim.Cooking
                     if (s <= src.Surface) return new OperationResult(src, OperationError.None);
                     stats = src.Stats;
                     surface = s;
+                    components = new List<ItemComponent>(src.Components);
+                    factor = src.QualityFactor;
+                    break;
+                }
+                case OperationKind.Portion:
+                case OperationKind.Close:
+                case OperationKind.Pack:
+                {
+                    // Spec 031: a squeeze, a close or a pack keeps what it is made of (only its buckets and tags change).
+                    var src = flat[0];
+                    stats = src.Stats;
+                    surface = src.Surface;
                     components = new List<ItemComponent>(src.Components);
                     factor = src.QualityFactor;
                     break;
@@ -121,6 +142,7 @@ namespace Worktown.Sim.Cooking
             var tags = new List<string>();
             foreach (var input in flat) tags.AddRange(input.Tags);
             tags.AddRange(op.AddedTags);
+            if (op.Kind == OperationKind.Close && stepChoice == Assembly.Wrapped) tags.Add(Assembly.PlatedTag); // spec 031: finished
             tags.Sort(StringComparer.Ordinal);
 
             var item = new Item(

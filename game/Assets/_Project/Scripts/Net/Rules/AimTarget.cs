@@ -85,6 +85,17 @@ namespace Worktown.Game.Net.Rules
             return new AimTarget(AimKind.Station, StationKind.Crate, default, 0, null, 0, 0, ingredient, price, PlaceSpots.None, false, false);
         }
 
+        /// <summary>
+        /// Spec 031: a tool on the assembly board (<see cref="BuildRules"/>: a dispenser or a packaging): <see cref="Option"/> the
+        /// tool, <see cref="StoveFlags"/> the board's byte (who squeezes), <see cref="Name"/> the sauce or packaging, <see cref="Price"/>
+        /// its price, and the board's build as clients see it: <see cref="ContentCount"/> layers, <see cref="Mode"/> its mode byte.
+        /// </summary>
+        public static AimTarget AssemblyTool(int tool, byte boardFlags, string name, long price, int layers, byte buildMode)
+        {
+            return new AimTarget(AimKind.Station, StationKind.Assembly, VesselKind.Assembly, layers, layers > 0 ? "the build" : null, tool,
+                boardFlags, name, price, PlaceSpots.None, false, false, buildMode);
+        }
+
         /// <summary>A free item that is no cookware (food, the knife, a box).</summary>
         public static AimTarget Item(string name)
         {

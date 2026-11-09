@@ -92,6 +92,34 @@ namespace Worktown.Sim.Cooking
                 DeepFryOperation(plated, none),
                 GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, plated, none),
                 GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, plated, none),
+                // Spec 031: the assembly board.
+                new OperationDef(Assembly.SqueezeOperationId, "dispenser", OperationKind.Portion, false, 1, 1, new[]
+                {
+                    new ParamDef(Assembly.AmountParam, ParamKind.Number, 0f, Assembly.MaxSqueezeSeconds, new[]
+                    {
+                        new BucketDef(Assembly.Little, 0f, "a dash of"),
+                        new BucketDef(Assembly.Right, Assembly.RightFrom, ""),
+                        new BucketDef(Assembly.Lots, Assembly.LotsFrom, "lots of"),
+                    }),
+                }, null, plated, none, "{" + Assembly.AmountParam + "} {in}"),
+                new OperationDef(Assembly.AssembleOperationId, Assembly.Station, OperationKind.Assemble, false, 1, CookingLimits.MaxBuildLayers,
+                    Array.Empty<ParamDef>(), null, new[] { Assembly.PlatedTag, Assembly.BuildTag }, new[] { Assembly.BuildTag }, "{in}"),
+                new OperationDef(Assembly.CloseOperationId, Assembly.Station, OperationKind.Close, false, 1, 1, new[]
+                {
+                    new ParamDef(Assembly.StyleParam, ParamKind.Choice, 0f, 1f, new[]
+                    {
+                        new BucketDef(Assembly.Folded, 0f, "folded"),
+                        new BucketDef(Assembly.Wrapped, 1f, "wrapped"),
+                    }),
+                }, null, plated, new[] { Assembly.ClosedTag }, "{" + Assembly.StyleParam + "} {in}"),
+                new OperationDef(Assembly.PackOperationId, Assembly.Station, OperationKind.Pack, false, 1, 1, new[]
+                {
+                    new ParamDef(Assembly.ContainerParam, ParamKind.Choice, 0f, 1f, new[]
+                    {
+                        new BucketDef(Assembly.Box, 0f, "boxed"),
+                        new BucketDef(Assembly.Bag, 1f, "bagged"),
+                    }),
+                }, null, plated, new[] { Assembly.PackedTag, Assembly.PlatedTag }, "{" + Assembly.ContainerParam + "} {in}"),
             });
         }
 
@@ -202,6 +230,14 @@ namespace Worktown.Sim.Cooking
                 var shape = Find("shape");
                 if (shape == null || shape.Kind != ParamKind.Choice)
                     throw new ArgumentException($"Cut operation '{op.Id}' needs a Choice param 'shape'.", p);
+            }
+            else if (op.Kind == OperationKind.Portion || op.Kind == OperationKind.Close || op.Kind == OperationKind.Pack)
+            {
+                // Spec 031: a squeeze has a Number amount, a close or pack exactly one Choice (the style or the container).
+                if (op.MinInputs != 1 || op.MaxInputs != 1 || op.Params.Count != 1)
+                    throw new ArgumentException($"Operation '{op.Id}' takes one input and one param.", p);
+                ParamKind want = op.Kind == OperationKind.Portion ? ParamKind.Number : ParamKind.Choice;
+                if (op.Params[0].Kind != want) throw new ArgumentException($"Operation '{op.Id}' needs a {want} param.", p);
             }
             else if (op.Kind == OperationKind.Heat)
             {

@@ -48,7 +48,7 @@ namespace Worktown.Game.Tests
         public void StationKinds_AreTheSpec021Furniture_AndTheSpec028bStock()
         {
             CollectionAssert.AreEquivalent(new[] { StationKind.Crate, StationKind.Counter, StationKind.Stove, StationKind.PlateShelf,
-                    StationKind.Fridge, StationKind.Shelf, StationKind.Fryer, StationKind.Griddle }, // spec 029, spec 030
+                    StationKind.Fridge, StationKind.Shelf, StationKind.Fryer, StationKind.Griddle, StationKind.Assembly }, // spec 029, 030, 031
                 System.Enum.GetValues(typeof(StationKind)));
         }
 

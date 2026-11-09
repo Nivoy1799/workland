@@ -404,6 +404,74 @@ namespace Worktown.Game.Tests
             finally { Close(plan); }
         }
 
+        // ---- Spec 031 AC4: the assembly board ----
+
+        [Test]
+        public void Assembly_AtTheEndOfTheDishFlow_AfterThePlates_BeforeTheCounter_ToolsAndSpotInReach()
+        {
+            Plan plan = Open();
+            try
+            {
+                var boards = plan.BackStations.FindAll(s => s.Kind == StationKind.Assembly);
+                Assert.AreEqual(1, boards.Count, "one assembly board");
+                Station board = boards[0];
+                Vector3 b = board.transform.position;
+                float v = plan.V(b);
+                var plates = VesselTestKit.AllOf(plan.Scene, VesselTestKit.VesselType).FindAll(x => VesselTestKit.KindOf(x) == VesselKind.Plate);
+                Assert.Greater(plates.Count, 0);
+                float nearestPlate = float.MaxValue;
+                foreach (Component p in plates)
+                {
+                    Assert.Less(plan.V(p.transform.position), v, p.name + ": the plates come before the board");
+                    nearestPlate = Mathf.Min(nearestPlate, new Vector2(p.transform.position.x - b.x, p.transform.position.z - b.z).magnitude);
+                }
+                Vector3 shelf = plan.Shelf.transform.position, serving = plan.Serving.transform.position;
+                float shelfToBoard = new Vector2(shelf.x - b.x, shelf.z - b.z).magnitude;
+                TestContext.WriteLine("nearest plate to the board " + nearestPlate.ToString("0.00") + " m, plate shelf to the board "
+                    + shelfToBoard.ToString("0.00") + " m, the board to the serving counter's aisle point "
+                    + Vector3.Distance(plan.AislePointNear(b), plan.AislePointNear(serving)).ToString("0.00") + " m");
+                Assert.LessOrEqual(nearestPlate, 1.5f, "plates to the assembly board, centre to centre");
+                Assert.LessOrEqual(shelfToBoard, 1.5f, "the plate shelf to the assembly board, centre to centre");
+                Assert.LessOrEqual(v, plan.V(serving) + 0.01f, "the board stands before (or at) the serving counter: the end of the dish flow");
+                Assert.LessOrEqual(Vector3.Distance(plan.AislePointNear(b), plan.AislePointNear(serving)), 1.5f, "a step from the board to the counter");
+                Assert.IsNotNull(board.GetComponent(VesselTestKit.VesselType.Assembly.GetType("Worktown.Game.Cooking.StationContents")),
+                    "the board's byte (who squeezes)");
+                Assert.Greater(Vector3.Dot(Flat(-board.transform.forward), plan.Street), 0.7f, "the board's front faces the aisle");
+
+                Bounds body = BodyOf(board);
+                List<AssemblySpot> spots = All<AssemblySpot>(plan.Scene);
+                Assert.AreEqual(1, spots.Count, "one build spot");
+                AssemblySpot spot = spots[0];
+                Assert.AreSame(board, spot.Board);
+                Assert.AreEqual(VesselKind.Assembly, VesselTestKit.KindOf(spot.GetComponent(VesselTestKit.VesselType)));
+                Assert.IsNull(spot.GetComponent(typeof(Pickup)), "the build spot is never carried");
+                Assert.IsTrue(Array.Exists(spot.GetComponents<Component>(), c => c != null && c.GetType().Name == "NetworkObject"), "networked");
+                Vector3 s = spot.transform.position;
+                Assert.IsTrue(s.x > body.min.x && s.x < body.max.x && s.z > body.min.z && s.z < body.max.z, "the spot lies on the board");
+                Assert.AreEqual(Worktown.Game.Art.ArtSizeTable.WorktopHeight, s.y, 0.03f, "on the board's top");
+                Assert.Greater(plan.U(s), plan.U(b), "the spot is at the front, by the cook");
+                Assert.IsNotNull(spot.transform.Find("Contents"), "the stack is drawn in its Contents");
+                Assert.IsTrue(PickupRules.IsInReach(plan.AislePointNear(s), s), "the build spot is in reach from the aisle");
+
+                Assert.AreEqual(BuildRules.ToolCount, board.SlotCount, "two dispensers, paper, boxes, bags");
+                for (int tool = 0; tool < BuildRules.ToolCount; tool++)
+                {
+                    Assert.IsTrue(board.TryGetSlot(tool, out StockSlot slot), "tool " + tool);
+                    Assert.AreEqual(tool, slot.Option);
+                    Assert.IsNull(slot.IngredientId, slot.name + " is a tool, no stock");
+                    Assert.Greater(slot.transform.childCount, 0, slot.name + " shows its bottle or packaging");
+                    Assert.IsEmpty(slot.GetComponentsInChildren<Collider>(true), slot.name + ": never blocks a ray");
+                    Vector3 a = slot.Anchor;
+                    Assert.IsTrue(a.x > body.min.x && a.x < body.max.x && a.z > body.min.z && a.z < body.max.z && a.y > body.max.y, slot.name + " stands on the board");
+                    Assert.IsTrue(PickupRules.IsInReach(plan.AislePointNear(slot.Anchor), slot.Anchor), slot.name + " is in reach from the aisle");
+                    bool dispenser = BuildRules.IsDispenser(tool);
+                    Assert.AreEqual(dispenser, Array.Exists(slot.GetComponents<Component>(), c => c != null && c.GetType().Name == "SauceDispenserView"),
+                        slot.name + (dispenser ? " has" : " has no") + " a dispenser view");
+                }
+            }
+            finally { Close(plan); }
+        }
+
         // ---- Spec 029 AC4: the fryer ----
 
         [Test]

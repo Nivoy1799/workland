@@ -163,7 +163,9 @@ namespace Worktown.Game.Dev
         private const float FryerX = 6.44f;
         private const float StoveAX = 7.48f;
         private const float StoveBX = 8.72f;
-        private const float WorktopBetweenX = 9.97f; // spec 029b: the plating worktop after stove B (no worktop between the stoves)
+        private const float WorktopBetweenX = 9.71f; // spec 029b: the plating worktop after stove B; spec 031: one plate pair wide (9.34 to 10.08)
+        /// <summary>Spec 031: the assembly board after the plates (the plate shelf and the counter at 11.64).</summary>
+        private const float AssemblyX = 10.55f;
         /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
         public const float ParkX = -2.5f; // spec 028b: 2.8 m west of the side wall, as in 027a
         private const float ObserverExitX = -0.7f; // the observers' way south from the staff gap, west of the side wall
@@ -235,6 +237,9 @@ namespace Worktown.Game.Dev
                 TourStep.Act(ActSlowMotion), TourStep.Act(ActPickUpPanFrames), TourStep.Act(ActPutPanBackFrames), TourStep.Act(ActNormalMotion),
                 TourStep.WalkTo(WorktopBetweenX, StandZ), TourStep.LookAt(WorktopBetweenX, 0.9f, BackLineZ - 0.15f), TourStep.Wait(0.6f),
                 TourStep.Shot("worktop-first"),
+                // Spec 031: the assembly board from the aisle (first person): the cutting board, the two dispensers, the packaging rack.
+                TourStep.WalkTo(AssemblyX, StandZ), TourStep.LookAt(AssemblyX, 0.75f, BackLineZ - 0.2f), TourStep.Wait(0.6f),
+                TourStep.Shot("assembly-first"),
                 TourStep.WalkTo(LookObserverX, AisleZ), TourStep.LookAt(LookObserverX, 1.4f, LookObserverZ), TourStep.Wait(0.6f),
                 TourStep.Shot("scale-person"),
                 TourStep.WalkTo(StoveBX, AisleZ), TourStep.View(ViewMode.ThirdPerson), TourStep.Look(0f, -10f), TourStep.Wait(1.2f),
@@ -289,7 +294,7 @@ namespace Worktown.Game.Dev
             {
                 new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
             };
-            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 600f); // spec 030: + the griddle
+            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 760f); // spec 030: + the griddle; spec 031: + the wrap
         }
     }
 }

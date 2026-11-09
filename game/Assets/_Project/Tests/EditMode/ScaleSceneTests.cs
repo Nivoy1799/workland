@@ -153,6 +153,7 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Basket));
                 // Spec 030: the six griddle spots lie on the griddle's plate.
                 Assert.AreEqual(Worktown.Game.Cooking.GriddleRules.SpotsPerGriddle, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Griddle));
+                Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Assembly)); // spec 031: the build spot on its board
                 Assert.AreEqual(6, vessels.Count);
                 foreach (Component vessel in vessels)
                 {

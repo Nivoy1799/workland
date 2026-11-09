@@ -9,13 +9,5 @@ namespace Worktown.Game.Cooking
     /// </summary>
     public sealed class Spatula : MonoBehaviour
     {
-        [Tooltip("Station index of the griddle this spatula belongs to.")]
-        [SerializeField] private int _griddleIndex;
-
-        public int GriddleIndex
-        {
-            get => _griddleIndex;
-            internal set => _griddleIndex = value;
-        }
     }
 }

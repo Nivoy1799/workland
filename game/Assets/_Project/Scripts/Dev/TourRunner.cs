@@ -339,6 +339,7 @@ namespace Worktown.Game.Dev
             // Spec 029: the fryer close-up (the basket arcs and bubbles), between the other captures.
             StartCoroutine(WatchFryer(() => capturing));
             StartCoroutine(WatchGriddle(() => capturing)); // spec 030: the griddle close-up and the remote flip
+            StartCoroutine(WatchAssembly(() => capturing)); // spec 031: the assembly board close-up and the remote stack
             float stillFor = 0f, goneSince = -1f;
             float nextShot = _tour.ObserverShotEvery > 0f ? Time.unscaledTime + _tour.ObserverShotEvery : float.PositiveInfinity;
             int shots = 0;
@@ -543,6 +544,71 @@ namespace Worktown.Game.Dev
                 }
                 yield return null;
             }
+        }
+
+        /// <summary>
+        /// Spec 031, observer of a tour with an assembly board: when the build spot gets its first layer the fixed camera moves to a
+        /// close-up of the board from the aisle's far side; every new layer, the squeeze (the board's byte), the fold, the paper are
+        /// filmed in frames 0.04 s apart (the remote drop, ribbon and fold), and the camera goes back once the board is empty.
+        /// </summary>
+        private IEnumerator WatchAssembly(Func<bool> busy)
+        {
+            Worktown.Game.Cooking.AssemblySpot first = FindFirstObjectByType<Worktown.Game.Cooking.AssemblySpot>();
+            if (first == null || first.Board == null || !_tour.HasObserverCamera) yield break;
+            var spot = first.GetComponent<Worktown.Game.Cooking.Vessel>();
+            var contents = first.Board.GetComponent<Worktown.Game.Cooking.StationContents>();
+            Vector3 board = first.transform.position;
+            int lastLayers = spot.ContentCount;
+            byte lastMode = spot.Mode.Value, lastFlags = contents != null ? contents.StoveFlags.Value : (byte)0;
+            bool close = false;
+            while (!_finished && spot != null)
+            {
+                int layers = spot.ContentCount;
+                byte mode = spot.Mode.Value, flags = contents != null ? contents.StoveFlags.Value : (byte)0;
+                if (!close && layers > 0)
+                {
+                    close = true;
+                    while (busy() || _fryerCapturing) yield return null;
+                    AssemblyCloseUp(board);
+                    Debug.Log("[Tour] observer: assembly close-up");
+                    lastLayers = layers;
+                    lastMode = mode;
+                    lastFlags = flags;
+                    _fryerCapturing = true;
+                    yield return _capture.Frames("assembly-first-layer", 8, 0.04f);
+                    _fryerCapturing = false;
+                }
+                if (close && (layers != lastLayers || mode != lastMode || flags != lastFlags))
+                {
+                    string name = flags != lastFlags ? (flags != 0 ? "assembly-squeeze" : "assembly-squeeze-end")
+                        : mode != lastMode ? "assembly-close" : "assembly-layer-" + layers;
+                    lastLayers = layers;
+                    lastMode = mode;
+                    lastFlags = flags;
+                    while (busy()) yield return null;
+                    AssemblyCloseUp(board); // the fryer's watch may have put the camera back meanwhile
+                    _fryerCapturing = true;
+                    Debug.Log("[Tour] observer: frames '" + name + "'");
+                    yield return _capture.Frames(name, 10, 0.04f);
+                    _fryerCapturing = false;
+                }
+                if (close && layers == 0)
+                {
+                    close = false;
+                    FixCamera();
+                    Debug.Log("[Tour] observer: back to the tour camera");
+                }
+                yield return null;
+            }
+        }
+
+        /// <summary>Spec 031: the observer's close-up of the assembly board, from the plate shelf's side above the board.</summary>
+        private static void AssemblyCloseUp(Vector3 board)
+        {
+            Camera cam = Camera.main;
+            Vector3 eye = new Vector3(board.x + 0.75f, 1.65f, board.z - 0.95f);
+            Vector3 look = new Vector3(board.x - 0.05f, board.y + 0.04f, board.z + 0.02f);
+            if (cam != null) cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
         }
 
         private IEnumerator Capture(TourStep step, Action done)

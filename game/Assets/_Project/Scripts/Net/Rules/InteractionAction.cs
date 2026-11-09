@@ -23,6 +23,12 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 029: shake a lowered fryer basket (empty hands).</summary>
         Shake,
         /// <summary>Spec 030: the spatula over a griddle spot with food: turn it over.</summary>
-        Flip
+        Flip,
+        /// <summary>Spec 031: hold left click on a sauce dispenser of the assembly board (the amount by the time held).</summary>
+        Squeeze,
+        /// <summary>Spec 031: empty hands fold the open build on a wrap or flatbread.</summary>
+        Fold,
+        /// <summary>Spec 031: wrap the build in paper, or put it in a box or a bag, from the board's rack.</summary>
+        Pack
     }
 }

@@ -26,6 +26,9 @@ namespace Worktown.Sim.Cooking
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (catalog == null) throw new ArgumentNullException(nameof(catalog));
             if (item.BaseId != null) return item.DisplayName;
+            // Spec 031: a build is named by its dish ("falafel wrap") or its layers, and by how it is closed and packed.
+            if (item.Kind == OperationKind.Assemble || item.Kind == OperationKind.Close || item.Kind == OperationKind.Pack)
+                return Assembly.NameOf(item, catalog);
 
             var names = new List<string>(item.Inputs.Count);
             foreach (var input in item.Inputs)

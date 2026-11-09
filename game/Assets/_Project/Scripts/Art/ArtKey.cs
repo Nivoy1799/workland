@@ -98,6 +98,15 @@ namespace Worktown.Game.Art
         ToolSpatula,
         FoodPaprika,
         FoodEggplant,
-        FoodMushroom
+        FoodMushroom,
+
+        // Spec 031: the assembly board (graybox), a flat layer (a bread base or a sauce), the folded wrap and the paper-wrapped one
+        // (tinted primitives), and the Kenney takeaway box (styrofoam) and bag.
+        StationAssembly,
+        FoodLayerDisc,
+        FoodWrapFolded,
+        FoodWrapPaper,
+        PropTakeawayBox,
+        PropPaperBag
     }
 }
