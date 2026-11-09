@@ -48,7 +48,7 @@ sits too far back and high.
 | 035 | Cleaning: trays and plates come back dirty, sink, trash, spills, hygiene score | 5 |
 | 036 | Seitan spit: rotating, outer layer cooks, shave slices with the knife | 2, signature |
 | 037 | Business: price menu, equipment shop and upgrades, shop rating unlocks items | 6 |
-| 038 | First-shift onboarding (guided tutorial) | 7 |
+| 038 | First-shift onboarding (guided tutorial) - built before 037, which waits for the price-scale answer | 7 |
 
 **Feel comes before features** (human, 2026-11-08: "most important it should feel good"). 027a–027c run
 before any new station, and every later spec has docs/feel.md acceptance criteria of its own.
@@ -124,3 +124,10 @@ tuned later by the human.
 - 035 (feels off): hygiene rates far too harsh (one spill 100 -> 49 % in 40 s; decision: all decay and recovery 10x
   slower, in the 036 round); eat-in guests leave holding their plate (no seats yet); the trash bag copy flies in as a
   box; third-person wipe cloth in the hand does not move; the bin has no byte (onlookers see the bag vanish).
+- 035 review (CHANGES REQUESTED; fixed in the 036 round): plate invariant on a server stop, dead ForgetBox, CanDraw
+  minimum share, failed refunds keep the order, GrocerPaid in the snapshot, scrub auto-stop, full bags only, tests.
+  Note for the human (minor): the HUD shows an exact hygiene % (the spec asked for it); effects switch at 50/30.
+- 036 (feels off): best quality comes at the end of the good window (70 s on the spit; fryer and griddle the same),
+  not at the "perfect" cue - a later spec should make "perfect" the best rating everywhere; the scoop is not
+  predicted; an open wrap with fillings can't be picked up to scoop onto (the 031 fold-on-click rule); the first-
+  person knife saws in the corner; graybox cone and tray labels.
