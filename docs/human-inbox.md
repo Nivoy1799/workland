@@ -46,6 +46,9 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+6. **FYI, scope note (no answer needed unless you object):** the griddle spec (030) needed grill vegetables that spec
+   028 had not added. The builder added paprika, eggplant and mushroom as ingredients (shelf slots, grocer prices
+   60 / 70 / 80). Claude approved it under the 24 h grant; say so if you'd rather review such additions yourself.
 5. **Vegan word check: plant products.** The new content check (D27) blocks words like milk, butter, cream and cheese
    anywhere in item, menu and news text. That also blocks honest plant products ("oat milk", "coconut milk",
    "peanut butter", "cashew cream"), and it does not catch adjectives ("creamy", "cheesy", "buttery").

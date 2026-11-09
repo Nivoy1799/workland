@@ -100,3 +100,6 @@ tuned later by the human.
   (orchestrator decision; toast warned before Good); first person shows 6 rings and 6 labels at once (show rings and
   labels only for the aimed spot plus spots in Warning or worse); grill marks stay on the plated item; a spatula motion
   in the hand on flip; griddle to plates 4.2 m; per-dish menu prices (spec 037).
+- 030 review (approved after the CombineSides fix, which went into the 031 round): tuning for the human - the "grilled"
+  name and the menu's medium bucket start at 9 s per side, before the good window (12 s seitan, 10 s veg), so an
+  undercooked plate can be an exact order; GriddleSides is sim-model only (the server keeps its own sessions).
