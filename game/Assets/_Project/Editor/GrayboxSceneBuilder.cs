@@ -45,6 +45,8 @@ namespace Worktown.Game.Editor
     public static class GrayboxSceneBuilder
     {
         public const string Root = "Assets/_Project";
+        /// <summary>Spec 027b: the clip whose legs are blended over the idle (feet under the hips).</summary>
+        public const string StandLegsClip = "A_TPose";
         public const string ScenePath = Root + "/Scenes/Graybox.unity";
         private const string PlayerPrefabPath = Root + "/Prefabs/Player.prefab";
         private const string PickupPrefabPath = Root + "/Prefabs/PickupCube.prefab";
@@ -358,6 +360,8 @@ namespace Worktown.Game.Editor
             SetField(visual, "_crouch", ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.CrouchClip));
             SetField(visual, "_crouchWalk", crouchWalk);
             SetField(visual, "_hold", ArtCatalogBuilder.HoldClip());
+            // Spec 027b: the idle stands with one foot well ahead; the legs of the library's A pose pull the feet together.
+            SetField(visual, "_stand", ArtCatalogBuilder.CharacterClip(StandLegsClip));
 
             // Spec 025 amendment: the clip speeds on this body (all variants share it), from the root motion; the feet
             // (StrideRules) are a cross-check.
@@ -1270,18 +1274,22 @@ namespace Worktown.Game.Editor
 
             var orbit = go.AddComponent<CinemachineOrbitalFollow>();
             orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
-            orbit.Radius = 5f;
-            orbit.TargetOffset = new Vector3(0f, 1.6f, 0f);
+            // Spec 027b: closer and lower than before (5 m, 1.6 m, 20 degrees), so the person fills more of the frame and the
+            // kitchen stays visible; less damping (feel.md 5). The numbers live in FeelSettings (preset A); PlayerCameraRig
+            // applies the current ones again on bind and when the F2 panel changes them.
+            FeelSettings feel = FeelSettings.PresetA();
+            orbit.Radius = feel.ThirdPersonDistance;
+            orbit.TargetOffset = new Vector3(0f, feel.ThirdPersonHeight, 0f);
             orbit.VerticalAxis.Range = new Vector2(-30f, 70f);
-            orbit.VerticalAxis.Value = 20f;
-            orbit.VerticalAxis.Center = 20f;
-            orbit.RadialAxis.Range = new Vector2(0.4f, 1.6f); // 2 to 8 m
+            orbit.VerticalAxis.Value = feel.ThirdPersonPitch;
+            orbit.VerticalAxis.Center = feel.ThirdPersonPitch;
+            orbit.RadialAxis.Range = new Vector2(0.5f, 2.2f); // about 1.6 to 7 m with the wheel
             orbit.RadialAxis.Value = 1f;
-            orbit.TrackerSettings.PositionDamping = new Vector3(0.2f, 0.2f, 0.2f);
+            orbit.TrackerSettings.PositionDamping = Vector3.one * feel.ThirdPersonDamping;
 
             var composer = go.AddComponent<CinemachineRotationComposer>();
-            composer.TargetOffset = new Vector3(0f, 1.6f, 0f);
-            composer.Damping = new Vector2(0.1f, 0.1f);
+            composer.TargetOffset = new Vector3(0f, feel.ThirdPersonHeight, 0f);
+            composer.Damping = Vector2.one * feel.ComposerDamping;
 
             var deoccluder = go.AddComponent<CinemachineDeoccluder>();
             deoccluder.IgnoreTag = "Player";

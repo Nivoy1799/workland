@@ -28,6 +28,8 @@ namespace Worktown.Game.Player
         public const string HandName = "HandR";
         /// <summary>m/s: anything faster is a teleport (spawn, reconcile snap), not walking.</summary>
         private const float TeleportSpeed = 20f;
+        // Spec 027b: layers over the base clips: the legs of the standing pose, then the holding arm.
+        private const int BaseLayer = 0, LegsLayer = 1, HoldLayer = 2, LayerCount = 3;
 
         // Mixer inputs of the base layer.
         private const int IdleInput = 0, WalkInput = 1, JogInput = 2, CrouchInput = 3, CrouchWalkInput = 4, InputCount = 5;
@@ -52,6 +54,8 @@ namespace Worktown.Game.Player
         [SerializeField] private AnimationClip _crouch;
         [SerializeField] private AnimationClip _crouchWalk;
         [SerializeField] private AnimationClip _hold;
+        [Tooltip("Spec 027b: a pose with the feet under the hips; its legs are blended over the idle (CharacterAnimRules.StandLegsWeight).")]
+        [SerializeField] private AnimationClip _stand;
         [Header("Spec 025: measured by the art builder on this body (m/s at rate 1, loop seconds)")]
         [SerializeField] private float _walkClipSpeed;
         [SerializeField] private float _walkLoopLength;
@@ -74,6 +78,8 @@ namespace Worktown.Game.Player
         private AnimationClipPlayable[] _clips = new AnimationClipPlayable[0];
         private AnimationClipPlayable _holdClip;
         private bool _hasHoldLayer;
+        private AnimationClipPlayable _standClip;
+        private bool _hasLegsLayer;
         private readonly float[] _groupWeights = { 1f, 0f, 0f, 0f };
         private readonly double[] _groupPhase = new double[GroupCount]; // normalized loops
         private double _holdPhase;
@@ -100,6 +106,12 @@ namespace Worktown.Game.Player
         public float Yaw => (_tracked != null ? _tracked : transform).eulerAngles.y;
 
         public CharacterAnimState State => _state;
+
+        /// <summary>Spec 027b: the smoothed horizontal speed the animation uses (m/s).</summary>
+        public float Speed => _speed;
+
+        /// <summary>Spec 027b: the position the animation measures (the smoothed body).</summary>
+        public Vector3 TrackedPosition => (_tracked != null ? _tracked : transform).position;
 
         /// <summary>Spec 025: the measured clips (m/s at rate 1 on this body, loop seconds).</summary>
         public GaitClip WalkGait => new GaitClip(_walkClipSpeed, _walkLoopLength);
@@ -174,9 +186,12 @@ namespace Worktown.Game.Player
             Advance(CrouchWalkGroup, dt, CharacterAnimRules.CrouchRate(_speed, _crouchWalkClipSpeed), _crouchWalk.length);
             SetClip(CrouchWalkInput, _groupWeights[CrouchWalkGroup], _groupPhase[CrouchWalkGroup]);
 
+            // Spec 027b: the idle clip stands with one foot 0.29 m ahead (a frozen stride from the side); its legs are pulled
+            // towards the feet-together pose while (and as much as) the idle shows.
+            if (_hasLegsLayer) _layers.SetInputWeight(LegsLayer, CharacterAnimRules.StandLegsWeight * _groupWeights[IdleGroup]);
             if (_hasHoldLayer)
             {
-                _layers.SetInputWeight(1, _holdWeight);
+                _layers.SetInputWeight(HoldLayer, _holdWeight);
                 _holdPhase += dt;
                 _holdClip.SetTime(CharacterAnimRules.LoopTime(_holdPhase, _hold.length));
             }
@@ -254,16 +269,24 @@ namespace Worktown.Game.Player
                 _graph.Connect(_clips[i], 0, _base, i);
                 _base.SetInputWeight(i, 0f);
             }
-            _layers = AnimationLayerMixerPlayable.Create(_graph, 2);
-            _graph.Connect(_base, 0, _layers, 0);
-            _layers.SetInputWeight(0, 1f);
+            _layers = AnimationLayerMixerPlayable.Create(_graph, LayerCount);
+            _graph.Connect(_base, 0, _layers, BaseLayer);
+            _layers.SetInputWeight(BaseLayer, 1f);
+            _hasLegsLayer = _stand != null;
+            if (_hasLegsLayer)
+            {
+                _standClip = CreateClip(_stand, true);
+                _graph.Connect(_standClip, 0, _layers, LegsLayer);
+                _layers.SetLayerMaskFromAvatarMask(LegsLayer, LegsMask());
+                _layers.SetInputWeight(LegsLayer, CharacterAnimRules.StandLegsWeight * _groupWeights[IdleGroup]);
+            }
             _hasHoldLayer = _hold != null;
             if (_hasHoldLayer)
             {
                 _holdClip = CreateClip(_hold, false);
-                _graph.Connect(_holdClip, 0, _layers, 1);
-                _layers.SetLayerMaskFromAvatarMask(1, RightArmMask());
-                _layers.SetInputWeight(1, _holdWeight);
+                _graph.Connect(_holdClip, 0, _layers, HoldLayer);
+                _layers.SetLayerMaskFromAvatarMask(HoldLayer, RightArmMask());
+                _layers.SetInputWeight(HoldLayer, _holdWeight);
             }
             output.SetSourcePlayable(_layers);
             _graph.Play();
@@ -276,6 +299,16 @@ namespace Worktown.Game.Player
             playable.SetApplyFootIK(footIk);
             playable.SetSpeed(0); // the time is set every frame from the phase (loops, playback rate)
             return playable;
+        }
+
+        /// <summary>Spec 027b: a Humanoid mask with only the legs and their foot IK active (the standing pose's layer).</summary>
+        public static AvatarMask LegsMask()
+        {
+            var mask = new AvatarMask();
+            for (AvatarMaskBodyPart part = 0; part < AvatarMaskBodyPart.LastBodyPart; part++)
+                mask.SetHumanoidBodyPartActive(part, part == AvatarMaskBodyPart.LeftLeg || part == AvatarMaskBodyPart.RightLeg
+                    || part == AvatarMaskBodyPart.LeftFootIK || part == AvatarMaskBodyPart.RightFootIK);
+            return mask;
         }
 
         /// <summary>Spec 025: a Humanoid mask with only the right arm and its fingers active.</summary>
@@ -291,6 +324,7 @@ namespace Worktown.Game.Player
         {
             if (_graph.IsValid()) _graph.Destroy();
             _hasHoldLayer = false;
+            _hasLegsLayer = false;
         }
 
         private void OnDestroy()

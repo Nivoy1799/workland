@@ -126,7 +126,56 @@ ConfirmTimeout 0.35 s; tween times 0.15 / 0.12 s; lift 0.08 m; AimCone 6°; Stic
 minimum 0.1 s; third-person damping 0.08 / 0.05; Preset B values above.
 
 ## Implementation notes
-(Builder fills this in.)
+- **Where the look lives.** `Pickup` draws every item through an `ItemTween` (Art) for every viewer: the model
+  children (labels excluded) are moved for each camera render and put back right after, as spec 024's hand drawing
+  did, so the networked transform, colliders and rules never see a moved item (AC3 test checks the root every frame).
+  `HeldItemView` no longer moves anything; it only answers the first-person view pose. A goal change (rest, hand, view,
+  hold point, into) picks the tween with `FeelRules.StyleFor` (arc, settle, none for a view toggle). After a put-down
+  the networked position needs 2–3 ticks (NetworkTransform interpolation 2 at 30 Hz), so the model waits where it was
+  drawn until the position stopped moving (at most `Pickup.RestSettleMax` 0.3 s), then settles onto it; with a
+  prediction it waits on the predicted spot instead, so nothing jumps back towards the head.
+- **Prediction.** `PickupInteractor` starts the look in the click's frame (`Pickup.PredictHeld/PredictRest/PredictInto`,
+  the drop pose mirrors `ServerDetach`'s in-front spot) and judges it with `FeelPrediction` from synced state only
+  (holder, position of a lying item, the vessel's content count). The timeout counts from the click or the last
+  relevant change, and needs two observations past the deadline (one long frame never denies). The outcome the server
+  already reports (ReportResult/Place/Cook) is used too: a refusal denies at once, "ok" restarts the timeout. No new
+  RPCs or MoveData fields; the surface tests are unchanged.
+- **Into a pot.** The food flies to just above the contents (`DropHeight`), the server despawns it, and `FoodVisual`
+  drops the new part in from that height for every viewer. Other viewers see the food leave the hand without a flight
+  (the despawn has no destination); a follow-up could fly it from the hand.
+- **Aim.** Exact ray hits on a station, button or place surface always win; an item counts as hit directly only within
+  `DirectHitRadius` 0.11 m of its centre (the pan's handle lay over the free spot next to it: that was the finding).
+  Otherwise the cone (only actionable targets, in reach, in sight) with stickiness decides. The 0.1 s minimum only
+  holds a target that was *lost*; a new target replaces the old one at once (an early version also held new targets
+  for 0.1 s, and the tour then clicked the stove top behind the burner it aimed at; fixed).
+- **Stride while standing (finding).** Measured, not the state machine: the observer log (`[Tour] observer anim`)
+  shows the standing remote cook in Idle at 0.00 m/s, with no tick jitter even frame to frame. The library's
+  `Idle_Loop` itself stands with the left foot 0.29 m ahead of the right (a walk stride is 0.44 m), which reads as a
+  frozen stride from the side and while turning. Fix: `CharacterVisual` blends the legs of the library's `A_TPose`
+  (legs and foot IK only) over the idle at `CharacterAnimRules.StandLegsWeight` 0.7, scaled by the idle's weight, so
+  walking and crouching keep their legs. `StandingPoseTests` samples the real clips on the real body (alone > 0.25 m,
+  with the layer < 0.12 m). Customers use the same idle and get the same fix.
+- **Camera.** Third person 3.2 m (was 5), look point 1.3 m (was 1.6), pitch 12° (was 20), damping 0.08 / 0.05,
+  wheel range 1.6–7 m; preset B 3.8 m, 15°, 0.12 / 0.08. `PlayerCameraRig` re-applies them when the panel changes them.
+- **F2.** In development builds F2 opens the feel panel and the What's-new banner moves to Shift+F2 (release builds
+  keep F2; spec 011 had F2 for the banner, so this needs the human's nod). The panel adds itself at runtime and the
+  whole file is inside the dev guard (`FeelPanelTests`). Save writes `feel.json` next to the player log.
+- **Sounds.** Pick, place tock per material (item first, else the surface), nope, button: played by the interactor in
+  the click's frame. The old polled "tick on a change of hands" in `KitchenSounds` is gone (it came up to 0.1 s late
+  and would double them). Other players' put-downs make no tock yet.
+- **Scope.** Beyond the listed folders: `Scripts/Dev` (tours: frames around clicks, slow motion x4 so the arc shows at
+  0.1 s frames, observer animation log; asked for by the orchestrator), `Scripts/Art/FoodVisual.cs` (the drop),
+  `Scripts/UI/WhatsNewView.cs` (Shift+F2), `Tests/EditMode/WhatsNewTests.cs` (027b is now the newest entry, same pattern
+  as earlier specs). Not done: a visible sink of a pressed button (feel.md 2), only its click sound.
+- **Movement.** Kept: walk full speed in 0.13 s, stop in 0.10 s (tests). Sprint from standing takes 0.26 s.
+- **Measured (AC5, visual check on a local host, `[Feel]` lines in `.verify/visual/*-tour.log`).** Click to visual: the
+  click's own frame for every predicted click (one tour click shows "1 frame later" because the tour clicks after that
+  frame's render). Click to confirm: 44 to 98 ms (pick-up 46 to 98, place 53 to 82, put-into 44 to 77). The 98 ms is
+  close to the 100 ms limit; at 30 Hz the request and the state both wait for a tick.
+- **Visual check (AC4).** The look sheet has the pick-up and the put-back at normal speed and again at 4x tween
+  length (`*-x4` cells), because a 0.15 s arc only spans one or two 0.1 s frames. The cook sheet shows the highlight and
+  prompt before each click, the ghost on the burner, the potato dropping into the pot, and the onion in slow motion.
+  The observer sheets only take guests'-view shots every 6 s, so they do not show remote arcs frame by frame.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

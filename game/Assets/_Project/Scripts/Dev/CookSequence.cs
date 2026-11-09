@@ -17,12 +17,15 @@ namespace Worktown.Game.Dev
     /// and put it on that stove's top next to the pan, take a potato and an onion and put both into the pot, switch the
     /// pot's burner on, then look at the stove. If an aim does not give the expected action in 3 s it logs a warning and
     /// sends the same request directly. Needs first person (<c>-view first</c>) for the clicks.
-    /// The cook tour passes <paramref name="shot"/> to take a picture after each step.
+    /// The cook tour passes <paramref name="capture"/> to take a picture after each step (spec 027b: and frames around the
+    /// pan's pick-up and put-down and the potato going into the pot, the onion in slow motion).
     /// </summary>
     public static class CookSequence
     {
-        public static IEnumerator Run(TourActor actor, Func<string, IEnumerator> shot, float lookSeconds)
+        public static IEnumerator Run(TourActor actor, CookCapture capture, float lookSeconds)
         {
+            Func<string, IEnumerator> shot = capture?.Shot;
+            const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
             Station potatoCrate = null, onionCrate = null;
             var stoves = new List<Station>();
@@ -80,13 +83,15 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(atA, false, false);
             if (shot != null) yield return shot("at-stove");
             NetworkObject panObject = pan.NetworkObject;
-            yield return actor.Use("pick up the pan", ContentPoint(pan), InteractionAction.PickUp, () => me.DevSendPickup(panObject));
+            yield return actor.Use("pick up the pan", ContentPoint(pan), InteractionAction.PickUp, () => me.DevSendPickup(panObject),
+                capture?.Before("pan-highlight", "pan-pickup", frames));
             if (shot != null) yield return shot("pan-in-hand");
 
             yield return actor.LevelView();
             yield return actor.WalkTo(atB, false, false);
             Vector3 burnerSpot = freeBurner.SpotWorldPosition(0);
-            yield return actor.Use("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => me.DevSendPlace(freeBurner.Index, 0));
+            yield return actor.Use("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => me.DevSendPlace(freeBurner.Index, 0),
+                capture?.Before("pan-ghost-on-burner", "pan-place", frames));
             Debug.Log("[Demo] the pan is on the burner (" + Time.time.ToString("0.0") + " s)");
             if (shot != null) yield return shot("pan-on-burner");
 
@@ -96,7 +101,7 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(atB, false, false);
             int nextToPan = PlaceSpots.NearestFree(stoveTop.Size, stoveTop.ToTopPlane(burnerSpot), null);
             yield return actor.Use("put the potato on the stove top next to the pan", stoveTop.SpotWorldPosition(nextToPan),
-                InteractionAction.Place, () => me.DevSendPlace(stoveTop.Index, nextToPan));
+                InteractionAction.Place, () => me.DevSendPlace(stoveTop.Index, nextToPan), capture?.Before("potato-aims-next-to-pan", null, 0f));
             Debug.Log("[Demo] potato next to the pan (" + Time.time.ToString("0.0") + " s)");
             if (shot != null) yield return shot("potato-next-to-pan");
 
@@ -107,8 +112,13 @@ namespace Worktown.Game.Dev
                 yield return Buy(actor, "take " + id, crate, laneZ);
                 yield return actor.WalkTo(new Vector3(atB.x, 0f, laneZ), false, false);
                 yield return actor.WalkTo(atB, false, false);
+                // Spec 027b: the potato at normal speed, the onion in slow motion (the drop shows at 0.1 s frames).
+                bool slow = capture != null && crate == onionCrate;
+                if (slow) capture.TweenScale?.Invoke(TourRules.SlowMotionScale);
                 yield return actor.Use("put it into the pot", ContentPoint(pot), InteractionAction.PutInto,
-                    () => me.DevSendUse(potObject, VesselRules.ActionUse));
+                    () => me.DevSendUse(potObject, VesselRules.ActionUse),
+                    capture?.Before(id + "-aims-at-pot", id + "-into-pot" + (slow ? "-x4" : ""), frames));
+                if (slow) capture.TweenScale?.Invoke(1f);
                 if (shot != null) yield return shot(id + "-in-pot");
             }
             yield return actor.Use("switch the pot's burner on", potSwitch.transform.position, InteractionAction.Press,

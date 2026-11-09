@@ -8,8 +8,8 @@ namespace Worktown.Game.Audio
 {
     /// <summary>
     /// Spec 023: client-only kitchen sounds. Reacts to what the client already knows and plays nothing over the network:
-    /// a chop when a cutting board's synced contents change while it holds something, a soft tick when the local
-    /// player picks something up or puts it down and when a stove knob or mode changes, a sizzle loop on a hot pan and
+    /// a chop when a cutting board's synced contents change while it holds something, a soft tick when a stove knob
+    /// or mode changes (spec 027b: the local player's pick, place, nope and button sounds come through <see cref="Play"/>), a sizzle loop on a hot pan and
     /// a bubble loop on a hot pot (<see cref="VesselSteam.IsHot"/>). Sounds are synthesised by
     /// <see cref="ProceduralSounds"/>; the headless server removes itself in Awake.
     /// </summary>
@@ -43,8 +43,6 @@ namespace Worktown.Game.Audio
         private VesselSteam[] _hotCandidates = new VesselSteam[0];
         private Vessel[] _boards = new Vessel[0];
         private StationContents[] _stoves = new StationContents[0];
-        private PickupInteractor _player;
-        private bool _wasHolding;
         private bool _initialised;
 
         private readonly Dictionary<VesselSteam, LoopState> _loops = new Dictionary<VesselSteam, LoopState>();
@@ -102,16 +100,6 @@ namespace Worktown.Game.Audio
             foreach (Vessel vessel in FindObjectsByType<Vessel>(FindObjectsSortMode.None))
                 if (vessel.Kind == VesselKind.Board) boards.Add(vessel);
             _boards = boards.ToArray();
-            if (_player == null || !_player.IsOwner)
-            {
-                _player = null;
-                foreach (PickupInteractor candidate in FindObjectsByType<PickupInteractor>(FindObjectsSortMode.None))
-                {
-                    if (!candidate.IsOwner) continue;
-                    _player = candidate;
-                    break;
-                }
-            }
         }
 
         private void PollEvents()
@@ -147,12 +135,8 @@ namespace Worktown.Game.Audio
                 _stoveFlags[stove] = flags;
             }
 
-            if (_player != null)
-            {
-                bool holding = _player.CurrentHeld.IsHolding;
-                if (holding != _wasHolding && play) PlayAt(SoundKey.Tick, _player.transform.position);
-                _wasHolding = holding;
-            }
+            // Spec 027b: the local player's pick and place sounds are played at the click (PickupInteractor), so the old
+            // polled tick on a change of hands is gone (it came up to 0.1 s late and would double them).
             _initialised = true;
         }
 
@@ -184,6 +168,13 @@ namespace Worktown.Game.Audio
                 if (loop.Level > 0f && !loop.Source.isPlaying && loop.Source.clip != null) loop.Source.Play();
                 else if (loop.Level <= 0f && loop.Source.isPlaying) loop.Source.Pause();
             }
+        }
+
+        /// <summary>Spec 027b: plays a one-shot now (the local player's actions call this in the frame of the click).</summary>
+        public void Play(SoundKey key, Vector3 position)
+        {
+            if (_catalog == null) return;
+            PlayAt(key, position);
         }
 
         private void PlayAt(SoundKey key, Vector3 position)

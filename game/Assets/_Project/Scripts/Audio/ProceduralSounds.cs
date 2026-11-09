@@ -90,6 +90,76 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>Spec 027b: picking something up, a short soft upward "fwip" (a rising blip with a breath of noise).</summary>
+        public static float[] Pick()
+        {
+            var rng = new System.Random(2701);
+            var s = new float[(int)(SampleRate * 0.09f)];
+            double phase = 0.0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float u = t / 0.09f;
+                double freq = 520.0 + 640.0 * u;
+                phase += 2.0 * Math.PI * freq / SampleRate;
+                float env = (float)Math.Sin(Math.PI * Math.Min(1.0, u * 1.15)) * (1f - u * 0.4f);
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0) * 0.05f;
+                s[i] = ((float)Math.Sin(phase) * 0.32f + noise) * env;
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// Spec 027b: a put-down tock, made of decaying partials (frequency, amplitude, decay seconds) plus a short noise
+        /// click for the contact. Wood is hollow and low, metal rings with inharmonic partials, ceramic clinks high, food
+        /// is a soft thud.
+        /// </summary>
+        private static float[] Tock(int seed, float seconds, float clickAmount, float clickDecay, params float[] partials)
+        {
+            var rng = new System.Random(seed);
+            var s = new float[(int)(SampleRate * seconds)];
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float v = 0f;
+                for (int p = 0; p + 2 < partials.Length; p += 3)
+                    v += (float)Math.Sin(2.0 * Math.PI * partials[p] * t) * partials[p + 1] * (float)Math.Exp(-t / partials[p + 2]);
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                v += high * clickAmount * (float)Math.Exp(-t / clickDecay);
+                s[i] = v * Math.Min(1f, t / 0.0008f);
+            }
+            return s;
+        }
+
+        public static float[] PlaceWood() => Tock(2702, 0.14f, 0.18f, 0.004f, 210f, 0.38f, 0.035f, 470f, 0.16f, 0.02f, 1150f, 0.05f, 0.01f);
+        public static float[] PlaceMetal() => Tock(2703, 0.45f, 0.12f, 0.003f, 523f, 0.22f, 0.16f, 1247f, 0.16f, 0.11f, 2093f, 0.1f, 0.07f, 3310f, 0.06f, 0.04f);
+        public static float[] PlaceCeramic() => Tock(2704, 0.25f, 0.1f, 0.002f, 1860f, 0.22f, 0.07f, 2730f, 0.14f, 0.05f, 4120f, 0.08f, 0.03f);
+        public static float[] PlaceFood() => Tock(2705, 0.12f, 0.25f, 0.012f, 120f, 0.32f, 0.03f, 260f, 0.12f, 0.02f);
+
+        /// <summary>Spec 027b: "nope", two short soft falling tones.</summary>
+        public static float[] Nope()
+        {
+            var s = new float[(int)(SampleRate * 0.24f)];
+            int half = s.Length / 2;
+            for (int i = 0; i < s.Length; i++)
+            {
+                bool second = i >= half;
+                float t = (second ? i - half : i) / (float)SampleRate;
+                float length = half / (float)SampleRate;
+                float freq = second ? 300f : 380f;
+                float env = (float)Math.Sin(Math.PI * Math.Min(1.0, t / length)) * 0.9f;
+                float tone = (float)Math.Sin(2.0 * Math.PI * freq * t) + 0.25f * (float)Math.Sin(2.0 * Math.PI * freq * 2.0 * t);
+                s[i] = tone * 0.22f * env;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 027b: a stove button or knob, a crisp short click.</summary>
+        public static float[] Button() => Tock(2706, 0.05f, 0.3f, 0.0015f, 2400f, 0.12f, 0.006f, 650f, 0.2f, 0.008f);
+
         public static float[] Samples(SoundKey key)
         {
             switch (key)
@@ -98,6 +168,13 @@ namespace Worktown.Game.Audio
                 case SoundKey.Tick: return Tick();
                 case SoundKey.Sizzle: return Sizzle();
                 case SoundKey.Bubble: return Bubble();
+                case SoundKey.Pick: return Pick();
+                case SoundKey.PlaceWood: return PlaceWood();
+                case SoundKey.PlaceMetal: return PlaceMetal();
+                case SoundKey.PlaceCeramic: return PlaceCeramic();
+                case SoundKey.PlaceFood: return PlaceFood();
+                case SoundKey.Nope: return Nope();
+                case SoundKey.Button: return Button();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }

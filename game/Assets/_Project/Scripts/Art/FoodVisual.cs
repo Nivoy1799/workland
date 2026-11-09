@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Worktown.Game.Cooking;
+using Worktown.Game.Player;
 
 namespace Worktown.Game.Art
 {
@@ -34,6 +35,11 @@ namespace Worktown.Game.Art
         private readonly List<Renderer> _renderers = new List<Renderer>();
         private Dictionary<ArtKey, GameObject> _prefabs;
         private MaterialPropertyBlock _block;
+        // Spec 027b: parts that just arrived drop in from above (every viewer).
+        private int _shownParts = -1;
+        private readonly List<Transform> _dropping = new List<Transform>();
+        private readonly List<Vector3> _dropRest = new List<Vector3>();
+        private float _dropStart;
 
         /// <summary>A food object: a single pile, or a plate / bowl with up to four parts.</summary>
         public void ShowFood(FoodLook look, IReadOnlyList<FoodLook> parts)
@@ -58,14 +64,59 @@ namespace Worktown.Game.Art
             ShowFallback(!shown, look);
         }
 
-        /// <summary>A station's contents (plating table, bowl, pan, pot): up to four parts at this anchor.</summary>
+        /// <summary>
+        /// A station's contents (plating table, bowl, pan, pot): up to four parts at this anchor. Spec 027b: when there are
+        /// more parts than shown before, the new ones drop in from <see cref="FeelSettings.DropHeight"/> above (ease-in over
+        /// <see cref="FeelSettings.DropSeconds"/>), for every viewer; the first contents after a (re)join just appear.
+        /// </summary>
         public void ShowParts(IReadOnlyList<FoodLook> parts)
         {
             ReleaseAll();
             int count = PartCount(parts, FoodLook.MaxParts);
+            int firstNew = -1;
             for (int i = 0; i < count; i++)
+            {
+                if (_shownParts >= 0 && i == _shownParts) firstNew = _active.Count;
                 AddPile(parts[i], FoodArtRules.PartPosition(i, count, _partRadius), _partScale);
+            }
+            _shownParts = count;
+            if (firstNew >= 0) StartDrop(firstNew);
             ShowFallback(false, default);
+        }
+
+        private void StartDrop(int firstInstance)
+        {
+            FeelSettings feel = FeelSettings.Current;
+            if (!(feel.DropSeconds > 0f) || feel.DropHeight <= 0f) return;
+            Vector3 lift = transform.InverseTransformVector(Vector3.up * feel.DropHeight);
+            _dropStart = Time.unscaledTime;
+            for (int i = firstInstance; i < _active.Count; i++)
+            {
+                Transform t = _active[i].transform;
+                _dropping.Add(t);
+                _dropRest.Add(t.localPosition);
+                t.localPosition += lift;
+            }
+        }
+
+        private void Update()
+        {
+            if (_dropping.Count == 0) return;
+            FeelSettings feel = FeelSettings.Current;
+            float t = feel.DropSeconds > 0f ? (Time.unscaledTime - _dropStart) / feel.DropSeconds : 1f;
+            Vector3 lift = transform.InverseTransformVector(Vector3.up * feel.DropHeight);
+            float left = 1f - FeelRules.EaseIn(t);
+            for (int i = 0; i < _dropping.Count; i++)
+                if (_dropping[i] != null) _dropping[i].localPosition = _dropRest[i] + lift * (t >= 1f ? 0f : left);
+            if (t >= 1f) StopDrop();
+        }
+
+        private void StopDrop()
+        {
+            for (int i = 0; i < _dropping.Count; i++)
+                if (_dropping[i] != null) _dropping[i].localPosition = _dropRest[i];
+            _dropping.Clear();
+            _dropRest.Clear();
         }
 
         private static int PartCount(IReadOnlyList<FoodLook> parts, int limit)
@@ -156,6 +207,7 @@ namespace Worktown.Game.Art
 
         private void ReleaseAll()
         {
+            StopDrop();
             for (int i = 0; i < _active.Count; i++)
             {
                 GameObject instance = _active[i];

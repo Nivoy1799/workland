@@ -27,6 +27,16 @@ namespace Worktown.Game.Dev
         public const string ActPickUpPan = "pick-up-pan";
         public const string ActPutPanBack = "put-pan-back";
         public const string ActCook = "cook";
+        /// <summary>Spec 027b: the same pick-up and put-back, with a highlight shot before the click and frames every
+        /// <see cref="FrameInterval"/> around it (the arc into the hand, the ghost, the settle on the burner).</summary>
+        public const string ActPickUpPanFrames = "pick-up-pan-frames";
+        public const string ActPutPanBackFrames = "put-pan-back-frames";
+        /// <summary>Spec 027b: tweens <see cref="SlowMotionScale"/> times longer (the arc shape shows at 0.1 s frames), and back.</summary>
+        public const string ActSlowMotion = "slow-motion";
+        public const string ActNormalMotion = "normal-motion";
+        public const float SlowMotionScale = 4f;
+        /// <summary>Spec 027b: seconds of frames around one click.</summary>
+        public const float ClickFramesSeconds = 1f;
 
         /// <summary>Spec 027 defaults: walking frames every 0.1 s, 24 per segment; sheet 6 columns of 320x180.</summary>
         public const float FrameInterval = 0.1f;
@@ -57,7 +67,10 @@ namespace Worktown.Game.Dev
         public const float ObserverSpotDistance = 0.6f;
 
         public static readonly IReadOnlyList<string> Names = new[] { LookTour, WalkTour, CookTour };
-        public static readonly IReadOnlyList<string> Acts = new[] { ActPickUpPan, ActPutPanBack, ActCook };
+        public static readonly IReadOnlyList<string> Acts = new[]
+        {
+            ActPickUpPan, ActPutPanBack, ActCook, ActPickUpPanFrames, ActPutPanBackFrames, ActSlowMotion, ActNormalMotion
+        };
 
         public static bool IsKnown(string name) => TryGet(name, out _);
 
@@ -166,8 +179,11 @@ namespace Worktown.Game.Dev
                 TourStep.View(ViewMode.ThirdPerson), TourStep.Look(90f, -12f), TourStep.Wait(1.2f), TourStep.Shot("kitchen-third"),
                 TourStep.View(ViewMode.FirstPerson), TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
                 TourStep.Wait(0.6f), TourStep.Shot("stove-first"),
-                TourStep.Act(ActPickUpPan), TourStep.Look(0f, -12f), TourStep.Wait(0.8f), TourStep.Shot("pan-first"),
-                TourStep.Act(ActPutPanBack),
+                // Spec 027b: the pick-up with its frames (highlight and prompt, the arc into the hand), the put-back (ghost, settle),
+                // then both again in slow motion so the arc's shape shows at 0.1 s frames.
+                TourStep.Act(ActPickUpPanFrames), TourStep.Look(0f, -12f), TourStep.Wait(0.8f), TourStep.Shot("pan-first"),
+                TourStep.Act(ActPutPanBackFrames),
+                TourStep.Act(ActSlowMotion), TourStep.Act(ActPickUpPanFrames), TourStep.Act(ActPutPanBackFrames), TourStep.Act(ActNormalMotion),
                 TourStep.WalkTo(WorktopBetweenX, StandZ), TourStep.LookAt(WorktopBetweenX, 0.9f, BackLineZ - 0.15f), TourStep.Wait(0.6f),
                 TourStep.Shot("worktop-first"),
                 TourStep.WalkTo(LookObserverX, AisleZ), TourStep.LookAt(LookObserverX, 1.4f, LookObserverZ), TourStep.Wait(0.6f),

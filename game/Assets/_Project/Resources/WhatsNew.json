@@ -355,6 +355,27 @@
         "Walk out through the staff gap, around to the street, and look across the counter into the kitchen",
         "Two players in the aisle: try to pass each other (it is 1.3 m wide) and say if it feels too tight"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-027b",
+      "date": "2026-11-09",
+      "title": "Feel pass 1: instant answers, nothing teleports, forgiving aim",
+      "items": [
+        "A click answers at once: the pan arcs into your hand, things settle onto the spot, food drops into the pot, each with its own sound",
+        "If the server says no, the item flies back with a short 'nope'",
+        "Everyone sees the arcs and drops, not only you",
+        "Aim takes the best target near the dot (a pot for the potato in your hand) and does not flicker between two",
+        "Outline and prompt on the target, grey 'Too far' when out of reach, and a see-through copy where the item will land",
+        "Fast double clicks are no longer lost; the third-person camera sits closer and lower",
+        "F2 opens the feel panel (development builds): sliders, Preset A and B, Save writes feel.json; the What's-new banner is Shift+F2 there"
+      ],
+      "test": [
+        "Pick up the pan, put it on a burner, drop a potato into the pot: does anything jump or wait for the server?",
+        "Aim at the free spot right next to the pan with a potato in hand: you get the spot, not the pan",
+        "Press F2, try Preset A and Preset B for a few minutes each and say which one feels better (A or B)",
+        "Third person (V): is the cook readable and the kitchen still visible?",
+        "Watch the other player stand and turn at the stove: legs together, no frozen stride"
+      ]
     }
   ]
 }

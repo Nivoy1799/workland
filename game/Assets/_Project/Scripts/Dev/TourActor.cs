@@ -128,12 +128,15 @@ namespace Worktown.Game.Dev
         /// <summary>
         /// Aims at <paramref name="point"/>, then does what a click would do; if the aim does not give
         /// <paramref name="expected"/> in 3 s, logs a warning and sends <paramref name="fallback"/> directly.
-        /// Same log lines as the spec 021 demo.
+        /// Same log lines as the spec 021 demo. Spec 027b: <paramref name="beforeClick"/> runs between the aim and the click.
         /// </summary>
-        public IEnumerator Use(string what, Vector3 point, InteractionAction expected, Action fallback)
+        public IEnumerator Use(string what, Vector3 point, InteractionAction expected, Action fallback, Func<IEnumerator> beforeClick = null)
         {
             Debug.Log("[Demo] " + what + " (" + Time.time.ToString("0.0") + " s)");
             yield return AimAt(point, 3f, () => Interactor.CurrentAction == expected);
+            // Spec 027b: a shot of the aimed state (highlight, prompt, ghost) and the start of a frame sequence, right before
+            // the click (frames that start here see the click's own frame).
+            if (beforeClick != null) yield return beforeClick();
             if (Interactor.CurrentAction == expected)
             {
                 Debug.Log("[Demo] click: '" + InteractionRules.PromptFor(Interactor.CurrentHeld, Interactor.CurrentAim) + "'");
