@@ -119,3 +119,8 @@ tuned later by the human.
   sauce dispenser's open bottle is not visible to the client; third-person carried box has no arm pose; the delivery
   knock replays for late joiners; packs are expensive next to the start money (037); old money-only wallet paths can
   be removed once every scene has a SupplyService.
+- 034 review (CHANGES REQUESTED; fixed in the 035 round): delivery boxes stacked on one spot (physics sync), last
+  drops, stock reset vs economy, unstocked goods free, lost boxes, pour key leftover, refund bound, tests.
+- 035 (feels off): hygiene rates far too harsh (one spill 100 -> 49 % in 40 s; decision: all decay and recovery 10x
+  slower, in the 036 round); eat-in guests leave holding their plate (no seats yet); the trash bag copy flies in as a
+  box; third-person wipe cloth in the hand does not move; the bin has no byte (onlookers see the bag vanish).
