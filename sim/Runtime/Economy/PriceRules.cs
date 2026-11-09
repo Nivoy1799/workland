@@ -50,7 +50,14 @@ namespace Worktown.Sim.Economy
             return next;
         }
 
-        /// <summary>Sum of grocer prices of the item's components; null if any component is unpriced.</summary>
+        /// <summary>
+        /// Sum of grocer prices of the item's components; null if any component is unpriced. Spec 031b: a squeezed portion of
+        /// sauce counts at the least share any squeeze of its amount bucket was charged (<see cref="PortionPercentOf"/>), not at
+        /// the bottle's price. 032 review: rounding can put a "lots" layer made of merged squeezes up to $1 above what they cost
+        /// (three 10 % taps of a $14 bottle cost 3 x $1, a 30 % portion is $4), so each lots portion counts
+        /// <see cref="LotsRoundingMargin"/> less; with any number of merged lots layers the cost is never above what was spent, and
+        /// the wholesaler's cap (<see cref="SurplusCap"/>) never pays more than that. Items without a squeeze are unchanged.
+        /// </summary>
         public static long? ItemCost(EconomyCatalog c, Item item)
         {
             if (c == null) throw new ArgumentNullException(nameof(c));
@@ -61,6 +68,68 @@ namespace Worktown.Sim.Economy
                 if (!c.TryGetGrocerPrice(comp.BaseId, out var p)) return null;
                 sum += p;
             }
+            return sum - PortionDiscount(c, item);
+        }
+
+        // ---- Spec 031b: portion prices (a squeeze of sauce from a dispenser) ----
+
+        /// <summary>A started half-second of a squeeze costs this share of the bottle's grocer price (%).</summary>
+        public const int PortionStepPercent = 10;
+        /// <summary>A squeeze costs at most this share of the bottle's grocer price (%).</summary>
+        public const int PortionMaxPercent = 30;
+        /// <summary>s per portion step.</summary>
+        public const float PortionStepSeconds = 0.5f;
+
+        /// <summary>
+        /// The share (%) of the bottle's grocer price a squeeze of <paramref name="seconds"/> costs: 10 % per started 0.5 s, at
+        /// least one step (a tap is a dash), at most 30 %. NaN or negative counts as a tap.
+        /// </summary>
+        public static int PortionPercent(float seconds)
+        {
+            if (float.IsNaN(seconds) || seconds < 0f) seconds = 0f;
+            // A tiny tolerance, so a squeeze measured as exactly 1.0 s (30 ticks) is two steps, not three.
+            int steps = (int)Math.Ceiling(seconds / PortionStepSeconds - 1e-4);
+            if (steps < 1) steps = 1;
+            return Math.Min(PortionMaxPercent, steps * PortionStepPercent);
+        }
+
+        /// <summary><paramref name="percent"/> % of <paramref name="price"/>, rounded half up, at least 1 for a priced item.</summary>
+        public static long PortionCost(long price, int percent)
+        {
+            if (price <= 0) return 0;
+            percent = Math.Clamp(percent, 0, 100);
+            return Math.Max(1L, (price * percent + 50) / 100);
+        }
+
+        /// <summary>
+        /// The least share (%) any squeeze that made the amount bucket <paramref name="amountBucket"/> was charged: a dash or the
+        /// right amount at least one step, lots (1.5 s or more, one squeeze or several added up) the most.
+        /// </summary>
+        public static int PortionPercentOf(string? amountBucket) =>
+            amountBucket == Assembly.Lots ? PortionPercent(Assembly.LotsFrom) : PortionStepPercent;
+
+        /// <summary>032 review: a lots portion counts this much less than a 30 % portion (merged squeezes round down by up to $1).</summary>
+        public const long LotsRoundingMargin = 1;
+
+        /// <summary>What a portion of a <paramref name="price"/> bottle in <paramref name="amountBucket"/> counts in <see cref="ItemCost"/>.</summary>
+        public static long PortionCounted(long price, string? amountBucket)
+        {
+            long cost = PortionCost(price, PortionPercentOf(amountBucket));
+            return amountBucket == Assembly.Lots ? Math.Max(0L, cost - LotsRoundingMargin) : cost;
+        }
+
+        private static long PortionDiscount(EconomyCatalog c, Item item)
+        {
+            if (item.Kind == OperationKind.Portion)
+            {
+                item.Buckets.TryGetValue(Assembly.AmountParam, out string? bucket);
+                long discount = 0;
+                foreach (var comp in item.Components)
+                    if (c.TryGetGrocerPrice(comp.BaseId, out var p)) discount += p - PortionCounted(p, bucket);
+                return discount;
+            }
+            long sum = 0;
+            foreach (var input in item.Inputs) sum += PortionDiscount(c, input);
             return sum;
         }
 

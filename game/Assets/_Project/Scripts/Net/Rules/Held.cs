@@ -23,10 +23,25 @@ namespace Worktown.Game.Net.Rules
         public readonly int ContentCount;
         /// <summary>Cookware: what pouring or selling it gives ("crispy fried potato sticks"), null when empty.</summary>
         public readonly string ContentName;
+        /// <summary>Spec 030: the griddle's spatula (flips food on a griddle spot).</summary>
+        public readonly bool IsSpatula;
+        /// <summary>
+        /// Spec 030 (029b review): an item still on its predicted way into the hands (a pick-up the server has not answered). It
+        /// counts as held only for refusals (no take, no buy, no second pick-up): every action is None, so nothing that depends on
+        /// the item (a tip, a pour, a place) is sent for something that may never arrive.
+        /// </summary>
+        public readonly bool IsPending;
+        /// <summary>031b: food that is a build (open, folded, in paper, boxed or bagged; FoodLookRules.IsBuild): it goes back only
+        /// on an empty board.</summary>
+        public readonly bool IsBuild;
 
         private Held(bool holding, bool food, bool knife, bool plated, string name, bool vessel = false,
-            VesselKind kind = default, int count = 0, string contentName = null)
+            VesselKind kind = default, int count = 0, string contentName = null, bool spatula = false, bool pending = false,
+            bool build = false)
         {
+            IsBuild = build;
+            IsSpatula = spatula;
+            IsPending = pending;
             IsHolding = holding;
             IsFood = food;
             IsKnife = knife;
@@ -40,12 +55,22 @@ namespace Worktown.Game.Net.Rules
 
         public static Held Nothing => new Held(false, false, false, false, string.Empty);
 
-        public static Held Food(string name, bool plated)
+        public static Held Food(string name, bool plated, bool build = false)
         {
-            return new Held(true, true, false, plated, string.IsNullOrEmpty(name) ? "food" : name);
+            return new Held(true, true, false, plated, string.IsNullOrEmpty(name) ? "food" : name, build: build);
         }
 
         public static Held Knife => new Held(true, false, true, false, "knife");
+
+        /// <summary>Spec 030: the griddle's spatula.</summary>
+        public static Held Spatula => new Held(true, false, false, false, "spatula", spatula: true);
+
+        /// <summary>Spec 030: <paramref name="item"/> on its way into the hands (a pending pick-up): held, but no action.</summary>
+        public static Held Pending(Held item)
+        {
+            return new Held(true, item.IsFood, item.IsKnife, item.IsPlated, item.Name, item.IsVessel, item.Vessel, item.ContentCount,
+                item.ContentName, item.IsSpatula, true, item.IsBuild);
+        }
 
         /// <summary>Spec 021: a board, pan, pot, plate or bowl with <paramref name="count"/> things in it.</summary>
         public static Held Cookware(VesselKind kind, int count, string contentName)

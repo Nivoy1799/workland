@@ -80,6 +80,7 @@ namespace Worktown.Game.Editor
             public bool AlongZ; // spec 019, Max mode: turn the model so its longest horizontal side runs along Z
             public string Skin = null; // spec 025, Character mode: texture name of the skin material
             public bool Flat; // spec 028: a stand-in model drawn with the white piece material (FoodVisual tints it flat)
+            public bool CloseLid; // spec 031b: the model's "lid" part is turned shut on its hinge (the open clamshell box)
         }
 
         private static readonly Def[] Defs =
@@ -100,6 +101,12 @@ namespace Worktown.Game.Editor
             // basket, fronts on +Z like the kit (the scene builder turns them to the aisle).
             new Def { Key = ArtKey.StationFryer, Mode = Fit.Graybox },
             new Def { Key = ArtKey.ToolFryerBasket, Mode = Fit.Graybox },
+            // Spec 030: no griddle model in the packs either: a graybox steel plate on a steel cabinet with a front panel.
+            new Def { Key = ArtKey.StationGriddle, Mode = Fit.Graybox },
+            // Spec 031: no assembly board in the packs: a graybox worktop cabinet with a wooden cutting board on top.
+            new Def { Key = ArtKey.StationAssembly, Mode = Fit.Graybox },
+            // Spec 032: no register in the packs: a graybox till (body, leaning display, change drawer, buttons, card terminal, mat).
+            new Def { Key = ArtKey.StationRegister, Mode = Fit.Graybox },
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -140,6 +147,10 @@ namespace Worktown.Game.Editor
             FoodDef(ArtKey.FoodLemonHalf, "lemon-half.fbx"),
             FlatFoodDef(ArtKey.FoodSauceGarlicHerb, "bottle-musterd.fbx"),
             FoodDef(ArtKey.FoodSauceChili, "bottle-ketchup.fbx"),
+            // Spec 030: the grill vegetables (the kit's own models and colours).
+            FoodDef(ArtKey.FoodPaprika, "paprika.fbx"),
+            FoodDef(ArtKey.FoodEggplant, "eggplant.fbx"),
+            FoodDef(ArtKey.FoodMushroom, "mushroom.fbx"),
             // Generic pieces at their real size (m): a half fruit, a 1 cm slice, a fry-sized stick, a 3 cm cube.
             Piece(ArtKey.FoodPieceHalf, PrimitiveType.Sphere, new Vector3(0.08f, 0.04f, 0.08f)),
             Piece(ArtKey.FoodPieceSlice, PrimitiveType.Cylinder, new Vector3(0.07f, 0.01f, 0.07f)),
@@ -148,6 +159,14 @@ namespace Worktown.Game.Editor
             // Spec 029: a falafel ball (tinted brown by FoodVisual) and the empty fries box stacked at the fryer.
             Piece(ArtKey.FoodFalafelBall, PrimitiveType.Sphere, new Vector3(0.035f, 0.035f, 0.035f)),
             FoodDef(ArtKey.PropFriesBox, "fries-empty.fbx"),
+            // Spec 031: a flat layer (a bread base or a sauce, tinted), the folded wrap and the paper wrap (tinted primitives), the
+            // Kenney takeaway box and bag (their own colours).
+            Piece(ArtKey.FoodLayerDisc, PrimitiveType.Cylinder, new Vector3(0.25f, 0.008f, 0.25f)),
+            Piece(ArtKey.FoodWrapFolded, PrimitiveType.Sphere, new Vector3(0.25f, 0.06f, 0.12f)),
+            Piece(ArtKey.FoodWrapPaper, PrimitiveType.Sphere, new Vector3(0.25f, 0.075f, 0.135f)),
+            // Spec 031b: the clamshell's lid is turned shut, so the box reads as one closed box, not two trays.
+            new Def { Key = ArtKey.PropTakeawayBox, Model = FoodKit + "styrofoam.fbx", Mode = Fit.Max, CloseLid = true },
+            FoodDef(ArtKey.PropPaperBag, "bag.fbx"),
             // Cookware (real size x1.15).
             FoodDef(ArtKey.FoodPlate, "plate.fbx"),
             FoodDef(ArtKey.FoodBowl, "bowl.fbx"),
@@ -157,6 +176,8 @@ namespace Worktown.Game.Editor
             // Spec 019: the cutting board on the board station, the knife (its long side along Z, see AlongZ).
             new Def { Key = ArtKey.ToolCuttingBoard, Model = FoodKit + "cutting-board.fbx", Mode = Fit.Max },
             new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, AlongZ = true },
+            // Spec 030: the griddle spatula (Food Kit), its long side along Z like the knife.
+            new Def { Key = ArtKey.ToolSpatula, Model = FoodKit + "cooking-spatula.fbx", Mode = Fit.Max, AlongZ = true },
 
             // Spec 023, spec 026: one cabinet module (0.6 m wide, worktop high, station deep); the scene builder lines up
             // as many as a worktop run needs instead of stretching one cabinet.
@@ -240,6 +261,7 @@ namespace Worktown.Game.Editor
                 : def.Primitive.HasValue ? CreatePiece(def.Primitive.Value, root.transform)
                 : InstantiateModel(def.Model, root.transform, "Model");
             model.transform.localRotation = Quaternion.Euler(0f, def.Yaw, 0f);
+            if (def.CloseLid) CloseLid(model, def.Key);
             if (def.Model.StartsWith(Furniture)) Recolour(model);
             if (def.Flat)
                 foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
@@ -343,6 +365,66 @@ namespace Worktown.Game.Editor
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, WrapperPath(def.Key));
             UnityEngine.Object.DestroyImmediate(root);
             return saved;
+        }
+
+        /// <summary>
+        /// Spec 031b: turns the model's "lid" part shut. The hinge is the base's edge that faces the lid, at the base's top; of the
+        /// turns about that edge (every 5 degrees) the one that leaves the lid most squarely on top of the base wins (its middle
+        /// over the base's middle, its bottom on the base's top). Throws when the model has no lid.
+        /// </summary>
+        private static void CloseLid(GameObject model, ArtKey key)
+        {
+            Transform lid = FindChild(model.transform, "lid");
+            if (lid == null) throw new InvalidOperationException(key + ": the model has no 'lid' part to close");
+            Bounds lidBounds = WorldBounds(lid.gameObject);
+            bool any = false;
+            Bounds baseBounds = default;
+            foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
+            {
+                if (r.transform == lid || r.transform.IsChildOf(lid)) continue;
+                if (!any) baseBounds = r.bounds;
+                else baseBounds.Encapsulate(r.bounds);
+                any = true;
+            }
+            if (!any) throw new InvalidOperationException(key + ": the model has nothing but its lid");
+            Vector3 apart = lidBounds.center - baseBounds.center;
+            bool alongX = Mathf.Abs(apart.x) >= Mathf.Abs(apart.z);
+            Vector3 axis = alongX ? Vector3.forward : Vector3.right;
+            Vector3 hinge = alongX
+                ? new Vector3(apart.x >= 0f ? baseBounds.max.x : baseBounds.min.x, baseBounds.max.y, baseBounds.center.z)
+                : new Vector3(baseBounds.center.x, baseBounds.max.y, apart.z >= 0f ? baseBounds.max.z : baseBounds.min.z);
+            Vector3 startPosition = lid.localPosition;
+            Quaternion startRotation = lid.localRotation;
+            float bestAngle = 0f, bestScore = float.MaxValue;
+            for (int angle = -180; angle <= 180; angle += 5)
+            {
+                lid.localPosition = startPosition;
+                lid.localRotation = startRotation;
+                lid.RotateAround(hinge, axis, angle);
+                Bounds b = WorldBounds(lid.gameObject);
+                Vector2 off = new Vector2(b.center.x - baseBounds.center.x, b.center.z - baseBounds.center.z);
+                float score = off.magnitude + Mathf.Abs(b.min.y - baseBounds.max.y) + (b.min.y < baseBounds.min.y ? 1f : 0f);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestAngle = angle;
+                }
+            }
+            lid.localPosition = startPosition;
+            lid.localRotation = startRotation;
+            lid.RotateAround(hinge, axis, bestAngle);
+            Debug.Log("[ArtCatalog] " + key + ": lid turned " + bestAngle + " degrees about the hinge (score " + bestScore.ToString("0.000") + ")");
+        }
+
+        private static Transform FindChild(Transform parent, string name)
+        {
+            foreach (Transform child in parent)
+            {
+                if (string.Equals(child.name, name, StringComparison.OrdinalIgnoreCase)) return child;
+                Transform deeper = FindChild(child, name);
+                if (deeper != null) return deeper;
+            }
+            return null;
         }
 
         /// <summary>
@@ -807,6 +889,9 @@ namespace Worktown.Game.Editor
         {
             if (key == ArtKey.StationFryer) return BuildFryer(parent);
             if (key == ArtKey.ToolFryerBasket) return BuildBasket(parent);
+            if (key == ArtKey.StationGriddle) return BuildGriddle(parent); // spec 030
+            if (key == ArtKey.StationAssembly) return BuildAssembly(parent); // spec 031
+            if (key == ArtKey.StationRegister) return BuildRegister(parent); // spec 032
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -915,6 +1000,106 @@ namespace Worktown.Game.Editor
             // A low rail behind the wells (the worktop stays at 0.90 m): the raised baskets hang in front of it.
             float barZ = Z(FryerArt.WellBack + 0.03f);
             Box(model, "Rail", new Vector3(0f, h + 0.006f, barZ), new Vector3(w - 0.06f, 0.012f, 0.02f), dark);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 030: the graybox griddle as the wrapper's "Model" (<see cref="GriddleArtRules"/>, station z mirrored: the front on +Z):
+        /// a steel cabinet with a darker front panel for the knob, the dark steel plate (0.9 × 0.6 m) at the front with a low rim on
+        /// its sides and back and a grease trough along its front edge, and a steel deck behind it.
+        /// </summary>
+        private static GameObject BuildGriddle(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            Material panel = GrayboxMaterial("FryerPanel", Palette.Shade(Palette.Steel, 0.78f));
+            Material plate = GrayboxMaterial("GriddlePlate", Color.Lerp(Palette.Charcoal, Palette.Steel, 0.3f));
+            Material dark = GrayboxMaterial("FryerDark", Palette.Charcoal);
+            const float w = GriddleArtRules.Width, d = GriddleArtRules.Depth, h = GriddleArtRules.PlateTop, t = GriddleArtRules.PlateThickness;
+            float Z(float stationZ) => -stationZ; // the wrapper's front is +Z
+            float body = h - t;
+            Box(model, "Cabinet", new Vector3(0f, body * 0.5f, 0f), new Vector3(w, body, d), steel);
+            Box(model, "Front panel", new Vector3(0f, body * 0.5f, Z(-d * 0.5f + 0.02f)), new Vector3(w, body - 0.02f, 0.04f), panel);
+            float pw = Worktown.Game.Cooking.GriddleRules.PlateWidth, pd = Worktown.Game.Cooking.GriddleRules.PlateDepth;
+            float pz = GriddleArtRules.PlateCenterZ;
+            Box(model, "Plate", new Vector3(0f, h - t * 0.5f, Z(pz)), new Vector3(pw, t, pd), plate);
+            Box(model, "Rim back", new Vector3(0f, h - 0.01f, Z(pz + pd * 0.5f + 0.01f)), new Vector3(pw + 0.04f, 0.028f, 0.02f), steel);
+            Box(model, "Rim left", new Vector3(-pw * 0.5f - 0.01f, h - 0.01f, Z(pz)), new Vector3(0.02f, 0.028f, pd), steel);
+            Box(model, "Rim right", new Vector3(pw * 0.5f + 0.01f, h - 0.01f, Z(pz)), new Vector3(0.02f, 0.028f, pd), steel);
+            float frontEdge = pz - pd * 0.5f;
+            Box(model, "Trough", new Vector3(0f, h - t - 0.01f, Z(frontEdge - 0.015f)), new Vector3(pw, 0.02f, 0.03f), dark);
+            float deckFront = pz + pd * 0.5f + 0.02f;
+            Box(model, "Deck", new Vector3(0f, h - t * 0.5f, Z((deckFront + d * 0.5f) * 0.5f)), new Vector3(w, t, d * 0.5f - deckFront), steel);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 031: the graybox assembly board as the wrapper's "Model" (<see cref="AssemblyArtRules"/>, station z mirrored: the front
+        /// on +Z): a wooden cabinet with two door panels and a worktop, the cutting board the build lies on at the front left, a low
+        /// shelf the two sauce dispensers stand on at the back, and the packaging rack (a low frame) along the right edge.
+        /// </summary>
+        private static GameObject BuildAssembly(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material wood = GrayboxMaterial("AssemblyWood", Palette.WoodLight);
+            Material dark = GrayboxMaterial("AssemblyWoodDark", Palette.WoodDark);
+            Material board = GrayboxMaterial("AssemblyBoard", Palette.Shade(Palette.WoodLight, 0.88f));
+            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            const float w = AssemblyArtRules.Width, d = AssemblyArtRules.Depth, h = AssemblyArtRules.Top;
+            const float slab = 0.03f;
+            float Z(float stationZ) => -stationZ; // the wrapper's front is +Z (turned half way round: x mirrors too)
+            float X(float stationX) => -stationX;
+            Box(model, "Cabinet", new Vector3(0f, (h - slab) * 0.5f, 0f), new Vector3(w, h - slab, d), wood);
+            Box(model, "Worktop", new Vector3(0f, h - slab * 0.5f, 0f), new Vector3(w + 0.02f, slab, d + 0.02f), dark);
+            for (int side = -1; side <= 1; side += 2)
+                Box(model, side < 0 ? "Door left" : "Door right", new Vector3(side * w * 0.25f, (h - slab) * 0.5f, Z(-d * 0.5f - 0.005f)),
+                    new Vector3(w * 0.5f - 0.03f, h - slab - 0.1f, 0.01f), dark);
+            Vector2 spot = AssemblyArtRules.SpotPosition;
+            Box(model, "Cutting board", new Vector3(X(spot.x), h + AssemblyArtRules.BoardThickness * 0.5f, Z(spot.y)),
+                new Vector3(AssemblyArtRules.BoardWidth, AssemblyArtRules.BoardThickness, AssemblyArtRules.BoardDepth), board);
+            Vector2 sauce = AssemblyArtRules.ToolPosition(0), chili = AssemblyArtRules.ToolPosition(1);
+            Box(model, "Dispenser shelf", new Vector3(X((sauce.x + chili.x) * 0.5f), h + 0.006f, Z(sauce.y)), new Vector3(0.36f, 0.012f, 0.16f), steel);
+            Vector2 paper = AssemblyArtRules.ToolPosition(2), bags = AssemblyArtRules.ToolPosition(4);
+            float rackLength = bags.y - paper.y + 0.26f, rackZ = (paper.y + bags.y) * 0.5f;
+            Box(model, "Rack floor", new Vector3(X(paper.x), h + 0.006f, Z(rackZ)), new Vector3(0.26f, 0.012f, rackLength), dark);
+            Box(model, "Rack back", new Vector3(X(paper.x + 0.125f), h + 0.0075f, Z(rackZ)), new Vector3(0.012f, 0.015f, rackLength), dark);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 032: the graybox register as the wrapper's "Model" (RegisterArtRules, the base on the counter top at the origin): a
+        /// Charcoal body, a display leaning towards the front with a DeepBlue screen, the WoodDark change drawer with a coin or note in
+        /// each compartment (palette colours by value), the Terracotta BACK and Sage GIVE buttons, the DeepBlue card terminal and the
+        /// WoodLight change mat. Front on +Z like the kit (the scene builder turns it to the cook).
+        /// </summary>
+        private static GameObject BuildRegister(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material body = GrayboxMaterial("RegisterBody", Palette.Charcoal);
+            Material screen = GrayboxMaterial("RegisterScreen", Palette.DeepBlue);
+            Material drawer = GrayboxMaterial("RegisterDrawer", Palette.WoodDark);
+            Material mat = GrayboxMaterial("RegisterMat", Palette.WoodLight);
+            Material back = GrayboxMaterial("RegisterBack", Palette.Terracotta);
+            Material give = GrayboxMaterial("RegisterGive", Palette.Sage);
+            Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
+            Box(model, "Body", F(RegisterArtRules.BodyCentre), RegisterArtRules.BodySize, body);
+            Quaternion lean = Quaternion.Euler(25f, 0f, 0f); // mirrored: leans back from the +Z front
+            Box(model, "Display", F(RegisterArtRules.DisplayCentre), RegisterArtRules.DisplaySize, body).transform.localRotation = lean;
+            Box(model, "Screen", F(RegisterArtRules.ScreenCentre), RegisterArtRules.ScreenSize, screen).transform.localRotation = lean;
+            Box(model, "Drawer", F(RegisterArtRules.DrawerCentre), RegisterArtRules.DrawerSize, drawer);
+            for (int slot = 0; slot < Worktown.Sim.Economy.CashRules.Tray.Count; slot++)
+            {
+                int value = Worktown.Sim.Economy.CashRules.Tray[slot];
+                Box(model, "Money " + value, F(RegisterArtRules.TrayCentre(slot)), RegisterArtRules.TrayMoneySize(value),
+                    GrayboxMaterial("Cash" + value, Worktown.Game.Shop.RegisterView.ColorOf(value)));
+            }
+            Box(model, "Back", F(RegisterArtRules.BackCentre), RegisterArtRules.ButtonSize, back);
+            Box(model, "Give", F(RegisterArtRules.GiveCentre), RegisterArtRules.ButtonSize, give);
+            Box(model, "Terminal", F(RegisterArtRules.TerminalCentre), RegisterArtRules.TerminalSize, screen);
+            Box(model, "Change mat", F(RegisterArtRules.MatCentre), RegisterArtRules.MatSize, mat);
             return model;
         }
 

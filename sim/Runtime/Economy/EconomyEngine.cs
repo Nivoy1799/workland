@@ -212,7 +212,28 @@ namespace Worktown.Sim.Economy
             if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
             if (!_catalog.TryGetGrocerPrice(baseId, out var price)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
             if (units < 1 || units > EconomyLimits.MaxLot) return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
-            long cost = price * units;
+            return Debit(s, ai, price * units);
+        }
+
+        /// <summary>
+        /// Spec 031b: buys <paramref name="percent"/> % of one base item from the NPC grocer (a squeezed portion of sauce):
+        /// <see cref="PriceRules.PortionCost"/> of its grocer price. Percent outside 1..100 is InvalidQuantity. On failure nothing
+        /// changes.
+        /// </summary>
+        public PurchaseResult TryBuyPortion(EconomyState s, string buyerId, string baseId, int percent)
+        {
+            Need(s);
+            int ai = FindAccount(s, buyerId);
+            if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
+            if (!_catalog.TryGetGrocerPrice(baseId, out var price)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            if (percent < 1 || percent > 100) return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
+            return Debit(s, ai, PriceRules.PortionCost(price, percent));
+        }
+
+        /// <summary>031b review: the grocer debit shared by <see cref="TryBuyBase"/> and <see cref="TryBuyPortion"/>: account
+        /// <paramref name="ai"/> pays <paramref name="cost"/> to the grocer, or InsufficientFunds and nothing changes.</summary>
+        private static PurchaseResult Debit(EconomyState s, int ai, long cost)
+        {
             var acc = s.Accounts[ai];
             if (cost > acc.Balance) return new PurchaseResult(s, EconomyError.InsufficientFunds, 0);
             var next = s with

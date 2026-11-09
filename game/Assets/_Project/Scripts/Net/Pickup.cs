@@ -63,6 +63,10 @@ namespace Worktown.Game.Net
         private bool _registered;
         private int _poseFrame = -1;
         private Pose _framePose;
+        // Spec 031b: the size the model is drawn at (eases to the view's fit scale while held in first person, else 1).
+        private float _drawScale = 1f;
+        private float _viewScale = 1f;
+        private const float DrawScaleSeconds = 0.04f;
         // The client's own copy of the resting tilt (the server's is server only), for a predicted place.
         private Quaternion _clientRestTilt = Quaternion.identity;
 
@@ -237,7 +241,7 @@ namespace Worktown.Game.Net
                 _poseFrame = Time.frameCount;
                 _framePose = ComputeFramePose(Time.unscaledTime);
             }
-            _tween.Apply(_framePose);
+            _tween.Apply(_framePose, _drawScale);
         }
 
         private void OnEndCameraRendering(ScriptableRenderContext context, Camera cam)
@@ -261,6 +265,10 @@ namespace Worktown.Game.Net
                 _clientRestTilt = PlaceSpots.TiltOf(root.rotation);
             Pose drawn = _tween.Evaluate(frame.Goal, now);
             if (_look.HasPrediction && PredictionDrawnFrame < 0) PredictionDrawnFrame = Time.frameCount;
+            // Spec 031b: a large item in the first-person view is drawn smaller; the size eases with the arc into and out of view.
+            float wanted = frame.Kind == ItemGoalKind.View ? _viewScale : 1f;
+            _drawScale = Mathf.Lerp(_drawScale, wanted, 1f - Mathf.Exp(-Time.unscaledDeltaTime / DrawScaleSeconds));
+            if (Mathf.Abs(_drawScale - wanted) < 0.002f) _drawScale = wanted;
             return drawn;
         }
 
@@ -278,7 +286,7 @@ namespace Worktown.Game.Net
                     pose = new Pose(hand.position + frame * HandOffset, frame);
                     return true;
                 }
-                if (!visual.DrawsHeldInHand && visual.TryGetComponent(out HeldItemView view) && view.TryGetViewPose(this, out pose))
+                if (!visual.DrawsHeldInHand && visual.TryGetComponent(out HeldItemView view) && view.TryGetViewPose(this, out pose, out _viewScale))
                 {
                     kind = ItemGoalKind.View;
                     return true;

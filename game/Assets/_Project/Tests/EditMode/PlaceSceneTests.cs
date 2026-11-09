@@ -36,7 +36,7 @@ namespace Worktown.Game.Tests
             try
             {
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(11, surfaces.Count, "spec 021: five worktops, and per stove its top and two burners");
+                Assert.AreEqual(12, surfaces.Count, "spec 021: five worktops, and per stove its top and two burners; spec 030: the griddle's deck");
                 SerializedProperty list = new SerializedObject(All<PickupService>(scene)[0]).FindProperty("_surfaces");
                 Assert.AreEqual(surfaces.Count, list.arraySize);
                 int burners = 0;
@@ -106,13 +106,17 @@ namespace Worktown.Game.Tests
                 List<Component> vessels = VesselTestKit.AllOf(scene, VesselTestKit.VesselType);
                 // Spec 029: the fryer baskets hang in their fryer (no spot, never carried).
                 Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Basket), "two fryer baskets");
+                // Spec 030: the six griddle spots lie on the griddle's plate (fixed, no spot); the spatula on the griddle's deck.
+                Assert.AreEqual(Worktown.Game.Cooking.GriddleRules.SpotsPerGriddle, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Griddle), "six griddle spots");
+                Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Assembly), "spec 031: one build spot on the assembly board");
+                items.AddRange(All<Spatula>(scene));
                 items.AddRange(vessels);
-                Assert.AreEqual(1 + 6, items.Count, "knife, board, pan, pot, bowl and two plates");
+                Assert.AreEqual(1 + 1 + 6, items.Count, "knife, spatula, board, pan, pot, bowl and two plates");
                 foreach (Component item in items)
                 {
                     PlaceSurface on = SurfaceUnder(surfaces, item.transform.position);
                     Assert.IsNotNull(on, item.name + " lies on no spot (" + item.transform.position + ")");
-                    bool heat = !(item is Knife) && VesselRules.IsHeat(VesselTestKit.KindOf(item));
+                    bool heat = !(item is Knife) && !(item is Spatula) && VesselRules.IsHeat(VesselTestKit.KindOf(item));
                     Assert.AreEqual(heat, on.IsBurner, item.name + " on " + on.name);
                 }
             }

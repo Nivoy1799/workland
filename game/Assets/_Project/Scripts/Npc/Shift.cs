@@ -59,7 +59,7 @@ namespace Worktown.Game.Npc
             if (IsOpen)
             {
                 if (inHours && DayOf(tick) == Day) return false;
-                Live = Live.WithMissed(stillWaiting);
+                Live = Live.WithMissed(stillWaiting, MissReason.Closed); // spec 032: by reason
                 Last = Live;
                 LastDay = Day;
                 IsOpen = false;
@@ -92,6 +92,26 @@ namespace Worktown.Game.Npc
         public void RecordMissed(int count)
         {
             if (IsOpen) Live = Live.WithMissed(count);
+        }
+
+        /// <summary>Spec 032: guests left unserved for <paramref name="reason"/> during the open shift (ignored when closed).</summary>
+        public void RecordMissed(int count, MissReason reason)
+        {
+            if (IsOpen) Live = Live.WithMissed(count, reason);
+        }
+
+        /// <summary>
+        /// Spec 032: a guest paid at the register (with its tip) and left a review. Counted in the open shift; a guest who pays
+        /// in the moments after closing (the register settles it) counts in the shift that just closed.
+        /// </summary>
+        public void RecordSale(int stars, long paid, long tip, Worktown.Sim.Economy.GuestReview review)
+        {
+            if (IsOpen) Live = Live.WithSale(stars, paid, tip, review);
+            else if (SummaryShowing)
+            {
+                Live = Live.WithSale(stars, paid, tip, review);
+                Last = Live;
+            }
         }
 
         /// <summary>Server stopped: back to "no shift yet".</summary>

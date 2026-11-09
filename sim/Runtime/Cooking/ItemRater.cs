@@ -18,6 +18,14 @@ namespace Worktown.Sim.Cooking
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
 
+            // Spec 031: a build (open, closed or packed) rates against its best recipe template (RecipeTemplates). A plate of a
+            // build goes through the plate rule below (its one input: the build's own rating).
+            if (item.Kind == OperationKind.Assemble || item.Kind == OperationKind.Close || item.Kind == OperationKind.Pack)
+            {
+                TemplateScore? best = RecipeTemplates.Best(item);
+                if (best != null) return new ItemRating(best.Quality, best.Taste, best.DonenessFactor);
+            }
+
             if (item.Kind == OperationKind.Plate)
             {
                 float quality = 0f, taste = 0f, factor = 0f, total = 0f;

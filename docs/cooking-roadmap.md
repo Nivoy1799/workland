@@ -93,3 +93,22 @@ tuned later by the human.
   pending); KitchenService.TakeIngredient can charge without an item if the spawn fails (refund or check first);
   test the TakeIngredient sequence (TryBuy 0 times on refusal); StockTakeLook liveness when the interactor dies;
   nits (NearestSlot test point, real Finish path, measured log, crate variable names, readonly row arrays).
+- 029b review (approved with nits; must-fix test and label decision moved into 030): stock take after Pay can still
+  fail on pool or spawn errors (needs an Economy refund backstop, track for 034); the cook tour should press the basket
+  button through DevClick (end-to-end intent); a dispatch test for tip vs pour and VesselFull on tip; TipBasket log.
+- 030 (feels off) -> polish round 2 (before or with 032): warning lead time = clamp(0.4 x good window, 1 s, 3 s)
+  (orchestrator decision; toast warned before Good); first person shows 6 rings and 6 labels at once (show rings and
+  labels only for the aimed spot plus spots in Warning or worse); grill marks stay on the plated item; a spatula motion
+  in the hand on flip; griddle to plates 4.2 m; per-dish menu prices (spec 037).
+- 030 review (approved after the CombineSides fix, which went into the 031 round): tuning for the human - the "grilled"
+  name and the menu's medium bucket start at 9 s per side, before the good window (12 s seitan, 10 s veg), so an
+  undercooked plate can be an exact order; GriddleSides is sim-model only (the server keeps its own sessions).
+- 031b review (approved with nits): third-person E squeeze on tap (fixed in 032 round: 0.2 s hold), free busy
+  dispenser, tests and nits (in 032 round). Follow-up: no third-person tour shot with food on the heat.
+- 032 (feels off): bills from market values are huge (inbox question 7, spec 037 rescale); "changed their mind"
+  (spec 014 demand reconcile) is now the top miss reason and may be redundant with patience; order bubbles behind the
+  ticket rail from the kitchen; rail cards dim from below; third person can only take card payments; one look-tour
+  run exited 139 during FishNet shutdown after its sheet (flaky, watch).
+- 032 review (CHANGES REQUESTED): double pay on hand-over failure (must-fix) and register decisions (any cook works the
+  head payment; self-settled payments pay no tip; head untouched 30 s auto-settles) in the 032 fix round. Process:
+  future rounds commit spec and review fixes as separate commits.

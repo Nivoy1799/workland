@@ -23,6 +23,18 @@ namespace Worktown.Game.Audio
         /// <summary>Spec 029: the fryer's deep oil bubbling (loop), a basket's shake rattle and its drain drips.</summary>
         Fryer,
         Rattle,
-        Drip
+        Drip,
+        /// <summary>Spec 030: the flip on the griddle, a short "tssh" (a burst of sizzle as the raw side hits the plate).</summary>
+        Flip,
+        /// <summary>Spec 031: a layer lands on the build (a soft "plop"), the sauce squeeze (loop while held), the fold of a wrap and the
+        /// crinkle of wrap paper, a box or a bag.</summary>
+        Plop,
+        Squeeze,
+        Fold,
+        Paper,
+        /// <summary>Spec 032: a coin or note into the register's change tray.</summary>
+        Clink,
+        /// <summary>Spec 032: the card terminal.</summary>
+        Beep
     }
 }

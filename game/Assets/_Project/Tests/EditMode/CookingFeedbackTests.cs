@@ -133,20 +133,6 @@ namespace Worktown.Game.Tests
         // ---- serve reward ----
 
         [Test]
-        public void Tip_IsTheShareAbove100Percent()
-        {
-            // An exact order with 5 stars pays 130 %: $100 becomes $130, $30 of it tip.
-            int permille = OrderRules.PayPermille(OrderMatch.Exact, 5);
-            Assert.AreEqual(1300, permille);
-            Assert.AreEqual(30, OrderRules.TipOf(130, permille));
-            Assert.AreEqual(1, OrderRules.TipOf(5, 1200), "$4 at 120 % rounds to $5");
-            Assert.AreEqual(0, OrderRules.TipOf(100, 1000));
-            Assert.AreEqual(0, OrderRules.TipOf(60, OrderRules.ClosePermille));
-            Assert.AreEqual(0, OrderRules.TipOf(0, 1300));
-            Assert.AreEqual(0, OrderRules.TipOf(-5, 1300));
-        }
-
-        [Test]
         public void ServeReward_CountsSales_AndClamps()
         {
             ServeReward first = ServeReward.Next(default, 3, 4, 64, 4);

@@ -30,7 +30,11 @@ namespace Worktown.Game.Cooking
         {
             DisplayName.OnChange += (_, _, _) => Refresh();
             Stars.OnChange += (_, _, _) => Refresh();
-            Look.OnChange += (_, _, _) => _visualDirty = true;
+            Look.OnChange += (_, _, _) =>
+            {
+                _visualDirty = true;
+                Refresh(); // spec 031b: the label's short build name follows the look
+            };
             Parts.OnChange += (_, _, _, _, _) => _visualDirty = true;
         }
 
@@ -70,8 +74,9 @@ namespace Worktown.Game.Cooking
 
         private void Refresh()
         {
+            // Spec 031b: a build without a dish name is shortened in the label (BuildRules.LabelName); Describe keeps the full name.
             if (_label != null)
-                _label.text = DisplayName.Value + "\n" + StarRating.Format(Stars.Value);
+                _label.text = BuildRules.LabelName(DisplayName.Value, FoodLookRules.IsBuild(Look.Value)) + "\n" + StarRating.Format(Stars.Value);
         }
 
         private void LateUpdate()

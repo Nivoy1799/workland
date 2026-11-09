@@ -158,10 +158,14 @@ namespace Worktown.Game.Dev
         private const float BackLineZ = 14.3f;
         // Spec 029: the fryer (x 6.44) moved the stoves 0.84 m to the right. Spec 029b: the stoves stand side by side, the
         // plating worktop (x 9.34 to 10.60) and the plate shelf (11.22) follow stove B.
+        // Spec 030: the griddle (x 5.49) between the prep run (now one board wide) and the fryer; nothing else moved.
+        private const float GriddleX = 5.49f;
         private const float FryerX = 6.44f;
         private const float StoveAX = 7.48f;
         private const float StoveBX = 8.72f;
-        private const float WorktopBetweenX = 9.97f; // spec 029b: the plating worktop after stove B (no worktop between the stoves)
+        private const float WorktopBetweenX = 9.71f; // spec 029b: the plating worktop after stove B; spec 031: one plate pair wide (9.34 to 10.08)
+        /// <summary>Spec 031: the assembly board after the plates (the plate shelf and the counter at 11.64).</summary>
+        private const float AssemblyX = 10.55f;
         /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
         public const float ParkX = -2.5f; // spec 028b: 2.8 m west of the side wall, as in 027a
         private const float ObserverExitX = -0.7f; // the observers' way south from the staff gap, west of the side wall
@@ -220,6 +224,8 @@ namespace Worktown.Game.Dev
                 TourStep.Wait(0.6f), TourStep.Shot("stock-first"),
                 LookAtSlot(StationKind.Fridge, "cucumber"), TourStep.Wait(0.6f), TourStep.Shot("fridge-slot"),
                 LookAtSlot(StationKind.Shelf, "potato"), TourStep.Wait(0.6f), TourStep.Shot("shelf-slot"),
+                // Spec 030: the griddle from the aisle (first person): the plate, its six spots, the knob, the spatula on the deck.
+                TourStep.WalkTo(GriddleX, StandZ), TourStep.LookAt(GriddleX, 0.75f, BackLineZ - 0.2f), TourStep.Wait(0.6f), TourStep.Shot("griddle-first"),
                 // Spec 029: the fryer from the aisle (first person): the knob, the basket buttons, both baskets on the hook.
                 TourStep.WalkTo(FryerX, StandZ), TourStep.LookAt(FryerX, 0.85f, BackLineZ - 0.2f), TourStep.Wait(0.6f), TourStep.Shot("fryer-first"),
                 TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
@@ -231,6 +237,9 @@ namespace Worktown.Game.Dev
                 TourStep.Act(ActSlowMotion), TourStep.Act(ActPickUpPanFrames), TourStep.Act(ActPutPanBackFrames), TourStep.Act(ActNormalMotion),
                 TourStep.WalkTo(WorktopBetweenX, StandZ), TourStep.LookAt(WorktopBetweenX, 0.9f, BackLineZ - 0.15f), TourStep.Wait(0.6f),
                 TourStep.Shot("worktop-first"),
+                // Spec 031: the assembly board from the aisle (first person): the cutting board, the two dispensers, the packaging rack.
+                TourStep.WalkTo(AssemblyX, StandZ), TourStep.LookAt(AssemblyX, 0.75f, BackLineZ - 0.2f), TourStep.Wait(0.6f),
+                TourStep.Shot("assembly-first"),
                 TourStep.WalkTo(LookObserverX, AisleZ), TourStep.LookAt(LookObserverX, 1.4f, LookObserverZ), TourStep.Wait(0.6f),
                 TourStep.Shot("scale-person"),
                 TourStep.WalkTo(StoveBX, AisleZ), TourStep.View(ViewMode.ThirdPerson), TourStep.Look(0f, -10f), TourStep.Wait(1.2f),
@@ -285,7 +294,7 @@ namespace Worktown.Game.Dev
             {
                 new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
             };
-            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 420f);
+            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 960f); // spec 030: + the griddle; spec 031: + the wrap; spec 032: + the register
         }
     }
 }

@@ -21,6 +21,16 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Take the food from a board, pan or bowl; take a plate from the shelf.</summary>
         Take,
         /// <summary>Spec 029: shake a lowered fryer basket (empty hands).</summary>
-        Shake
+        Shake,
+        /// <summary>Spec 030: the spatula over a griddle spot with food: turn it over.</summary>
+        Flip,
+        /// <summary>Spec 031: hold left click on a sauce dispenser of the assembly board (the amount by the time held).</summary>
+        Squeeze,
+        /// <summary>Spec 031: empty hands fold the open build on a wrap or flatbread.</summary>
+        Fold,
+        /// <summary>Spec 031: wrap the build in paper, or put it in a box or a bag, from the board's rack.</summary>
+        Pack,
+        /// <summary>Spec 032: a slot of the register: a coin or note into the change, take it back, hand it over, the card terminal.</summary>
+        Pay
     }
 }

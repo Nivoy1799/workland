@@ -23,8 +23,12 @@ namespace Worktown.Game.Cooking
         public const float GoodShare = 0.6f;
         /// <summary>Where Perfect starts on the ring (halfway through the good arc).</summary>
         public const float PerfectShare = GoodShare + (1f - GoodShare) * (float)PerfectShareOfWindow;
-        /// <summary>The warning cue: this many real seconds before Overdone.</summary>
+        /// <summary>The warning cue: at most this many real seconds before Overdone (031b: the longest lead).</summary>
         public const double WarnRealSeconds = 3.0;
+        /// <summary>031b: the shortest warning lead, real seconds.</summary>
+        public const double WarnMinRealSeconds = 1.0;
+        /// <summary>031b: the warning lead is this share of the good window's length (clamped to 1..3 real s).</summary>
+        public const double WarnLeadShare = 0.4;
         /// <summary>The warning in sim seconds (<see cref="CookingTime.TimeScale"/> sim seconds per real second).</summary>
         public const double WarnSimSeconds = WarnRealSeconds * CookingTime.TimeScale;
 
@@ -149,13 +153,36 @@ namespace Worktown.Game.Cooking
             return (byte)Math.Round(share * 255.0);
         }
 
-        /// <summary>True from exactly <see cref="WarnSimSeconds"/> before Overdone until Overdone (never for food that does
-        /// not overcook).</summary>
+        /// <summary>
+        /// True from exactly <see cref="WarnLeadSimSeconds"/> before Overdone until Overdone (never for food that does not
+        /// overcook). 031b: the lead follows the good window, so short windows (toast, grill vegetables) never warn before Good.
+        /// </summary>
         public static bool Warn(double simSeconds, HeatTimeline timeline)
         {
             double t = Sanitize(simSeconds);
             if (double.IsInfinity(timeline.OverdoneFrom)) return false;
-            return t >= timeline.OverdoneFrom - WarnSimSeconds && t < timeline.OverdoneFrom;
+            return t >= timeline.OverdoneFrom - WarnLeadSimSeconds(timeline) && t < timeline.OverdoneFrom;
+        }
+
+        /// <summary>
+        /// 031b (orchestrator decision): the warning lead in real seconds for a good window of <paramref name="goodWindowRealSeconds"/>:
+        /// clamp(<see cref="WarnLeadShare"/> × window, <see cref="WarnMinRealSeconds"/>, <see cref="WarnRealSeconds"/>). An unknown
+        /// (NaN, infinite or negative) window gets the longest lead.
+        /// </summary>
+        public static double WarnLeadRealSeconds(double goodWindowRealSeconds)
+        {
+            if (double.IsNaN(goodWindowRealSeconds) || double.IsInfinity(goodWindowRealSeconds) || goodWindowRealSeconds < 0.0)
+                return WarnRealSeconds;
+            double lead = WarnLeadShare * goodWindowRealSeconds;
+            return lead < WarnMinRealSeconds ? WarnMinRealSeconds : lead > WarnRealSeconds ? WarnRealSeconds : lead;
+        }
+
+        /// <summary>031b: the warning lead of <paramref name="timeline"/> in sim seconds (its good window: Good to Overdone).</summary>
+        public static double WarnLeadSimSeconds(HeatTimeline timeline)
+        {
+            double window = timeline.OverdoneFrom - timeline.GoodFrom;
+            if (double.IsNaN(window) || double.IsInfinity(window) || window < 0.0) return WarnSimSeconds;
+            return WarnLeadRealSeconds(window / CookingTime.TimeScale) * CookingTime.TimeScale;
         }
 
         private static double Sanitize(double simSeconds) => double.IsNaN(simSeconds) || simSeconds < 0.0 ? 0.0 : simSeconds;

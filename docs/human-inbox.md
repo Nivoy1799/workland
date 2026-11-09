@@ -4,10 +4,23 @@ Hop in whenever you like. Answer by writing under a question (or just tell Claud
 every question has a default, and work continues on other items until you answer. Newest first.
 
 ## Status (updated 2026-11-09 05:00)
-- **Running:** spec 029 (deep fryer: baskets, lower, shake, lift, drain; fries and falafel).
+- **Running:** spec 033 (drinks: cups, dispenser with fill timing, lids).
 - **Next:** fryer (029), griddle (030), assembly and packaging (031), orders 2.0 (032). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
+  - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
+    raw-plus-burnt "perfect" exploit, a sauce button that could block the dispenser forever, and a hand-over path
+    that could pay a guest twice; all fixed):
+    - **griddle:** two sides cook separately, flip with the spatula, split ring, grill marks; grilled veggies, toast;
+    - **assembly:** build wraps layer by layer, hold to squeeze sauce (a portion costs 10 % of the bottle), fold,
+      paper, box or bag; recipe scoring by layers and order;
+    - **orders 2.0:** guests order with changes ("no onion", "+ extra garlic"), patience rings, a register where you
+      count out change coin by coin or take a card, tips and star reviews in the shift summary (F3);
+    - calm view (only the aimed ring and warnings), held food visible in first person, any cook can work the till.
+  - **Specs 029 + 029b, deep fryer and polish:** two baskets you lower, shake, raise and let drain; fries and
+    falafel; bubbles, rings, a bubbling loop, rattle and drips; tip fries from the basket straight onto a plate you
+    hold. Labels speak your words ("golden fries", "well done"). The review caught an exploit (re-frying stacked the
+    shake bonus up to a perfect rating), now capped. The stoves stand side by side; the fryer is 3.3 m from the plates.
   - **Spec 028b, compact stock:** a fridge (vegetables, seitan, falafel mix, lemon) and a dry shelf (sauces,
     potato, onion, flatbread, wraps) right next to the cutting board; aim at an item and click, it flies into your
     hand at once. Both are simple graybox models for now (no fridge in our Kenney furniture).
@@ -42,6 +55,22 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+8. **Crash on quit (Direct3D 12).** After the visual-check tours finish, the game sometimes crashes while shutting
+   down (4 of 6 runs): an access violation inside Windows' `D3D12Core.dll`, after networking has stopped; no game code
+   on the stack. An older dump from 11-07 shows a different shutdown crash. Players would see "Worktown has stopped"
+   when quitting. Claude switched the visual-check tours to Direct3D 11 so checks stay reliable. Option A: Claude
+   investigates in a small spec (driver update check, PSO cache, Unity graphics settings, try D3D11 as default).
+   Option B: ignore until real players report it. **Default: A**, after the cooking roadmap. Do you also see it when
+   you quit the game?
+7. **Price scale.** Bills now come from the economy's market values: a wrap costs about **$1,525**, ingredients
+   $45–110 each, the player starts with $500, and a cash guest hands over a $1,900 note. That reads like a luxury
+   restaurant, not street food. Option A: rescale the whole economy to street-food money (wrap about $9, fries $4,
+   ingredients $0.30–2, start with $200), with prices in cents internally so change stays exact. Option B: keep the
+   numbers and just call the currency something else. Option C: you set the targets. **Default: A**, done in the
+   pricing spec (037), where you also get a menu board to set your own prices. Blocks nothing until then.
+6. **FYI, scope note (no answer needed unless you object):** the griddle spec (030) needed grill vegetables that spec
+   028 had not added. The builder added paprika, eggplant and mushroom as ingredients (shelf slots, grocer prices
+   60 / 70 / 80). Claude approved it under the 24 h grant; say so if you'd rather review such additions yourself.
 5. **Vegan word check: plant products.** The new content check (D27) blocks words like milk, butter, cream and cheese
    anywhere in item, menu and news text. That also blocks honest plant products ("oat milk", "coconut milk",
    "peanut butter", "cashew cream"), and it does not catch adjectives ("creamy", "cheesy", "buttery").

@@ -23,7 +23,7 @@ namespace Worktown.Game.Cooking
 
         /// <summary>
         /// Ingredient order (the FoodLook ingredient byte): index 0 is potato; spec 028: after the four demo ingredients come the
-        /// ten street-food items of the sim (<see cref="StreetFoodItems"/>). Spec 028b: which slot of the fridge or the dry shelf
+        /// ten street-food items of the sim (<see cref="StreetFoodItems"/>), spec 030: then the three grill vegetables. Spec 028b: which slot of the fridge or the dry shelf
         /// holds which is <see cref="StockLayout"/>.
         /// </summary>
         public static readonly IReadOnlyList<BaseItemDef> All = Combine();
@@ -35,6 +35,7 @@ namespace Worktown.Game.Cooking
         {
             var all = new List<BaseItemDef> { Potato, Apple, Tomato, Onion };
             all.AddRange(StreetFoodItems.All);
+            all.AddRange(StreetFoodItems.GrillVegetables); // spec 030: paprika, eggplant, mushroom (indices 14 to 16)
             return all.AsReadOnly();
         }
 

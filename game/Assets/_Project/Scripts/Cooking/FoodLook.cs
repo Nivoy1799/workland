@@ -27,10 +27,18 @@ namespace Worktown.Game.Cooking
         public const byte HeatBoiled = 2;
         /// <summary>Spec 029: from the fryer's basket (fries, falafel balls); golden like fried.</summary>
         public const byte HeatDeepFried = 3;
+        /// <summary>Spec 031b: from the griddle (grilled or toasted); golden like fried, with grill marks once done (also on a plate).</summary>
+        public const byte HeatGrilled = 4;
 
         public const byte KindSingle = 0;
         public const byte KindPlated = 1;
         public const byte KindMixed = 2;
+        /// <summary>Spec 031: a build from the assembly board: open (its layers are the parts), folded, in paper, in a box, in a bag.</summary>
+        public const byte KindBuild = 3;
+        public const byte KindFolded = 4;
+        public const byte KindWrapped = 5;
+        public const byte KindBoxed = 6;
+        public const byte KindBagged = 7;
 
         /// <summary>Parts drawn on a plate or in a bowl; the rest are not drawn.</summary>
         public const int MaxParts = 4;
@@ -41,9 +49,10 @@ namespace Worktown.Game.Cooking
         public byte Shape;
         /// <summary>0 raw, 1 short, 2 medium, 3 long (from the last heat op's time bucket).</summary>
         public byte Doneness;
-        /// <summary>0 none, 1 fried (fry or saute), 2 boiled, 3 deep-fried (spec 029): picks the golden shift (spec 017 open question 3).</summary>
+        /// <summary>0 none, 1 fried (fry or saute), 2 boiled, 3 deep-fried (spec 029), 4 grilled (spec 031b): picks the golden shift
+        /// (spec 017 open question 3).</summary>
         public byte Heat;
-        /// <summary>0 single, 1 plated, 2 mixed.</summary>
+        /// <summary>0 single, 1 plated, 2 mixed; spec 031: 3 an open build, 4 folded, 5 in paper, 6 boxed, 7 bagged.</summary>
         public byte Kind;
         /// <summary>Plated or mixed: number of parts shown (max 4), else 0.</summary>
         public byte PartCount;

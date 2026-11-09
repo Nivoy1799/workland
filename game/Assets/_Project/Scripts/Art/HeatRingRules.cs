@@ -97,6 +97,38 @@ namespace Worktown.Game.Art
             if (p > 0f) Arc(0f, p, FillInner, FillOuter, FillColor(zone), vertices, colors, triangles);
         }
 
+        /// <summary>Spec 030: the gap between the two halves of a griddle ring, at the top and the bottom (share of the circle).</summary>
+        public const float HalfGap = 0.008f;
+
+        /// <summary>
+        /// Spec 030: the griddle's two-half ring (one half per side of the item): side 1 on the left half, side 2 on the right,
+        /// each filling from the top downwards to its own progress in its zone's colour, with the good window marked on its rim
+        /// (mirrored on the left). The half whose side is down (cooking now) gets a small Cream tick on its rim. Into the
+        /// lists (cleared first), like <see cref="Build"/>.
+        /// </summary>
+        public static void BuildHalves(float side1Progress, HeatZone side1Zone, float side2Progress, HeatZone side2Zone, int downSide,
+            List<Vector3> vertices, List<Color> colors, List<int> triangles)
+        {
+            vertices.Clear();
+            colors.Clear();
+            triangles.Clear();
+            Arc(0f, 1f, TrackInner, TrackOuter, Track, vertices, colors, triangles);
+            float g = HeatZoneRules.GoodShare * 0.5f, p = HeatZoneRules.PerfectShare * 0.5f;
+            // Side 2, right: shares 0..0.5 clockwise from the top.
+            Arc(g, p, MarkInner, MarkOuter, GoodMark, vertices, colors, triangles);
+            Arc(p, 0.5f - HalfGap, MarkInner, MarkOuter, PerfectMark, vertices, colors, triangles);
+            // Side 1, left: mirrored, shares 1..0.5 counter-clockwise from the top.
+            Arc(1f - p, 1f - g, MarkInner, MarkOuter, GoodMark, vertices, colors, triangles);
+            Arc(0.5f + HalfGap, 1f - p, MarkInner, MarkOuter, PerfectMark, vertices, colors, triangles);
+            float p1 = Mathf.Clamp01(float.IsNaN(side1Progress) ? 0f : side1Progress);
+            float p2 = Mathf.Clamp01(float.IsNaN(side2Progress) ? 0f : side2Progress);
+            if (p2 > 0f) Arc(HalfGap, Mathf.Max(HalfGap, 0.5f * p2 - HalfGap), FillInner, FillOuter, FillColor(side2Zone), vertices, colors, triangles);
+            if (p1 > 0f) Arc(Mathf.Min(1f - HalfGap, 1f - 0.5f * p1 + HalfGap), 1f - HalfGap, FillInner, FillOuter, FillColor(side1Zone),
+                vertices, colors, triangles);
+            float mid = downSide == 1 ? 0.25f : 0.75f;
+            Arc(mid - 0.03f, mid + 0.03f, MarkOuter, MarkOuter + 0.14f, Palette.Cream, vertices, colors, triangles);
+        }
+
         /// <summary>
         /// The palette colours (sRGB) as a mesh's vertex colours need them: in a linear colour space project the shader
         /// takes vertex colours as linear, so they are converted (else every colour looks washed out). In place.

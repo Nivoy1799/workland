@@ -21,6 +21,15 @@ namespace Worktown.Game.Cooking
         Shelf,
         /// <summary>Spec 029: a deep fryer with two baskets (<see cref="VesselKind.Basket"/>): a power knob and a lower/raise button
         /// per basket on its front (<see cref="FryerRules"/>).</summary>
-        Fryer
+        Fryer,
+        /// <summary>Spec 030: a flat griddle with six spots (<see cref="VesselKind.Griddle"/>) and a power knob on its front
+        /// (<see cref="GriddleRules"/>).</summary>
+        Griddle,
+        /// <summary>Spec 031: the assembly board: one build spot (<see cref="VesselKind.Assembly"/>), two sauce dispensers held to
+        /// squeeze and a packaging rack (wrap paper, box, bag) on its top (<see cref="BuildRules"/>; the tools are its slots).</summary>
+        Assembly,
+        /// <summary>Spec 032: the register on the counter: the change tray's coins and notes, take back, hand over and the card
+        /// terminal are its slots (Shop.RegisterRules).</summary>
+        Register
     }
 }

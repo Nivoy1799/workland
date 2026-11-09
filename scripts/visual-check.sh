@@ -41,13 +41,13 @@ if [ ! -f "$GAME" ]; then echo "no client build at $GAME (run WorktownBuild.Buil
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 OUT_WIN="$(cygpath -w "$OUT")"
-WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew)
+WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew -force-d3d11)  # D3D11: D3D12 crashes on exit after tours (2026-11-09, see human-inbox)
 
 timeout_for() {
   case "$1" in
     look) echo 360 ;;
     walk) echo 420 ;;
-    cook) echo 600 ;;
+    cook) echo 1260 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register
     *) echo 420 ;;
   esac
 }
@@ -116,8 +116,11 @@ for tour in "${tour_list[@]}"; do
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
   sleep 3
+  # Spec 032: the cook tour's host scripts its first orders (a wrap with a modifier, cash with change) and longer patience.
+  host_extra=()
+  if [ "$tour" = "cook" ]; then host_extra=(-tour-orders); fi
   if [ "$SERVER" = "local" ]; then
-    "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
+    "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${host_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
   else
     "$GAME" -connect "$ADDRESS" -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
   fi

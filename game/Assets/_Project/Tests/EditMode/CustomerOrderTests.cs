@@ -77,24 +77,30 @@ namespace Worktown.Game.Tests
             TownEconomy close = NewEconomy();
             TownEconomy tipped = NewEconomy();
 
+            // Spec 032: a guest's sale credits nothing at the counter; the register pays the bill (the match's share) and the tip.
             SaleResult a = full.TrySell("p0", fries);
-            SaleResult b = close.TrySell("p0", fries, OrderRules.PayPermille(OrderMatch.Close, 4));
-            SaleResult c = tipped.TrySell("p0", fries, OrderRules.PayPermille(OrderMatch.Exact, 4));
+            SaleResult b = close.TrySellForGuest("p0", fries);
+            SaleResult c = tipped.TrySellForGuest("p0", fries);
 
             Assert.IsTrue(a.Ok && b.Ok && c.Ok);
             Assert.AreEqual(SaleChannel.NpcDemand, a.Channel);
-            Assert.AreEqual(EconomyRules.ApplyPermille(a.Payout, 600), b.Payout);
-            Assert.AreEqual(EconomyRules.ApplyPermille(a.Payout, 1200), c.Payout, "exact with 4 stars: +20 % tip");
+            Assert.AreEqual(a.Payout, b.Payout, "the sim's own payout is the bill's base");
             Assert.AreEqual(500 + a.Payout, full.BalanceOf("p0"));
-            Assert.AreEqual(500 + b.Payout, close.BalanceOf("p0"));
-            Assert.AreEqual(500 + c.Payout, tipped.BalanceOf("p0"));
+            Assert.AreEqual(500, close.BalanceOf("p0"), "nothing yet");
+            long closeBill = EconomyRules.ApplyPermille(b.Payout, OrderRules.GuestSharePermille(OrderMatch.Close));
+            Assert.IsTrue(close.TryPayGuest("p0", closeBill, out _));
+            Assert.AreEqual(500 + EconomyRules.ApplyPermille(a.Payout, 600), close.BalanceOf("p0"));
+            long tip = TipRules.Tip(c.Payout, 0, 1200, 0, 4);
+            Assert.IsTrue(tipped.TryPayGuest("p0", c.Payout + tip, out _));
+            Assert.AreEqual(500 + a.Payout + tip, tipped.BalanceOf("p0"), "exact with 4 stars, fast: the bill and a 22 % tip");
+            Assert.AreEqual(a.Payout * 30 * 3 / 4 / 100, tip);
         }
 
         [Test]
         public void RefusedSale_ChangesNothing_WithAFactor()
         {
             TownEconomy economy = NewEconomy();
-            SaleResult refused = economy.TrySell("p0", MenuKitchen.RawWholePotato(), 250);
+            SaleResult refused = economy.TrySellForGuest("p0", MenuKitchen.RawWholePotato());
             Assert.IsFalse(refused.Ok);
             Assert.AreEqual(500, economy.BalanceOf("p0"));
         }
@@ -125,11 +131,11 @@ namespace Worktown.Game.Tests
         [Test]
         public void Orders_AreDeterministicForASeed()
         {
-            List<byte> first = DrawMany(CustomerRules.OrderSeed, 40);
-            CollectionAssert.AreEqual(first, DrawMany(CustomerRules.OrderSeed, 40));
-            CollectionAssert.AreNotEqual(first, DrawMany(CustomerRules.OrderSeed + 1, 40), "another seed, other orders");
+            List<byte> first = DrawMany(CustomerRules.OrderSeed, 80);
+            CollectionAssert.AreEqual(first, DrawMany(CustomerRules.OrderSeed, 80));
+            CollectionAssert.AreNotEqual(first, DrawMany(CustomerRules.OrderSeed + 1, 80), "another seed, other orders");
             var kinds = new HashSet<byte>(first);
-            Assert.AreEqual(Menu.All.Count, kinds.Count, "40 orders use the whole menu");
+            Assert.AreEqual(Menu.All.Count, kinds.Count, "80 orders use the whole menu (spec 031: 13 dishes, was 40 for 9)");
         }
 
         [Test]

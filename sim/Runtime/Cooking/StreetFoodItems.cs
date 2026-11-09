@@ -20,11 +20,19 @@ namespace Worktown.Sim.Cooking
         public static readonly BaseItemDef GarlicHerbSauce = Make("garlic_herb_sauce", "garlic-herb sauce", 0.05f, 0.30f, 0.10f, 0.15f, 0.30f, 0.40f, 0f, 0.4f, 0.6f, 0f, 0.40f);
         public static readonly BaseItemDef ChiliSauce = Make("chili_sauce", "chili sauce", 0.20f, 0.30f, 0.30f, 0.10f, 0.20f, 0.10f, 0f, 0.5f, 0.7f, 0f, 0.40f);
 
+        // Spec 030: the grill vegetables (the griddle op times them in Griddle). Not in All: GrillVegetables lists them.
+        public static readonly BaseItemDef Paprika = Make("paprika", "paprika", 0.40f, 0f, 0.10f, 0.10f, 0.10f, 0f, 0.70f, 0.4f, 0.85f, 0.30f, 0.70f);
+        public static readonly BaseItemDef Eggplant = Make("eggplant", "eggplant", 0.10f, 0f, 0f, 0.20f, 0.20f, 0.05f, 0.30f, 0.5f, 0.85f, 0.40f, 0.80f);
+        public static readonly BaseItemDef Mushroom = Make("mushroom", "mushroom", 0.05f, 0.05f, 0f, 0.05f, 0.60f, 0f, 0.20f, 0.5f, 0.85f, 0.30f, 0.70f);
+
         /// <summary>The ten new crate items in crate order (after the four demo ingredients).</summary>
         public static readonly IReadOnlyList<BaseItemDef> All = Array.AsReadOnly(new[]
         {
             Flatbread, Wrap, Seitan, FalafelMix, Lettuce, Cucumber, RedCabbage, Lemon, GarlicHerbSauce, ChiliSauce
         });
+
+        /// <summary>Spec 030: the three grill vegetables, in stock order after <see cref="All"/>: paprika, eggplant, mushroom.</summary>
+        public static readonly IReadOnlyList<BaseItemDef> GrillVegetables = Array.AsReadOnly(new[] { Paprika, Eggplant, Mushroom });
 
         /// <summary>
         /// The cut bucket id ("halves", "slices", "sticks") the item is cut into, or null when it is not cut (wrap,
@@ -36,12 +44,15 @@ namespace Worktown.Sim.Cooking
             {
                 case "flatbread":
                 case "lemon":
+                case "mushroom": // spec 030
                     return "halves";
                 case "seitan":
+                case "paprika": // spec 030: strips
                     return "sticks";
                 case "lettuce":
                 case "cucumber":
                 case "red_cabbage":
+                case "eggplant": // spec 030
                     return "slices";
                 default:
                     return null;

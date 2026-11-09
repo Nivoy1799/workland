@@ -13,6 +13,8 @@ namespace Worktown.Game.UI
     /// it shows the open shift so far. Client only, display only: the numbers come from the rail's SyncVars.
     /// Dev only (development builds): <c>-demo-shift</c> opens it 25 s after start for screenshots; this only changes what
     /// this client shows, never the server's clock.
+    /// Spec 032: plus the tips, the reviews (average, count, the last three with their stars and line) and the missed guests by
+    /// reason, from the rail's <see cref="Npc.ShiftReport"/> values.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class ShiftSummaryView : MonoBehaviour
@@ -28,6 +30,9 @@ namespace Worktown.Game.UI
         private Label _earned;
         private Label _stars;
         private Label _missed;
+        private Label _tips;
+        private Label _reviews;
+        private readonly Label[] _reviewLines = new Label[3];
         private Label _footer;
         private TicketRailView _rail;
         private bool _pinned;
@@ -78,13 +83,26 @@ namespace Worktown.Game.UI
             int earned = last ? _rail.LastEarned.Value : _rail.LiveEarned.Value;
             int stars = last ? _rail.LastStarsTenths.Value : _rail.LiveStarsTenths.Value;
             int missed = last ? _rail.LastMissed.Value : _rail.LiveMissed.Value;
+            Npc.ShiftReport report = last ? _rail.LastReport.Value : _rail.LiveReport.Value;
 
             _title.text = (last ? "Shift summary" : "This shift so far") + (day > 0 ? "  ·  Day " + day : string.Empty);
             _served.text = "Dishes served:  " + served;
             _earned.text = "Money earned:  " + EconomyRules.Money(earned);
             int rounded = (stars + 5) / 10;
             _stars.text = "Average stars:  " + (served > 0 ? Npc.ShiftSummary.StarsText(stars) + "  " + StarRating.Format(rounded) : "-");
-            _missed.text = "Missed customers:  " + missed;
+            _missed.text = MissedText(missed, report);
+            _tips.text = "Tips:  " + EconomyRules.Money(report.Tips);
+            _reviews.text = report.Reviews > 0
+                ? "Reviews:  " + Npc.ShiftSummary.StarsText(report.ReviewTenths) + "  " + StarRating.Format((report.ReviewTenths + 5) / 10)
+                    + "  (" + report.Reviews + ")"
+                : "Reviews:  -";
+            byte[] packed = { report.Review1, report.Review2, report.Review3 };
+            for (int i = 0; i < _reviewLines.Length; i++)
+            {
+                string line = ReviewLine(packed[i]);
+                _reviewLines[i].text = line;
+                _reviewLines[i].style.display = line.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            }
             _footer.text = _rail.SummaryOpen.Value ? "Next shift starts at 08:00 tomorrow." : "F3 closes this.";
         }
 
@@ -96,8 +114,8 @@ namespace Worktown.Game.UI
             style.position = Position.Absolute;
             style.top = 16;
             style.left = Length.Percent(50);
-            style.width = 340;
-            style.marginLeft = -170;
+            style.width = 400; // spec 032: room for a review line
+            style.marginLeft = -200;
             style.paddingTop = 12;
             style.paddingBottom = 12;
             _title = AddLabel(panel, 20, Palette.Mustard);
@@ -106,11 +124,54 @@ namespace Worktown.Game.UI
             _served = AddLabel(panel, 16, Palette.Cream);
             _earned = AddLabel(panel, 16, Palette.Cream);
             _stars = AddLabel(panel, 16, Palette.Cream);
+            _tips = AddLabel(panel, 16, Palette.Cream); // spec 032
+            _reviews = AddLabel(panel, 16, Palette.Cream);
+            for (int i = 0; i < _reviewLines.Length; i++)
+            {
+                _reviewLines[i] = AddLabel(panel, 14, Palette.Mustard);
+                _reviewLines[i].style.marginLeft = 12;
+                _reviewLines[i].style.whiteSpace = WhiteSpace.Normal;
+            }
             _missed = AddLabel(panel, 16, Palette.Cream);
+            _missed.style.whiteSpace = WhiteSpace.Normal;
             _footer = AddLabel(panel, 13, Palette.Plaster);
             _footer.style.marginTop = 6;
             return panel;
         }
+
+        /// <summary>Spec 032: one review in the summary: "★★★★☆ "Tasty, I'd come back."" (empty for none).</summary>
+        public static string ReviewLine(byte packed)
+        {
+            Worktown.Sim.Economy.GuestReview review = Worktown.Sim.Economy.GuestReview.Unpack(packed);
+            return review == null ? string.Empty : StarRating.Format(review.Stars) + "  \u201C" + review.Text + "\u201D";
+        }
+
+        /// <summary>Spec 032: "Missed customers:  3 (out of patience 1, changed their mind 1, kitchen closed 1)".</summary>
+        public static string MissedText(int missed, Npc.ShiftReport report)
+        {
+            string text = "Missed customers:  " + missed;
+            if (missed <= 0) return text;
+            var parts = new System.Collections.Generic.List<string>(3);
+            if (report.MissedPatience > 0) parts.Add("out of patience " + report.MissedPatience);
+            if (report.MissedGone > 0) parts.Add("changed their mind " + report.MissedGone);
+            if (report.MissedClosed > 0) parts.Add("kitchen closed " + report.MissedClosed);
+            return parts.Count > 0 ? text + "  (" + string.Join(", ", parts) + ")" : text;
+        }
+
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        /// <summary>Spec 032, tours: open or close the panel like F3 does.</summary>
+        public void DevPin(bool pinned) => _pinned = pinned;
+
+        /// <summary>Spec 032, tours: the panel's lines as shown now (for the log).</summary>
+        public string DevText()
+        {
+            if (_panel == null) return string.Empty;
+            var lines = new System.Collections.Generic.List<string>();
+            foreach (VisualElement child in _panel.Children())
+                if (child is Label label && label.style.display != DisplayStyle.None && !string.IsNullOrEmpty(label.text)) lines.Add(label.text);
+            return string.Join(" | ", lines);
+        }
+#endif
 
         private static Label AddLabel(VisualElement parent, int size, Color color)
         {

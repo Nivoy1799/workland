@@ -238,6 +238,25 @@ namespace Worktown.Game.Player
         }
 
         /// <summary>
+        /// 030 review: the start of a flip prediction: the spot's synced counter at the click and, in <see cref="ItemSnapshot.HeldId"/>,
+        /// how many of our own flips of that spot were still on their way (<paramref name="ahead"/>). The flip is confirmed once the
+        /// counter moved past them.
+        /// </summary>
+        public static ItemSnapshot FlipStart(ItemSnapshot atClick, int ahead) =>
+            new ItemSnapshot(atClick.Exists, atClick.Holder, atClick.Position, atClick.VesselCount, ahead < 0 ? 0 : ahead);
+
+        /// <summary>
+        /// 031b (review of 031): the start of a fold or packaging prediction: the spot's synced close and pack bits at the click and,
+        /// in <see cref="ItemSnapshot.HeldId"/>, the bits the step leads to (<paramref name="targetBits"/>). It is confirmed only when
+        /// the synced bits equal the target.
+        /// </summary>
+        public static ItemSnapshot BuildStepStart(ItemSnapshot atClick, int targetBits) =>
+            new ItemSnapshot(atClick.Exists, atClick.Holder, atClick.Position, atClick.VesselCount, targetBits < 0 ? 0 : targetBits);
+
+        /// <summary>030 review: the counter steps (mod 4) from <paramref name="before"/> to <paramref name="after"/>.</summary>
+        public static int FlipSteps(int before, int after) => ((after - before) % 4 + 4) % 4;
+
+        /// <summary>
         /// What the synced state <paramref name="now"/> says about a prediction made when it was <paramref name="start"/>:
         /// PickUp is confirmed when you hold it and denied when someone else does or it is gone. Place and Drop are
         /// confirmed when nobody holds it any more, denied when someone else holds it or it is gone. PutInto is confirmed
@@ -271,6 +290,19 @@ namespace Worktown.Game.Player
                 case PredictionKind.Basket:
                     // Spec 029: confirmed once the synced basket is on the other side of the oil line.
                     if (!now.Exists) return PredictionPhase.Denied;
+                    return now.VesselCount != start.VesselCount ? PredictionPhase.Confirmed : PredictionPhase.Pending;
+                case PredictionKind.Flip:
+                    // Spec 030: confirmed once the spot's synced flip counter moved on; an emptied spot denies it. 030 review: past our own
+                    // earlier flips still on their way (<see cref="FlipStart"/>), so one counter step never confirms two quick flips.
+                    if (!now.Exists) return PredictionPhase.Denied;
+                    return FlipSteps(start.VesselCount, now.VesselCount) > System.Math.Max(0, start.HeldId)
+                        ? PredictionPhase.Confirmed : PredictionPhase.Pending;
+                case PredictionKind.BuildStep:
+                    // Spec 031: confirmed once the build's close or pack bits changed; an emptied board denies it. 031b: with the
+                    // step's target bits in the start (<see cref="BuildStepStart"/>) only those bits confirm it, so a fold that
+                    // arrives never confirms the paper clicked right after it.
+                    if (!now.Exists) return PredictionPhase.Denied;
+                    if (start.HeldId >= 0) return now.VesselCount == start.HeldId ? PredictionPhase.Confirmed : PredictionPhase.Pending;
                     return now.VesselCount != start.VesselCount ? PredictionPhase.Confirmed : PredictionPhase.Pending;
                 default:
                     return PredictionPhase.Pending;

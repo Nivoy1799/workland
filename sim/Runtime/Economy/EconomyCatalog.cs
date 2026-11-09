@@ -148,6 +148,10 @@ namespace Worktown.Sim.Economy
                 new GrocerPrice("flatbread", 60), new GrocerPrice("lemon", 60), new GrocerPrice("wrap", 70),
                 new GrocerPrice("garlic_herb_sauce", 80), new GrocerPrice("chili_sauce", 80),
                 new GrocerPrice("falafel_mix", 90), new GrocerPrice("seitan", 110),
+                // Spec 030: the grill vegetables.
+                new GrocerPrice("paprika", 60), new GrocerPrice("eggplant", 70), new GrocerPrice("mushroom", 80),
+                // Spec 031: packaging at the assembly board (defaults to review; no cheaper than the cheapest food, anti-faucet rule).
+                new GrocerPrice("wrap_paper", 35), new GrocerPrice("takeaway_box", 40), new GrocerPrice("paper_bag", 35),
             };
             return new EconomyCatalog(markets, rules, byproducts, grocer, OperationCatalog.CreateDefault());
         }

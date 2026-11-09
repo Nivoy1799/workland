@@ -48,6 +48,8 @@ namespace Worktown.Sim.Cooking
         public static OperationCatalog CreateDefault()
         {
             var plated = new[] { "plated" };
+            // Spec 031b: builds stay builds: no cut, heat op or mix takes a build (a plate takes one only alone, ItemFactory).
+            var platedOrBuild = new[] { "plated", Assembly.BuildTag };
             var none = Array.Empty<string>();
 
             var shape = new ParamDef("shape", ParamKind.Choice, 0f, 1f, new[]
@@ -78,19 +80,71 @@ namespace Worktown.Sim.Cooking
             return new OperationCatalog(new[]
             {
                 new OperationDef("cut", "board", OperationKind.Cut, false, 1, 1, new[] { shape }, null,
-                    plated, none, "{in} {shape}"),
+                    platedOrBuild, none, "{in} {shape}"),
                 new OperationDef("fry", "pan", OperationKind.Heat, false, 1, 1, new[] { panTemp, panTime },
-                    new HeatProfile(null, 0.35f, -0.6f, 0.5f, 0.15f, 0f), plated, none, "{temp} {time} fried {in}"),
+                    new HeatProfile(null, 0.35f, -0.6f, 0.5f, 0.15f, 0f), platedOrBuild, none, "{temp} {time} fried {in}"),
                 new OperationDef("saute", "pan", OperationKind.Heat, false, 1, 1, new[] { panTemp, panTime },
-                    new HeatProfile(null, 0.15f, -0.4f, 0.25f, 0.2f, 0f), plated, none, "{temp} {time} sauteed {in}"),
+                    new HeatProfile(null, 0.15f, -0.4f, 0.25f, 0.2f, 0f), platedOrBuild, none, "{temp} {time} sauteed {in}"),
                 new OperationDef("boil", "pot", OperationKind.Heat, false, 1, 1, new[] { boilTime },
-                    new HeatProfile(100f, 0f, 0.5f, -0.8f, 0f, 0.1f), plated, none, "{time} boiled {in}"),
+                    new HeatProfile(100f, 0f, 0.5f, -0.8f, 0f, 0.1f), platedOrBuild, none, "{time} boiled {in}"),
                 new OperationDef("mix", "counter", OperationKind.Mix, true, 2, CookingLimits.MaxMixInputs,
-                    Array.Empty<ParamDef>(), null, plated, none, "{in} mix"),
+                    Array.Empty<ParamDef>(), null, platedOrBuild, none, "{in} mix"),
                 new OperationDef("plate", "counter", OperationKind.Plate, true, 1, CookingLimits.MaxPlateInputs,
                     Array.Empty<ParamDef>(), null, plated, plated, "plate of {in}"),
-                DeepFryOperation(plated, none),
+                DeepFryOperation(platedOrBuild, none),
+                GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, platedOrBuild, none),
+                GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, platedOrBuild, none),
+                // Spec 031: the assembly board.
+                new OperationDef(Assembly.SqueezeOperationId, "dispenser", OperationKind.Portion, false, 1, 1, new[]
+                {
+                    new ParamDef(Assembly.AmountParam, ParamKind.Number, 0f, Assembly.MaxSqueezeSeconds, new[]
+                    {
+                        new BucketDef(Assembly.Little, 0f, "a dash of"),
+                        new BucketDef(Assembly.Right, Assembly.RightFrom, ""),
+                        new BucketDef(Assembly.Lots, Assembly.LotsFrom, "lots of"),
+                    }),
+                }, null, plated, none, "{" + Assembly.AmountParam + "} {in}"),
+                new OperationDef(Assembly.AssembleOperationId, Assembly.Station, OperationKind.Assemble, false, 1, CookingLimits.MaxBuildLayers,
+                    Array.Empty<ParamDef>(), null, new[] { Assembly.PlatedTag, Assembly.BuildTag }, new[] { Assembly.BuildTag }, "{in}"),
+                new OperationDef(Assembly.CloseOperationId, Assembly.Station, OperationKind.Close, false, 1, 1, new[]
+                {
+                    new ParamDef(Assembly.StyleParam, ParamKind.Choice, 0f, 1f, new[]
+                    {
+                        new BucketDef(Assembly.Folded, 0f, "folded"),
+                        new BucketDef(Assembly.Wrapped, 1f, "wrapped"),
+                    }),
+                }, null, plated, new[] { Assembly.ClosedTag }, "{" + Assembly.StyleParam + "} {in}"),
+                new OperationDef(Assembly.PackOperationId, Assembly.Station, OperationKind.Pack, false, 1, 1, new[]
+                {
+                    new ParamDef(Assembly.ContainerParam, ParamKind.Choice, 0f, 1f, new[]
+                    {
+                        new BucketDef(Assembly.Box, 0f, "boxed"),
+                        new BucketDef(Assembly.Bag, 1f, "bagged"),
+                    }),
+                }, null, plated, new[] { Assembly.PackedTag, Assembly.PlatedTag }, "{" + Assembly.ContainerParam + "} {in}"),
             });
+        }
+
+        /// <summary>
+        /// Spec 030: a griddle op (<c>griddle</c> for seitan and vegetables, <c>toast</c> for bread) at the station "griddle": the
+        /// plate's fixed temperature, "time" = the shorter side's sim seconds and "long_side" = the longer side's (0..600, so an
+        /// item that was never flipped is valid), each in the buckets short / medium (from <paramref name="medium"/>) / long (from
+        /// <paramref name="longFrom"/>). The name comes from the two buckets (<see cref="Griddle.NameTemplate"/>).
+        /// </summary>
+        private static OperationDef GriddleOperation(string id, GriddleProfile profile, float medium, float longFrom, string[] plated,
+            string[] none)
+        {
+            BucketDef[] Buckets() => new[]
+            {
+                new BucketDef("short", 0f, ""),
+                new BucketDef("medium", medium, ""),
+                new BucketDef("long", longFrom, ""),
+            };
+            var shortSide = new ParamDef("time", ParamKind.Number, 0f, Griddle.MaxSideSeconds, Buckets());
+            var longSide = new ParamDef(Griddle.LongSideParam, ParamKind.Number, 0f, Griddle.MaxSideSeconds, Buckets());
+            string done = profile.Toasts ? "toasted" : "grilled";
+            return new OperationDef(id, Griddle.Station, OperationKind.Heat, false, 1, 1, new[] { shortSide, longSide },
+                new HeatProfile(Griddle.PlateTempC, 0.1f, -0.3f, 0.4f, 0.25f, 0f, null, profile), plated, none, done + " {in}");
         }
 
         /// <summary>
@@ -179,6 +233,14 @@ namespace Worktown.Sim.Cooking
                 if (shape == null || shape.Kind != ParamKind.Choice)
                     throw new ArgumentException($"Cut operation '{op.Id}' needs a Choice param 'shape'.", p);
             }
+            else if (op.Kind == OperationKind.Portion || op.Kind == OperationKind.Close || op.Kind == OperationKind.Pack)
+            {
+                // Spec 031: a squeeze has a Number amount, a close or pack exactly one Choice (the style or the container).
+                if (op.MinInputs != 1 || op.MaxInputs != 1 || op.Params.Count != 1)
+                    throw new ArgumentException($"Operation '{op.Id}' takes one input and one param.", p);
+                ParamKind want = op.Kind == OperationKind.Portion ? ParamKind.Number : ParamKind.Choice;
+                if (op.Params[0].Kind != want) throw new ArgumentException($"Operation '{op.Id}' needs a {want} param.", p);
+            }
             else if (op.Kind == OperationKind.Heat)
             {
                 if (op.Heat == null) throw new ArgumentException($"Heat operation '{op.Id}' needs a HeatProfile.", p);
@@ -194,6 +256,19 @@ namespace Worktown.Sim.Cooking
                 bool hasTemp = temp != null && temp.Kind == ParamKind.Number;
                 if (hasTemp == op.Heat.FixedTemperatureC.HasValue)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs exactly one of a 'temp' param or a fixed temperature.", p);
+                if (h.Grill != null)
+                {
+                    // Spec 030: a griddle op has the long side next to "time", in the same range, and finite, ordered curves.
+                    var longSide = Find(Griddle.LongSideParam);
+                    if (h.Fry != null || longSide == null || longSide.Kind != ParamKind.Number || longSide.Min != time.Min
+                        || longSide.Max != time.Max)
+                        throw new ArgumentException($"Griddle operation '{op.Id}' needs a Number param '{Griddle.LongSideParam}' like 'time'.", p);
+                    var sides = new List<FryCurve>(h.Grill.Curves) { h.Grill.Fallback };
+                    foreach (var c in sides)
+                        if (c == null || !(c.WindowMinAt > 0f && c.WindowMaxAt > c.WindowMinAt && c.BurntAt > c.WindowMaxAt)
+                            || !Fin(c.BurntAt))
+                            throw new ArgumentException($"Griddle operation '{op.Id}' has an invalid side curve.", p);
+                }
                 if (h.Fry != null)
                 {
                     // Spec 029: a deep fry op has the server's shake and drain choices and finite, ordered curves.

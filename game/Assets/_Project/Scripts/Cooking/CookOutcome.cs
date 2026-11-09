@@ -47,6 +47,26 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 029: the basket is in the oil; raise it first to put food in or take it out.</summary>
         BasketLowered,
         /// <summary>Spec 029: a shake needs a lowered basket with food.</summary>
-        NotLowered
+        NotLowered,
+        /// <summary>Spec 030: a flip needs the spatula in the hands ("Use the spatula").</summary>
+        NoSpatula,
+        /// <summary>Spec 031: the build is closed (folded, wrapped or packed): nothing more goes on, it is closed once.</summary>
+        BuildClosed,
+        /// <summary>Spec 031: a wrap or flatbread is folded before it goes in paper or a bag.</summary>
+        FoldFirst,
+        /// <summary>Spec 031: someone else is squeezing that dispenser.</summary>
+        DispenserBusy,
+        /// <summary>Spec 031: only a build on a wrap or flatbread folds.</summary>
+        NothingToFold,
+        /// <summary>Spec 032: nobody waits at the register to pay.</summary>
+        NoPayment,
+        /// <summary>Spec 032: the guest pays by card (no cash, no change).</summary>
+        PaysByCard,
+        /// <summary>Spec 032: the guest pays in cash (the terminal is not for them).</summary>
+        PaysCash,
+        /// <summary>Spec 032: the change tray holds no more (it is synced as a byte).</summary>
+        TrayFull,
+        /// <summary>Spec 032: there is no change in the tray to take back.</summary>
+        TrayEmpty
     }
 }

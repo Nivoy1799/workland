@@ -23,6 +23,8 @@ namespace Worktown.Game.Art
         private readonly List<Transform> _parts = new List<Transform>();
         private readonly List<Vector3> _positions = new List<Vector3>();
         private readonly List<Quaternion> _rotations = new List<Quaternion>();
+        private readonly List<Vector3> _scales = new List<Vector3>(); // spec 031b
+        private bool _scaled;
         private int _partsForChildCount = -1;
         private bool _applied;
 
@@ -121,12 +123,20 @@ namespace Worktown.Game.Art
         /// Draws the item at <paramref name="pose"/> until <see cref="Restore"/>: moves the visual children (labels stay).
         /// Does nothing when the pose is the root's own, or when the item has no visual child (the root never moves).
         /// </summary>
-        public void Apply(Pose pose)
+        public void Apply(Pose pose) => Apply(pose, 1f);
+
+        /// <summary>
+        /// Spec 031b: as <see cref="Apply(Pose)"/>, drawn at <paramref name="size"/> times its size (a large item held in the
+        /// first-person view is drawn smaller). The scale is put back by <see cref="Restore"/> as well.
+        /// </summary>
+        public void Apply(Pose pose, float size)
         {
             Restore();
-            if (_root == null || IsRootPose(pose)) return;
+            bool scaled = !float.IsNaN(size) && size > 0f && Mathf.Abs(size - 1f) > 1e-4f;
+            if (_root == null || (IsRootPose(pose) && !scaled)) return;
             CollectParts();
             if (_parts.Count == 0) return;
+            float s = scaled ? size : 1f;
             Vector3 scale = _root.lossyScale;
             for (int i = 0; i < _parts.Count; i++)
             {
@@ -134,8 +144,11 @@ namespace Worktown.Game.Art
                 if (part == null) continue;
                 _positions[i] = part.localPosition;
                 _rotations[i] = part.localRotation;
-                part.SetPositionAndRotation(pose.position + pose.rotation * Vector3.Scale(scale, _positions[i]), pose.rotation * _rotations[i]);
+                _scales[i] = part.localScale;
+                part.SetPositionAndRotation(pose.position + pose.rotation * (Vector3.Scale(scale, _positions[i]) * s), pose.rotation * _rotations[i]);
+                if (scaled) part.localScale = _scales[i] * s;
             }
+            _scaled = scaled;
             _applied = true;
         }
 
@@ -145,7 +158,12 @@ namespace Worktown.Game.Art
             if (!_applied) return;
             _applied = false;
             for (int i = 0; i < _parts.Count; i++)
-                if (_parts[i] != null) _parts[i].SetLocalPositionAndRotation(_positions[i], _rotations[i]);
+            {
+                if (_parts[i] == null) continue;
+                _parts[i].SetLocalPositionAndRotation(_positions[i], _rotations[i]);
+                if (_scaled) _parts[i].localScale = _scales[i];
+            }
+            _scaled = false;
         }
 
         /// <summary>The visual children (not labels), collected again only when the number of children changed.</summary>
@@ -156,12 +174,14 @@ namespace Worktown.Game.Art
             _parts.Clear();
             _positions.Clear();
             _rotations.Clear();
+            _scales.Clear();
             foreach (Transform child in _root)
             {
                 if (child.TryGetComponent(out TextMesh _)) continue;
                 _parts.Add(child);
                 _positions.Add(Vector3.zero);
                 _rotations.Add(Quaternion.identity);
+                _scales.Add(Vector3.one);
             }
         }
 

@@ -47,12 +47,31 @@ namespace Worktown.Game.Art
         private HeatZone _heatZone = HeatZone.None;
         private float _heatProgress;
         private bool _heatBoiled;
+        // Spec 031b: grill marks on grilled food, except on a griddle spot (GriddleSpotView draws its own there).
+        private bool _noGrillMarks;
+        private Vector3 _barSize;
+
+        private void Awake()
+        {
+            _noGrillMarks = GetComponentInParent<GriddleSpot>() != null;
+        }
 
         private struct PieceTint
         {
             public FoodLook Look;
             public bool Tinted;
             public bool Food;
+            /// <summary>Spec 031: a fixed palette colour (the wrap paper), used when <see cref="HasFixed"/>.</summary>
+            public bool HasFixed;
+            public Color Fixed;
+        }
+
+        /// <summary>Spec 031: set up a visual made at runtime (the build stack's layers): its catalog and whether fries lie loose.</summary>
+        internal void Configure(ArtCatalog catalog, bool loose)
+        {
+            _catalog = catalog;
+            _loose = loose;
+            _prefabs = null;
         }
 
         /// <summary>
@@ -78,6 +97,10 @@ namespace Worktown.Game.Art
             if (look.Kind == FoodLook.KindSingle)
             {
                 shown = AddPile(look, Vector3.zero, 1f);
+            }
+            else if (FoodLookRules.IsBuild(look))
+            {
+                shown = AddBuild(look, parts, Vector3.zero, 1f); // spec 031: a build in the hands
             }
             else
             {
@@ -110,6 +133,29 @@ namespace Worktown.Game.Art
             }
             _shownParts = count;
             if (firstNew >= 0) StartDrop(firstNew);
+            ShowFallback(false, default);
+        }
+
+        /// <summary>
+        /// Spec 031: one layer of a build at this anchor: a bread base or a sauce is a flat disc in its colour, anything else the
+        /// ingredient's own pile at <see cref="AssemblyArtRules.PileScale"/>. Drawn for every viewer by Art/BuildStackView.
+        /// </summary>
+        public void ShowLayer(FoodLook look)
+        {
+            ReleaseAll();
+            if (AssemblyArtRules.IsFlat(look))
+            {
+                float disc = AssemblyArtRules.IsSauce(look.Ingredient) ? AssemblyArtRules.SauceScale : 1f;
+                Add(ArtKey.FoodLayerDisc, Vector3.zero, 0f, disc, look, true, true);
+            }
+            else AddPile(look, Vector3.zero, AssemblyArtRules.PileScale);
+            ShowFallback(false, default);
+        }
+
+        /// <summary>Spec 031: nothing drawn here (an empty layer slot).</summary>
+        public void Clear()
+        {
+            ReleaseAll();
             ShowFallback(false, default);
         }
 
@@ -156,15 +202,117 @@ namespace Worktown.Game.Art
 
         private bool AddPile(FoodLook look, Vector3 offset, float scale)
         {
+            if (FoodLookRules.IsBuild(look)) return AddBuild(look, null, offset, scale); // spec 031: a build on a plate
             if (!FoodArtRules.TryGetPiece(look, _loose, out FoodPiece piece)) return false;
             if (!TryGetPrefab(piece.Key, out _)) return false;
             // Spec 029: a part that stands on its own (the fries box) keeps more of its size on a plate.
             if (scale < 1f) scale = Mathf.Min(1f, scale * FoodArtRules.PartBoost(piece.Key));
+            bool marks = !_noGrillMarks && FoodArtRules.HasGrillMarks(look);
             for (int i = 0; i < piece.Count; i++)
             {
                 Vector3 position = offset + FoodArtRules.PilePosition(i, piece.Count) * scale;
                 Add(piece.Key, position, FoodArtRules.PileYaw(i, piece.Count), scale, look, piece.Tinted, true);
+                if (marks && i < FoodArtRules.MarkedPieces) AddGrillMarks(_active[_active.Count - 1]);
             }
+            return true;
+        }
+
+        /// <summary>
+        /// Spec 031b: grill marks on a grilled piece (in the hands, on a plate, in a build): dark Charcoal bars across its top, as
+        /// the griddle spot draws them (GriddleSpotView). Pooled like every piece.
+        /// </summary>
+        private void AddGrillMarks(GameObject piece)
+        {
+            if (piece == null || !TryGetPrefab(ArtKey.FoodPieceStick, out GameObject bar)) return;
+            piece.GetComponentsInChildren(false, _renderers);
+            bool any = false;
+            Bounds b = default;
+            foreach (Renderer r in _renderers)
+            {
+                if (!any) b = r.bounds;
+                else b.Encapsulate(r.bounds);
+                any = true;
+            }
+            _renderers.Clear();
+            if (!any) return;
+            float unit = Mathf.Max(1e-4f, transform.lossyScale.x);
+            Vector3 top = transform.InverseTransformPoint(new Vector3(b.center.x, b.max.y, b.center.z));
+            float length = Mathf.Clamp(Mathf.Min(b.size.x, b.size.z) / unit, 0.01f, 0.25f);
+            Vector3 barSize = BarSize(bar);
+            var scale = new Vector3(length * 0.12f / barSize.x, length * 0.05f / barSize.y, length * 0.75f / barSize.z);
+            for (int k = 0; k < FoodArtRules.MarksPerPiece; k++)
+            {
+                float across = (k - (FoodArtRules.MarksPerPiece - 1) * 0.5f) * length * 0.3f;
+                AddFixed(ArtKey.FoodPieceStick, top + new Vector3(across, length * 0.01f, 0f), scale, Palette.Charcoal);
+            }
+        }
+
+        /// <summary>The bar prefab's own size (m, its renderers at scale 1), measured once.</summary>
+        private Vector3 BarSize(GameObject prefab)
+        {
+            if (_barSize.x > 0f) return _barSize;
+            Vector3 size = Vector3.one * 0.03f;
+            foreach (MeshFilter f in prefab.GetComponentsInChildren<MeshFilter>(true))
+                if (f.sharedMesh != null)
+                {
+                    size = Vector3.Scale(f.sharedMesh.bounds.size, f.transform.lossyScale);
+                    break;
+                }
+            _barSize = new Vector3(Mathf.Max(size.x, 1e-4f), Mathf.Max(size.y, 1e-4f), Mathf.Max(size.z, 1e-4f));
+            return _barSize;
+        }
+
+        /// <summary>
+        /// Spec 031: a build. Open: its first layers stacked (a bread or sauce layer is a flat disc in its colour, the rest the
+        /// ingredient's own pile, each on top of the one before); folded: the folded wrap in the bread's colour; in paper: the paper
+        /// (Cream); boxed and bagged: the Kenney box and bag.
+        /// </summary>
+        private bool AddBuild(FoodLook look, IReadOnlyList<FoodLook> parts, Vector3 offset, float scale)
+        {
+            switch (look.Kind)
+            {
+                case FoodLook.KindFolded: return Add(ArtKey.FoodWrapFolded, offset, 0f, scale, BreadLook(look), true, true);
+                case FoodLook.KindWrapped:
+                    // The folded wrap with the paper round two thirds of it: its end peeks out, so it reads as a wrap in paper.
+                    bool wrap = Add(ArtKey.FoodWrapFolded, offset, 0f, scale, BreadLook(look), true, true);
+                    return AddFixed(ArtKey.FoodWrapPaper, offset + new Vector3(0.04f, -0.004f, 0f) * scale,
+                        new Vector3(0.7f, 1.12f, 1.12f) * scale, Palette.Cream) || wrap;
+                case FoodLook.KindBoxed: return Add(ArtKey.PropTakeawayBox, offset, 0f, scale, default, false, false);
+                case FoodLook.KindBagged: return Add(ArtKey.PropPaperBag, offset, 0f, scale, default, false, false);
+            }
+            int count = parts != null ? Mathf.Min(parts.Count, FoodLook.MaxParts) : 0;
+            if (count == 0) return Add(ArtKey.FoodLayerDisc, offset, 0f, scale, BreadLook(look), true, true);
+            float height = 0f;
+            bool any = false;
+            for (int i = 0; i < count; i++)
+            {
+                FoodLook part = parts[i];
+                Vector2 shift = AssemblyArtRules.LayerShift(i, part);
+                Vector3 at = offset + new Vector3(shift.x, height, shift.y) * scale;
+                if (AssemblyArtRules.IsFlat(part))
+                {
+                    float disc = AssemblyArtRules.IsSauce(part.Ingredient) ? AssemblyArtRules.SauceScale : 1f;
+                    any |= Add(ArtKey.FoodLayerDisc, at, 0f, scale * disc, part, true, true);
+                }
+                else any |= AddPile(part, at, scale * AssemblyArtRules.PileScale);
+                height += AssemblyArtRules.LayerHeight(part);
+            }
+            return any;
+        }
+
+        private static FoodLook BreadLook(FoodLook build) => new FoodLook(build.Ingredient, FoodLook.ShapeWhole, 0, 0, FoodLook.KindSingle, 0);
+
+        private bool AddFixed(ArtKey key, Vector3 position, Vector3 scale, Color colour)
+        {
+            if (!TryGetPrefab(key, out GameObject prefab)) return false;
+            GameObject instance = Take(prefab);
+            Transform t = instance.transform;
+            t.localPosition = position;
+            t.localRotation = Quaternion.identity;
+            t.localScale = scale;
+            var info = new PieceTint { HasFixed = true, Fixed = colour };
+            _tints.Add(info);
+            ApplyTint(instance, info);
             return true;
         }
 
@@ -185,6 +333,11 @@ namespace Worktown.Game.Art
         /// <summary>A food piece: the bucket colour, or (spec 027c) the heat colour; anything else its own colours.</summary>
         private void ApplyTint(GameObject instance, PieceTint info)
         {
+            if (info.HasFixed)
+            {
+                Tint(instance, info.Fixed, true); // spec 031: the wrap paper
+                return;
+            }
             if (!info.Food)
             {
                 Tint(instance, Color.white, false);

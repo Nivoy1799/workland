@@ -26,6 +26,18 @@ namespace Worktown.Game.Player
         private const float ChopAngle = 35f;      // degrees the tip dips
         private const float ChopDrop = 0.08f;     // metres the knife moves down
 
+        private const int BoundsFrames = 15;
+        // Spec 031b: the spatula's flip in view (as long as the food's arc on the griddle).
+        public const float FlipSeconds = 0.25f;
+        private const float FlipReach = 0.06f;  // metres towards the view centre and forward
+        private const float FlipLift = 0.05f;   // metres up
+        private const float FlipPitch = 25f;    // degrees the blade tips up
+        private const float FlipRoll = 70f;     // degrees it turns over
+        private float _flipStart = float.NegativeInfinity;
+        private readonly System.Collections.Generic.List<MeshFilter> _meshes = new System.Collections.Generic.List<MeshFilter>();
+        private Pickup _boundsItem;
+        private int _nextBoundsFrame;
+        private Bounds _bounds;
         private PlayerCameraRig _rig;
         private Camera _camera;
         private float _chopStart = float.NegativeInfinity;
@@ -42,9 +54,17 @@ namespace Worktown.Game.Player
         /// Spec 027b: the pose (frame) the held <paramref name="item"/> is drawn at in your first-person view; false when
         /// it is not shown in view (third person, no anchor, or not activated: then it goes to the hand).
         /// </summary>
-        public bool TryGetViewPose(Pickup item, out Pose pose)
+        public bool TryGetViewPose(Pickup item, out Pose pose) => TryGetViewPose(item, out pose, out _);
+
+        /// <summary>
+        /// Spec 031b: as <see cref="TryGetViewPose(Pickup, out Pose)"/>, plus the scale the item is drawn at. Everything but the
+        /// knife stands whole in the lower right (<see cref="HoldViewRules"/>): its middle at a fixed place on screen, tilted
+        /// towards the eye, large things scaled down so they never reach the view centre.
+        /// </summary>
+        public bool TryGetViewPose(Pickup item, out Pose pose, out float scale)
         {
             pose = default;
+            scale = 1f;
             if (_rig == null || item == null || !_rig.IsFirstPerson || _camera == null || _rig.ViewHold == null) return false;
             Transform anchor = _rig.ViewHold;
             if (item.TryGetComponent(out Worktown.Game.Cooking.Knife _))
@@ -55,8 +75,81 @@ namespace Worktown.Game.Player
                     anchor.rotation * Quaternion.Euler(ChopAngle * chop, 0f, 0f) * KnifeHoldRotation);
                 return true;
             }
-            pose = new Pose(anchor.position, anchor.rotation);
+            Bounds local = LocalBounds(item);
+            Vector3 lossy = item.transform.lossyScale;
+            Vector3 centre = Vector3.Scale(lossy, local.center);
+            float size = Vector3.Scale(lossy, local.size).magnitude; // the diagonal: the whole item fits, however it turns
+            Transform eye = _camera.transform;
+            scale = HoldViewRules.FitScale(size, _camera.fieldOfView);
+            LastViewSize = size;
+            LastViewScale = scale;
+            Quaternion rotation = eye.rotation * HoldViewRules.Tilt;
+            Vector3 inView = HoldViewRules.CentreInView(_camera.fieldOfView, _camera.aspect);
+            if (item.TryGetComponent(out Worktown.Game.Cooking.Spatula _))
+            {
+                // Spec 031b: on a flip the spatula scoops forward and turns over its long side (local, like the knife's chop).
+                float flip = FlipAmount(Time.unscaledTime - _flipStart);
+                inView += new Vector3(-FlipReach * flip, FlipLift * flip, FlipReach * flip);
+                rotation = eye.rotation * Quaternion.Euler(-FlipPitch * flip, 0f, FlipRoll * flip) * HoldViewRules.Tilt;
+            }
+            Vector3 middle = eye.TransformPoint(inView);
+            pose = new Pose(middle - rotation * (centre * scale), rotation);
             return true;
+        }
+
+        /// <summary>Spec 031b: the held item's size (m, its model's diagonal) and drawn scale in the view pose asked last (tour log).</summary>
+        public float LastViewSize { get; private set; }
+        public float LastViewScale { get; private set; } = 1f;
+
+        /// <summary>Spec 031b: one flip with the spatula in view (the owner clicked a flip; other players see the food's arc).</summary>
+        public void PlayFlip()
+        {
+            _flipStart = Time.unscaledTime;
+        }
+
+        /// <summary>0 at rest, up to 1 in the middle of a flip, back to 0 after <see cref="FlipSeconds"/>.</summary>
+        public static float FlipAmount(float elapsed)
+        {
+            if (elapsed < 0f || elapsed >= FlipSeconds) return 0f;
+            return Mathf.Sin(elapsed / FlipSeconds * Mathf.PI);
+        }
+
+        /// <summary>
+        /// The item's model bounds in its root's space (labels excluded), measured while the model rests on the root (the view
+        /// pose is asked before the frame's tween moves it). Looked up again for another item, or every few frames (a plate can
+        /// get food while held). No allocation per frame.
+        /// </summary>
+        private Bounds LocalBounds(Pickup item)
+        {
+            if (item == _boundsItem && Time.frameCount < _nextBoundsFrame) return _bounds;
+            _boundsItem = item;
+            _nextBoundsFrame = Time.frameCount + BoundsFrames;
+            Transform root = item.transform;
+            item.GetComponentsInChildren(false, _meshes);
+            bool any = false;
+            Bounds result = new Bounds(Vector3.zero, Vector3.zero);
+            foreach (MeshFilter f in _meshes)
+            {
+                // Only drawn meshes: no label, no particles (the steam's bounds are large), no switched-off fallback cube.
+                if (f == null || f.sharedMesh == null || !f.TryGetComponent(out MeshRenderer r) || !r.enabled || f.TryGetComponent(out TextMesh _))
+                    continue;
+                Bounds b = f.sharedMesh.bounds;
+                Transform t = f.transform;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                    Vector3 p = root.InverseTransformPoint(t.TransformPoint(corner));
+                    if (!any)
+                    {
+                        result = new Bounds(p, Vector3.zero);
+                        any = true;
+                    }
+                    else result.Encapsulate(p);
+                }
+            }
+            _meshes.Clear();
+            _bounds = any ? result : new Bounds(Vector3.zero, Vector3.one * 0.1f);
+            return _bounds;
         }
 
         /// <summary>Spec 019: one chop of the knife in view (the owner sent a stroke).</summary>

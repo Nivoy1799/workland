@@ -69,7 +69,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void TheMenuCoversEveryDish_WithUniqueIds()
         {
-            Assert.AreEqual(7, Menu.All.Count); // spec 029: Falafel (4)
+            Assert.AreEqual(13, Menu.All.Count); // spec 029: Falafel (4); spec 030: Grilled veggies, Toasted flatbread; spec 031: the four builds
             var ids = new HashSet<byte>();
             foreach (MenuDish dish in Menu.All)
             {
@@ -160,15 +160,13 @@ namespace Worktown.Game.Tests
 
         // ---- pay factors (spec 022 open question 2) ----
 
+        /// <summary>Spec 032: the match's share (exact 100 %, close 60 %, wrong 25 %); the tip is TipRules now, not stars on the share.</summary>
         [Test]
-        public void PayPermille_ExactPlusTipPerStarAboveTwo_Close60_Wrong25()
+        public void GuestShare_Exact100_Close60_Wrong25()
         {
-            Assert.AreEqual(1000, OrderRules.PayPermille(OrderMatch.Exact, 1));
-            Assert.AreEqual(1000, OrderRules.PayPermille(OrderMatch.Exact, 2));
-            Assert.AreEqual(1100, OrderRules.PayPermille(OrderMatch.Exact, 3));
-            Assert.AreEqual(1300, OrderRules.PayPermille(OrderMatch.Exact, 5));
-            Assert.AreEqual(600, OrderRules.PayPermille(OrderMatch.Close, 5));
-            Assert.AreEqual(250, OrderRules.PayPermille(OrderMatch.Wrong, 5));
+            Assert.AreEqual(1000, OrderRules.GuestSharePermille(OrderMatch.Exact));
+            Assert.AreEqual(600, OrderRules.GuestSharePermille(OrderMatch.Close));
+            Assert.AreEqual(250, OrderRules.GuestSharePermille(OrderMatch.Wrong));
         }
 
         [Test]

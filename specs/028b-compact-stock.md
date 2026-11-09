@@ -1,7 +1,7 @@
 ---
 id: 028b
 title: Compact stock (fridge and dry shelf next to prep, pick the ingredient)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

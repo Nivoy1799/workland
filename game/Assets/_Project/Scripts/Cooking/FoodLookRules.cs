@@ -25,6 +25,7 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static FoodLook From(Item item)
         {
+            if (IsBuildTop(item)) return BuildLook(item); // spec 031
             FoodLook look = Walk(item, out Item node, out bool hasShape);
             if (node != null && look.Kind == FoodLook.KindMixed && !hasShape && node.Inputs.Count > 0)
                 look.Shape = PartLook(node.Inputs[0], look).Shape;
@@ -38,6 +39,7 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static IReadOnlyList<FoodLook> PartsOf(Item item)
         {
+            if (IsBuildTop(item)) return BuildParts(item); // spec 031: the first layers of an open build
             FoodLook outer = Walk(item, out Item node, out _);
             if (node == null) return System.Array.Empty<FoodLook>();
             int count = System.Math.Min(node.Inputs.Count, FoodLook.MaxParts);
@@ -45,6 +47,44 @@ namespace Worktown.Game.Cooking
             for (int i = 0; i < count; i++) parts[i] = PartLook(node.Inputs[i], outer);
             return parts;
         }
+
+        // ---- Spec 031: builds ----
+
+        private static bool IsBuildTop(Item item) =>
+            item != null && (item.OperationId == Assembly.AssembleOperationId || item.OperationId == Assembly.CloseOperationId
+                || item.OperationId == Assembly.PackOperationId);
+
+        /// <summary>
+        /// Spec 031: the look of a build: the first layer's ingredient (the bread), the kind from how it is closed and packed
+        /// (<see cref="FoodLook.KindBuild"/> open, Folded, Wrapped, Boxed, Bagged) and, open, its layer count (at most
+        /// <see cref="FoodLook.MaxParts"/>).
+        /// </summary>
+        public static FoodLook BuildLook(Item build)
+        {
+            IReadOnlyList<Item> layers = Assembly.LayersOf(build);
+            var look = new FoodLook { Ingredient = layers.Count > 0 ? IngredientOf(layers[0]) : FoodLook.UnknownIngredient };
+            string close = Assembly.CloseOf(build), pack = Assembly.PackOf(build);
+            look.Kind = pack == Assembly.Box ? FoodLook.KindBoxed : pack == Assembly.Bag ? FoodLook.KindBagged
+                : close == Assembly.Wrapped ? FoodLook.KindWrapped : close == Assembly.Folded ? FoodLook.KindFolded : FoodLook.KindBuild;
+            look.PartCount = (byte)System.Math.Min(layers.Count, FoodLook.MaxParts);
+            return look;
+        }
+
+        private static IReadOnlyList<FoodLook> BuildParts(Item build)
+        {
+            IReadOnlyList<Item> layers = Assembly.LayersOf(build);
+            int count = System.Math.Min(layers.Count, FoodLook.MaxParts);
+            var parts = new FoodLook[count];
+            for (int i = 0; i < count; i++) parts[i] = From(layers[i]);
+            return parts;
+        }
+
+        /// <summary>Spec 031: a look that is finished (a plate, or a build in paper, a box or a bag): it goes on nothing but the counter.</summary>
+        public static bool IsFinished(FoodLook look) =>
+            look.Kind == FoodLook.KindPlated || look.Kind == FoodLook.KindWrapped || look.Kind == FoodLook.KindBoxed || look.Kind == FoodLook.KindBagged;
+
+        /// <summary>Spec 031: a look of a build (open, folded, wrapped, boxed or bagged).</summary>
+        public static bool IsBuild(FoodLook look) => look.Kind >= FoodLook.KindBuild && look.Kind <= FoodLook.KindBagged;
 
         /// <summary>Index into <see cref="DemoIngredients.All"/>, or 255 when the id is not a demo ingredient.</summary>
         public static byte IngredientIndex(string baseId)
@@ -96,10 +136,11 @@ namespace Worktown.Game.Cooking
             return look;
         }
 
-        /// <summary>The heat byte of a heat op: boiled, deep-fried (spec 029), else fried.</summary>
+        /// <summary>The heat byte of a heat op: boiled, deep-fried (spec 029), grilled (spec 031b: the griddle), else fried.</summary>
         public static byte HeatOf(string operationId)
         {
             if (operationId == BoilOp) return FoodLook.HeatBoiled;
+            if (operationId == Griddle.OperationId || operationId == Griddle.ToastOperationId) return FoodLook.HeatGrilled;
             return operationId == DeepFryOp ? FoodLook.HeatDeepFried : FoodLook.HeatFried;
         }
 

@@ -64,6 +64,10 @@ namespace Worktown.Game.Player
         private bool[] _keep = new bool[64];
         private static readonly IComparer<Entry> ByQueueKey = new QueueKeyComparer();
         private float _nextRigLookup;
+        // 031b: the calm view's buffers (no allocation per frame).
+        private readonly List<HeatRingView> _calm = new List<HeatRingView>();
+        private readonly List<float> _calmDistances = new List<float>();
+        private int[] _calmRanks = new int[16];
 
         private sealed class QueueKeyComparer : IComparer<Entry>
         {
@@ -163,6 +167,9 @@ namespace Worktown.Game.Player
                 _distances.Add(distance);
             }
 
+            // Spec 031b, the calm view: only the aimed ring, the alarms and (third person) the nearest few stay.
+            CalmRings(target, firstPerson);
+
             // Heat rings take their place after the aimed target and the held item, before every label.
             int labels = _wanted.Count;
             foreach (HeatRingView ring in _rings)
@@ -182,6 +189,33 @@ namespace Worktown.Game.Player
                 SetHidden(entry, !keep[i]);
                 SetBack(entry, keep[i]);
                 if (keep[i]) PlaceBack(entry);
+            }
+        }
+
+        /// <summary>
+        /// 031b (docs/feel.md 3 and 7): of the rings that would draw this frame, keep the aimed one, the alarms (warning, overdone,
+        /// burnt) and in third person the <see cref="LabelRules.ThirdPersonRings"/> nearest to the player (LabelRules.ShowsRing).
+        /// </summary>
+        private void CalmRings(Component target, bool firstPerson)
+        {
+            _calm.Clear();
+            _calmDistances.Clear();
+            Vector3 from = transform.position;
+            foreach (HeatRingView ring in _rings)
+            {
+                if (ring == null || !ring.IsShown) continue;
+                _calm.Add(ring);
+                _calmDistances.Add((ring.AnchorPosition - from).magnitude);
+            }
+            if (_calmRanks.Length < _calm.Count) _calmRanks = new int[Mathf.NextPowerOfTwo(_calm.Count)];
+            LabelRules.NearRanks(_calmDistances, _calmRanks);
+            for (int i = 0; i < _calm.Count; i++)
+            {
+                HeatRingView ring = _calm[i];
+                Vessel vessel = ring.Vessel;
+                bool aimed = target != null && vessel != null && target.transform == vessel.transform;
+                bool alarm = vessel != null && LabelRules.IsAlarm(vessel.Zone, vessel.Warning);
+                ring.ApplyCalm(LabelRules.ShowsRing(aimed, alarm, firstPerson, _calmRanks[i]));
             }
         }
 

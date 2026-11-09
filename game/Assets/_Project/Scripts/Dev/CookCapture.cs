@@ -11,11 +11,23 @@ namespace Worktown.Game.Dev
     /// </summary>
     public sealed class CookCapture
     {
-        public CookCapture(Func<string, IEnumerator> shot, Func<string, float, IEnumerator> frames, Action<float> tweenScale)
+        public CookCapture(Func<string, IEnumerator> shot, Func<string, float, IEnumerator> frames, Action<float> tweenScale,
+            Func<bool> framesBusy = null)
         {
             Shot = shot;
             Frames = frames;
             TweenScale = tweenScale;
+            FramesBusy = framesBusy;
+        }
+
+        /// <summary>Spec 031b: true while a frame sequence is still being captured (null: never waits).</summary>
+        public Func<bool> FramesBusy { get; }
+
+        /// <summary>Spec 031b: waits until every running frame sequence has ended, so the next frames are a separate capture.</summary>
+        public IEnumerator WaitForFrames(float limitSeconds = 20f)
+        {
+            float until = UnityEngine.Time.unscaledTime + limitSeconds;
+            while (FramesBusy != null && FramesBusy() && UnityEngine.Time.unscaledTime < until) yield return null;
         }
 
         /// <summary>Takes one named shot (waits for the end of the frame).</summary>

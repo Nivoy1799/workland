@@ -37,6 +37,8 @@ namespace Worktown.Game.Art
         private bool _smoking;
         // Spec 029: a fryer basket is hot while it is lowered into a fryer that is on.
         private StationContents _fryer;
+        // Spec 030: a griddle spot is hot while its griddle is on.
+        private StationContents _griddle;
 
         /// <summary>The vessel holds something and stands on a burner that is on.</summary>
         public bool IsHot { get; private set; }
@@ -60,6 +62,11 @@ namespace Worktown.Game.Art
             {
                 FryerBasket basket = GetComponent<FryerBasket>();
                 if (basket != null && basket.Fryer != null) _fryer = basket.Fryer.GetComponent<StationContents>();
+            }
+            else if (_vessel.Kind == VesselKind.Griddle)
+            {
+                GriddleSpot spot = GetComponent<GriddleSpot>();
+                if (spot != null && spot.Griddle != null) _griddle = spot.Griddle.GetComponent<StationContents>();
             }
             else if (_vessel.Kind != VesselKind.Pan && _vessel.Kind != VesselKind.Pot)
             {
@@ -117,6 +124,7 @@ namespace Worktown.Game.Art
             if (_vessel.Kind == VesselKind.Basket)
                 return _fryer != null && FryerRules.IsOn(_fryer.StoveFlags.Value)
                     && FryerRules.StateOf(_vessel.Mode.Value) == BasketState.Lowered;
+            if (_vessel.Kind == VesselKind.Griddle) return _griddle != null && GriddleRules.IsOn(_griddle.StoveFlags.Value); // spec 030
             Vector3 position = transform.position;
             for (int i = 0; i < _burners.Length; i++)
             {

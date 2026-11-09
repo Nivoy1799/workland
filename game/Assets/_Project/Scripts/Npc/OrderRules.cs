@@ -11,9 +11,6 @@ namespace Worktown.Game.Npc
     public static class OrderRules
     {
         public const int ExactPermille = 1000;
-        /// <summary>Tip per star above <see cref="TipFromStars"/> on an exact match (10 %).</summary>
-        public const int TipPermillePerStar = 100;
-        public const int TipFromStars = 2;
         public const int ClosePermille = 600;
         public const int WrongPermille = 250;
 
@@ -39,6 +36,7 @@ namespace Worktown.Game.Npc
         public static OrderMatch Match(Item served, MenuDish ordered)
         {
             if (served == null || ordered == null) return OrderMatch.Wrong;
+            if (ordered.Template != null) return MatchBuild(served, ordered); // spec 031
             var parts = new List<Part>();
             bool mixed = false;
             Collect(served, null, null, null, parts, ref mixed);
@@ -50,29 +48,90 @@ namespace Worktown.Game.Npc
             return misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
         }
 
-        /// <summary>Share of the sale price in permille: exact 100 % + 10 % per star above 2, close 60 %, wrong 25 %.</summary>
-        public static int PayPermille(OrderMatch match, int stars)
+        /// <summary>
+        /// Spec 031: a dish built on the assembly board matches by its recipe template, layer by layer: no build, or the main
+        /// ingredient missing, is Wrong; then one step short (a required layer missing or prepared wrong, the close or the pack
+        /// short of the template) is Close, none is Exact, more is Wrong. The layer order and the sauce amount only cost score
+        /// (forgiving), never the match; extra layers are neutral.
+        /// </summary>
+        public static OrderMatch MatchBuild(Item served, MenuDish ordered)
+        {
+            RecipeTemplate template = RecipeTemplates.ById(ordered.Template);
+            if (served == null || template == null || !Assembly.IsBuild(served)) return OrderMatch.Wrong;
+            if (ordered.Main != null)
+            {
+                bool main = false;
+                foreach (Item layer in Assembly.LayersOf(served))
+                    if (Assembly.BaseOf(layer) == ordered.Main) main = true;
+                if (!main) return OrderMatch.Wrong;
+            }
+            TemplateScore s = RecipeTemplates.Score(served, template);
+            int misses = s.Missing + s.WrongPrep + s.CloseShort + s.PackShort;
+            if (misses == 0) return OrderMatch.Exact;
+            return misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
+        }
+
+        /// <summary>
+        /// Spec 032: the served item against a guest's order: the dish and its packed modifiers (<see cref="OrderModifiers.Pack"/>).
+        /// A dish built on the board is checked per layer with the modifiers (<see cref="OrderModifiers.Check"/>, the 031 template
+        /// match extended): Exact with no step short, Close with one, Wrong with more, no build or no main ingredient; its quality is
+        /// the order's (scored against the order's template). Other dishes match as in 022 (no modifiers exist for them) with the
+        /// item's own rating. Misses: 0 Exact, 1 Close, at least 2 Wrong.
+        /// </summary>
+        public static OrderFit Fit(Item served, MenuDish ordered, byte modifiers)
+        {
+            if (served == null || ordered == null) return new OrderFit(OrderMatch.Wrong, 2, 0f, 1);
+            float itemQuality = Worktown.Sim.Cooking.ItemRater.Rate(served).Quality;
+            RecipeTemplate template = ordered.Template != null ? RecipeTemplates.ById(ordered.Template) : null;
+            if (template == null)
+            {
+                OrderMatch plain = Match(served, ordered);
+                int m = plain == OrderMatch.Exact ? 0 : plain == OrderMatch.Close ? 1 : 2;
+                return new OrderFit(plain, m, itemQuality, Worktown.Game.Cooking.StarRating.Stars(itemQuality));
+            }
+            if (!Assembly.IsBuild(served) || !HasMainLayer(served, ordered))
+                return new OrderFit(OrderMatch.Wrong, 2, itemQuality, Worktown.Game.Cooking.StarRating.Stars(itemQuality));
+            ModifierCheck check = OrderModifiers.Check(served, template, OrderModifiers.Unpack(template, modifiers));
+            int misses = check.Misses;
+            OrderMatch match = misses == 0 ? OrderMatch.Exact : misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
+            float quality = check.Score.Quality;
+            return new OrderFit(match, misses, quality, Worktown.Game.Cooking.StarRating.Stars(quality));
+        }
+
+        /// <summary>Spec 032: <see cref="Fit"/>'s match only.</summary>
+        public static OrderMatch Match(Item served, MenuDish ordered, byte modifiers) => Fit(served, ordered, modifiers).Match;
+
+        private static bool HasMainLayer(Item served, MenuDish ordered)
+        {
+            if (ordered.Main == null) return true;
+            foreach (Item layer in Assembly.LayersOf(served))
+                if (Assembly.BaseOf(layer) == ordered.Main) return true;
+            return false;
+        }
+
+        /// <summary>Spec 032: the guest's share of the sale price in permille by the match (no star tip any more: the tip is
+        /// <see cref="Worktown.Sim.Economy.TipRules"/>): exact 100 %, close 60 %, wrong 25 %.</summary>
+        public static int GuestSharePermille(OrderMatch match)
         {
             switch (match)
             {
-                case OrderMatch.Exact: return ExactPermille + TipPermillePerStar * Math.Max(0, stars - TipFromStars);
+                case OrderMatch.Exact: return ExactPermille;
                 case OrderMatch.Close: return ClosePermille;
                 default: return WrongPermille;
             }
         }
 
         /// <summary>
-        /// Spec 027c: the tip inside a customer's payment <paramref name="paid"/> at <paramref name="payPermille"/> (only
-        /// shares above 100 % carry one): <paramref name="paid"/> minus the smallest full price that gives it (the economy
-        /// rounds the share to whole dollars). 0 for no tip or bad input.
+        /// Spec 032: the bill's share of the sim's sale payout in permille: the match's share, times the order's quality over the
+        /// item's in the sim's demand formula (price × (500 + q) / 1000), so a build the guest asked to be without a layer is paid
+        /// as the order, not as an incomplete recipe. Deterministic; at most 1.5 × the share (q 0 to 1000).
         /// </summary>
-        public static long TipOf(long paid, int payPermille)
+        public static int BillPermille(OrderMatch match, float itemQuality, float orderQuality)
         {
-            if (paid <= 0 || payPermille <= ExactPermille) return 0;
-            long guess = paid * ExactPermille / payPermille;
-            for (long full = Math.Max(1L, guess - 2); full <= guess + 2; full++)
-                if (Worktown.Game.Economy.EconomyRules.ApplyPermille(full, payPermille) == paid) return paid - full;
-            return Math.Max(0L, paid - guess);
+            long share = GuestSharePermille(match);
+            long qi = 500 + Worktown.Sim.Economy.PriceRules.QualityPermille(itemQuality);
+            long qo = 500 + Worktown.Sim.Economy.PriceRules.QualityPermille(orderQuality);
+            return (int)(share * qo / qi);
         }
 
         /// <summary>Short text for logs and the serve feed.</summary>
@@ -115,6 +174,7 @@ namespace Worktown.Game.Npc
                 Part part = parts[i];
                 if (part.BaseId == null || claimed.Contains(part.BaseId)) continue;
                 if (need.BaseId != null && part.BaseId != need.BaseId) continue;
+                if (need.AnyOf != null && !Contains(need.AnyOf, part.BaseId)) continue; // 030 review
                 int m = PartMisses(need, part);
                 if (m >= bestMisses) continue;
                 best = i;

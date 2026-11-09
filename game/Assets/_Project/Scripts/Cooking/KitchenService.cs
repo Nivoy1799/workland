@@ -34,6 +34,8 @@ namespace Worktown.Game.Cooking
         [SerializeField] private NetworkObject _knifePrefab;
         [Tooltip("Spec 021: one prefab per kind of cookware (board, pan, pot, plate, bowl), for respawns and the plate shelf.")]
         [SerializeField] private NetworkObject[] _vesselPrefabs = new NetworkObject[0];
+        [Tooltip("Spec 030: spatula prefab for replacing a lost spatula (the scene spatula is an instance of it).")]
+        [SerializeField] private NetworkObject _spatulaPrefab;
 
         private const float HomeCheckInterval = 0.5f;
         private const int MaxInitAttempts = 300;
@@ -54,7 +56,17 @@ namespace Worktown.Game.Cooking
         // Spec 029: the fryer baskets (key: fryer station index and basket), found on the first server frame.
         private readonly Dictionary<long, Vessel> _baskets = new Dictionary<long, Vessel>();
         private readonly List<Vessel> _basketList = new List<Vessel>();
+        // Spec 030: the griddle spots (key: griddle station index and spot), found on the first server frame.
+        private readonly Dictionary<long, Vessel> _griddleSpots = new Dictionary<long, Vessel>();
+        // Spec 031: the build spot of each assembly board (key: the board's station index), and who squeezes which dispenser.
+        private readonly Dictionary<int, Vessel> _assemblySpots = new Dictionary<int, Vessel>();
+        private readonly Dictionary<long, PickupInteractor> _squeezers = new Dictionary<long, PickupInteractor>();
+        private readonly List<long> _leftSqueezes = new List<long>(); // 031b
+        private AssemblyDesk _deskField; // 031b: the board's charging steps (pure, tested)
+        private AssemblyDesk Desk => _deskField ??= new AssemblyDesk(_kitchen);
         private uint _lastHeatTick;
+        // 030 review: the cooked-ticks stamp of each heat vessel at its last periodic label refresh.
+        private readonly Dictionary<Vessel, long> _labelStamps = new Dictionary<Vessel, long>();
         private bool _heatChecked;
 
         private sealed class HomeSlot
@@ -95,9 +107,13 @@ namespace Worktown.Game.Cooking
                 _initAttempts = 0;
                 _burnerSurface.Clear();
                 _heatSync.Clear();
+                _labelStamps.Clear();
                 _heatChecked = false;
                 _baskets.Clear();
                 _basketList.Clear();
+                _griddleSpots.Clear();
+                _assemblySpots.Clear(); // spec 031
+                _squeezers.Clear();
             }
         }
 
@@ -113,6 +129,12 @@ namespace Worktown.Game.Cooking
             Station station = _stations[stationIndex];
             // Spec 028b: stock checks its option (the slot) and the reach to that slot's anchor itself (StockRules).
             if (station.Kind == StationKind.Crate || StockLayout.IsStock(station.Kind)) return TakeIngredient(player, station, option);
+            // Spec 031: a dispenser's release ends the squeeze wherever the player is now (the press was in reach).
+            if (!AssemblyDesk.NeedsReach(station.Kind, option))
+            {
+                EnsureInitialized();
+                return UseAssembly(player, station, option);
+            }
             if (!StationRules.IsInReach(player.transform.position, station.transform.position))
                 return CookOutcome.TooFar;
             EnsureInitialized();
@@ -122,7 +144,11 @@ namespace Worktown.Game.Cooking
                 case StationKind.Counter: return Serve(player, station);
                 case StationKind.Stove: return UseBurner(station, option);
                 case StationKind.Fryer: return UseFryer(station, option);
+                case StationKind.Griddle: return UseGriddle(station, option); // spec 030
+                case StationKind.Assembly: return UseAssembly(player, station, option); // spec 031
                 case StationKind.PlateShelf: return TakePlate(player);
+                // Spec 032: the register's slots (the change tray, take back, hand over, the card terminal); the guests' service decides.
+                case StationKind.Register: return _customers != null ? _customers.UseRegister(player, option) : CookOutcome.NoPayment;
                 default: return CookOutcome.UnknownStation;
             }
         }
@@ -191,6 +217,201 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
+        /// <summary>Spec 030: the griddle's power knob (GriddleRules.PowerOption); the spots' down sides cook while it is on.</summary>
+        private CookOutcome UseGriddle(Station griddle, int option)
+        {
+            if (option != GriddleRules.PowerOption) return CookOutcome.InvalidOption;
+            _kitchen.TryToggleGriddle(griddle.Index, Tick);
+            RefreshGriddle(griddle);
+            for (int s = 0; s < GriddleRules.SpotsPerGriddle; s++)
+                if (_griddleSpots.TryGetValue(BurnerKey(griddle.Index, s), out Vessel spot)) RefreshVessel(spot);
+            Debug.Log("[Kitchen] " + griddle.DisplayName + " " + (_kitchen.GriddleIsOn(griddle.Index) ? "on" : "off"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 030: the griddle's light byte (on).</summary>
+        private void RefreshGriddle(Station griddle)
+        {
+            if (griddle == null || !griddle.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            contents.ServerSetStoveFlags(_kitchen.GriddleFlags(griddle.Index));
+        }
+
+        /// <summary>
+        /// Spec 030: a flip of the item on a griddle spot: the spatula must be in the hands (NoSpatula, "Use the spatula"; reach
+        /// was checked by the caller), food on the spot (StationEmpty). The new down side's heat bytes go out at once with the
+        /// mode byte, so the two ring halves never swap for a moment.
+        /// </summary>
+        private CookOutcome Flip(PickupInteractor player, Vessel spot)
+        {
+            bool spatula = _pickups.TryGetHeld(player, out NetworkObject tool) && tool.TryGetComponent(out Spatula _);
+            CookOutcome can = VesselRules.CheckFlip(spot.Kind, spatula);
+            if (can != CookOutcome.Ok) return can;
+            CookOutcome flipped = _kitchen.TryFlip(spot.ObjectId, Tick);
+            if (flipped != CookOutcome.Ok) return flipped;
+            RefreshVessel(spot);
+            _heatSync.Remove(spot);
+            PublishHeatOf(spot, Tick, TickRate);
+            GriddleSides sides = _kitchen.GriddleSidesOf(spot.ObjectId, Tick, TickRate);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " flipped the food on the griddle: " + GriddleRules.SideName(sides.DownSide)
+                + " down (side 1 " + (sides.SideA / CookingTime.TimeScale).ToString("0.0") + " s, side 2 "
+                + (sides.SideB / CookingTime.TimeScale).ToString("0.0") + " s)");
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 030: the griddle spot's item slides onto the plate (or into the bowl) the player holds.</summary>
+        private CookOutcome TipGriddle(PickupInteractor player, Vessel spot, Vessel plate)
+        {
+            CookOutcome tipped = _kitchen.TryPour(spot.ObjectId, VesselKind.Griddle, plate.ObjectId, plate.Kind, Tick, TickRate, out Item result);
+            if (tipped != CookOutcome.Ok && tipped != CookOutcome.TooShort) return tipped;
+            RefreshVessel(spot);
+            RefreshVessel(plate);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " slid " + KitchenState.NameOf(result) + " from the griddle onto the "
+                + VesselRules.Name(plate.Kind) + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
+            return tipped;
+        }
+
+        // ---- Spec 031: the assembly board ----
+
+        /// <summary>
+        /// Spec 031: the board's tools (RequestStation; reach to the board was checked): a dispenser's press and release
+        /// (<see cref="BuildRules.SqueezeStartOption"/> / <see cref="BuildRules.SqueezeStopOption"/>), the server measuring the time
+        /// between their arrivals in its own ticks; a packaging (<see cref="BuildRules.PackagingOption"/>).
+        /// </summary>
+        private CookOutcome UseAssembly(PickupInteractor player, Station board, int option)
+        {
+            if (!_assemblySpots.TryGetValue(board.Index, out Vessel spot) || spot == null) return CookOutcome.UnknownStation;
+            if (BuildRules.TryParseSqueeze(option, out int d, out bool start))
+                return start ? StartSqueeze(player, board, d) : StopSqueeze(player, board, d);
+            if (BuildRules.TryParsePackaging(option, out int p)) return Package(player, spot, p);
+            return CookOutcome.InvalidOption;
+        }
+
+        private CookOutcome StartSqueeze(PickupInteractor player, Station board, int d)
+        {
+            CookOutcome started = Desk.Press(board.Index, d, player.OwnerId, Tick, WalletOf(player));
+            if (started != CookOutcome.Ok) return started;
+            _squeezers[AssemblyDesk.KeyOf(board.Index, d)] = player; // 032 review: the desk's key
+            RefreshAssembly(board);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// The release: the sauce for the time held goes on the build (or on the same sauce on top), its portion is charged
+        /// first (spec 031b: AssemblyDesk); a refused step changes nothing and charges nothing. A release with no squeeze of this
+        /// player (refused at the press, or already stopped by the server) is harmless: Ok, nothing happens.
+        /// </summary>
+        private CookOutcome StopSqueeze(PickupInteractor player, Station board, int d)
+        {
+            if (!_kitchen.IsSqueezing(board.Index, d, out int owner, out _) || owner != player.OwnerId) return CookOutcome.Ok;
+            return EndSqueeze(player, board, d);
+        }
+
+        private CookOutcome EndSqueeze(PickupInteractor player, Station board, int d)
+        {
+            _squeezers.Remove(AssemblyDesk.KeyOf(board.Index, d));
+            CookOutcome made = Desk.End(board.Index, d, player.OwnerId, Tick, TickRate, WalletOf(player), out AssemblyDesk.SqueezeResult r);
+            RefreshAssembly(board);
+            if (made != CookOutcome.Ok) return made;
+            if (_assemblySpots.TryGetValue(board.Index, out Vessel spot)) RefreshVessel(spot);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " squeezed " + BuildRules.SauceOf(d) + " for " + r.Seconds.ToString("0.00")
+                + " s (" + EconomyRules.Money(r.Cost) + "), top " + r.TopSeconds.ToString("0.00") + " s: " + KitchenState.NameOf(r.Build)
+                + " q=" + KitchenState.QualityOf(r.Build).ToString("0.00"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 031: wrap paper, a box or a bag from the rack onto the build: checked in the sim, paid, then applied.</summary>
+        private CookOutcome Package(PickupInteractor player, Vessel spot, int p)
+        {
+            CookOutcome done = Desk.Package(spot.ObjectId, p, player.OwnerId, WalletOf(player), out Item packed, out long cost);
+            if (done != CookOutcome.Ok) return done;
+            RefreshVessel(spot);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " used the " + BuildRules.PackagingName(p) + " (" + EconomyRules.Money(cost)
+                + "): " + KitchenState.NameOf(packed) + " q=" + KitchenState.QualityOf(packed).ToString("0.00"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 031: empty hands (or anything) fold the open build on bread (RequestUse action ActionFold).</summary>
+        private CookOutcome Fold(PickupInteractor player, Vessel spot)
+        {
+            if (spot.Kind != VesselKind.Assembly) return CookOutcome.InvalidOption;
+            CookOutcome folded = _kitchen.TryFold(spot.ObjectId);
+            if (folded != CookOutcome.Ok) return folded;
+            RefreshVessel(spot);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " folded " + _kitchen.ResultName(spot.ObjectId, VesselKind.Assembly, Tick, TickRate));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 031b: the player's wallet for the board's charges (free without an economy).</summary>
+        private IAssemblyWallet WalletOf(PickupInteractor player) => _economy != null ? new PlayerWallet(_economy, player) : null;
+
+        /// <summary>Spec 031b: <see cref="IAssemblyWallet"/> through the economy service: a portion or the full grocer price.</summary>
+        private sealed class PlayerWallet : IAssemblyWallet
+        {
+            private readonly Worktown.Game.Economy.EconomyService _economy;
+            private readonly PickupInteractor _player;
+
+            public PlayerWallet(Worktown.Game.Economy.EconomyService economy, PickupInteractor player)
+            {
+                _economy = economy;
+                _player = player;
+            }
+
+            public CookOutcome Charge(int owner, string grocerId, int percent, out long cost)
+            {
+                cost = 0;
+                if (_player == null || _player.OwnerId != owner) return CookOutcome.SimRefused;
+                Worktown.Sim.Economy.EconomyError paid = percent >= 100
+                    ? _economy.TryBuy(_player.NetworkObject, grocerId, out cost)
+                    : _economy.TryBuyPortion(_player.NetworkObject, grocerId, percent, out cost);
+                return StockRules.PaidOutcome(paid);
+            }
+
+            public bool CanAfford(int owner, string grocerId, int percent) =>
+                _player != null && _player.OwnerId == owner && _economy.CanAffordPortion(_player.NetworkObject, grocerId, percent);
+        }
+
+        private static readonly System.Func<PickupInteractor, bool> IsPresent = p => p != null && p.IsSpawned;
+
+        /// <summary>Spec 031: the board's light byte (who squeezes).</summary>
+        private void RefreshAssembly(Station board)
+        {
+            if (board == null || !board.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            contents.ServerSetStoveFlags(_kitchen.AssemblyFlags(board.Index));
+        }
+
+        /// <summary>
+        /// Spec 031: a squeeze held past <see cref="BuildRules.AutoStopSeconds"/> ends as if released. 031b: a squeeze whose player
+        /// left (despawned) is dropped at once, without a charge, so the dispenser is free for everyone.
+        /// </summary>
+        private void StopOverdueSqueezes(uint tick, double tickRate)
+        {
+            if (_squeezers.Count > 0)
+            {
+                // 031b review: the selection and the cancel are the desk's pure helper (tested); here only the refresh and the log.
+                Desk.DropLeftSqueezes(_squeezers, IsPresent, _leftSqueezes);
+                foreach (long key in _leftSqueezes)
+                {
+                    int board = AssemblyDesk.BoardOfKey(key), d = AssemblyDesk.DispenserOfKey(key);
+                    RefreshAssembly(board >= 0 && board < _stations.Length ? _stations[board] : null);
+                    Debug.Log("[Kitchen] the squeeze of a player who left was dropped (board " + board + ", dispenser " + d + ")");
+                }
+            }
+            while (_kitchen.TryFindOverdueSqueeze(tick, tickRate, out int board, out int d, out int owner))
+            {
+                Station station = board >= 0 && board < _stations.Length ? _stations[board] : null;
+                long key = AssemblyDesk.KeyOf(board, d);
+                if (_squeezers.TryGetValue(key, out PickupInteractor player) && player != null && player.OwnerId == owner && station != null)
+                {
+                    CookOutcome ended = EndSqueeze(player, station, d);
+                    if (ended != CookOutcome.Ok) Debug.Log("[Kitchen] the held squeeze ended: " + ended);
+                    continue;
+                }
+                _squeezers.Remove(key);
+                _kitchen.CancelSqueeze(board, d);
+                RefreshAssembly(station);
+            }
+        }
+
         // ---- cookware (RequestUse) ----
 
         /// <summary>
@@ -211,6 +432,8 @@ namespace Worktown.Game.Cooking
 
             if (action == VesselRules.ActionStroke || action == VesselRules.ActionTurn) return Cut(player, vessel, action);
             if (action == VesselRules.ActionShake) return Shake(player, vessel);
+            if (action == VesselRules.ActionFlip) return Flip(player, vessel); // spec 030
+            if (action == VesselRules.ActionFold) return Fold(player, vessel); // spec 031
             if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
 
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
@@ -218,6 +441,8 @@ namespace Worktown.Game.Cooking
             {
                 // Spec 029b: holding a plate or bowl, a click on a raised basket tips its food onto it (no new RPC).
                 if (vessel.Kind == VesselKind.Basket && VesselRules.TipsFromBasket(source.Kind)) return TipBasket(player, vessel, source);
+                // Spec 030: holding a plate or bowl, a click on a griddle spot slides its item onto it.
+                if (vessel.Kind == VesselKind.Griddle && VesselRules.TipsFromFixed(vessel.Kind, source.Kind)) return TipGriddle(player, vessel, source);
                 return Pour(player, source, vessel);
             }
             if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
@@ -327,8 +552,11 @@ namespace Worktown.Game.Cooking
             byte mode = 0;
             if (vessel.Kind == VesselKind.Pan) mode = _kitchen.PanIsSaute(id) ? Vessel.ModeSaute : Vessel.ModeFry;
             else if (vessel.Kind == VesselKind.Basket) mode = _kitchen.BasketMode(id, tick); // spec 029
-            vessel.ServerSet(_kitchen.ContentNames(id, vessel.Kind, tick, rate), _kitchen.ContentLooks(id, vessel.Kind, tick, rate),
-                _kitchen.ResultName(id, vessel.Kind, tick, rate), mode);
+            else if (vessel.Kind == VesselKind.Griddle) mode = _kitchen.GriddleMode(id, tick, rate); // spec 030
+            else if (vessel.Kind == VesselKind.Assembly) mode = _kitchen.BuildMode(id); // spec 031
+            // 030 review: one preview per food for the label and the title.
+            IReadOnlyList<string> names = _kitchen.ContentNamesAndTitle(id, vessel.Kind, tick, rate, out string title);
+            vessel.ServerSet(names, _kitchen.ContentLooks(id, vessel.Kind, tick, rate), title, mode);
         }
 
         /// <summary>Server: the stove's knob and button lights (two bits per burner).</summary>
@@ -375,6 +603,27 @@ namespace Worktown.Game.Cooking
             }
             foreach (Knife knife in FindObjectsByType<Knife>(FindObjectsSortMode.None))
                 if (knife.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _knifePrefab));
+            // Spec 030: the spatula comes back at its home spot like the knife.
+            foreach (Spatula spatula in FindObjectsByType<Spatula>(FindObjectsSortMode.None))
+                if (spatula.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _spatulaPrefab));
+            // Spec 030: the griddle spots (fixed scene objects on their griddle).
+            _griddleSpots.Clear();
+            foreach (GriddleSpot gs in FindObjectsByType<GriddleSpot>(FindObjectsSortMode.None))
+            {
+                if (gs.Griddle == null || !gs.TryGetComponent(out Vessel spot) || !spot.IsSpawned) continue;
+                _kitchen.RegisterGriddleSpot(spot.ObjectId, gs.Griddle.Index, gs.Spot);
+                _griddleSpots[BurnerKey(gs.Griddle.Index, gs.Spot)] = spot;
+                RefreshVessel(spot);
+            }
+            // Spec 031: the build spots of the assembly boards.
+            _assemblySpots.Clear();
+            foreach (AssemblySpot a in FindObjectsByType<AssemblySpot>(FindObjectsSortMode.None))
+            {
+                if (a.Board == null || !a.TryGetComponent(out Vessel spot) || !spot.IsSpawned) continue;
+                _kitchen.RegisterAssemblySpot(spot.ObjectId, a.Board.Index);
+                _assemblySpots[a.Board.Index] = spot;
+                RefreshVessel(spot);
+            }
             // Spec 029: the fryer baskets (scene objects next to their fryer).
             _baskets.Clear();
             _basketList.Clear();
@@ -390,6 +639,8 @@ namespace Worktown.Game.Cooking
             {
                 if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
                 else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
+                else if (station != null && station.Kind == StationKind.Griddle) RefreshGriddle(station); // spec 030
+                else if (station != null && station.Kind == StationKind.Assembly) RefreshAssembly(station); // spec 031
             }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
         }
@@ -430,7 +681,11 @@ namespace Worktown.Game.Cooking
                 if (vessel == null || !vessel.IsSpawned)
                 {
                     _vessels.RemoveAt(i); // its id may be reused; KitchenState entries were removed when it went
-                    if (vessel != null) _heatSync.Remove(vessel);
+                    if (vessel != null)
+                    {
+                        _heatSync.Remove(vessel);
+                        _labelStamps.Remove(vessel);
+                    }
                     continue;
                 }
                 if (vessel.Kind == VesselKind.Plate && VesselRules.IsLost(true, vessel.transform.position.y))
@@ -478,6 +733,7 @@ namespace Worktown.Game.Cooking
             _kitchen.RemoveVessel(vessel.ObjectId);
             _vessels.Remove(vessel);
             _heatSync.Remove(vessel); // a pooled object that comes back starts fresh
+            _labelStamps.Remove(vessel);
             if (vessel.IsSpawned) _networkManager.ServerManager.Despawn(vessel.NetworkObject);
         }
 
@@ -489,12 +745,22 @@ namespace Worktown.Game.Cooking
             EnsureInitialized();
             uint tick = Tick;
             double tickRate = TickRate;
-            if (_labelsDirty || CookingTime.ElapsedTicks(_lastLabelTick, tick) >= tickRate || tick < _lastLabelTick)
+            // Spec 030 (orchestrator decision): the label is the name a take would give now, so it is refreshed 4 times a
+            // second (HeatSync's rate; only changes are sent), and the name in the hands never differs from the label for long.
+            if (_labelsDirty || CookingTime.ElapsedTicks(_lastLabelTick, tick) >= HeatSync.MinTicks(tickRate) || tick < _lastLabelTick)
             {
+                bool all = _labelsDirty;
                 _labelsDirty = false;
                 _lastLabelTick = tick;
                 foreach (Vessel vessel in _vessels)
-                    if (vessel != null && VesselRules.IsHeat(vessel.Kind) && _kitchen.HeatCount(vessel.ObjectId) > 0) RefreshVessel(vessel);
+                {
+                    if (vessel == null || !VesselRules.IsHeat(vessel.Kind) || _kitchen.HeatCount(vessel.ObjectId) == 0) continue;
+                    // 030 review: only food that cooked since the last refresh (a heat that is off changes no name).
+                    long stamp = _kitchen.HeatStamp(vessel.ObjectId, tick);
+                    if (!all && _labelStamps.TryGetValue(vessel, out long last) && last == stamp) continue;
+                    _labelStamps[vessel] = stamp;
+                    RefreshVessel(vessel);
+                }
             }
             if (!_heatChecked || tick != _lastHeatTick)
             {
@@ -507,6 +773,7 @@ namespace Worktown.Game.Cooking
                     if (basket != null && _kitchen.SettleDrain(basket.ObjectId, tick)) RefreshVessel(basket);
                 }
                 PublishHeat(tick, tickRate);
+                StopOverdueSqueezes(tick, tickRate); // spec 031
             }
             WatchHomes();
         }
@@ -518,21 +785,25 @@ namespace Worktown.Game.Cooking
         private void PublishHeat(uint tick, double tickRate)
         {
             foreach (Vessel vessel in _vessels)
+                if (vessel != null) PublishHeatOf(vessel, tick, tickRate);
+        }
+
+        private void PublishHeatOf(Vessel vessel, uint tick, double tickRate)
+        {
+            if (!vessel.IsServerInitialized || !VesselRules.IsHeat(vessel.Kind)) return;
+            if (!_heatSync.TryGetValue(vessel, out HeatSync sync))
             {
-                if (vessel == null || !vessel.IsServerInitialized || !VesselRules.IsHeat(vessel.Kind)) continue;
-                if (!_heatSync.TryGetValue(vessel, out HeatSync sync))
-                {
-                    sync = new HeatSync();
-                    _heatSync[vessel] = sync;
-                }
-                HeatReading reading = _kitchen.HeatReadingOf(vessel.ObjectId, tick, tickRate);
-                byte zone = HeatZoneRules.Encode(reading);
-                byte zoneBefore = sync.Zone;
-                if (!sync.ShouldSend(tick, tickRate, reading.Progress, zone)) continue;
-                vessel.ServerSetHeat(reading.Progress, zone);
-                // Spec 029b: the label's words follow the zone, so they change with the ring, not up to a second later.
-                if (HeatZoneRules.ZoneOf(zone) != HeatZoneRules.ZoneOf(zoneBefore)) RefreshVessel(vessel);
+                sync = new HeatSync();
+                _heatSync[vessel] = sync;
             }
+            HeatReading reading = _kitchen.HeatReadingOf(vessel.ObjectId, tick, tickRate);
+            byte zone = HeatZoneRules.Encode(reading);
+            byte zoneBefore = sync.Zone;
+            if (!sync.ShouldSend(tick, tickRate, reading.Progress, zone)) return;
+            vessel.ServerSetHeat(reading.Progress, zone);
+            // Spec 029b: the label follows the zone change with the ring, not up to a refresh later (spec 030: the name a take
+            // would give may change with it; the refresh also republishes a griddle spot's up side).
+            if (HeatZoneRules.ZoneOf(zone) != HeatZoneRules.ZoneOf(zoneBefore)) RefreshVessel(vessel);
         }
 
         // ---- stock and the counter (spec 007/009, spec 028b) ----
@@ -659,27 +930,23 @@ namespace Worktown.Game.Cooking
             string stars = StarRating.Format(starCount);
             string entry;
             bool served = false;
-            int customerId = 0;
-            Worktown.Game.Npc.OrderMatch match = Worktown.Game.Npc.OrderMatch.Wrong;
+            Worktown.Game.Npc.GuestPick pick = default;
             long soldPayout = 0;
-            int paidPermille = EconomyRules.FullPayPermille;
 
             if (_economy != null)
             {
                 Item plated = item;
                 if (plate == null && _kitchen.TryPlate(held.ObjectId, out plated) != CookOutcome.Ok) return CookOutcome.CannotSell;
-                // Spec 022: which waiting customer gets it and the share of the price they pay (a pure read; a failure
-                // here only means "no customer", the sale then pays the full sim price as before).
+                // Spec 022: which waiting customer gets it (a pure read; a failure here only means "no customer", the sale then
+                // pays the full sim price as before). Spec 032: with its modifiers; the guest pays later at the register, so a sale
+                // to it credits nothing now (TrySellForGuest) and the guest's bill comes from the sim's payout.
                 bool forCustomer = false;
-                byte dish = Worktown.Game.Npc.Menu.None;
-                int payPermille = EconomyRules.FullPayPermille;
                 if (_customers != null)
                 {
-                    try { forCustomer = _customers.TryPick(plated, starCount, out customerId, out dish, out match, out payPermille); }
+                    try { forCustomer = _customers.TryPick(plated, out pick); }
                     catch (System.Exception e) { Debug.LogException(e); forCustomer = false; }
-                    if (!forCustomer) payPermille = EconomyRules.FullPayPermille;
                 }
-                SaleResult sale = _economy.TrySell(player.NetworkObject, plated, payPermille);
+                SaleResult sale = forCustomer ? _economy.TrySellForGuest(player.NetworkObject, plated) : _economy.TrySell(player.NetworkObject, plated);
                 if (!sale.Ok)
                 {
                     Debug.Log("[Economy] player " + player.OwnerId + " could not sell " + name + ": " + sale.Error);
@@ -688,14 +955,16 @@ namespace Worktown.Game.Cooking
                 string where = sale.Channel == SaleChannel.NpcDemand ? sale.MarketId : "wholesaler";
                 served = forCustomer && sale.Channel == SaleChannel.NpcDemand;
                 soldPayout = sale.Payout;
-                if (served) paidPermille = payPermille;
-                entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
-                    + EconomyRules.Money(sale.Payout) + " (" + where + ")";
                 if (served)
-                    entry += " · " + Worktown.Game.Npc.Menu.NameOf(dish) + " order: " + Worktown.Game.Npc.OrderRules.Describe(match);
-                Debug.Log("[Economy] player " + player.OwnerId + " sold " + name + " for " + EconomyRules.Money(sale.Payout)
-                    + " to " + where + " q=" + quality.ToString("0.00")
-                    + (served ? " (" + Worktown.Game.Npc.OrderRules.Describe(match) + ", " + payPermille + " permille)" : string.Empty));
+                    entry = "Player " + player.OwnerId + " handed " + name + " " + stars + " to a guest · "
+                        + Worktown.Game.Npc.Menu.NameOf(pick.Dish) + " order: " + Worktown.Game.Npc.OrderRules.Describe(pick.Fit.Match)
+                        + " · pays at the register";
+                else
+                    entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
+                        + EconomyRules.Money(sale.Payout) + " (" + where + ")";
+                Debug.Log("[Economy] player " + player.OwnerId + (served ? " handed " : " sold ") + name + " (sim payout "
+                    + EconomyRules.Money(sale.Payout) + ") to " + where + " q=" + quality.ToString("0.00")
+                    + (served ? " (" + Worktown.Game.Npc.OrderRules.Describe(pick.Fit.Match) + ", bill " + pick.BillPermille + " permille)" : string.Empty));
             }
             else
             {
@@ -713,16 +982,24 @@ namespace Worktown.Game.Cooking
             if (_feed != null)
             {
                 _feed.ServerAdd(entry);
-                // Spec 027c: the reward moment over the counter for everyone (stars, coin, tip), through the feed's SyncVar.
-                _feed.ServerReward(counter.Index, starCount, soldPayout, Worktown.Game.Npc.OrderRules.TipOf(soldPayout, paidPermille));
+                // Spec 027c: the reward moment over the counter for everyone (stars, coin), through the feed's SyncVar. Spec 032: a
+                // guest's reward comes when it pays at the register (its tip is known then); a plain sale has no tip.
+                if (!served) _feed.ServerReward(counter.Index, starCount, soldPayout, 0);
             }
 
             // Spec 014, after the sale is complete: customers must never be able to break the money transaction
-            // (review blocker). Spec 022: the picked customer leaves with what they paid.
-            if (served && _customers != null)
+            // (review blocker). Spec 032: the guest takes the dish and pays at the register; should that fail, the bill is paid now.
+            // 032 review: never for a guest already in the register's line (it pays there, once; GuestFallback).
+            if (served)
             {
-                try { _customers.OnServed(customerId, match, soldPayout, starCount); }
+                bool handed = false;
+                try { handed = _customers.OnHandedOver(pick, player, soldPayout); }
                 catch (System.Exception e) { Debug.LogException(e); }
+                bool waiting = true;
+                try { waiting = _customers.IsPaying(pick.CustomerId); }
+                catch (System.Exception e) { Debug.LogException(e); }
+                if (Worktown.Game.Shop.RegisterFlow.FallbackPays(handed, waiting))
+                    _economy.TryPayGuest(player.OwnerId, player.NetworkObject, EconomyRules.ApplyPermille(soldPayout, pick.BillPermille), out _);
             }
             return CookOutcome.Ok;
         }

@@ -197,6 +197,7 @@ namespace Worktown.Game.Art
                 return;
             }
             Place(now);
+            MarkDrawn(); // spec 030 (029b nit): measured on the first real frame, not when Begin places it
         }
 
         private void OnBeginCameraRendering(ScriptableRenderContext context, Camera cam)
@@ -207,11 +208,16 @@ namespace Worktown.Game.Art
                 return;
             }
             Place(Time.unscaledTime);
+            MarkDrawn();
+        }
+
+        private void MarkDrawn()
+        {
+            if (DrawnFrame < 0) DrawnFrame = Time.frameCount;
         }
 
         private void Place(float now)
         {
-            if (DrawnFrame < 0) DrawnFrame = Time.frameCount;
             if (_confirmed) Hide(_real);
             Pose pose = Evaluate(now);
             transform.SetPositionAndRotation(pose.position, pose.rotation);

@@ -15,7 +15,9 @@ namespace Worktown.Game.Art
             Palette.FoodPotato, Palette.FoodApple, Palette.FoodTomato, Palette.FoodOnion,
             // Spec 028: flatbread, wrap, seitan, falafel mix, lettuce, cucumber, red cabbage, lemon, garlic-herb sauce, chili sauce.
             Palette.FoodFlatbread, Palette.FoodWrap, Palette.FoodSeitan, Palette.FoodFalafel, Palette.FoodLettuce,
-            Palette.FoodCucumber, Palette.FoodRedCabbage, Palette.FoodLemon, Palette.FoodHerbSauce, Palette.FoodChiliSauce
+            Palette.FoodCucumber, Palette.FoodRedCabbage, Palette.FoodLemon, Palette.FoodHerbSauce, Palette.FoodChiliSauce,
+            // Spec 030: paprika, eggplant, mushroom.
+            Palette.FoodPaprika, Palette.FoodEggplant, Palette.FoodMushroom
         };
 
         /// <summary>Darkening for raw / short / medium / long (open question 3).</summary>
@@ -27,6 +29,7 @@ namespace Worktown.Game.Art
         private const byte Potato = 0, Apple = 1, Tomato = 2, Onion = 3;
         private const byte Flatbread = 4, Wrap = 5, Seitan = 6, FalafelMix = 7, Lettuce = 8, Cucumber = 9, RedCabbage = 10,
             Lemon = 11, HerbSauce = 12, ChiliSauce = 13;
+        private const byte Paprika = 14, Eggplant = 15, Mushroom = 16; // spec 030
 
         public static int IngredientCount => IngredientColors.Length;
 
@@ -107,8 +110,19 @@ namespace Worktown.Game.Art
         /// <summary>Spec 029: one portion of falafel mix becomes this many balls in the fryer (the sim's DeepFry shape).</summary>
         public const int FalafelBalls = 4;
 
-        /// <summary>Fried in the pan or (spec 029) in the fryer: both shift golden.</summary>
-        public static bool IsFried(byte heat) => heat == FoodLook.HeatFried || heat == FoodLook.HeatDeepFried;
+        /// <summary>Fried in the pan or (spec 029) in the fryer, or (spec 031b) grilled: all shift golden.</summary>
+        public static bool IsFried(byte heat) => heat == FoodLook.HeatFried || heat == FoodLook.HeatDeepFried || heat == FoodLook.HeatGrilled;
+
+        /// <summary>
+        /// Spec 031b: grilled food done to the medium bucket or longer (both sides at least medium: the sim's "time" is the shorter
+        /// side) shows grill marks wherever it is drawn (in the hands, on a plate, in a build), not only on the griddle.
+        /// </summary>
+        public static bool HasGrillMarks(FoodLook look) => look.Heat == FoodLook.HeatGrilled && look.Doneness >= FoodLook.DonenessMedium;
+
+        /// <summary>Spec 031b: grill marks drawn on one pile: on each of its first pieces, at most this many pieces.</summary>
+        public const int MarkedPieces = 3;
+        /// <summary>Spec 031b: dark bars per marked piece.</summary>
+        public const int MarksPerPiece = 2;
 
         private static FoodPiece Generic(byte shape, int count) => new FoodPiece(GenericPiece(shape), count, true);
 
@@ -131,6 +145,9 @@ namespace Worktown.Game.Art
                 case Lemon: return ArtKey.FoodLemon;
                 case HerbSauce: return ArtKey.FoodSauceGarlicHerb;
                 case ChiliSauce: return ArtKey.FoodSauceChili;
+                case Paprika: return ArtKey.FoodPaprika; // spec 030
+                case Eggplant: return ArtKey.FoodEggplant;
+                case Mushroom: return ArtKey.FoodMushroom;
                 default: throw new System.ArgumentOutOfRangeException(nameof(ingredient), ingredient, "no whole model");
             }
         }

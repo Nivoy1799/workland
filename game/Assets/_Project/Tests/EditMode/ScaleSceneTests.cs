@@ -57,14 +57,18 @@ namespace Worktown.Game.Tests
                 foreach (Station station in All<Station>(scene))
                 {
                     // Spec 028b: the fridge and the dry shelf are 1.80 m high (the guide's fridge).
+                    // Spec 032: the register stands on the serving counter's run: its own height above the counter top.
+                    bool register = station.Kind == StationKind.Register;
+                    float floor = register ? ArtSizeTable.ServingCounterHeight : 0f;
                     float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
+                        : register ? floor + RegisterArtRules.Height
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");
                     Bounds body = station.transform.Find("Body").GetComponent<BoxCollider>().bounds;
                     // Spec 029: the fryer's collider stops under its oil wells (a lowered basket is aimed at above it).
                     float colliderTop = station.Kind == StationKind.Fryer ? FryerArt.BodyColliderTop : expected;
                     Assert.AreEqual(colliderTop, body.max.y, HeightTolerance, station.name + " collider top");
-                    Assert.AreEqual(0f, body.min.y, 0.001f, station.name + " stands on the floor");
+                    Assert.AreEqual(floor, body.min.y, 0.001f, station.name + (register ? " stands on the counter top" : " stands on the floor"));
                     if (station.Kind == StationKind.Counter) counters++;
                     if (station.Kind == StationKind.Stove) stoves++;
                 }
@@ -72,7 +76,7 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(2, stoves);
 
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(11, surfaces.Count);
+                Assert.AreEqual(12, surfaces.Count); // spec 030: the griddle's deck
                 foreach (PlaceSurface surface in surfaces)
                 {
                     for (int i = 0; i < surface.SpotCount; i++)
@@ -151,6 +155,9 @@ namespace Worktown.Game.Tests
                 List<Component> vessels = VesselTestKit.AllOf(scene, VesselTestKit.VesselType);
                 // Spec 029: the two fryer baskets hang in the oil, not on a worktop.
                 Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Basket));
+                // Spec 030: the six griddle spots lie on the griddle's plate.
+                Assert.AreEqual(Worktown.Game.Cooking.GriddleRules.SpotsPerGriddle, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Griddle));
+                Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Assembly)); // spec 031: the build spot on its board
                 Assert.AreEqual(6, vessels.Count);
                 foreach (Component vessel in vessels)
                 {

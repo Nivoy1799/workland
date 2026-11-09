@@ -1,7 +1,7 @@
 ---
 id: 028
 title: Street-food ingredients and the vegan content check
-status: approved
+status: done
 owner: architect
 builder: sonnet
 ---

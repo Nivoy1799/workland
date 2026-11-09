@@ -91,6 +91,24 @@ namespace Worktown.Game.Art
         StationFryer,
         ToolFryerBasket,
         FoodFalafelBall,
-        PropFriesBox
+        PropFriesBox,
+
+        // Spec 030: the griddle (graybox: a steel plate on a cabinet), its spatula (Food Kit cooking-spatula) and the grill vegetables.
+        StationGriddle,
+        ToolSpatula,
+        FoodPaprika,
+        FoodEggplant,
+        FoodMushroom,
+
+        // Spec 031: the assembly board (graybox), a flat layer (a bread base or a sauce), the folded wrap and the paper-wrapped one
+        // (tinted primitives), and the Kenney takeaway box (styrofoam) and bag.
+        StationAssembly,
+        FoodLayerDisc,
+        FoodWrapFolded,
+        FoodWrapPaper,
+        PropTakeawayBox,
+        PropPaperBag,
+        /// <summary>Spec 032: the register on the counter (graybox, RegisterArtRules).</summary>
+        StationRegister
     }
 }

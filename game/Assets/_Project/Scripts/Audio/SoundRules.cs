@@ -92,6 +92,7 @@ namespace Worktown.Game.Audio
                 case VesselKind.Pan:
                 case VesselKind.Pot:
                 case VesselKind.Basket: // spec 029: a wire basket
+                case VesselKind.Griddle: // spec 030: the steel plate
                     return SoundMaterial.Metal;
                 case VesselKind.Plate:
                 case VesselKind.Bowl:
@@ -107,6 +108,7 @@ namespace Worktown.Game.Audio
             if (item == null) return null;
             if (item.TryGetComponent(out Vessel vessel)) return MaterialOf(vessel.Kind);
             if (item.TryGetComponent(out Knife _)) return SoundMaterial.Metal;
+            if (item.TryGetComponent(out Spatula _)) return SoundMaterial.Metal; // spec 030
             if (item.TryGetComponent(out Food _)) return SoundMaterial.Food;
             return null;
         }
