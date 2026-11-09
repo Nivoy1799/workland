@@ -4,10 +4,13 @@ Hop in whenever you like. Answer by writing under a question (or just tell Claud
 every question has a default, and work continues on other items until you answer. Newest first.
 
 ## Status (updated 2026-11-09 05:00)
-- **Running:** spec 028b (compact stock: a fridge and a dry shelf next to prep instead of a long crate row).
+- **Running:** spec 029 (deep fryer: baskets, lower, shake, lift, drain; fries and falafel).
 - **Next:** fryer (029), griddle (030), assembly and packaging (031), orders 2.0 (032). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
+  - **Spec 028b, compact stock:** a fridge (vegetables, seitan, falafel mix, lemon) and a dry shelf (sauces,
+    potato, onion, flatbread, wraps) right next to the cutting board; aim at an item and click, it flies into your
+    hand at once. Both are simple graybox models for now (no fridge in our Kenney furniture).
   - **Spec 028, street-food ingredients:** flatbread, wrap, seitan, falafel mix, lettuce, cucumber, red cabbage,
     lemon, garlic-herb and chili sauce (buy, hold, cut, cook); "cheese" removed (the grocer sells cashews); a test
     blocks animal-product words in every catalog, menu and news text.

@@ -88,3 +88,8 @@ tuned later by the human.
   not only test the matcher; scan name catalogs once a production one exists; adjective forms per the inbox answer;
   rename `StreetFoodItems.CutShape` to `PreferredCutShape`; grocer lists `cashew` with no kitchen item (check both
   directions or drop it); real shred and strip cut shapes need an operation-catalog change.
+- 028b review (approved with nits) -> polish round after 029: a Take is confirmed by any item in the hands (snapshot
+  the held id, confirm only on new food); a pending take makes Place/PutInto/Sell clickable (map to None while
+  pending); KitchenService.TakeIngredient can charge without an item if the spawn fails (refund or check first);
+  test the TakeIngredient sequence (TryBuy 0 times on refusal); StockTakeLook liveness when the interactor dies;
+  nits (NearestSlot test point, real Finish path, measured log, crate variable names, readonly row arrays).
