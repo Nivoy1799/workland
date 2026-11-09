@@ -67,6 +67,9 @@ namespace Worktown.Game.Player
         private readonly List<float> _hullScales = new List<float>(32);
         private PlacementGhost _ghost;
 
+        /// <summary>Spec 038: the marker's translucent material (the tutorial's pulse outline copies it, so its shader is in the build).</summary>
+        public Material MarkerMaterial => _markerMaterial;
+
         public void Activate(PickupInteractor interactor)
         {
             if (_interactor != null || interactor == null) return;

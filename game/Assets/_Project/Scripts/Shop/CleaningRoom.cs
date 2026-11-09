@@ -57,7 +57,7 @@ namespace Worktown.Game.Shop
         /// <summary>
         /// The server stopped (FishNet despawned the dishes and bags): what was carried comes back (dishes to the return, bags into the
         /// can). 035 review: the plates are counted again for the restart (<see cref="DishRoom.Restarted"/>: the scene's two plates come
-        /// back on the worktop, the pooled ones are gone), so the shop keeps exactly its plates.
+        /// back where they last were, 036 review; the pooled ones are gone), so the shop keeps exactly its plates.
         /// </summary>
         public void EndSession(List<int> scratch)
         {

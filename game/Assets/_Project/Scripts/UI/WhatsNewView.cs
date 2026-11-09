@@ -94,6 +94,15 @@ namespace Worktown.Game.UI
             }
         }
 
+        /// <summary>Spec 038: closes the banner and starts the first-shift tutorial from its first step.</summary>
+        private void PlayTutorial()
+        {
+            Close();
+            Worktown.Game.Tutorial.TutorialRunner runner = Worktown.Game.Tutorial.TutorialRunner.Find();
+            if (runner != null) runner.Replay();
+            else Debug.LogWarning("[WhatsNew] no tutorial runner (join or host a game first)");
+        }
+
         private void SetOpen(bool open)
         {
             _open = open;
@@ -140,7 +149,12 @@ namespace Worktown.Game.UI
             AddLabel(scroll, "banner-heading", "Please test");
             foreach (string item in entry.test) AddLabel(scroll, "banner-item", "☐  " + item);
             AddLabel(banner, "banner-footer", "Scroll for more.  Enter or the button closes this.  " + ReopenKeyName + " opens it again.  F1 debug menu.");
-            banner.Add(new Button(Close) { text = "Got it" });
+            var buttons = new VisualElement();
+            buttons.style.flexDirection = FlexDirection.Row;
+            buttons.style.justifyContent = Justify.Center;
+            buttons.Add(new Button(PlayTutorial) { text = "Play the tutorial" }); // spec 038
+            buttons.Add(new Button(Close) { text = "Got it" });
+            banner.Add(buttons);
             return backdrop;
         }
 

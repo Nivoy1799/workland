@@ -99,6 +99,34 @@ namespace Worktown.Game.Npc
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         private TourOrders _tourOrders;
 #endif
+        // Spec 038: the host's own tutorial (every build): its guests are calm and the first ones scripted. Never on a server build.
+        private bool _tutorialRunning;
+        private TutorialOrders _tutorialOrders;
+        private float _serverStartedAt = -1f;
+        private bool _lastTutorialScripted;
+#if UNITY_SERVER
+        private static readonly bool ServerBuild = true;
+#else
+        private static readonly bool ServerBuild = false;
+#endif
+
+        /// <summary>
+        /// Spec 038, called by the local TutorialRunner (same process, so only on a host; no RPC): the tutorial started (or was replayed)
+        /// or ended. While it runs, guests this host spawns get Tutorial.TutorialRules.CalmPatienceScale times the patience and the first
+        /// ones order the tutorial's dishes (<see cref="TutorialOrders"/>). Guests already waiting keep their order. A server build ignores it.
+        /// </summary>
+        public void SetLocalTutorial(bool running)
+        {
+            if (ServerBuild) return;
+            if (running && !_tutorialRunning) _tutorialOrders = new TutorialOrders();
+            if (running != _tutorialRunning)
+                Debug.Log("[Customers] the host's tutorial " + (running ? "runs: calm guests, patience x" + Worktown.Game.Tutorial.TutorialRules.CalmPatienceScale : "ended: guests as usual"));
+            _tutorialRunning = running;
+        }
+
+        /// <summary>Spec 038 (AC4): guests spawned now are calm (a host whose own tutorial runs; never a dedicated server).</summary>
+        public bool CalmGuests => Worktown.Game.Tutorial.TutorialRules.HostCalms(ServerBuild, _networkManager.IsServerStarted,
+            _networkManager.IsClientStarted, _tutorialRunning);
 
         /// <summary>Spec 032, tests and the tour log: the register's line.</summary>
         public RegisterDesk Desk => Flow.Desk;
@@ -117,6 +145,16 @@ namespace Worktown.Game.Npc
                 Debug.Log("[Customers] tour orders on (-tour-orders): scripted first orders, patience x" + _patienceScale);
             }
 #endif
+            // Spec 038: a tutorial that will start by itself (or -tutorial) counts as running from the start, so the very first guests of a
+            // host are already calm and scripted; the local TutorialRunner confirms or ends it (SetLocalTutorial).
+            if (!ServerBuild && !Application.isBatchMode)
+            {
+                bool done = false;
+                try { done = PlayerPrefs.GetInt(Worktown.Game.Tutorial.TutorialRules.DoneKey, 0) == 1; }
+                catch (PlayerPrefsException) { }
+                if (Worktown.Game.Tutorial.TutorialRules.StartsOnLaunch(System.Environment.GetCommandLineArgs(), done, Debug.isDebugBuild))
+                    SetLocalTutorial(true);
+            }
         }
 
         private void OnDestroy()
@@ -145,6 +183,8 @@ namespace Worktown.Game.Npc
             _tab.Clear();
             _linePayees.Clear();
             _synced = false;
+            _serverStartedAt = -1f;
+            if (_tutorialRunning) _tutorialOrders = new TutorialOrders(); // spec 038: a new game scripts its first guests again
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
             if (_tourOrders != null) _tourOrders = new TourOrders();
 #endif
@@ -153,8 +193,13 @@ namespace Worktown.Game.Npc
         private void Update()
         {
             if (!_networkManager.IsServerStarted || _economy == null) return;
+            if (_serverStartedAt < 0f) _serverStartedAt = Time.time;
             if (!_synced)
             {
+                // Spec 038: a host with a pending tutorial waits for its local client (a few frames), so the first guests are calm.
+                if (Worktown.Game.Tutorial.TutorialRules.WaitsForLocalClient(ServerBuild, _tutorialRunning, _networkManager.IsClientStarted,
+                        Time.time - _serverStartedAt))
+                    return;
                 _synced = true;
                 OnHour();
             }
@@ -511,6 +556,7 @@ namespace Worktown.Game.Npc
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
                 if (_tourOrders != null && _tourOrders.LastScripted) eatIn = _tourOrders.LastEatIn; // the tour's scripted guests
 #endif
+                if (_lastTutorialScripted) eatIn = _tutorialOrders.LastEatIn; // spec 038
                 customer.ServerInit(wish, dish.Id, modifiers, drinkByte, eatIn, _entry.position); // before Spawn: values go out with the spawn
                 _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;
@@ -541,8 +587,25 @@ namespace Worktown.Game.Npc
         private MenuDish DrawDish(string wish, out GuestOrder order, out float patienceScale, out string drink)
         {
             patienceScale = _patienceScale;
+            // Spec 038: on a host whose tutorial runs, guests are calm (patience x 3) and the first ones order the tutorial's dishes. This
+            // comes first, also in a tour run with -tour-orders (the tutorial tour), whose longer patience it multiplies.
+            bool calm = CalmGuests;
+            _lastTutorialScripted = false;
+            if (calm)
+            {
+                patienceScale = Worktown.Game.Tutorial.TutorialRules.PatienceScale(true, _patienceScale);
+                if (_tutorialOrders != null && _tutorialOrders.TryNext(wish, out MenuDish taught, out order, out drink))
+                {
+                    _lastTutorialScripted = true;
+                    return taught;
+                }
+            }
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
-            if (_tourOrders != null && _tourOrders.TryNext(wish, out MenuDish scripted, out order, out patienceScale, out drink)) return scripted;
+            if (_tourOrders != null && _tourOrders.TryNext(wish, out MenuDish scripted, out order, out float tourScale, out drink))
+            {
+                patienceScale = Worktown.Game.Tutorial.TutorialRules.PatienceScale(calm, tourScale);
+                return scripted;
+            }
 #endif
             MenuDish dish = Menu.Draw(_orders, wish, Menu.CrateIngredients);
             order = GuestOrders.Draw(_orders, dish != null && dish.Template != null ? RecipeTemplates.ById(dish.Template) : null);

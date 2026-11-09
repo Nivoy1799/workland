@@ -258,7 +258,7 @@ namespace Worktown.Sim.Economy
             if (offer == null) throw new ArgumentNullException(nameof(offer));
             int ai = FindAccount(s, buyerId);
             if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
-            if (!_catalog.TryGetGrocerPrice(offer.GoodId, out var price) || price != offer.GrocerPrice)
+            if (!_catalog.TryGetGrocerPrice(offer.PriceGoodId, out var price) || price != offer.GrocerPrice) // 036 review: the price good
                 return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
             if (packs < 1 || packs > Supplier.MaxPacksPerOrder || offer.PackSize < 1 || offer.GrocerItemsPerUnit < 1)
                 return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);

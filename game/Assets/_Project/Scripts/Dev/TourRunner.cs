@@ -249,6 +249,15 @@ namespace Worktown.Game.Dev
                 case TourRules.ActCook:
                     yield return CookSequence.Run(_actor, new CookCapture(shot => _capture.Shot(shot), StartFrames, SetTweenScale, () => _framesRunning > 0), 30f);
                     break;
+                case TourRules.ActTutorial:
+                {
+                    // Spec 038: the tutorial's steps through the cook tour's parts; the watcher shoots every card beside it.
+                    var capture = new CookCapture(shot => _capture.Shot(shot), StartFrames, SetTweenScale, () => _framesRunning > 0);
+                    Coroutine watch = StartCoroutine(TutorialSequence.WatchSteps(capture));
+                    yield return TutorialSequence.Run(_actor, capture);
+                    StopCoroutine(watch);
+                    break;
+                }
                 case TourRules.ActSlowMotion:
                     SetTweenScale(TourRules.SlowMotionScale);
                     break;

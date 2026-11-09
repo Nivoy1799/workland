@@ -2279,7 +2279,6 @@ namespace Worktown.Game.Net
             return fresh;
         }
 
-        /// <summary>Third person (spec 007/021): E at a crate or the shelf with empty hands, at the counter holding something.</summary>
         /// <summary>
         /// Spec 036, third person: a tap of E at the spit loads a cone (empty hands, bare spit), else scoops from the tray (empty hands, or
         /// onto the build in them), else turns the knob; with the knife it does nothing (holding E shaves).
@@ -2311,6 +2310,7 @@ namespace Worktown.Game.Net
             return true;
         }
 
+        /// <summary>Third person (spec 007/021): E at a crate or the shelf with empty hands, at the counter holding something.</summary>
         private bool TryHandleStationKey(Station station, bool holding)
         {
             // Spec 034, third person: a carried delivery box goes into this station's slot for its good (E).
@@ -2415,6 +2415,9 @@ namespace Worktown.Game.Net
 
         /// <summary>Owner side: true if a cube we own says we hold it.</summary>
         public bool IsHoldingSomething() => FindHeldPickup() != null;
+
+        /// <summary>Spec 038, owner side: what the hands hold now in either view (CurrentHeld is first person only), for the tutorial.</summary>
+        public Held HandsNow => Hands(FindHeldPickup());
 
         /// <summary>Owner side: the cube this client holds, or null.</summary>
         public Pickup FindHeldPickup()

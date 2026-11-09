@@ -23,6 +23,7 @@ namespace Worktown.Game.UI
         private VisualElement _box;
         private Label _lines;
         private VisualElement _menu;
+        private Button _replay;
         private TextField _address;
         private TextField _steamId;
         private string _simStatus;
@@ -79,6 +80,9 @@ namespace Worktown.Game.UI
             steamRow.Add(new Button(() => _bootstrap.ConnectSteam(_steamId.value.Trim())) { text = "Join SteamID" });
             _menu.Add(steamRow);
             _box.Add(_menu);
+            // Spec 038: replays the first-shift tutorial (in a game; F1 is the menu the tutorial's last card names).
+            _replay = new Button(ReplayTutorial) { text = "Replay tutorial" };
+            _box.Add(_replay);
 
             documentRoot.Add(_box);
         }
@@ -88,6 +92,14 @@ namespace Worktown.Game.UI
             _box?.RemoveFromHierarchy();
             _box = null;
             ReportOpen(false);
+        }
+
+        private void ReplayTutorial()
+        {
+            Worktown.Game.Tutorial.TutorialRunner runner = Worktown.Game.Tutorial.TutorialRunner.Find();
+            if (runner == null) return;
+            _toggledOpen = false;
+            runner.Replay();
         }
 
         private void JoinIp()
@@ -113,6 +125,7 @@ namespace Worktown.Game.UI
             bool visible = _toggledOpen || !connected;
             _box.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             _menu.style.display = connected ? DisplayStyle.None : DisplayStyle.Flex;
+            _replay.style.display = connected ? DisplayStyle.Flex : DisplayStyle.None;
             ReportOpen(_toggledOpen && connected);
             if (visible) _lines.text = BuildText(nm, connected);
         }

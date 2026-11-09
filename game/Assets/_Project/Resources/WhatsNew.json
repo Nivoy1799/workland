@@ -649,6 +649,26 @@
         "Build a seitan wrap with shaved seitan (scoop onto the wrap in your hands or put it on the board), wrap it and serve: does the review mention the spit?",
         "Make a spill and watch the hygiene meter: does it fall slowly now (about 1 % every 5 s)?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-038",
+      "date": "2026-11-09",
+      "title": "Your first shift: a guided tutorial through every station",
+      "items": [
+        "A small card at the top shows one step at a time (3 / 14): take a potato, cut sticks, fry, plate, build and wrap a falafel wrap, serve, take the payment, lemonade, wash a plate, order stock, and the spit (optional)",
+        "The thing to use next pulses in mustard, even when you do not aim at it; an arrow at the screen edge points to it when it is out of view",
+        "A step you already did completes at once. F4 (or Skip tutorial) ends it, F5 skips the optional spit step; it starts by itself only on your first game",
+        "Play it again with Play the tutorial here or Replay tutorial in the F1 menu",
+        "When you host, the guests of your tutorial are calm (three times the patience) and the first ones order fries and a falafel wrap with lemonade, paid in cash. A dedicated server never changes its rules",
+        "Seitan cones can be ordered at the terminal again (they were priced as an unknown good)"
+      ],
+      "test": [
+        "Host a new game: does the card appear at the top, and does each step finish as soon as you do it?",
+        "Turn away from the shelf: does the edge arrow point the right way, and does the target pulse in mustard?",
+        "Hold a potato before step 2 shows: does step 2 finish at once?",
+        "Do the guests wait longer during the tutorial, and is the first guest's order fries (cash, eat in)?",
+        "Press F4: is the card gone, and does it stay gone after a restart? Replay it from F1 or Play the tutorial"
+      ]
     }
   ]
 }

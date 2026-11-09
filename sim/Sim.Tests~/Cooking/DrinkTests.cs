@@ -178,7 +178,8 @@ namespace Worktown.Sim.Tests.Cooking
             Assert.Equal(a.Hash, b.Hash);
             Assert.Equal(a.CanonicalTree, b.CanonicalTree);
             Assert.Equal(Quality(a), Quality(b));
-            // The ops are appended: the catalog's earlier ops keep their place and the old items their hashes (AssemblyTests pins).
+            // 15 ops through spec 033 (fill and lid appended), 16 since spec 036 added the spit's shave (inserted, not appended); the old
+            // items keep their hashes (AssemblyTests and SpitTests pin them).
             Assert.Equal(16, OperationCatalog.CreateDefault().Count);
         }
 

@@ -90,8 +90,6 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 034: the grey reason of an empty slot, rack, cup stack or tap.</summary>
         public const string OutOfStockText = "Out of stock: order more at the terminal";
 
-        /// <summary>035 review: a tap whose kegs show no whole cup left: the server refuses a press below the smallest share.</summary>
-        public const string AlmostEmptyText = "Almost empty: order more at the terminal";
 
         /// <summary>Spec 034: a slot that shows its stock and has none left (as this client sees it).</summary>
         public static bool IsOutOfStock(AimTarget target) => target.StockLine >= 0 && target.StockCount == 0;
@@ -258,7 +256,7 @@ namespace Worktown.Game.Net.Rules
                 case CookOutcome.CupFull: return "The cup is full";
                 case CookOutcome.NotFilled: return "Fill the cup first";
                 case CookOutcome.DispenserBusy: return "Someone is using that tap";
-                case CookOutcome.OutOfStock: return DrinkRules.IsTap(target.Option) ? AlmostEmptyText : OutOfStockText; // spec 034; 035 review
+                case CookOutcome.OutOfStock: return OutOfStockText; // spec 034; 036 review: a tap shows 0 only when its kegs are empty
                 case CookOutcome.HandsFull: return null; // the cup stack with full hands: nothing to say
                 default: return null;
             }

@@ -216,11 +216,18 @@ namespace Worktown.Game.Tests
             var wallet = new StockWallet(room);
             Assert.IsFalse(wallet.CanAfford(Cook, "garlic_herb_sauce", PriceRules.PortionStepPercent));
             Assert.IsTrue(((IDrinkWallet)wallet).CanAfford(Cook, "lemonade", 1, false));
-            // The client: a tap whose kegs show no whole cup says so in grey (the server refuses a press below the smallest share).
-            AimTarget tap = AimTarget.DrinkTool(0, 0, "lemonade", -1).WithStock(StockCatalog.IndexOf("lemonade"), 0);
+            // The client: a tap whose kegs are empty says so in grey. 036 review: "Out of stock" only at 0; a started cup counts as one
+            // (less than a cup shows as 1), so the last part of a keg still pours.
+            int lemonade = StockCatalog.IndexOf("lemonade");
+            AimTarget tap = AimTarget.DrinkTool(0, 0, "lemonade", -1).WithStock(lemonade, 0);
             Held cup = Held.Cup("empty cup", -1, DrinkRules.LevelEmpty, false);
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(cup, tap));
-            Assert.AreEqual(InteractionRules.AlmostEmptyText, InteractionRules.PromptFor(cup, tap));
+            Assert.AreEqual(InteractionRules.OutOfStockText, InteractionRules.PromptFor(cup, tap));
+            while (room.LineOf(lemonade).AvailablePercent > 30) room.Draw(lemonade, 10, 1, out _);
+            Assert.AreEqual(30, room.LineOf(lemonade).AvailablePercent, "a third of a cup left");
+            byte shown = StockCatalog.Presented(room.LineOf(lemonade));
+            Assert.AreEqual(1, shown, "below one cup the tap still shows one");
+            Assert.AreEqual(InteractionAction.Fill, InteractionRules.ActionFor(cup, tap.WithStock(lemonade, shown)), "it still pours");
         }
     }
 }

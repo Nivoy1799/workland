@@ -137,7 +137,13 @@ namespace Worktown.Game.Cooking
                 _assemblySpots.Clear(); // spec 031
                 _squeezers.Clear();
                 _pourers.Clear(); // spec 033
-                Spits.Clear(); // spec 036
+                // 036 review: an untouched loaded cone goes back to the cone stock line (a partly shaved one is lost, like food in a pan).
+                int untouched = Spits.ClearReturningUntouched();
+                if (untouched > 0 && _supply != null)
+                {
+                    _supply.Room.Return(Worktown.Game.Shop.StockCatalog.ConeLine, untouched);
+                    Debug.Log("[Kitchen] the server stopped: " + untouched + " untouched seitan cone(s) back in stock");
+                }
                 _spitCones.Clear();
                 _spitTrays.Clear();
                 _spitOf.Clear();
@@ -822,6 +828,12 @@ namespace Worktown.Game.Cooking
                 {
                     Worktown.Game.Shop.StockRoom stock = _supply != null ? _supply.Room : null;
                     int line = Worktown.Game.Shop.StockCatalog.ConeLine;
+                    // 036 review: no free cones with an economy but no supply (a faucet); only a scene without money loads for free.
+                    if (!SpitDesk.MayLoadWithoutStock(stock != null, _economy != null))
+                    {
+                        outcome = CookOutcome.OutOfStock;
+                        break;
+                    }
                     outcome = Spits.LoadCone(s, _pickups.TryGetHeld(player, out _), Tick,
                         () => stock != null ? stock.Take(line) : CookOutcome.Ok, () => stock?.Return(line, 1));
                     if (outcome == CookOutcome.Ok)

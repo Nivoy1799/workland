@@ -469,7 +469,7 @@ namespace Worktown.Game.Dev
         /// plate and tips the fries from the basket onto it (the fries box on the held plate), and the plate is served at the
         /// counter (the orders waiting are logged first).
         /// </summary>
-        private static IEnumerator FryFries(TourActor actor, CookCapture capture, float laneZ)
+        internal static IEnumerator FryFries(TourActor actor, CookCapture capture, float laneZ) // spec 038: the tutorial tour too
         {
             const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
@@ -629,7 +629,7 @@ namespace Worktown.Game.Dev
         /// ribbon); the fold (frames), the wrap paper from the rack (frames); taken and served at the counter (the reward). A shot
         /// of the stack after every layer. The observer films the board close-up.
         /// </summary>
-        private static IEnumerator BuildFalafelWrap(TourActor actor, CookCapture capture, float laneZ)
+        internal static IEnumerator BuildFalafelWrap(TourActor actor, CookCapture capture, float laneZ) // spec 038: the tutorial tour too
         {
             const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
@@ -819,7 +819,7 @@ namespace Worktown.Game.Dev
         /// board and a portion is scooped straight onto it at the tray (frames), back on the board, the lettuce slices on top, the chili
         /// squeezed, folded, wrapped in paper and served (frames of the reward; the review, when the guest pays, says which seitan).
         /// </summary>
-        private static IEnumerator ShaveSeitanWrap(TourActor actor, CookCapture capture, float laneZ)
+        internal static IEnumerator ShaveSeitanWrap(TourActor actor, CookCapture capture, float laneZ) // spec 038: the tutorial tour too
         {
             const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
@@ -1177,7 +1177,7 @@ namespace Worktown.Game.Dev
         /// through the staff gap to the bin, take the cloth from the sink's drainboard and wipe the spill (frames), put the cloth back. The
         /// HUD meter is shot before, at its low and after.
         /// </summary>
-        private static IEnumerator CleanUp(TourActor actor, CookCapture capture, float laneZ)
+        internal static IEnumerator CleanUp(TourActor actor, CookCapture capture, float laneZ) // spec 038: the tutorial tour too
         {
             const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
@@ -1646,7 +1646,7 @@ namespace Worktown.Game.Dev
         /// aimed at ("Out of stock"), the tomato is put down on the landing worktop's back corner, and at the terminal the page buttons
         /// are tried and one pack of tomatoes is ordered (the row lights, the feed says when it is due).
         /// </summary>
-        private static IEnumerator RunOutAndOrder(TourActor actor, CookCapture capture, float laneZ)
+        internal static IEnumerator RunOutAndOrder(TourActor actor, CookCapture capture, float laneZ) // spec 038: the tutorial tour too
         {
             PickupInteractor me = actor.Interactor;
             StockSlot tomato = FindSlot(Worktown.Game.Shop.SupplyService.TourLine);

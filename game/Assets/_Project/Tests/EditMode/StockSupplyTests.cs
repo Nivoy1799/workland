@@ -83,11 +83,14 @@ namespace Worktown.Game.Tests
             }
             Assert.AreEqual(StockCatalog.Count, StockCatalog.Goods.Select(g => g.Id).Distinct().Count());
             Assert.LessOrEqual(StockCatalog.Count, TerminalRules.Pages * TerminalRules.Rows);
-            foreach (StockCatalog.Good g in StockCatalog.Goods)
-                Assert.IsTrue(g.Id == StockCatalog.ConeId ? Catalog.TryGetGrocerPrice(Worktown.Sim.Cooking.Spit.MeatId, out _)
-                    : Catalog.TryGetGrocerPrice(g.Id, out _), g.Id + " has a grocer price (the supplier's offer; spec 036: a cone is priced as seitan)");
+            // 036 review: no special case; every line's offer is priced by a grocer good the engine accepts (TryBuySupply checks it).
             for (int line = 0; line < StockCatalog.Count; line++)
-                Assert.IsTrue(StockCatalog.TryOffer(Catalog, line, out _), StockCatalog.Goods[line].Id + " has a supplier offer");
+            {
+                Assert.IsTrue(StockCatalog.TryOffer(Catalog, line, out SupplierOffer offer), StockCatalog.Goods[line].Id + " has a supplier offer");
+                Assert.AreEqual(StockCatalog.Goods[line].Id, offer.GoodId, "the offer delivers the line's own good");
+                Assert.IsTrue(Catalog.TryGetGrocerPrice(offer.PriceGoodId, out long price), StockCatalog.Goods[line].Id + " has a grocer price");
+                Assert.AreEqual(price, offer.GrocerPrice, StockCatalog.Goods[line].Id + ": the offer's price is the grocer's");
+            }
         }
 
         [Test]

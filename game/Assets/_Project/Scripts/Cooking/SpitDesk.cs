@@ -52,6 +52,26 @@ namespace Worktown.Game.Cooking
             Version++;
         }
 
+        /// <summary>
+        /// 036 review: the server stops: how many loaded cones are still untouched (all <see cref="Spit.PortionsPerCone"/> portions, never
+        /// shaved), so the caller puts them back into the cone stock line; then every spit is bare (<see cref="Clear"/>). A partly
+        /// shaved cone is lost, like food left in a pan.
+        /// </summary>
+        public int ClearReturningUntouched()
+        {
+            int untouched = 0;
+            foreach (Record r in _spits.Values)
+                if (r.Cone != null && r.Cone.Portions == Spit.PortionsPerCone && r.Cone.Shaves == 0) untouched++;
+            Clear();
+            return untouched;
+        }
+
+        /// <summary>
+        /// 036 review: a cone may be loaded without a stock room only where nothing is paid at all (no economy either: tests, a bare
+        /// scene). With an economy but no supply, a free cone would be a faucet: the load is refused (OutOfStock).
+        /// </summary>
+        public static bool MayLoadWithoutStock(bool hasStock, bool hasEconomy) => hasStock || !hasEconomy;
+
         public bool IsSpit(int station) => _spits.ContainsKey(station);
 
         /// <summary>The spit stations, sorted (stable logs).</summary>

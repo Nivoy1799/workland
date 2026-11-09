@@ -124,7 +124,7 @@ namespace Worktown.Game.Shop
         {
             offer = null;
             if (catalog == null || !catalog.TryGetGrocerPrice(Spit.MeatId, out long price)) return false;
-            offer = new SupplierOffer(ConeId, price, Spit.PortionsPerCone, Supplier.KegPackSize, Supplier.DelayMinutes);
+            offer = new SupplierOffer(ConeId, price, Spit.PortionsPerCone, Supplier.KegPackSize, Supplier.DelayMinutes, Spit.MeatId); // 036 review: priced as seitan
             return true;
         }
 
@@ -203,12 +203,14 @@ namespace Worktown.Game.Shop
 
         /// <summary>
         /// The synced byte of a line: sealed units for a good taken whole (a sauce's opened bottle is in its dispenser, not on the
-        /// shelf); for a keg the cups left (sealed kegs and the opened one). At most 255.
+        /// shelf); for a keg the whole cups left (sealed kegs and the opened one); 036 review: less than one cup shows as 1, so 0 means the
+        /// kegs are really empty and the tap says "Out of stock" only then (the last part of a cup still pours). At most 255.
         /// </summary>
         public static byte Presented(StockLine line)
         {
             if (line == null) return 0;
             long shown = line.PercentPerUnit > ItemPercent ? line.AvailablePercent / ItemPercent : line.Count;
+            if (shown == 0 && line.PercentPerUnit > ItemPercent && line.AvailablePercent > 0) shown = 1; // 036 review: less than a cup is not 0
             return (byte)Math.Max(0L, Math.Min(byte.MaxValue, shown));
         }
 

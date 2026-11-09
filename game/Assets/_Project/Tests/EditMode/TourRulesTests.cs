@@ -189,7 +189,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void KnownTours_AreLookWalkCook()
         {
-            CollectionAssert.AreEqual(new[] { "look", "walk", "cook" }, TourRules.Names.ToArray());
+            CollectionAssert.AreEqual(new[] { "look", "walk", "cook", "tutorial" }, TourRules.Names.ToArray()); // spec 038: + tutorial
             foreach (string name in TourRules.Names) Assert.IsTrue(TourRules.IsKnown(name));
         }
 
