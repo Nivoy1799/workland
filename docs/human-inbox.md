@@ -3,12 +3,16 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-09 02:40)
-- **Running:** spec 027a (shop floor plan), builder working.
-- **Next:** 027b feel pass 1 (movement and interaction, F2 panel with presets A/B), 027c feel pass 2 (cooking
+## Status (updated 2026-11-09 05:10)
+- **Running:** spec 027b feel pass 1 (instant feedback, arcs, forgiving aim, F2 panel with presets A/B).
+- **Next:** 027c feel pass 2 (cooking
   feedback), 027d world labels and customer looks. Then the cooking stations (028+). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
+  - **Spec 027a, shop floor plan:** back line (crates, board, two stoves, plates), a 1.5 m cook aisle (two cooks
+    can pass; player body radius now 0.3 m), a slim 0.7 m front counter, guests queue on the street side facing
+    the cook, back and side walls with a staff gap. **Your "buttons on the back" was real:** the stove and
+    cabinet models themselves were turned towards the wall; now every knob and door faces the cook.
   - **Spec 027, visual check tool:** `bash scripts/visual-check.sh --tours look,walk,cook` makes contact sheets
     (frames every 0.1 s, walking seen from the side, the kitchen, the cook demo) without window focus. Its first run
     found 9 problems; each one is now in a roadmap spec.

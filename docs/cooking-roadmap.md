@@ -57,3 +57,8 @@ Each spec follows docs/art-direction.md (sizes, palette, measured animation), do
 builder, tester, reviewer, visual check, verify.sh. Numbers such as prices, timings and patience are
 **provisional defaults** chosen by the orchestrator, listed in each spec under "Defaults to review", and
 tuned later by the human.
+
+## Follow-ups from reviews (small, do when touching the area)
+- 027: visual-check.sh trap should `exit 130`; derive the WSL path with `wslpath`; tour args parse in release builds.
+- 027a: FloorPlanTests AC4 drives CustomerQueue/OrderRules directly, not CustomerService serving and Customer
+  movement (make it end to end); TourRules duplicates layout constants (take them from the scene or builder).
