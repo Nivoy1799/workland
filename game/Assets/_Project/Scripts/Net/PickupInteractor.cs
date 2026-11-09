@@ -29,6 +29,11 @@ namespace Worktown.Game.Net
     /// flies to the hand, onto the spot or into the pot: Pickup.Predict*); the synced state (holder, position, the pot's
     /// contents) confirms it (FeelPrediction), and without a confirming change within FeelSettings.ConfirmTimeout of the
     /// last relevant change the look eases back and "nope" plays. No new RPCs or values.
+    /// Spec 028b: the slots of the fridge and the dry shelf (<see cref="StockSlot"/>) are interactables like the stove
+    /// buttons: a ray hit on the station's body means its slot nearest to the hit point, the cone aims at their anchors
+    /// (reach is measured to the anchor, as the server does), and a click sends RequestStation(station, slot) with the pick
+    /// sound and a copy of the item flying into the hand (<see cref="Worktown.Game.Art.StockTakeLook"/>) until the server's
+    /// food arrives there; while that is pending the hands count as full.
     /// </summary>
     public sealed class PickupInteractor : NetworkBehaviour
     {
@@ -77,6 +82,13 @@ namespace Worktown.Game.Net
         private bool _queuedFirstPerson;
         private StationButton[] _allButtons;
         private PlaceSurface[] _allSurfaces;
+        private StockSlot[] _allSlots;
+        // Spec 028b: the copy of a taken ingredient flying into the hand until the server's food is there (owner only).
+        private Worktown.Game.Art.StockTakeLook _pendingTake;
+        private string _pendingTakeName;
+        // Spec 028b: how far a food's model stands below its pivot (the food prefab's collider half height, 0.2 m); learnt from
+        // the first food held.
+        private float _foodBottom = 0.2f;
         private readonly Dictionary<long, SpotState> _spotCache = new Dictionary<long, SpotState>();
         private readonly List<AimCandidate> _cone = new List<AimCandidate>(32);
         private readonly List<Component> _coneSources = new List<Component>(32);
@@ -112,6 +124,8 @@ namespace Worktown.Game.Net
         {
             public Pickup Item;
             public Vessel Vessel;
+            /// <summary>Spec 028b: a take from a stock slot (no item yet; the snapshot is the hands).</summary>
+            public Worktown.Game.Art.StockTakeLook Take;
             public int ClickFrame;
             public bool VisualLogged;
         }
@@ -184,8 +198,12 @@ namespace Worktown.Game.Net
             _ending.Clear();
             _looks.Clear(_ending);
             foreach (PendingLook look in _ending)
+            {
                 if (look.Item != null) look.Item.EndPrediction(false);
+                if (look.Take != null) look.Take.Confirm(); // spec 028b: the copy just goes
+            }
             _ending.Clear();
+            _pendingTake = null;
             ClearQueuedClick();
         }
 
@@ -252,7 +270,7 @@ namespace Worktown.Game.Net
                 CurrentAction = InteractionAction.None;
                 return;
             }
-            CurrentHeld = Describe(held);
+            CurrentHeld = Hands(held);
             CurrentAim = TargetTooFar ? Describe(Target).TooFar() : Describe(Target);
             CurrentAction = InteractionRules.ActionFor(CurrentHeld, CurrentAim);
         }
@@ -389,6 +407,9 @@ namespace Worktown.Game.Net
                         SendStation(shelf.Index, 0); // the plate shelf
                     }
                     break;
+                case InteractionAction.Buy when Target is StockSlot slot:
+                    if (slot.Station != null) TakeWithLook(slot);
+                    break;
                 case InteractionAction.Sell:
                 case InteractionAction.Buy:
                     if (Target is Station station)
@@ -428,6 +449,51 @@ namespace Worktown.Game.Net
                 Predict(PredictionKind.PickUp, pickup, null);
                 pickup.PredictHeld(OwnerId);
             }
+        }
+
+        /// <summary>
+        /// Spec 028b: take from a stock slot. The pick sound, RequestStation(station, slot), and a copy of the slot's item on the
+        /// pick-up arc into the hand, judged like any predicted look (confirmed when food is in the hands; a refusal or the
+        /// timeout sends it back with "nope").
+        /// </summary>
+        private void TakeWithLook(StockSlot slot)
+        {
+            PlaySound(SoundKey.Pick, slot.Anchor);
+            SendStation(slot.Station.Index, slot.Option);
+            if (_snapshotOf == null) _snapshotOf = Snapshot;
+            float now = Time.unscaledTime;
+            Worktown.Game.Art.StockTakeLook look = Worktown.Game.Art.StockTakeLook.Begin(slot.transform, HandPose, now, FeelSettings.Current);
+            if (look == null) return;
+            Debug.Log("[Feel] click to visual: same frame (Take from the " + slot.Station.DisplayName + ")");
+            _pendingTake = look;
+            string id = slot.IngredientId;
+            _pendingTakeName = id != null ? DemoIngredients.All[slot.IngredientIndex].DisplayName : "food";
+            var pending = new PendingLook { Take = look, ClickFrame = Time.frameCount };
+            float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+                TimeManager != null ? (float)TimeManager.TickDelta : 0f);
+            _looks.Add(pending, look, new FeelPrediction(PredictionKind.Take, OwnerId, Snapshot(pending), now, timeout), _lastRequest);
+        }
+
+        /// <summary>
+        /// Spec 028b: where the copy of a taken item lands: where the food's model will be drawn in the hands, i.e. the
+        /// first-person view anchor (else the hold point) with the model standing on the bottom of the food's collider
+        /// (<see cref="_foodBottom"/> below the pivot), so the real food takes over without a jump.
+        /// </summary>
+        private Pose HandPose()
+        {
+            Transform anchor = _rig != null && _rig.IsFirstPerson && _rig.ViewHold != null ? _rig.ViewHold : _holdPoint;
+            if (anchor == null) return new Pose(transform.position + Vector3.up * 1.2f, transform.rotation);
+            return new Pose(anchor.position - anchor.up * _foodBottom, anchor.rotation);
+        }
+
+        /// <summary>
+        /// The hands as InteractionRules sees them; spec 028b: while a take from stock is on its way they count as holding
+        /// that food (a second take would be refused anyway, and the prompt already shows what the hands will hold).
+        /// </summary>
+        private Held Hands(Pickup held)
+        {
+            if (held == null && _pendingTake != null) return Held.Food(_pendingTakeName ?? "food", false);
+            return Describe(held);
         }
 
         /// <summary>Spec 027b: a drop request (Q, or E in third person) with its predicted fall in front of you.</summary>
@@ -504,8 +570,10 @@ namespace Worktown.Game.Net
             return FeelRules.RoundTrip(TimeManager != null ? TimeManager.RoundTripTime / 1000f : 0f);
         }
 
-        private static ItemSnapshot Snapshot(PendingLook look)
+        private ItemSnapshot Snapshot(PendingLook look)
         {
+            // Spec 028b: a take from stock is about the hands: does anything stand in them now?
+            if (look.Take != null) return FindHeldPickup() != null ? new ItemSnapshot(true, OwnerId, Vector3.zero, 0) : ItemSnapshot.Gone;
             Pickup item = look.Item;
             if (item == null || !item.IsSpawned) return ItemSnapshot.Gone;
             Vessel vessel = look.Vessel;
@@ -525,16 +593,29 @@ namespace Worktown.Game.Net
                 FeelPrediction p = r.Prediction;
                 LogVisual(look, p.Kind);
                 float ms = (p.ResolvedTime - p.StartTime) * 1000f;
+                if (look.Take != null && look.Take == _pendingTake) _pendingTake = null; // spec 028b: the hands are free again
                 if (p.Phase == PredictionPhase.Confirmed)
                 {
                     Debug.Log("[Feel] click to confirm: " + ms.ToString("0") + " ms (" + p.Kind + ")");
                     if (look.Item != null) look.Item.EndPrediction(true);
+                    if (look.Take != null)
+                    {
+                        Pickup taken = FindHeldPickup();
+                        if (taken != null && taken.TryGetComponent(out Food _)) _foodBottom = taken.BottomOffset;
+                        look.Take.Confirm(taken != null ? taken.gameObject : null, Time.unscaledTime);
+                    }
                     continue;
                 }
                 Debug.Log("[Feel] " + p.Kind + " " + (p.TimedOut ? "timed out" : "refused") + " after " + ms.ToString("0")
                           + " ms: the look goes back, nope");
                 if (look.Item != null) look.Item.EndPrediction(false);
-                PlaySound(SoundKey.Nope, look.Item != null ? look.Item.transform.position : transform.position);
+                Vector3 nopeAt = look.Item != null ? look.Item.transform.position : transform.position;
+                if (look.Take != null)
+                {
+                    nopeAt = look.Take.transform.position;
+                    look.Take.Deny(Time.unscaledTime);
+                }
+                PlaySound(SoundKey.Nope, nopeAt);
             }
             _resolved.Clear();
         }
@@ -596,8 +677,10 @@ namespace Worktown.Game.Net
                     return AimTarget.Spot(TargetSpot, surface.IsBurner);
                 case Vessel vessel:
                     return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value);
+                case StockSlot slot:
+                    return DescribeStock(slot.IngredientIndex); // spec 028b: a slot takes like a crate
                 case Station station:
-                    return station.Kind == StationKind.Crate ? DescribeCrate(station) : AimTarget.OnStation(station.Kind);
+                    return station.Kind == StationKind.Crate ? DescribeStock(station.IngredientIndex) : AimTarget.OnStation(station.Kind);
                 case Pickup pickup:
                     if (pickup.TryGetComponent(out Knife _)) return AimTarget.Item("knife");
                     if (pickup.TryGetComponent(out Food food))
@@ -608,13 +691,13 @@ namespace Worktown.Game.Net
             }
         }
 
-        private AimTarget DescribeCrate(Station crate)
+        /// <summary>A crate or (spec 028b) a stock slot of ingredient <paramref name="i"/>: its name ("red cabbage") and grocer price.</summary>
+        private AimTarget DescribeStock(int i)
         {
-            int i = crate.IngredientIndex;
             if (i < 0 || i >= DemoIngredients.All.Count) return AimTarget.Crate(null, -1);
             string id = DemoIngredients.All[i].Id;
             _prices ??= Worktown.Sim.Economy.EconomyCatalog.CreateDefault();
-            return AimTarget.Crate(id, _prices.TryGetGrocerPrice(id, out long price) ? price : -1);
+            return AimTarget.Crate(DemoIngredients.All[i].DisplayName, _prices.TryGetGrocerPrice(id, out long price) ? price : -1);
         }
 
         /// <summary>Third person: what E does (spec 007/021), sent through the click buffer (spec 027b review).</summary>
@@ -738,7 +821,10 @@ namespace Worktown.Game.Net
                 }
                 Station station = hitCollider.GetComponentInParent<Station>();
                 Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
-                if (station != null)
+                StockSlot slot = station != null && station.SlotCount > 0 ? station.NearestSlot(_rayHits[i].point) : null;
+                if (slot != null)
+                    AddAimHit(distance, AimKind.Station, slot); // spec 028b: the fridge or shelf means its slot nearest the hit; reach to its anchor
+                else if (station != null)
                     AddAimHit(distance, AimKind.Station, station);
                 else if (pickup != null && pickup.HasPrediction)
                     continue; // spec 027b: flying to its predicted place, not where its collider still is
@@ -817,6 +903,7 @@ namespace Worktown.Game.Net
         {
             if (_allButtons == null || HasMissing(_allButtons)) _allButtons = FindObjectsByType<StationButton>(FindObjectsSortMode.None);
             if (_allSurfaces == null || HasMissing(_allSurfaces)) _allSurfaces = FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None);
+            if (_allSlots == null || HasMissing(_allSlots)) _allSlots = FindObjectsByType<StockSlot>(FindObjectsSortMode.None); // spec 028b
         }
 
         private static bool HasMissing<TItem>(TItem[] items) where TItem : UnityEngine.Object
@@ -846,7 +933,7 @@ namespace Worktown.Game.Net
             if (ray.direction.sqrMagnitude < 0.5f) return null;
             RefreshInteractables();
             FeelSettings feel = FeelSettings.Current;
-            Held hands = Describe(held);
+            Held hands = Hands(held);
             _cone.Clear();
             _coneSources.Clear();
             _coneSpots.Clear();
@@ -865,6 +952,10 @@ namespace Worktown.Game.Net
                 AddCone(ray, button, PlaceSpots.None, button.transform.position, hands, Describe(button), range, feel.AimCone,
                     button.Station.transform.position);
             }
+            if (!hands.IsHolding)
+                foreach (StockSlot slot in _allSlots) // spec 028b: reach to the slot's anchor, as the server measures it
+                    if (slot != null && slot.Station != null)
+                        AddCone(ray, slot, PlaceSpots.None, slot.Anchor, hands, Describe(slot), range, feel.AimCone);
             if (held != null)
             {
                 foreach (PlaceSurface surface in _allSurfaces)

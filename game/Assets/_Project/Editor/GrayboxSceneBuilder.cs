@@ -66,26 +66,23 @@ namespace Worktown.Game.Editor
         private const string PlaceMarkerMaterialPath = Root + "/Settings/PlaceMarker.mat";
         private const float FoodSize = 0.4f;
         // Spec 027a (docs/feel.md 6): the shop floor plan. A back line along the back wall (z KitchenZ, fronts facing -z),
-        // left to right as seen from the aisle: a landing worktop by the staff gap, the four crates, the prep worktop (board
+        // left to right as seen from the aisle: a landing worktop by the staff gap, the stock (spec 028b), the prep worktop (board
         // and knife), stove A, a worktop, stove B, a worktop (plates), the plate shelf (plating table), a worktop (bowl).
         // Then the cook aisle (AisleWidth between the bodies) and the front counter (1.05 m) with the serving counter
         // opposite the plate shelf, turned so its cook side faces the aisle. Guests queue on the street side of the front
         // counter. A back wall closes the back line; low side walls close both ends, with the staff gap at the left end.
-        // Spec 028: the street-food stock is a bank of ten narrow crates (0.52 m wide, 0.56 m apart) between the landing worktop
-        // and the four crates, so the four crates, the stoves and everything right of them keep their places.
-        private const int BankCrates = 10;
-        private const float BankCrateWidth = 0.52f;
-        private const float BankPitch = 0.56f;
-        private const float BankWidth = BankCrates * BankPitch;
-        private const float KitchenMinX = -2f - BankWidth;
+        // Spec 028b: the stock is a dry shelf and a fridge (StockArt, StockLayout) where the last two of the four 027a crates
+        // stood, right next to the prep worktop: landing worktop, shelf, fridge, prep. The 028 crate bank and the four crates
+        // are gone; the prep worktop, the stoves and everything right of them keep their 027a places, and the kitchen's
+        // left end (with the staff gap) moved 2.5 m in, so the kitchen is shorter than 027a's.
         private const float LandingWidth = 1.26f;
-        private const float BankStartX = KitchenMinX + LandingWidth;
-        private const float CratePitch = StationWidth + 2f * WorktopGapMargin;
-        private const float FirstCrateX = BankStartX + BankWidth + StationWidth * 0.5f + WorktopGapMargin;
-        private const float PrepStartX = FirstCrateX + 3f * CratePitch + StationWidth * 0.5f + WorktopGapMargin;
+        private const float StationHalfGap = StationWidth * 0.5f + WorktopGapMargin;
+        private const float PrepStartX = 4.22f; // spec 027a's prep worktop start
+        private const float FridgeX = PrepStartX - StationHalfGap;
+        private const float StockShelfX = FridgeX - 2f * StationHalfGap;
+        private const float KitchenMinX = StockShelfX - StationHalfGap - LandingWidth;
         private const float PrepWidth = 1.8f;
         private const float BetweenWidth = 1.26f;
-        private const float StationHalfGap = StationWidth * 0.5f + WorktopGapMargin;
         private const float StoveAX = PrepStartX + PrepWidth + StationHalfGap;
         private const float StoveBX = StoveAX + 2f * StationHalfGap + BetweenWidth;
         private const float PlateShelfX = StoveBX + 2f * StationHalfGap + BetweenWidth;
@@ -106,7 +103,7 @@ namespace Worktown.Game.Editor
         private const float WallGap = 0.02f;
         private const float BackWallHeight = 2.4f;
         private const float SideWallHeight = 1.2f;
-        private static readonly float[] SpawnX = { 0.6f, 2.2f, 3.8f, 5.4f };
+        private static readonly float[] SpawnX = { 1.2f, 2.6f, 4.0f, 5.4f }; // spec 028b: the aisle starts at x 0.46 now
         /// <summary>
         /// Spec 027a: the catalog's station and cabinet wrappers show their front (the stove's knobs and oven door, the
         /// cabinet doors) on their local +z, so they are turned half way round to put it on the station's front (local -z,
@@ -132,7 +129,13 @@ namespace Worktown.Game.Editor
         /// counter 1.05 m. The station root sits at half of it.
         /// </summary>
         private static float StationHeightOf(StationKind kind) =>
-            kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
+            kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
+            : StockLayout.IsStock(kind) ? ArtSizeTable.StockHeight // spec 028b: the fridge and the dry shelf
+            : ArtSizeTable.WorktopHeight;
+
+        /// <summary>Spec 027a/028b: how deep a station's body is: 1.2 m, the counter 0.7 m, the fridge 0.62 m, the shelf 0.5 m.</summary>
+        private static float StationDepthOf(StationKind kind) =>
+            kind == StationKind.Counter ? CounterDepth : StockLayout.IsStock(kind) ? StockArt.DepthOf(kind) : StationWidth;
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         private const string UiThemePath = Root + "/UI/WorktownTheme.tss";
         private const string UiStylePath = Root + "/UI/Worktown.uss";
@@ -962,27 +965,24 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>
-        /// Spec 007/021: the kitchen (spec 027a: the shop floor plan, see the constants): crates, worktops, two stoves (two burners each), the counter
-        /// and the plate shelf; the cookware lying on top; the serve feed and the kitchen service.
+        /// Spec 007/021: the kitchen (spec 027a: the shop floor plan, see the constants): the stock (spec 028b: the dry shelf and the
+        /// fridge), worktops, two stoves (two burners each), the counter and the plate shelf; the cookware lying on top; the serve
+        /// feed and the kitchen service.
         /// </summary>
         private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab,
             List<NetworkObject> vesselPrefabs, ArtCatalog catalog)
         {
             var parent = new GameObject("Kitchen");
             var stations = new List<Station>();
-            for (int i = 0; i < DemoIngredients.All.Count; i++)
-            {
-                string id = DemoIngredients.All[i].Id;
-                string name = DemoIngredients.All[i].DisplayName;
-                Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", FoodArtRules.IngredientColor((byte)i)); // spec 026: palette
-                // Spec 028: the first four are the full-size crates; the street-food items stand in the narrow bank left of them.
-                bool bank = i >= DemoIngredients.FirstStreetFood;
-                float x = bank ? BankStartX + (i - DemoIngredients.FirstStreetFood + 0.5f) * BankPitch : FirstCrateX + i * CratePitch;
-                Station crate = CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
-                    char.ToUpperInvariant(name[0]) + name.Substring(1) + " crate", x, KitchenZ, 0f, mat, i, bank ? BankCrateWidth : StationWidth);
-                stations.Add(crate);
-                CreateCrateSample(catalog, crate, i, bank ? 2 : 3);
-            }
+            // Spec 028b: every ingredient in one slot of the dry shelf or the fridge, both against the back wall next to prep.
+            Station dryShelf = CreateStation(catalog, parent.transform, stations.Count, StationKind.Shelf, StockShelfName, StockShelfX,
+                StockZ(StationKind.Shelf), 0f, CreateMaterial(Root + "/Settings/Station_Shelf.mat", Palette.WoodLight), 0);
+            CreateStockSlots(catalog, dryShelf);
+            stations.Add(dryShelf);
+            Station fridge = CreateStation(catalog, parent.transform, stations.Count, StationKind.Fridge, FridgeName, FridgeX,
+                StockZ(StationKind.Fridge), 0f, CreateMaterial(Root + "/Settings/Station_Fridge.mat", Palette.Cream), 0);
+            CreateStockSlots(catalog, fridge);
+            stations.Add(fridge);
             Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Steel);
             Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, KitchenZ, 0f, stoveMat, 0);
             stations.Add(stoveA);
@@ -1026,7 +1026,8 @@ namespace Worktown.Game.Editor
             // Spec 021: the cookware lying on top at the start (each one's home spot, where a lost one comes back).
             NetworkObject Prefab(VesselKind kind) => vesselPrefabs.Find(p => p.GetComponent<Vessel>().Kind == kind);
             // Spec 027a: the board and the knife on the prep run, the plates next to the plate shelf, the bowl after it.
-            PlaceOnSpot(Prefab(VesselKind.Board), prep, SpotNear(prep, -0.3f, -0.125f), "Cutting board");
+            // Spec 028b: the board at the prep run's stock end (about 1 m from the fridge, 2.2 m from the shelf).
+            PlaceOnSpot(Prefab(VesselKind.Board), prep, SpotNear(prep, -0.5f, -0.125f), "Cutting board");
             PlaceOnSpot(knifePrefab, prep, SpotNear(prep, 0.25f, -0.125f), "Knife");
             PlaceOnSpot(Prefab(VesselKind.Pan), burnersA[0], 0, "Pan");
             PlaceOnSpot(Prefab(VesselKind.Pot), burnersB[0], 0, "Pot");
@@ -1174,33 +1175,81 @@ namespace Worktown.Game.Editor
             wall.isStatic = true;
         }
 
+        /// <summary>Spec 028b: names of the stock stations (their signs and the server log).</summary>
+        public const string FridgeName = "Fridge";
+        public const string StockShelfName = "Dry shelf";
+        /// <summary>Spec 028b: name prefix of a stock slot's object ("Slot 0 lettuce") and of its price tag.</summary>
+        public const string SlotName = "Slot";
+        public const string SlotTagName = "SlotTag";
+
+        /// <summary>Spec 028b: the centre z of a stock station, its back on the back line's back (so its front is set back).</summary>
+        private static float StockZ(StationKind kind) => KitchenZ + StationWidth * 0.5f - StockArt.DepthOf(kind) * 0.5f;
+
         /// <summary>
-        /// Spec 028: a few of the crate's food models sticking out of the open box, so a crate reads at a glance (no collider,
-        /// static). Stand-ins (see <see cref="FoodArtRules.WholeIsTinted"/>) get a flat material in the ingredient colour.
+        /// Spec 028b: the slots of a fridge or dry shelf (StockLayout, StockArt): one StockSlot per ingredient, its transform at
+        /// the middle of the items standing in it (the anchor the aim and the server's reach use), the items' models as its
+        /// children (not static, no colliders: the client copies one for the take's arc), and a small price tag on the board edge
+        /// under it. Stand-ins (see <see cref="FoodArtRules.WholeIsTinted"/>) get a flat material in the ingredient colour.
         /// </summary>
-        private static void CreateCrateSample(ArtCatalog catalog, Station crate, int ingredient, int count)
+        private static void CreateStockSlots(ArtCatalog catalog, Station station)
         {
-            if (catalog == null) return;
-            var look = new FoodLook((byte)ingredient, FoodLook.ShapeWhole, 0, 0, 0, 0);
-            if (!FoodArtRules.TryGetPiece(look, out FoodPiece piece) || !catalog.TryGet(piece.Key, out GameObject prefab)) return;
-            Material tint = piece.Tinted
-                ? CreateMaterial(Root + "/Settings/Sample_" + DemoIngredients.All[ingredient].Id + ".mat", FoodArtRules.IngredientColor((byte)ingredient))
-                : null;
-            var samples = new GameObject("Sample");
-            samples.transform.SetParent(crate.transform, false);
-            samples.transform.localPosition = new Vector3(0f, StationTop(crate) - CrateSampleSink, 0f);
-            for (int n = 0; n < count; n++)
+            StationKind kind = station.Kind;
+            IReadOnlyList<string> ids = StockLayout.SlotsOf(kind);
+            float height = StationHeightOf(kind), depth = StockArt.DepthOf(kind);
+            var slots = new List<StockSlot>();
+            for (int s = 0; s < ids.Count; s++)
             {
-                var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, samples.transform);
-                instance.transform.localPosition = new Vector3((n - (count - 1) * 0.5f) * CrateSampleSpacing, 0f, (n % 2 == 0 ? 0.04f : -0.04f));
-                instance.transform.localRotation = Quaternion.Euler(0f, 37f * n, 0f);
-                if (tint != null) foreach (Renderer r in instance.GetComponentsInChildren<Renderer>()) r.sharedMaterial = tint;
+                int ingredient = StockLayout.IngredientIndexOf(ids[s]);
+                if (ingredient < 0) throw new InvalidOperationException("stock slot " + s + " of the " + kind + ": unknown ingredient " + ids[s]);
+                Vector3 stand = StockArt.StandPoint(kind, s);
+                // Station local: y from the root (half way up), the front face at -depth / 2, the items set back from it.
+                var standLocal = new Vector3(stand.x, stand.y - height * 0.5f, -depth * 0.5f + stand.z);
+                GameObject prefab = null;
+                Material tint = null;
+                var look = new FoodLook((byte)ingredient, FoodLook.ShapeWhole, 0, 0, 0, 0);
+                if (catalog != null && FoodArtRules.TryGetPiece(look, out FoodPiece piece) && catalog.TryGet(piece.Key, out prefab) && piece.Tinted)
+                    tint = CreateMaterial(Root + "/Settings/Sample_" + ids[s] + ".mat", FoodArtRules.IngredientColor((byte)ingredient));
+                float itemHeight = prefab != null ? ArtCatalogBuilder.HeightOf(prefab) : 0.1f;
+                float itemSize = prefab != null && FoodArtRules.TryGetPiece(look, out FoodPiece sized) ? ArtSizeTable.TargetSize(sized.Key) : 0.1f;
+
+                var slotObject = new GameObject(SlotName + " " + s + " " + ids[s]);
+                slotObject.transform.SetParent(station.transform, false);
+                slotObject.transform.localPosition = standLocal + Vector3.up * (itemHeight * 0.5f);
+                var slot = slotObject.AddComponent<StockSlot>();
+                SetField(slot, "_station", station);
+                SetField(slot, "_option", s);
+                SetField(slot, "_ingredientIndex", ingredient);
+                slots.Add(slot);
+
+                if (prefab != null)
+                {
+                    int count = StockArt.SamplesPerSlot(kind, itemSize);
+                    float spacing = Mathf.Min(itemSize + 0.02f, (StockArt.Pitch(kind) - 0.03f) / count);
+                    for (int n = 0; n < count; n++)
+                    {
+                        var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, slotObject.transform);
+                        instance.transform.localPosition = new Vector3((n - (count - 1) * 0.5f) * spacing, -itemHeight * 0.5f, n % 2 == 0 ? 0f : 0.03f);
+                        instance.transform.localRotation = Quaternion.Euler(0f, 25f + 37f * n, 0f);
+                        if (tint != null) foreach (Renderer r in instance.GetComponentsInChildren<Renderer>()) r.sharedMaterial = tint;
+                    }
+                }
+
+                // A price tag on the board's front edge under the slot, read from the aisle like the station's sign.
+                string name = DemoIngredients.All[ingredient].DisplayName;
+                string price = GrocerPrices.TryGetGrocerPrice(ids[s], out long dollars) ? " " + EconomyRules.Money(dollars) : string.Empty;
+                TextMesh tag = CreateLabel(station.transform, new Vector3(stand.x, stand.y - height * 0.5f - SlotTagDrop, -depth * 0.5f - StationSign.Standoff),
+                    60, 0.05f);
+                tag.name = SlotTagName + " " + s;
+                tag.anchor = TextAnchor.UpperCenter;
+                tag.transform.localScale = Vector3.one * (StationSign.BaseScale * SlotTagScale);
+                tag.text = name + price;
+                tag.gameObject.AddComponent<StationSign>();
             }
-            SetStaticRecursive(samples);
+            SetField(station, "_slots", slots);
         }
 
-        private const float CrateSampleSink = 0.08f;     // how far the samples sit down in the box (m)
-        private const float CrateSampleSpacing = 0.22f;  // between neighbouring samples (m)
+        private const float SlotTagDrop = 0.01f;  // m under the board's top edge
+        private const float SlotTagScale = 0.6f;  // of a station sign
 
         /// <summary>Spec 021: a static stack of plate models on the plate shelf (the shelf gives the real plates).</summary>
         private static void CreatePlateStack(ArtCatalog catalog, Station shelf)
@@ -1223,8 +1272,9 @@ namespace Worktown.Game.Editor
         private static Station CreateStation(ArtCatalog catalog, Transform parent, int index, StationKind kind, string displayName,
             float x, float z, float yaw, Material material, int ingredientIndex, float width = StationWidth)
         {
-            float height = StationHeightOf(kind); // spec 026: 0.90 m, the counter 1.05 m
-            float depth = kind == StationKind.Counter ? CounterDepth : StationWidth; // spec 027a
+            float height = StationHeightOf(kind); // spec 026: 0.90 m, the counter 1.05 m; spec 028b: the stock 1.80 m
+            float depth = StationDepthOf(kind); // spec 027a, 028b
+            bool stock = StockLayout.IsStock(kind);
             var root = new GameObject(displayName);
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(x, height * 0.5f, z), Quaternion.Euler(0f, yaw, 0f));
@@ -1244,10 +1294,13 @@ namespace Worktown.Game.Editor
                 var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
                 visual.transform.localPosition = new Vector3(0f, -height * 0.5f, 0f);
                 visual.transform.localRotation = ArtFrontRotation; // spec 027a: the model's front (knobs, oven door) on the controls' side
-                // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules.
-                visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(width / StationWidth, 1f, depth / StationWidth));
+                // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules. Spec 028b: the
+                // stock models are built at their own size (StockArt).
+                if (!stock)
+                    visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(width / StationWidth, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
-                foreach (Renderer r in visual.GetComponentsInChildren<Renderer>())
+                // Spec 028b: the fridge's open doors stand out of the body; the sign stays on the body's front.
+                if (!stock) foreach (Renderer r in visual.GetComponentsInChildren<Renderer>())
                 {
                     Bounds wb = r.bounds;
                     for (int c = 0; c < 8; c++)
@@ -1260,7 +1313,11 @@ namespace Worktown.Game.Editor
 
             // Spec 020: no keys on the world labels any more (first person clicks; the prompts say how).
             // Spec 027d: a small sign on the cook side of the front face (never a name floating above the station).
-            TextMesh label = CreateLabel(root.transform, StationSign.LocalPosition(height, frontZ), 60, 0.05f);
+            // Spec 028b: on a fridge or shelf the sign sits on the top panel, above the items.
+            Vector3 signAt = stock
+                ? new Vector3(0f, StockArt.FridgeHeaderBottom + 0.02f - height * 0.5f, frontZ - StationSign.Standoff)
+                : StationSign.LocalPosition(height, frontZ);
+            TextMesh label = CreateLabel(root.transform, signAt, 60, 0.05f);
             label.transform.localScale = Vector3.one * StationSign.BaseScale;
             label.gameObject.AddComponent<StationSign>();
             string price = string.Empty;

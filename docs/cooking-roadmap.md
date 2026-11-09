@@ -84,3 +84,7 @@ tuned later by the human.
 - Netcode list (spec 004 load test and later): disconnect a client after many TooFast replies in a row; a late
   refusal after a server hitch over 1 s can bounce one prediction (synced state corrects it); with RTT over about
   0.24 s two requests are usually in flight, so refusals wait for the full timeout; WSL MTU 1280 path (Tugboat).
+- 028 review (approved with nits): ContentRules meta-test should plant a word per source (menu, WhatsNew, grocer),
+  not only test the matcher; scan name catalogs once a production one exists; adjective forms per the inbox answer;
+  rename `StreetFoodItems.CutShape` to `PreferredCutShape`; grocer lists `cashew` with no kitchen item (check both
+  directions or drop it); real shred and strip cut shapes need an operation-catalog change.

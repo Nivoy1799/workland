@@ -22,12 +22,13 @@ namespace Worktown.Game.Cooking
         public static readonly BaseItemDef Onion = Simple("onion", 0.5f, 0f, 0.2f, 0.3f, 0.3f, 0f, 0.6f);
 
         /// <summary>
-        /// Crate order in the scene: index 0 is potato; spec 028: after the four demo ingredients come the ten street-food
-        /// items of the sim (<see cref="StreetFoodItems"/>), in the narrow stock bank.
+        /// Ingredient order (the FoodLook ingredient byte): index 0 is potato; spec 028: after the four demo ingredients come the
+        /// ten street-food items of the sim (<see cref="StreetFoodItems"/>). Spec 028b: which slot of the fridge or the dry shelf
+        /// holds which is <see cref="StockLayout"/>.
         /// </summary>
         public static readonly IReadOnlyList<BaseItemDef> All = Combine();
 
-        /// <summary>The first crate index of the street-food bank (the four old crates come before it).</summary>
+        /// <summary>The index of the first street-food item (the four demo ingredients come before it).</summary>
         public const int FirstStreetFood = 4;
 
         private static IReadOnlyList<BaseItemDef> Combine()

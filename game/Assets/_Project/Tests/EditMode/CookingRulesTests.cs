@@ -39,14 +39,16 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("Counter: E sell", StationRules.Prompt(StationKind.Counter, "Counter"));
             Assert.AreEqual("Potato crate: E take one", StationRules.Prompt(StationKind.Crate, "Potato crate"));
             Assert.AreEqual("Plates: E take a plate", StationRules.Prompt(StationKind.PlateShelf, "Plates"));
+            Assert.AreEqual("Fridge: pick an item in first person (V)", StationRules.Prompt(StationKind.Fridge, "Fridge")); // spec 028b
             foreach (StationKind kind in System.Enum.GetValues(typeof(StationKind)))
                 Assert.IsNotEmpty(StationRules.Prompt(kind, "X"), kind.ToString());
         }
 
         [Test]
-        public void StationKinds_AreTheSpec021Furniture()
+        public void StationKinds_AreTheSpec021Furniture_AndTheSpec028bStock()
         {
-            CollectionAssert.AreEquivalent(new[] { StationKind.Crate, StationKind.Counter, StationKind.Stove, StationKind.PlateShelf },
+            CollectionAssert.AreEquivalent(new[] { StationKind.Crate, StationKind.Counter, StationKind.Stove, StationKind.PlateShelf,
+                    StationKind.Fridge, StationKind.Shelf },
                 System.Enum.GetValues(typeof(StationKind)));
         }
 

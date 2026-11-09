@@ -37,14 +37,11 @@ namespace Worktown.Game.Dev
             Func<string, IEnumerator> shot = capture?.Shot;
             const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
-            Station potatoCrate = null, onionCrate = null;
+            // Spec 028b: the potato and the onion come from the dry shelf's slots.
+            StockSlot potatoCrate = FindSlot("potato"), onionCrate = FindSlot("onion");
             var stoves = new List<Station>();
             foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
-            {
-                if (s.Kind == StationKind.Crate && s.IngredientIndex == 0) potatoCrate = s;
-                else if (s.Kind == StationKind.Crate && s.IngredientIndex == 3) onionCrate = s;
-                else if (s.Kind == StationKind.Stove) stoves.Add(s);
-            }
+                if (s.Kind == StationKind.Stove) stoves.Add(s);
             stoves.Sort((a, b) => a.transform.position.x.CompareTo(b.transform.position.x));
             Station stoveA = stoves.Count > 0 ? stoves[0] : null;
             Station stoveB = stoves.Count > 1 ? stoves[1] : null;
@@ -56,7 +53,7 @@ namespace Worktown.Game.Dev
             }
             if (potatoCrate == null || onionCrate == null || stoveA == null || stoveB == null || pan == null || pot == null)
             {
-                Debug.LogWarning("[Demo] crates, two stoves, the pan or the pot not found");
+                Debug.LogWarning("[Demo] the potato or onion slot, two stoves, the pan or the pot not found");
                 actor.CountTimeout("cook: scene objects missing");
                 yield break;
             }
@@ -105,7 +102,8 @@ namespace Worktown.Game.Dev
             Debug.Log("[Demo] the pan is on the burner (" + Time.time.ToString("0.0") + " s)");
             if (shot != null) yield return shot("pan-on-burner");
 
-            yield return Buy(actor, "take a potato", potatoCrate, laneZ);
+            // Spec 028b: the shelf slot's highlight and prompt before the click, then frames of the potato flying into the hand.
+            yield return Buy(actor, "take a potato", potatoCrate, laneZ, capture?.Before("potato-slot-highlight", "potato-take", frames));
             if (shot != null) yield return shot("potato-in-hand");
             yield return actor.WalkTo(new Vector3(atB.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(atB, false, false);
@@ -116,9 +114,9 @@ namespace Worktown.Game.Dev
             if (shot != null) yield return shot("potato-next-to-pan");
 
             NetworkObject potObject = pot.NetworkObject;
-            foreach (Station crate in new[] { potatoCrate, onionCrate })
+            foreach (StockSlot crate in new[] { potatoCrate, onionCrate })
             {
-                string id = DemoIngredients.All[crate.IngredientIndex].Id;
+                string id = crate.IngredientId;
                 yield return Buy(actor, "take " + id, crate, laneZ);
                 yield return actor.WalkTo(new Vector3(atB.x, 0f, laneZ), false, false);
                 yield return actor.WalkTo(atB, false, false);
@@ -210,30 +208,32 @@ namespace Worktown.Game.Dev
         }
 
         /// <summary>
-        /// Spec 028 AC5: buy a cucumber from the street-food bank, put it on the board, take the knife and make two strokes
-        /// (halves, then slices). The strokes are sent as the knife's use request, as a mouse drag would.
+        /// Spec 028 AC5: buy a cucumber, put it on the board, take the knife and make two strokes (halves, then slices). The
+        /// strokes are sent as the knife's use request, as a mouse drag would. Spec 028b: the cucumber comes from the fridge (a
+        /// shot of its slot's highlight and prompt, then frames of the copy flying into the hand).
         /// </summary>
         private static IEnumerator CutCucumber(TourActor actor, CookCapture capture, float laneZ)
         {
             PickupInteractor me = actor.Interactor;
-            Station crate = null;
-            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
-                if (s.Kind == StationKind.Crate && DemoIngredients.All[s.IngredientIndex].Id == "cucumber") crate = s;
+            StockSlot slot = FindSlot("cucumber");
             Vessel board = null;
             foreach (Vessel v in UnityEngine.Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
                 if (v.Kind == VesselKind.Board) board = v;
             Knife knife = UnityEngine.Object.FindFirstObjectByType<Knife>();
-            if (crate == null || board == null || knife == null)
+            if (slot == null || board == null || knife == null)
             {
-                actor.CountTimeout("cook: cucumber crate, board or knife missing");
+                actor.CountTimeout("cook: cucumber slot, board or knife missing");
                 yield break;
             }
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
-            yield return actor.WalkTo(new Vector3(crate.transform.position.x, 0f, laneZ), false, false);
-            yield return capture.Shot("cucumber-crate");
-            yield return actor.Use("take a cucumber", crate.transform.position, InteractionAction.Buy, () => me.DevSendStation(crate.Index, 0));
+            yield return actor.WalkTo(new Vector3(slot.Anchor.x, 0f, laneZ), false, false);
+            yield return capture.Shot("cucumber-fridge");
+            yield return actor.Use("take a cucumber", slot.Anchor, InteractionAction.Buy, () => me.DevSendStation(slot.Station.Index, slot.Option),
+                capture.Before("cucumber-slot-highlight", "cucumber-take", TourRules.ClickFramesSeconds));
             yield return capture.Shot("cucumber-in-hand");
+            if (!me.IsHoldingSomething() || !HeldName(me).Contains("cucumber"))
+                actor.CountTimeout("cook: the fridge gave no cucumber (" + HeldName(me) + ")");
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(board.transform.position.x, 0f, laneZ), false, false);
             NetworkObject boardObject = board.NetworkObject;
@@ -290,14 +290,35 @@ namespace Worktown.Game.Dev
             return null;
         }
 
-        /// <summary>Walks along the lane to the crate and takes one (aims at it, clicks; or sends the request directly).</summary>
-        private static IEnumerator Buy(TourActor actor, string what, Station crate, float laneZ)
+        /// <summary>
+        /// Walks along the lane to a stock slot and takes one (aims at it, clicks; or sends the request directly). Spec 028b:
+        /// a slot of the fridge or the dry shelf (RequestStation with the slot as the option).
+        /// </summary>
+        private static IEnumerator Buy(TourActor actor, string what, StockSlot slot, float laneZ, Func<IEnumerator> beforeClick = null)
         {
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
-            yield return actor.WalkTo(new Vector3(crate.transform.position.x + 1f, 0f, laneZ), false, false);
-            yield return actor.Use(what, crate.transform.position, InteractionAction.Buy, () => actor.Interactor.DevSendStation(crate.Index, 0));
+            yield return actor.WalkTo(new Vector3(slot.Anchor.x + 1f, 0f, laneZ), false, false);
+            yield return actor.Use(what, slot.Anchor, InteractionAction.Buy,
+                () => actor.Interactor.DevSendStation(slot.Station.Index, slot.Option), beforeClick);
+            if (!actor.Interactor.IsHoldingSomething() || !HeldName(actor.Interactor).Contains(slot.IngredientId.Replace('_', ' ')))
+                Debug.LogWarning("[Demo] " + what + ": the hands hold '" + HeldName(actor.Interactor) + "'");
             yield return actor.LevelView();
+        }
+
+        /// <summary>Spec 028b: the stock slot that holds <paramref name="id"/>, or null.</summary>
+        private static StockSlot FindSlot(string id)
+        {
+            foreach (StockSlot s in UnityEngine.Object.FindObjectsByType<StockSlot>(FindObjectsSortMode.None))
+                if (s.IngredientId == id && s.Station != null) return s;
+            return null;
+        }
+
+        /// <summary>The synced name of what the player holds ("cucumber"), or an empty string.</summary>
+        private static string HeldName(PickupInteractor me)
+        {
+            Pickup held = me.FindHeldPickup();
+            return held != null && held.TryGetComponent(out Food food) ? food.DisplayName.Value : string.Empty;
         }
 
         /// <summary>Where a vessel draws its contents (inside the pot, on the board); its position if none.</summary>

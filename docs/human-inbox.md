@@ -4,10 +4,13 @@ Hop in whenever you like. Answer by writing under a question (or just tell Claud
 every question has a default, and work continues on other items until you answer. Newest first.
 
 ## Status (updated 2026-11-09 05:00)
-- **Running:** spec 028 (street-food ingredients and the vegan content check).
+- **Running:** spec 028b (compact stock: a fridge and a dry shelf next to prep instead of a long crate row).
 - **Next:** fryer (029), griddle (030), assembly and packaging (031), orders 2.0 (032). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
+  - **Spec 028, street-food ingredients:** flatbread, wrap, seitan, falafel mix, lettuce, cucumber, red cabbage,
+    lemon, garlic-herb and chili sauce (buy, hold, cut, cook); "cheese" removed (the grocer sells cashews); a test
+    blocks animal-product words in every catalog, menu and news text.
   - **Specs 027b, 027c, 027d, the feel work** (three review rounds, 824 tests):
     - **instant feedback:** items fly to your hand or spot the moment you click, the server confirms in 40-100 ms,
       a refusal flies back with a "nope"; quick double clicks are never lost;
@@ -36,6 +39,13 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+5. **Vegan word check: plant products.** The new content check (D27) blocks words like milk, butter, cream and cheese
+   anywhere in item, menu and news text. That also blocks honest plant products ("oat milk", "coconut milk",
+   "peanut butter", "cashew cream"), and it does not catch adjectives ("creamy", "cheesy", "buttery").
+   Option A: allow explicit plant compounds (oat/soy/coconut/almond milk, peanut/cashew butter, cashew cream) through
+   an allow-list, and also block the adjective forms. Option B: block every such word, plant or not (the world simply
+   has its own names for these things). **Default: B** (strictest, fits "native vegan" and the own-history rule;
+   easy to relax later). Blocks nothing.
 3. **Cooking pace.** Measured with the new rings: a potato in the **pan** is good after 44 s, perfect at 55 s and
    burnt at 75 s. In the **pot** it is good after 2 min 21 s, perfect at 3 min, burnt at 4 min. Shop games usually
    aim at 20–60 s per item. Option A: speed everything up about 2x (pan good at ~22 s, pot at ~70 s). Option B:

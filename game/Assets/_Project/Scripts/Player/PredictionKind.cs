@@ -6,6 +6,8 @@ namespace Worktown.Game.Player
         PickUp,
         Place,
         Drop,
-        PutInto
+        PutInto,
+        /// <summary>Spec 028b: take an ingredient from a stock slot; the snapshot is your hands (an item appears in them).</summary>
+        Take
     }
 }

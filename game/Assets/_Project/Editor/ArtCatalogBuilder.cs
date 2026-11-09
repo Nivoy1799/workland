@@ -66,7 +66,7 @@ namespace Worktown.Game.Editor
         /// the height or the largest dimension. Tile: flat road tile, XZ to the target. Piece: a primitive at its real
         /// size x the class factor. Character: the baked body to the target height.
         /// </summary>
-        private enum Fit { Station, Module, Height, Max, Tile, Piece, Character }
+        private enum Fit { Station, Module, Height, Max, Tile, Piece, Character, Graybox }
 
         private sealed class Def
         {
@@ -92,6 +92,10 @@ namespace Worktown.Game.Editor
             Station(ArtKey.StationPlatingTable, Furniture + "kitchenCabinet.fbx"),
             new Def { Key = ArtKey.StationBowl, Model = Furniture + "kitchenCabinet.fbx", Mode = Fit.Station,
                       Yaw = StationYaw, Extra = Furniture + "kitchenBlender.fbx" },
+            // Spec 028b: the stock stations. The Furniture Kit in the repo has no fridge and no bookcase (the full kit has them;
+            // not downloaded), so they are graybox boxes in palette colours at their StockArt size, fronts on +Z like the kit.
+            new Def { Key = ArtKey.StationFridge, Mode = Fit.Graybox },
+            new Def { Key = ArtKey.StationShelf, Mode = Fit.Graybox },
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -225,8 +229,8 @@ namespace Worktown.Game.Editor
         {
             var root = new GameObject("Art_" + def.Key);
             if (def.Mode == Fit.Character) ConfigureHumanoidImport(def.Model);
-            GameObject model = def.Primitive.HasValue
-                ? CreatePiece(def.Primitive.Value, root.transform)
+            GameObject model = def.Mode == Fit.Graybox ? BuildGraybox(def.Key, root.transform)
+                : def.Primitive.HasValue ? CreatePiece(def.Primitive.Value, root.transform)
                 : InstantiateModel(def.Model, root.transform, "Model");
             model.transform.localRotation = Quaternion.Euler(0f, def.Yaw, 0f);
             if (def.Model.StartsWith(Furniture)) Recolour(model);
@@ -322,6 +326,8 @@ namespace Worktown.Game.Editor
                     AddHandAnchor(model, def.Key);
                     break;
                 }
+                case Fit.Graybox:
+                    break; // spec 028b: built at its size (StockArt), bottom at the origin, centred in X
                 default:
                     throw new InvalidOperationException(def.Key + ": unknown fit " + def.Mode);
             }
@@ -779,6 +785,117 @@ namespace Worktown.Game.Editor
             foreach (Transform t in parent.GetComponentsInChildren<Transform>(true))
                 if (t.name == name) return t;
             return null;
+        }
+
+        /// <summary>Spec 028b: name of the part of a stock model that is its cabinet (the fridge's doors stand out of it).</summary>
+        public const string StockCabinetName = "Cabinet";
+        public const string StockDoorsName = "Doors";
+
+        /// <summary>
+        /// Spec 028b: a graybox stock station as the wrapper's "Model": a "Cabinet" (and the fridge's open "Doors") of boxes in
+        /// palette colours, at the StockArt size, its bottom on the origin, centred in X and Z, its open front on +Z like the
+        /// kit's furniture (the scene builder turns it to the aisle).
+        /// </summary>
+        private static GameObject BuildGraybox(ArtKey key, Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            var cabinet = new GameObject(StockCabinetName);
+            cabinet.transform.SetParent(model.transform, false);
+            const float w = StockArt.Width, t = StockArt.Wall;
+            float h = ArtSizeTable.StockHeight;
+            if (key == ArtKey.StationFridge)
+            {
+                const float d = StockArt.FridgeDepth;
+                Material shell = GrayboxMaterial("Fridge", Palette.Cream);
+                Material inside = GrayboxMaterial("FridgeInside", Palette.SoftBlue);
+                Material steel = GrayboxMaterial("Steel", Palette.Steel);
+                Material seam = GrayboxMaterial("Seam", Palette.Charcoal);
+                float open = StockArt.FridgeDrawerTop, header = StockArt.FridgeHeaderBottom;
+                Box(cabinet, "Back", new Vector3(0f, h * 0.5f, -d * 0.5f + t * 0.5f), new Vector3(w, h, t), shell);
+                Box(cabinet, "Side left", new Vector3(-w * 0.5f + t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, d), shell);
+                Box(cabinet, "Side right", new Vector3(w * 0.5f - t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, d), shell);
+                Box(cabinet, "Header", new Vector3(0f, (header + h) * 0.5f, 0f), new Vector3(w, h - header, d), shell);
+                Box(cabinet, "Drawer", new Vector3(0f, open * 0.5f, 0f), new Vector3(w, open, d), shell);
+                Box(cabinet, "Drawer seam", new Vector3(0f, open * 0.5f, d * 0.5f + 0.002f), new Vector3(w - 0.12f, 0.012f, 0.004f), seam);
+                Box(cabinet, "Drawer handle", new Vector3(0f, open - 0.1f, d * 0.5f + 0.015f), new Vector3(0.5f, 0.025f, 0.03f), steel);
+                Box(cabinet, "Drawer handle 2", new Vector3(0f, open * 0.5f - 0.1f, d * 0.5f + 0.015f), new Vector3(0.5f, 0.025f, 0.03f), steel);
+                // The cold inside: a blue lining behind and under the items, and a steel shelf between the two rows.
+                Box(cabinet, "Lining", new Vector3(0f, (open + header) * 0.5f, -d * 0.5f + t + 0.005f), new Vector3(w - 2f * t, header - open, 0.01f), inside);
+                Box(cabinet, "Lining left", new Vector3(-w * 0.5f + t + 0.005f, (open + header) * 0.5f, t * 0.5f), new Vector3(0.01f, header - open, d - t), inside);
+                Box(cabinet, "Lining right", new Vector3(w * 0.5f - t - 0.005f, (open + header) * 0.5f, t * 0.5f), new Vector3(0.01f, header - open, d - t), inside);
+                float shelfTop = StockArt.FridgeRowHeights[0];
+                Box(cabinet, "Shelf", new Vector3(0f, shelfTop - 0.0125f, t * 0.5f), new Vector3(w - 2f * t, 0.025f, d - t), steel);
+                Box(cabinet, "Shelf edge", new Vector3(0f, shelfTop - 0.0125f, d * 0.5f - 0.006f), new Vector3(w - 2f * t, 0.035f, 0.012f), steel);
+
+                // Two doors over the open part, opened to the sides (StockArt.DoorOpenAngle), hinged at the front corners.
+                var doors = new GameObject(StockDoorsName);
+                doors.transform.SetParent(model.transform, false);
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    float doorWidth = w * 0.5f, doorHeight = h - open - 0.02f, thick = 0.05f;
+                    // Closed, the left door runs from its hinge towards +X, its outer face on +Z; opened it turns outwards.
+                    Quaternion yaw = Quaternion.Euler(0f, side < 0 ? -StockArt.DoorOpenAngle : StockArt.DoorOpenAngle, 0f);
+                    Vector3 along = yaw * new Vector3(-side, 0f, 0f);
+                    Vector3 outer = yaw * Vector3.forward; // the closed door's outer face, now facing away from the opening
+                    var hinge = new Vector3(side * w * 0.5f, open + 0.01f + doorHeight * 0.5f, d * 0.5f);
+                    string name = side < 0 ? "Door left" : "Door right";
+                    GameObject door = Box(doors, name, hinge + along * (doorWidth * 0.5f) - outer * (thick * 0.5f), new Vector3(doorWidth, doorHeight, thick), shell);
+                    door.transform.localRotation = yaw;
+                    GameObject lining = Box(doors, name + " lining", hinge + along * (doorWidth * 0.5f) - outer * (thick + 0.005f),
+                        new Vector3(doorWidth - 0.08f, doorHeight - 0.08f, 0.01f), inside);
+                    lining.transform.localRotation = yaw;
+                    GameObject handle = Box(doors, name + " handle", hinge + along * (doorWidth - 0.06f) + outer * 0.015f + Vector3.down * 0.1f,
+                        new Vector3(0.025f, 0.3f, 0.03f), steel);
+                    handle.transform.localRotation = yaw;
+                }
+            }
+            else
+            {
+                const float d = StockArt.ShelfDepth;
+                Material wood = GrayboxMaterial("ShelfWood", Palette.WoodLight);
+                Material back = GrayboxMaterial("ShelfBack", Palette.WoodDark);
+                Box(cabinet, "Back", new Vector3(0f, h * 0.5f, -d * 0.5f + t * 0.5f), new Vector3(w, h, t), back);
+                Box(cabinet, "Side left", new Vector3(-w * 0.5f + t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, d), wood);
+                Box(cabinet, "Side right", new Vector3(w * 0.5f - t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, d), wood);
+                Box(cabinet, "Header", new Vector3(0f, (StockArt.FridgeHeaderBottom + h) * 0.5f, 0f), new Vector3(w, h - StockArt.FridgeHeaderBottom, d), wood);
+                Box(cabinet, "Plinth", new Vector3(0f, 0.04f, 0f), new Vector3(w, 0.08f, d), wood);
+                for (int b = 0; b < StockArt.ShelfRowHeights.Length; b++)
+                    Box(cabinet, "Board " + (b + 1), new Vector3(0f, StockArt.ShelfRowHeights[b] - t * 0.5f, t * 0.5f), new Vector3(w - 2f * t, t, d - t), wood);
+            }
+            return model;
+        }
+
+        /// <summary>Spec 028b: one graybox part, a cube without its collider.</summary>
+        private static GameObject Box(GameObject parent, string name, Vector3 centre, Vector3 size, Material material)
+        {
+            GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            box.name = name;
+            UnityEngine.Object.DestroyImmediate(box.GetComponent<Collider>());
+            box.transform.SetParent(parent.transform, false);
+            box.transform.localPosition = centre;
+            box.transform.localScale = size;
+            box.GetComponent<MeshRenderer>().sharedMaterial = material;
+            return box;
+        }
+
+        /// <summary>Spec 028b: a palette material for the graybox stock models (in the Art folder, one per name).</summary>
+        private static Material GrayboxMaterial(string name, Color color)
+        {
+            string path = GrayboxSceneBuilder.Root + "/Art/Graybox_" + name + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            if (material.color != color)
+            {
+                material.color = color;
+                EditorUtility.SetDirty(material);
+            }
+            return material;
         }
 
         /// <summary>Spec 017: a generic food piece from a Unity primitive, without its collider, white material.</summary>
