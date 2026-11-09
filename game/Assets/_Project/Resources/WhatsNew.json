@@ -337,6 +337,24 @@
         "Walk down the street: houses, trees and lamps look the right size next to you and do not overlap",
         "Open the HUD, the F1 menu and the What's-new banner: warm muted colours, everything readable"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-027a",
+      "date": "2026-11-09",
+      "title": "The kitchen is a real street-food shop",
+      "items": [
+        "A back line along a back wall: crates, prep worktop with the board, two stoves, plates, in the order you cook",
+        "A cook aisle in front of it, and a front counter between you and the guests; you serve across it",
+        "Guests queue along the counter's street side and face you; they never walk into the kitchen",
+        "Stove knobs, crates and labels all face the aisle; the order rail hangs above the counter, readable from the aisle",
+        "You start in the aisle; the staff gap at the left end leads out to the town"
+      ],
+      "test": [
+        "Spawn: you stand in the aisle facing the stoves; turn around and the guests wait across the counter",
+        "Cook fries and serve them at the counter without leaving the aisle",
+        "Walk out through the staff gap, around to the street, and look across the counter into the kitchen",
+        "Two players in the aisle: try to pass each other (it is 1.3 m wide) and say if it feels too tight"
+      ]
     }
   ]
 }

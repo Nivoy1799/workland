@@ -92,7 +92,50 @@ Approved by the orchestrator under the human's 24 h grant (docs/cooking-roadmap.
 - Aisle 1.3 m. Staff gap at the left end. Guests queue to the right along the counter, towards the street.
 
 ## Implementation notes
-(Builder fills this in.)
+**Layout** (GrayboxSceneBuilder constants; x left to right as seen from the aisle):
+- **Back line** at z 14.3 (bodies z 13.7 to 14.9), fronts facing -z:
+  - landing worktop x -2.0 to -0.74;
+  - crates at x -0.12, 1.12, 2.36, 3.60;
+  - prep worktop 4.22 to 6.02 (board and knife);
+  - stove A 6.64, worktop, stove B 9.14, worktop with the plates;
+  - plate shelf 11.64, worktop with the bowl to 13.52.
+- **Aisle:** z 12.2 to 13.7 (1.5 m between bodies, 1.43 m clear in front of the stove buttons), centre line z 12.95.
+- **Front counter:** z 11.5 to 12.2, 0.7 m deep, 1.05 m high.
+  - The serving counter sits at x 11.64, opposite the plate shelf (2.45 m centre to centre). It is turned 180 degrees, so its cook side and label face the aisle. Its body and model are squashed from 1.2 to 0.7 m deep, like the worktop modules.
+  - Plain runs (cabinet modules squashed to 0.7 m, one collider each, no place surface) fill x -2.0 to 11.02 and 12.26 to 13.52.
+- **Ticket rail:** (11.64, 2.5, 11.7), turned to face the aisle.
+- **Walls** (Plaster):
+  - back wall z 14.92 to 15.12, 2.4 m, x -2.22 to 13.74;
+  - low side walls 1.2 m at x -2.22 to -2.02 and 13.54 to 13.74, from the back wall to z 11.5;
+  - the left one leaves the 1.5 m staff gap (z 12.2 to 13.7).
+- **Guests:** entry (24, 11.1); queue head (11.64, 11.1); slots 1 m apart towards -x (to x 6.64). Exit is back to the entry, all on z 11.1.
+- **Spawns:** (0.6 / 2.2 / 3.8 / 5.4, 12.95), facing +z.
+- **Player controller radius:** 0.3 m (was 0.4; orchestrator decision), so two cooks pass in the aisle. The 1.43 m clear width is at least 2 x (0.3 + 0.08 skin) + 0.1 (FloorPlanTests).
+- The street, the houses and the fence are unchanged; the fence at z 15.5 now stands 0.4 m behind the back wall.
+
+**Deviations and trade-offs**
+- **Queue direction.** The queue runs from the head towards -x, along the counter, not to the right. The plate shelf is the rightmost back-line station (dish-flow order), and the serving counter must be opposite it. A queue running right would leave the counter after one slot. Running left, all six slots have the counter between them and the aisle.
+- **Landing worktop.** A fifth worktop (the landing by the staff gap) keeps the existing counts: 5 worktops and 11 place surfaces in ScaleSceneTests and PlaceSceneTests. The front counter has no place surface, because every place surface stays at 0.90 m. Serving still works through the serving counter station, within reach from the aisle (AC3 test).
+- **Art fronts were backwards.** The station models and cabinet modules showed their backs to the cook: knobs and oven door faced the wall, which is the human's "buttons are on the back". They are now turned 180 degrees in the builder (`ArtFrontRotation`), and FloorPlanTests checks the art fronts. The wrong "fronts face +Z" comment in ArtCatalogBuilder is fixed (one line, allowed by the orchestrator).
+- **Guests face the counter.** Waiting guests now turn to face the counter: `CustomerService._queueFacing` drives `Customer.ServerSetTarget(target, facing)`, server side.
+- **Tours walk out first.** Every tour still parks outside the staff gap at (-5, 12.95) before it waits for its observer, and the observers stand outside the aisle. The two players could now pass each other, but the tours' straight-line steering would only slide past, so the robust walk-out stays.
+- **CookSequence** (Dev, outside the literal scope) now walks on the aisle line (`TourRules.AisleOffset`). It had to change: the old lane (z - 1.7) lies inside the front counter.
+
+**Fixtures updated** (old hard-coded values):
+- `TourRulesTests` spawns;
+- `ArtCatalogTests` station positions and the serving counter's 0.7 m body depth;
+- `CharacterArtTests` controller radius 0.4 to 0.3 (orchestrator decision);
+- `ScaleSceneTests` customers' path x min 8.5 to 6.1;
+- `WhatsNewTests`: spec 026 is no longer the newest; a new spec 027a test.
+
+**Tests:** new `FloorPlanTests` (11 tests: AC2 to AC4, plus "two players can pass").
+
+**Sheets (AC5):**
+- `.verify/visual/look/sheet.png`;
+- `.verify/visual/cook/sheet.png`;
+- `.verify/visual/cook-observer/sheet.png`.
+
+**Follow-ups (spec 027d, labels):** World TextMesh labels draw through geometry, so guests see mirrored aisle-facing text: the station labels and the rail. The order labels are large and overlap. The crate labels are big against the back wall.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

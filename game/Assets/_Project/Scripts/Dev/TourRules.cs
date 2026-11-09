@@ -7,11 +7,15 @@ namespace Worktown.Game.Dev
 {
     /// <summary>
     /// Spec 027, pure: the tours (shot table) and the path following and aiming they use. Coordinates are the graybox
-    /// scene's (GrayboxSceneBuilder): kitchen row at z 13 (stoves at x 3 and 5.5, counter 8.5, last worktop to 14.1), the
-    /// cook's lane at z 11.3 to 11.7, the queue at z 10.8, the road at z 5.5 to 10.5 east of x 9, a ring of pickup cubes
-    /// at 5 and 7 m around the spawns, a box at x 15 to 19, z 1.5 to 2.5. Every tour route first goes to the hub at (-1.75, 0),
-    /// inside the ring, then north past it (as the spec 021 demo); observer routes use (1.75, 0), because both players
-    /// start at the same time and block each other at a shared point. If the layout changes, change the points here (TourRulesTests walks every route).
+    /// scene's (GrayboxSceneBuilder). Spec 027a, the shop floor plan: back line at z 14.3 (stove A at x 6.64, stove B 9.14,
+    /// plate shelf 11.64), the cook aisle z 12.2 to 13.7 (centre 12.95; players spawn on that line at x 0.6 to 5.4), the
+    /// front counter z 11.5 to 12.2, the guests' queue at z 11.1 (x 6.64 to 11.64), the staff gap at the aisle's west end
+    /// (side walls at x -2.22 to -2.02), the road at z 5.5 to 10.5 east of x 9, a ring of pickup cubes at 5 and 7 m around
+    /// the origin, a box at x 15 to 19, z 1.5 to 2.5. Both players start in the single-file aisle and cannot pass each other
+    /// there, so every tour first walks out through the staff gap to <see cref="ParkX"/> (the same way as its observer,
+    /// whichever of the two is in front; two 0.3 m players can pass in the 1.5 m aisle, but the straight-line steering
+    /// would only slide past), and the observers' spots are outside the aisle; observer routes leave the gap
+    /// southwards at x -3.2. If the layout changes, change the points here (TourRulesTests walks every route).
     /// </summary>
     public static class TourRules
     {
@@ -130,41 +134,55 @@ namespace Worktown.Game.Dev
 
         // ---- The tours ----
 
-        private const float LaneZ = 11.3f;   // the cook's lane in front of the kitchen row
-        private const float StandZ = 11.7f;  // standing at a station
-        private const float HubX = -1.75f;   // the way north past the ring of cubes
-        private const float ObserverHubX = 1.75f; // the observer's own way north, so the two players never meet at the hub
+        /// <summary>Spec 027a: the cook aisle's centre line (the graybox's back line z 14.3 minus <see cref="AisleOffset"/>).</summary>
+        public const float AisleZ = 12.95f;
+        /// <summary>Spec 027a: from a back line station's centre to the aisle's centre line, where the cook stands.</summary>
+        public const float AisleOffset = 1.35f;
+        private const float StandZ = 13f;    // standing at a back line station (1.3 m in front of its centre)
+        private const float BackLineZ = 14.3f;
+        private const float StoveAX = 6.64f;
+        private const float StoveBX = 9.14f;
+        private const float WorktopBetweenX = 7.89f; // the worktop between the stoves
+        /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
+        public const float ParkX = -5f;
+        private const float ObserverExitX = -3.2f; // the observers' way south from the staff gap, west of the side wall
+        private const float LookObserverX = 2.6f;  // the look tour's person for scale, at the front counter's street side
+        private const float LookObserverZ = 10.9f;
 
-        private static readonly TourStep[] ToKitchen = { TourStep.WalkTo(HubX, 0f), TourStep.WalkTo(HubX, LaneZ) };
-        private static readonly TourStep[] ToStreet = { TourStep.WalkTo(HubX, 0f), TourStep.WalkTo(HubX, 9f), TourStep.WalkTo(13f, 9f) };
+        private static readonly TourStep Park = TourStep.WalkTo(ParkX, AisleZ);
 
         /// <summary>
-        /// Standard shots: the kitchen from the cook's position (third person), first person at a stove, holding the pan
-        /// and at a worktop, a person (the observer) standing in front of the first worktop for scale, the counter and the
-        /// queue from the guests' side, the street. The tour waits for the observer first: its route crosses the lane.
+        /// Standard shots: the kitchen down the aisle (third person), first person at a stove, holding the pan and at a
+        /// worktop, a person (the observer) standing at the front counter's street side for scale, seen from the aisle across
+        /// the counter, the counter and the queue from the guests' side (third person behind the cook, so the camera looks
+        /// across the counter at the cook), the street.
         /// </summary>
         private static Tour BuildLook()
         {
-            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), TourStep.WaitObserver() };
-            steps.AddRange(ToKitchen);
+            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), Park, TourStep.WaitObserver() };
             steps.AddRange(new[]
             {
-                TourStep.WalkTo(4.25f, LaneZ),
-                TourStep.View(ViewMode.ThirdPerson), TourStep.Look(0f, -12f), TourStep.Wait(1.2f), TourStep.Shot("kitchen-third"),
-                TourStep.View(ViewMode.FirstPerson), TourStep.WalkTo(3f, StandZ), TourStep.LookAt(3f, 0.9f, 12.85f), TourStep.Wait(0.6f),
-                TourStep.Shot("stove-first"),
+                TourStep.WalkTo(4.5f, AisleZ),
+                TourStep.View(ViewMode.ThirdPerson), TourStep.Look(90f, -12f), TourStep.Wait(1.2f), TourStep.Shot("kitchen-third"),
+                TourStep.View(ViewMode.FirstPerson), TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
+                TourStep.Wait(0.6f), TourStep.Shot("stove-first"),
                 TourStep.Act(ActPickUpPan), TourStep.Look(0f, -12f), TourStep.Wait(0.8f), TourStep.Shot("pan-first"),
                 TourStep.Act(ActPutPanBack),
-                TourStep.WalkTo(7f, LaneZ), TourStep.WalkTo(7f, StandZ), TourStep.LookAt(7f, 0.9f, 12.85f), TourStep.Wait(0.6f),
+                TourStep.WalkTo(WorktopBetweenX, StandZ), TourStep.LookAt(WorktopBetweenX, 0.9f, BackLineZ - 0.15f), TourStep.Wait(0.6f),
                 TourStep.Shot("worktop-first"),
-                TourStep.WalkTo(3.4f, 10.2f), TourStep.LookAt(0.6f, 1f, 12.25f), TourStep.Wait(0.6f), TourStep.Shot("scale-person"),
-                TourStep.WalkTo(8.5f, 7f), TourStep.LookAt(8.5f, 1f, 12.5f), TourStep.Wait(0.6f), TourStep.Shot("counter-guests"),
-                TourStep.View(ViewMode.ThirdPerson), TourStep.WalkTo(11f, 7.5f), TourStep.Look(90f, -6f), TourStep.Wait(1.2f),
+                TourStep.WalkTo(LookObserverX, AisleZ), TourStep.LookAt(LookObserverX, 1.4f, LookObserverZ), TourStep.Wait(0.6f),
+                TourStep.Shot("scale-person"),
+                TourStep.WalkTo(StoveBX, AisleZ), TourStep.View(ViewMode.ThirdPerson), TourStep.Look(0f, -10f), TourStep.Wait(1.2f),
+                TourStep.Shot("counter-guests"),
+                Park, TourStep.WalkTo(ParkX, 9f), TourStep.WalkTo(11f, 7.5f), TourStep.Look(90f, -6f), TourStep.Wait(1.2f),
                 TourStep.Shot("street-third"),
             });
-            // In front of the first worktop (x -0.1 to 2.4, front edge near z 12.7), clear of the queue; the lane passes 0.95 m south.
-            var route = new List<Vector3> { new Vector3(ObserverHubX, 0f, 0f), new Vector3(ObserverHubX, 0f, 9.5f), new Vector3(0.6f, 0f, 9.5f), new Vector3(0.6f, 0f, 12.25f) };
-            return new Tour(LookTour, steps, route, 180f, false, Vector3.zero, 0f, 0f, 0f, 240f);
+            // At the front counter's street side, west of the queue, facing the kitchen.
+            var route = new List<Vector3>
+            {
+                new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, LookObserverZ), new Vector3(LookObserverX, 0f, LookObserverZ)
+            };
+            return new Tour(LookTour, steps, route, 0f, false, Vector3.zero, 0f, 0f, 0f, 240f);
         }
 
         /// <summary>
@@ -175,8 +193,7 @@ namespace Worktown.Game.Dev
         private static Tour BuildWalk()
         {
             float segment = FramesPerSegment * FrameInterval;
-            var steps = new List<TourStep> { TourStep.View(ViewMode.ThirdPerson) };
-            steps.AddRange(ToStreet);
+            var steps = new List<TourStep> { TourStep.View(ViewMode.ThirdPerson), Park, TourStep.WalkTo(ParkX, 9f), TourStep.WalkTo(13f, 9f) };
             steps.AddRange(new[]
             {
                 TourStep.WalkTo(16f, 8f), TourStep.Look(90f, -6f), TourStep.WaitObserver(), TourStep.Wait(3f),
@@ -186,17 +203,28 @@ namespace Worktown.Game.Dev
                 TourStep.Look(90f, -6f), TourStep.Wait(1f),
                 TourStep.Frames("crouch", segment, FrameInterval), TourStep.WalkTo(16f, 8f, crouch: true), TourStep.Wait(2f),
             });
-            var route = new List<Vector3> { new Vector3(ObserverHubX, 0f, 0f), new Vector3(ObserverHubX, 0f, 9f), new Vector3(18f, 0f, 9f), new Vector3(18f, 0f, 3.2f) };
+            // South of the tour's way (z 7.8 against its 9, north of the cube ring), then down x 11 and east along z 3.2.
+            var route = new List<Vector3>
+            {
+                new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(11f, 0f, 7.8f),
+                new Vector3(11f, 0f, 3.2f), new Vector3(18f, 0f, 3.2f)
+            };
             return new Tour(WalkTour, steps, route, 0f, true, new Vector3(18f, 1.3f, 4f), 0f, 0f, 0f, 300f);
         }
 
-        /// <summary>The spec 021 cookware sequence with a shot after each step; the observer watches from the guests' side.</summary>
+        /// <summary>
+        /// The spec 021 cookware sequence with a shot after each step. The observer watches from the guests' side: its fixed
+        /// camera stands 5 m in front of the back line, west of the queue (x 6.64 and up), and looks across the front counter
+        /// at the cook, from the crates to the second stove.
+        /// </summary>
         private static Tour BuildCook()
         {
-            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), TourStep.WaitObserver(), TourStep.Act(ActCook) };
-            var route = new List<Vector3> { new Vector3(0f, 0f, 3.8f) };
-            // Camera 4.7 m in front of the stoves at eye height (1.6 m), a little down: the cook's back, as a guest sees it.
-            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.5f, 1.6f, 8.3f), 0f, -10f, 6f, 420f);
+            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), Park, TourStep.WaitObserver(), TourStep.Act(ActCook) };
+            var route = new List<Vector3>
+            {
+                new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
+            };
+            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 420f);
         }
     }
 }

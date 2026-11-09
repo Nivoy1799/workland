@@ -1,7 +1,7 @@
 ---
 id: 027
 title: Visual check tool (scripted tour, walking frames, contact sheet)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

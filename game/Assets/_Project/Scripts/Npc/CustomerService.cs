@@ -31,6 +31,8 @@ namespace Worktown.Game.Npc
         [Tooltip("First queue slot, in front of the counter.")]
         [SerializeField] private Transform _queueHead;
         [SerializeField] private Vector3 _queueDirection = Vector3.right;
+        [Tooltip("Spec 027a: the way waiting customers face once at their slot (towards the counter); zero keeps the walking direction.")]
+        [SerializeField] private Vector3 _queueFacing = Vector3.zero;
         [Tooltip("Spec 022: the ticket rail above the counter (orders and shift numbers for every client).")]
         [SerializeField] private TicketRailView _rail;
 
@@ -199,7 +201,7 @@ namespace Worktown.Game.Npc
             IReadOnlyList<QueuedCustomer> entries = _queue.Entries;
             for (int i = 0; i < entries.Count; i++)
                 if (_customers.TryGetValue(entries[i].Id, out Customer customer))
-                    customer.ServerSetTarget(CustomerRules.QueueSlot(_queueHead.position, _queueDirection, i));
+                    customer.ServerSetTarget(CustomerRules.QueueSlot(_queueHead.position, _queueDirection, i), _queueFacing);
 
             if (_leaving.Count > 0 || spawned > 0)
                 Debug.Log("[Customers] queue " + entries.Count + ": " + spawned + " walking in, "

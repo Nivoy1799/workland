@@ -115,7 +115,9 @@ namespace Worktown.Game.Tests
             try
             {
                 var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>(CatalogPath);
-                float[] fixedX = { 3f, 5.5f, 8.5f, 11f }; // spec 021: two stoves, counter, plate shelf after the crates
+                // Spec 027a: the shop floor plan. Crates 1.24 m apart from x -0.12, then the two stoves, the serving counter (in
+                // the front counter at z 11.85, 0.7 m deep, opposite the plate shelf) and the plate shelf; the back line at z 14.3.
+                float[] fixedX = { 6.64f, 9.14f, 11.64f, 11.64f };
                 int crates = DemoIngredients.All.Count;
                 int count = 0;
                 foreach (GameObject root in scene.GetRootGameObjects())
@@ -123,17 +125,17 @@ namespace Worktown.Game.Tests
                     foreach (Station station in root.GetComponentsInChildren<Station>(true))
                     {
                         count++;
-                        float x = station.Index < crates ? -8.5f + station.Index * 2f : fixedX[station.Index - crates];
+                        float x = station.Index < crates ? -0.12f + station.Index * 1.24f : fixedX[station.Index - crates];
                         // Spec 026: the body is as high as the furniture (0.90 m, the counter 1.05 m; was 1.0 m).
                         float height = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
-                        var expected = new Vector3(x, height * 0.5f, 13f);
+                        var expected = new Vector3(x, height * 0.5f, station.Kind == StationKind.Counter ? 11.85f : 14.3f);
                         Transform body = station.transform.Find("Body");
                         Assert.IsNotNull(body, station.name + " lost its Body");
                         Assert.AreEqual(Vector3.zero, body.localPosition, station.name);
                         var box = body.GetComponent<BoxCollider>();
                         Assert.IsNotNull(box, station.name + " lost its BoxCollider");
                         Assert.AreEqual(Vector3.one, box.size);
-                        Assert.AreEqual(new Vector3(1.2f, height, 1.2f), body.localScale);
+                        Assert.AreEqual(new Vector3(1.2f, height, station.Kind == StationKind.Counter ? 0.7f : 1.2f), body.localScale); // spec 027a: the counter is 0.7 m deep
                         Vector3 colliderCenter = box.bounds.center;
                         Assert.AreEqual(0f, Vector3.Distance(expected, colliderCenter), 0.001f, station.name + " moved");
                         Assert.IsNull(body.GetComponent<MeshRenderer>(), station.name + " still shows the cube");

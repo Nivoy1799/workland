@@ -54,7 +54,7 @@ namespace Worktown.Game.Editor
 
         /// <summary>Station footprint the models are fitted into (matches the cube body); the height comes from ArtSizeTable.</summary>
         public const float FitXZ = 1.2f;
-        /// <summary>Kenney furniture fronts face +Z; stations face the spawn at -Z.</summary>
+        /// <summary>Turns the Kenney furniture so its front (doors, knobs) faces the wrapper's +Z (spec 027a: the scene builder turns the wrappers to the stations' -Z fronts).</summary>
         private const float StationYaw = 180f;
         /// <summary>Spec 026: where the palette recolours of the Furniture Kit materials are kept.</summary>
         private const string RecolourFolder = GrayboxSceneBuilder.Root + "/Art/Recolour";

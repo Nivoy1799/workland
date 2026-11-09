@@ -68,13 +68,14 @@ namespace Worktown.Game.Dev
                 yield break;
             }
 
-            float laneZ = stoveA.transform.position.z - 1.7f;
-            float standZ = stoveA.transform.position.z - 1.3f;
+            // Spec 027a: the cook walks and stands on the aisle's centre line (it starts there, or outside the staff gap on
+            // the same line in a tour), between the back line and the front counter.
+            float laneZ = stoveA.transform.position.z - TourRules.AisleOffset;
+            float standZ = laneZ;
             Vector3 atA = new Vector3(stoveA.transform.position.x, 0f, standZ);
             Vector3 atB = new Vector3(stoveB.transform.position.x, 0f, standZ);
             Debug.Log("[Demo] walking to the first stove (" + Time.time.ToString("0.0") + " s)");
-            yield return actor.WalkTo(new Vector3(-1.75f, 0f, actor.Position.z), false, false);
-            yield return actor.WalkTo(new Vector3(-1.75f, 0f, laneZ), false, false);
+            yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(new Vector3(atA.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(atA, false, false);
             if (shot != null) yield return shot("at-stove");

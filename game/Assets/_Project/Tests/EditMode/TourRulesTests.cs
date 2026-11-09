@@ -15,8 +15,10 @@ namespace Worktown.Game.Tests
     public class TourRulesTests
     {
         private const float Reached = 0.3f;
-        // The graybox spawn points (GrayboxSceneBuilder.CreateSpawnPoints): a ring of radius 3 around the origin.
-        private static readonly Vector3[] Spawns = { new Vector3(0f, 0f, -3f), new Vector3(-3f, 0f, 0f), new Vector3(0f, 0f, 3f), new Vector3(3f, 0f, 0f) };
+        // The graybox spawn points (GrayboxSceneBuilder.CreateSpawnPoints). Spec 027a: on the cook aisle's centre line (was a
+        // ring of radius 3 around the origin).
+        private static readonly Vector3[] Spawns =
+            { new Vector3(0.6f, 0f, 12.95f), new Vector3(2.2f, 0f, 12.95f), new Vector3(3.8f, 0f, 12.95f), new Vector3(5.4f, 0f, 12.95f) };
 
         private static Tour Get(string name)
         {

@@ -63,14 +63,47 @@ namespace Worktown.Game.Editor
         private const string WorktopMaterialPath = Root + "/Settings/Worktop.mat";
         private const string PlaceMarkerMaterialPath = Root + "/Settings/PlaceMarker.mat";
         private const float FoodSize = 0.4f;
-        // Spec 021: the kitchen row after the crates. Stations keep the spec 015 grid (3, 5.5, 8.5, 11); worktops fill
-        // the gaps and both ends (from WorktopStartX to the first stove, from the shelf to WorktopEndX).
-        private const float StoveAX = 3f;
-        private const float StoveBX = 5.5f;
-        private const float CounterX = 8.5f;
-        private const float PlateShelfX = 11f;
-        private const float WorktopStartX = -0.1f;
-        private const float WorktopEndX = 14.1f;
+        // Spec 027a (docs/feel.md 6): the shop floor plan. A back line along the back wall (z KitchenZ, fronts facing -z),
+        // left to right as seen from the aisle: a landing worktop by the staff gap, the four crates, the prep worktop (board
+        // and knife), stove A, a worktop, stove B, a worktop (plates), the plate shelf (plating table), a worktop (bowl).
+        // Then the cook aisle (AisleWidth between the bodies) and the front counter (1.05 m) with the serving counter
+        // opposite the plate shelf, turned so its cook side faces the aisle. Guests queue on the street side of the front
+        // counter. A back wall closes the back line; low side walls close both ends, with the staff gap at the left end.
+        private const float KitchenMinX = -2f;
+        private const float LandingWidth = 1.26f;
+        private const float CratePitch = StationWidth + 2f * WorktopGapMargin;
+        private const float FirstCrateX = KitchenMinX + LandingWidth + StationWidth * 0.5f + WorktopGapMargin;
+        private const float PrepStartX = FirstCrateX + 3f * CratePitch + StationWidth * 0.5f + WorktopGapMargin;
+        private const float PrepWidth = 1.8f;
+        private const float BetweenWidth = 1.26f;
+        private const float StationHalfGap = StationWidth * 0.5f + WorktopGapMargin;
+        private const float StoveAX = PrepStartX + PrepWidth + StationHalfGap;
+        private const float StoveBX = StoveAX + 2f * StationHalfGap + BetweenWidth;
+        private const float PlateShelfX = StoveBX + 2f * StationHalfGap + BetweenWidth;
+        private const float KitchenMaxX = PlateShelfX + StationHalfGap + BetweenWidth;
+        /// <summary>Spec 027a: the serving counter stands in the front counter, opposite the plate shelf.</summary>
+        private const float CounterX = PlateShelfX;
+        /// <summary>Spec 027a: clear floor between the back line's bodies and the front counter (feel.md 6: at least 1.2 m).</summary>
+        private const float AisleWidth = 1.5f; // orchestrator: the top of the range, so two cooks (0.3 m controllers) pass each other
+        /// <summary>Spec 027a (orchestrator): the front counter and the serving counter are 0.7 m deep (stations are 1.2 m).</summary>
+        private const float CounterDepth = 0.7f;
+        private const float FrontCounterZ = KitchenZ - StationWidth * 0.5f - AisleWidth - CounterDepth * 0.5f;
+        private const float AisleZ = KitchenZ - (StationWidth + AisleWidth) * 0.5f;
+        /// <summary>Spec 027a: the guests' queue line, this far in front of the front counter's street side.</summary>
+        private const float QueueGap = 0.4f;
+        private const float QueueZ = FrontCounterZ - CounterDepth * 0.5f - QueueGap;
+        private const float StreetEntryX = 24f;
+        private const float WallThickness = 0.2f;
+        private const float WallGap = 0.02f;
+        private const float BackWallHeight = 2.4f;
+        private const float SideWallHeight = 1.2f;
+        private static readonly float[] SpawnX = { 0.6f, 2.2f, 3.8f, 5.4f };
+        /// <summary>
+        /// Spec 027a: the catalog's station and cabinet wrappers show their front (the stove's knobs and oven door, the
+        /// cabinet doors) on their local +z, so they are turned half way round to put it on the station's front (local -z,
+        /// where the buttons and the label are). Until now the cook saw the backs ("buttons are on the back").
+        /// </summary>
+        private static readonly Quaternion ArtFrontRotation = Quaternion.Euler(0f, 180f, 0f);
         // Spec 021: burners on the stove top (local x, z), one spot each; the stove top behind them is a place surface.
         private static readonly float[] BurnerX = { -0.3f, 0.3f };
         private const float BurnerZ = -0.12f;
@@ -83,7 +116,7 @@ namespace Worktown.Game.Editor
         // as fractions of the stove's height, so they stay on the same part of the scaled model.
         private const float KnobRowFraction = 0.8f / 1.1f;
         private const float KnobLabelFraction = 0.89f / 1.1f;
-        private const float KitchenZ = 13f;
+        private const float KitchenZ = 14.3f; // spec 027a: was 13; the back line, its aisle and the front counter north of the road
 
         /// <summary>
         /// Spec 026 (was a fixed 1.0 m): height of a station's body and furniture: the worktop height (0.90 m), the serving
@@ -166,7 +199,7 @@ namespace Worktown.Game.Editor
             root.tag = "Player";
             var controller = root.AddComponent<CharacterController>();
             controller.height = 2f;
-            controller.radius = 0.4f;
+            controller.radius = 0.3f; // spec 027a (orchestrator): real body width, so two players pass in the 1.5 m aisle (was 0.4)
             controller.center = new Vector3(0f, 1f, 0f);
 
             var graphic = new GameObject("Graphic");
@@ -366,16 +399,21 @@ namespace Worktown.Game.Editor
             else Debug.Log(line);
         }
 
-        /// <summary>Spec 014: street entry east of the kitchen and the queue in front of the counter.</summary>
+        /// <summary>
+        /// Spec 014: street entry east of the kitchen and the queue in front of the counter. Spec 027a: the queue runs along
+        /// the front counter's street side, head at the serving counter, slots towards the landing end (-x), so every slot
+        /// has the counter between it and the aisle; queued guests turn to face the counter (+z). Entry, queue and exit
+        /// share the line z = QueueZ, south of the counter and the side walls, so no guest path crosses the aisle.
+        /// </summary>
         private static void CreateCustomers(NetworkManager networkManager, NetworkObject customerPrefab)
         {
             var parent = new GameObject("Customers");
             var entry = new GameObject("StreetEntry");
             entry.transform.SetParent(parent.transform, false);
-            entry.transform.SetPositionAndRotation(new Vector3(24f, 0f, KitchenZ - 2.2f), Quaternion.Euler(0f, -90f, 0f)); // spec 024: y 0 (was 0.1), feet on the ground
+            entry.transform.SetPositionAndRotation(new Vector3(StreetEntryX, 0f, QueueZ), Quaternion.Euler(0f, -90f, 0f)); // spec 024: y 0 (was 0.1), feet on the ground
             var head = new GameObject("QueueHead");
             head.transform.SetParent(parent.transform, false);
-            head.transform.position = new Vector3(8.5f, 0f, KitchenZ - 2.2f); // in front of the counter; spec 024: y 0
+            head.transform.position = new Vector3(CounterX, 0f, QueueZ); // in front of the serving counter; spec 024: y 0
 
             var service = networkManager.gameObject.AddComponent<CustomerService>();
             SetField(service, "_networkManager", networkManager);
@@ -383,13 +421,18 @@ namespace Worktown.Game.Editor
             SetField(service, "_customerPrefab", customerPrefab);
             SetField(service, "_entry", entry.transform);
             SetField(service, "_queueHead", head.transform);
+            SetField(service, "_queueDirection", Vector3.left); // spec 027a: along the counter, away from the street end
+            SetField(service, "_queueFacing", Vector3.forward); // spec 027a: waiting guests face the cook across the counter
             SetField(service, "_rail", CreateTicketRail()); // spec 022
             SetField(networkManager.GetComponent<KitchenService>(), "_customers", service);
         }
 
-        // Spec 022: the ticket rail board above the counter, facing the players (south). Two rows of three cards.
+        // Spec 022: the ticket rail board above the counter. Two rows of three cards. Spec 027a: above the front counter's
+        // street half at the serving counter, turned to face the aisle (north), so the cook reads it; its bottom (2.5 - 0.575 m)
+        // clears the guests' heads.
         private const int TicketCards = 6;
-        private static readonly Vector3 RailPosition = new Vector3(CounterX, 2.75f, KitchenZ + 0.75f);
+        private static readonly Vector3 RailPosition = new Vector3(CounterX, 2.5f, FrontCounterZ - 0.15f);
+        private static readonly Quaternion RailRotation = Quaternion.Euler(0f, 180f, 0f);
         private static readonly Vector2 RailSize = new Vector2(2.5f, 1.15f);
         private static readonly Vector2 CardSize = new Vector2(0.74f, 0.4f);
         private const float CardStepX = 0.8f;
@@ -402,7 +445,7 @@ namespace Worktown.Game.Editor
         private static TicketRailView CreateTicketRail()
         {
             var root = new GameObject("TicketRail");
-            root.transform.position = RailPosition;
+            root.transform.SetPositionAndRotation(RailPosition, RailRotation);
             NetworkObject nob = root.AddComponent<NetworkObject>();
             SetField(nob, "_isGlobal", true);
 
@@ -736,6 +779,7 @@ namespace Worktown.Game.Editor
                     var module = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
                     module.name = WorktopModuleName + " " + (i + 1);
                     module.transform.localPosition = new Vector3(x + w * 0.5f, 0f, 0f);
+                    module.transform.localRotation = ArtFrontRotation; // spec 027a: the cabinet doors face the aisle
                     module.transform.localScale = new Vector3(w / ArtSizeTable.WorktopModuleWidth, height / wrapperHeight, 1f);
                     x += w;
                 }
@@ -906,7 +950,7 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>
-        /// Spec 007/021: the kitchen row north of the spawn: crates, worktops, two stoves (two burners each), the counter
+        /// Spec 007/021: the kitchen (spec 027a: the shop floor plan, see the constants): crates, worktops, two stoves (two burners each), the counter
         /// and the plate shelf; the cookware lying on top; the serve feed and the kitchen service.
         /// </summary>
         private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab,
@@ -919,35 +963,39 @@ namespace Worktown.Game.Editor
                 string id = DemoIngredients.All[i].Id;
                 Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", FoodArtRules.IngredientColor((byte)i)); // spec 026: palette
                 stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
-                    char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", -8.5f + i * 2f, mat, i));
+                    char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", FirstCrateX + i * CratePitch, KitchenZ, 0f, mat, i));
             }
             Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Steel);
-            Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, stoveMat, 0);
+            Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, KitchenZ, 0f, stoveMat, 0);
             stations.Add(stoveA);
-            Station stoveB = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 2", StoveBX, stoveMat, 0);
+            Station stoveB = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 2", StoveBX, KitchenZ, 0f, stoveMat, 0);
             stations.Add(stoveB);
-            stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", CounterX,
+            // Spec 027a: the serving counter stands in the front counter, turned so its cook side (and label) faces the aisle.
+            stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Counter, "Counter", CounterX, FrontCounterZ, 180f,
                 CreateMaterial(Root + "/Settings/Station_Counter.mat", Palette.WoodLight), 0));
-            Station shelf = CreateStation(catalog, parent.transform, stations.Count, StationKind.PlateShelf, "Plates", PlateShelfX,
+            Station shelf = CreateStation(catalog, parent.transform, stations.Count, StationKind.PlateShelf, "Plates", PlateShelfX, KitchenZ, 0f,
                 CreateMaterial(Root + "/Settings/Station_Plating.mat", Palette.WoodLight), 0);
             CreatePlateStack(catalog, shelf);
             stations.Add(shelf);
 
-            // Worktops at the stove top's height: before the first stove, between the stations, after the shelf.
+            // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, between the
+            // stoves, between the second stove and the plate shelf, after the shelf.
             float height = stoveA.transform.position.y + StationTop(stoveA);
-            float half = StationWidth * 0.5f + WorktopGapMargin;
+            const float half = StationHalfGap;
             Material worktopMat = CreateMaterial(WorktopMaterialPath, Palette.WoodLight);
             var surfaces = new List<PlaceSurface>();
-            PlaceSurface first = CreateWorktop(parent.transform, WorktopStartX, StoveAX - half, height, surfaces.Count, worktopMat, catalog);
-            surfaces.Add(first);
+            surfaces.Add(CreateWorktop(parent.transform, KitchenMinX, KitchenMinX + LandingWidth, height, surfaces.Count, worktopMat, catalog));
+            PlaceSurface prep = CreateWorktop(parent.transform, PrepStartX, PrepStartX + PrepWidth, height, surfaces.Count, worktopMat, catalog);
+            surfaces.Add(prep);
             PlaceSurface[] burnersA = CreateStoveSurfaces(stoveA, surfaces);
             surfaces.Add(CreateWorktop(parent.transform, StoveAX + half, StoveBX - half, height, surfaces.Count, worktopMat, catalog));
             PlaceSurface[] burnersB = CreateStoveSurfaces(stoveB, surfaces);
-            surfaces.Add(CreateWorktop(parent.transform, StoveBX + half, CounterX - half, height, surfaces.Count, worktopMat, catalog));
-            PlaceSurface nearCounter = CreateWorktop(parent.transform, CounterX + half, PlateShelfX - half, height, surfaces.Count, worktopMat, catalog);
-            surfaces.Add(nearCounter);
-            PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, WorktopEndX, height, surfaces.Count, worktopMat, catalog);
+            PlaceSurface plating = CreateWorktop(parent.transform, StoveBX + half, PlateShelfX - half, height, surfaces.Count, worktopMat, catalog);
+            surfaces.Add(plating);
+            PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, KitchenMaxX, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(last);
+            CreateFrontCounter(parent.transform, catalog);
+            CreateShopWalls(parent.transform);
             SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
             foreach (Station stove in new[] { stoveA, stoveB })
             {
@@ -959,13 +1007,14 @@ namespace Worktown.Game.Editor
 
             // Spec 021: the cookware lying on top at the start (each one's home spot, where a lost one comes back).
             NetworkObject Prefab(VesselKind kind) => vesselPrefabs.Find(p => p.GetComponent<Vessel>().Kind == kind);
-            PlaceOnSpot(Prefab(VesselKind.Board), first, SpotNear(first, 0f, -0.125f), "Cutting board");
-            PlaceOnSpot(knifePrefab, first, SpotNear(first, 0.5f, -0.125f), "Knife");
+            // Spec 027a: the board and the knife on the prep run, the plates next to the plate shelf, the bowl after it.
+            PlaceOnSpot(Prefab(VesselKind.Board), prep, SpotNear(prep, -0.3f, -0.125f), "Cutting board");
+            PlaceOnSpot(knifePrefab, prep, SpotNear(prep, 0.25f, -0.125f), "Knife");
             PlaceOnSpot(Prefab(VesselKind.Pan), burnersA[0], 0, "Pan");
             PlaceOnSpot(Prefab(VesselKind.Pot), burnersB[0], 0, "Pot");
-            PlaceOnSpot(Prefab(VesselKind.Plate), nearCounter, SpotNear(nearCounter, -0.25f, -0.125f), "Plate 1");
-            PlaceOnSpot(Prefab(VesselKind.Plate), nearCounter, SpotNear(nearCounter, 0.25f, -0.125f), "Plate 2");
-            PlaceOnSpot(Prefab(VesselKind.Bowl), last, SpotNear(last, -0.5f, -0.125f), "Bowl");
+            PlaceOnSpot(Prefab(VesselKind.Plate), plating, SpotNear(plating, -0.3f, -0.125f), "Plate 1");
+            PlaceOnSpot(Prefab(VesselKind.Plate), plating, SpotNear(plating, 0.3f, -0.125f), "Plate 2");
+            PlaceOnSpot(Prefab(VesselKind.Bowl), last, SpotNear(last, -0.3f, -0.125f), "Bowl");
 
             new GameObject("KitchenSounds").AddComponent<KitchenSounds>(); // spec 023, client only
 
@@ -1018,6 +1067,95 @@ namespace Worktown.Game.Editor
             return burners;
         }
 
+        /// <summary>Spec 027a: name prefix of the plain front counter runs either side of the serving counter.</summary>
+        public const string FrontCounterName = "Front counter";
+
+        /// <summary>
+        /// Spec 027a: the plain front counter either side of the serving counter, serving-counter high (1.05 m), CounterDepth (0.7 m) deep,
+        /// squashed in depth like the serving counter. Cabinet modules like the worktops, turned so their doors face the aisle (the cook side); one box
+        /// collider per run, no place surface (the place surfaces stay at worktop height).
+        /// </summary>
+        private static void CreateFrontCounter(Transform parent, ArtCatalog catalog)
+        {
+            Material material = CreateMaterial(Root + "/Settings/Station_Counter.mat", Palette.WoodLight);
+            float height = ArtSizeTable.ServingCounterHeight;
+            var runs = new[] { (KitchenMinX, CounterX - StationHalfGap), (CounterX + StationHalfGap, KitchenMaxX) };
+            for (int r = 0; r < runs.Length; r++)
+            {
+                (float minX, float maxX) = runs[r];
+                float width = maxX - minX;
+                var root = new GameObject(FrontCounterName + " " + (r + 1));
+                root.transform.SetParent(parent, false);
+                root.transform.SetPositionAndRotation(new Vector3((minX + maxX) * 0.5f, 0f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
+                var box = root.AddComponent<BoxCollider>();
+                box.size = new Vector3(width, height, CounterDepth);
+                box.center = new Vector3(0f, height * 0.5f, 0f);
+                if (catalog != null && catalog.TryGet(ArtKey.Worktop, out GameObject wrapper))
+                {
+                    (int count, float w) = ArtSizeTable.WorktopModules(width);
+                    float wrapperHeight = ArtCatalogBuilder.HeightOf(wrapper);
+                    float x = -width * 0.5f;
+                    for (int i = 0; i < count; i++)
+                    {
+                        var module = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                        module.name = "Counter module " + (i + 1);
+                        module.transform.localPosition = new Vector3(x + w * 0.5f, 0f, 0f);
+                        module.transform.localRotation = ArtFrontRotation; // spec 027a: the doors face the aisle (the cook side)
+                        module.transform.localScale = new Vector3(w / ArtSizeTable.WorktopModuleWidth, height / wrapperHeight, CounterDepth / StationWidth);
+                        x += w;
+                    }
+                }
+                else
+                {
+                    GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    body.name = "Body";
+                    UnityEngine.Object.DestroyImmediate(body.GetComponent<Collider>());
+                    body.transform.SetParent(root.transform, false);
+                    body.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
+                    body.transform.localScale = new Vector3(width, height, CounterDepth);
+                    body.GetComponent<MeshRenderer>().sharedMaterial = material;
+                }
+                SetStaticRecursive(root);
+            }
+        }
+
+        /// <summary>Spec 027a: names of the shop's walls (graybox Plaster boxes with colliders).</summary>
+        public const string BackWallName = "Back wall";
+        public const string SideWallName = "Side wall";
+
+        /// <summary>
+        /// Spec 027a: a plain back wall behind the back line (2.4 m) and low side walls (1.2 m) from the back wall to the front
+        /// counter's street side at both ends. The left one leaves the staff gap where the aisle meets it (the aisle's
+        /// width), so the cook can leave west, away from the guests; the right one is closed.
+        /// </summary>
+        private static void CreateShopWalls(Transform parent)
+        {
+            Material material = CreateMaterial(WallMaterialPath, Palette.Plaster);
+            var walls = new GameObject("Walls");
+            walls.transform.SetParent(parent, false);
+            float backFront = KitchenZ + StationWidth * 0.5f + WallGap;   // the back wall's inner face
+            float backLineFront = KitchenZ - StationWidth * 0.5f;          // where the aisle starts
+            float counterBack = FrontCounterZ + CounterDepth * 0.5f;       // where the aisle ends
+            float counterFront = FrontCounterZ - CounterDepth * 0.5f;      // the street side of the front counter
+            float leftX = KitchenMinX - WallGap - WallThickness;
+            float rightX = KitchenMaxX + WallGap;
+            CreateWall(walls.transform, BackWallName, leftX, rightX + WallThickness, backFront, backFront + WallThickness, BackWallHeight, material);
+            CreateWall(walls.transform, SideWallName + " left (back)", leftX, leftX + WallThickness, backLineFront, backFront, SideWallHeight, material);
+            CreateWall(walls.transform, SideWallName + " left (front)", leftX, leftX + WallThickness, counterFront, counterBack, SideWallHeight, material);
+            CreateWall(walls.transform, SideWallName + " right", rightX, rightX + WallThickness, counterFront, backFront, SideWallHeight, material);
+        }
+
+        private static void CreateWall(Transform parent, string name, float minX, float maxX, float minZ, float maxZ, float height, Material material)
+        {
+            GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube); // keeps its BoxCollider
+            wall.name = name;
+            wall.transform.SetParent(parent, false);
+            wall.transform.localPosition = new Vector3((minX + maxX) * 0.5f, height * 0.5f, (minZ + maxZ) * 0.5f);
+            wall.transform.localScale = new Vector3(maxX - minX, height, maxZ - minZ);
+            wall.GetComponent<MeshRenderer>().sharedMaterial = material;
+            wall.isStatic = true;
+        }
+
         /// <summary>Spec 021: a static stack of plate models on the plate shelf (the shelf gives the real plates).</summary>
         private static void CreatePlateStack(ArtCatalog catalog, Station shelf)
         {
@@ -1035,18 +1173,20 @@ namespace Worktown.Game.Editor
             SetStaticRecursive(stack);
         }
 
+        /// <summary>Spec 027a: <paramref name="yaw"/> turns the station; its front (controls, label) faces local -z.</summary>
         private static Station CreateStation(ArtCatalog catalog, Transform parent, int index, StationKind kind, string displayName,
-            float x, Material material, int ingredientIndex)
+            float x, float z, float yaw, Material material, int ingredientIndex)
         {
             float height = StationHeightOf(kind); // spec 026: 0.90 m, the counter 1.05 m
+            float depth = kind == StationKind.Counter ? CounterDepth : StationWidth; // spec 027a
             var root = new GameObject(displayName);
             root.transform.SetParent(parent, false);
-            root.transform.position = new Vector3(x, height * 0.5f, KitchenZ);
+            root.transform.SetPositionAndRotation(new Vector3(x, height * 0.5f, z), Quaternion.Euler(0f, yaw, 0f));
 
             GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.name = "Body";
             body.transform.SetParent(root.transform, false);
-            body.transform.localScale = new Vector3(StationWidth, height, StationWidth);
+            body.transform.localScale = new Vector3(StationWidth, height, depth);
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
             body.isStatic = true;
 
@@ -1057,6 +1197,9 @@ namespace Worktown.Game.Editor
                 UnityEngine.Object.DestroyImmediate(body.GetComponent<MeshRenderer>());
                 var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
                 visual.transform.localPosition = new Vector3(0f, -height * 0.5f, 0f);
+                visual.transform.localRotation = ArtFrontRotation; // spec 027a: the model's front (knobs, oven door) on the controls' side
+                // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules.
+                visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(1f, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
                 // Raise the label only when the model is taller than the cube.
                 float top = ArtCatalogBuilder.TopOf(visual) - height * 0.5f;
@@ -1252,7 +1395,7 @@ namespace Worktown.Game.Editor
 
         /// <summary>
         /// Spec 015: a short visual-only street east of the kitchen. The customers walk along
-        /// z = 10.8 (x 8.5 to 24) on the north side of the road; houses stand behind them.
+        /// z = 10.8 (spec 027a: x 6.6 to 24, along the front counter) on the north side of the road; houses stand behind them.
         /// Nothing here has a collider, so movement and interaction do not change.
         /// Spec 026: the buildings are at real size now (7.5 m to the ridge, up to 11.7 m wide), so the north row is spaced
         /// for their widths and the widest house that no longer fits there (F) stands south of the road, east of the
@@ -1332,16 +1475,14 @@ namespace Worktown.Game.Editor
 
         private static Transform[] CreateSpawnPoints()
         {
+            // Spec 027a: in the cook aisle (its centre line), facing the back line (+z); was a ring around the origin.
             var parent = new GameObject("SpawnPoints");
             var result = new List<Transform>();
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < SpawnX.Length; i++)
             {
                 var spawn = new GameObject("Spawn " + (i + 1));
                 spawn.transform.SetParent(parent.transform, false);
-                float angle = i * 90f;
-                spawn.transform.SetPositionAndRotation(
-                    Quaternion.Euler(0f, angle, 0f) * new Vector3(0f, 0.1f, -3f),
-                    Quaternion.Euler(0f, angle, 0f));
+                spawn.transform.SetPositionAndRotation(new Vector3(SpawnX[i], 0.1f, AisleZ), Quaternion.identity);
                 result.Add(spawn.transform);
             }
             return result.ToArray();
@@ -1566,6 +1707,7 @@ namespace Worktown.Game.Editor
                 case int i: prop.intValue = i; break;
                 case string s: prop.stringValue = s; break;
                 case Vector2 v: prop.vector2Value = v; break;
+                case Vector3 v3: prop.vector3Value = v3; break;
                 case UnityEngine.Object o: prop.objectReferenceValue = o; break;
                 case System.Collections.IList list:
                     prop.arraySize = list.Count;
