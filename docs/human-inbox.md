@@ -3,12 +3,22 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-09 05:10)
-- **Running:** spec 027b feel pass 1 (instant feedback, arcs, forgiving aim, F2 panel with presets A/B).
-- **Next:** 027c feel pass 2 (cooking
-  feedback), 027d world labels and customer looks. Then the cooking stations (028+). See docs/cooking-roadmap.md.
+## Status (updated 2026-11-09 05:00)
+- **Running:** spec 028 (street-food ingredients and the vegan content check).
+- **Next:** fryer (029), griddle (030), assembly and packaging (031), orders 2.0 (032). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
+  - **Specs 027b, 027c, 027d, the feel work** (three review rounds, 824 tests):
+    - **instant feedback:** items fly to your hand or spot the moment you click, the server confirms in 40-100 ms,
+      a refusal flies back with a "nope"; quick double clicks are never lost;
+    - **no teleports:** arcs, settles, drops into pots, a ghost preview where things land, sounds for every action;
+    - **forgiving aim** that sticks to the target and prefers what fits your held item; closer third-person camera;
+    - **standing people** no longer stand in a stride (the library's idle clip was the cause);
+    - **cooking reads at a glance:** a ring over the pan or pot fills up (cream, mustard at perfect, red when
+      overdone), the food browns, sizzle follows the heat, cues at perfect and 3 s before burning, smoke when burnt,
+      and serving pops stars and the tip;
+    - **labels:** small signs on the station fronts, no text through walls, no mirrored or overlapping text;
+      6 different customer looks.
   - **Spec 027a, shop floor plan:** back line (crates, board, two stoves, plates), a 1.5 m cook aisle (two cooks
     can pass; player body radius now 0.3 m), a slim 0.7 m front counter, guests queue on the street side facing
     the cook, back and side walls with a staff gap. **Your "buttons on the back" was real:** the stove and
