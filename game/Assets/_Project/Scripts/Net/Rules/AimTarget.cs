@@ -38,11 +38,14 @@ namespace Worktown.Game.Net.Rules
         public readonly int StockLine;
         /// <summary>Spec 034: that line's synced count as this client sees it (Shop.StockCounts), -1 while unknown.</summary>
         public readonly int StockCount;
+        /// <summary>Spec 035: a cleaning station's (or the plate shelf's) synced byte is known (<see cref="StoveFlags"/> holds it).</summary>
+        public readonly bool Known;
 
         private AimTarget(AimKind kind, StationKind station, VesselKind vessel, int contentCount, string contentName, int option,
             byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar, byte mode = 0, int stockLine = -1,
-            int stockCount = -1)
+            int stockCount = -1, bool known = false)
         {
+            Known = known;
             StockLine = stockLine < 0 ? -1 : stockLine;
             StockCount = stockCount < 0 ? -1 : stockCount;
             Mode = mode;
@@ -71,14 +74,23 @@ namespace Worktown.Game.Net.Rules
         private AimTarget With(bool tooFar)
         {
             return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar, Mode,
-                StockLine, StockCount);
+                StockLine, StockCount, Known);
+        }
+
+        /// <summary>
+        /// Spec 035: a cleaning station (the dish return, the sink or its basin, the trash can, the bin) or the plate shelf, with its synced
+        /// byte (Shop.CleaningRules: the dirty count, the basin and scrubbing bit, the fill, the clean plates) when <paramref name="known"/>.
+        /// </summary>
+        public static AimTarget CleaningStation(StationKind kind, int option, byte flags, bool known)
+        {
+            return new AimTarget(AimKind.Station, kind, default, 0, null, option, flags, null, -1, PlaceSpots.None, false, false, 0, -1, -1, known);
         }
 
         /// <summary>Spec 034: the same target showing stock line <paramref name="line"/> at <paramref name="count"/> (-1: unknown).</summary>
         public AimTarget WithStock(int line, int count)
         {
             return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, IsTooFar,
-                Mode, line, count);
+                Mode, line, count, Known);
         }
 
         /// <summary>

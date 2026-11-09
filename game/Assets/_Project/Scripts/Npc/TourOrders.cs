@@ -22,13 +22,17 @@ namespace Worktown.Game.Npc
 
         private readonly Dictionary<string, int> _next = new Dictionary<string, int>();
 
-        private static readonly (string Market, byte Dish, string[] Mods, bool Card, int Note, float Patience, string Drink)[] Script =
+        private static readonly (string Market, byte Dish, string[] Mods, bool Card, int Note, float Patience, string Drink, bool EatIn)[] Script =
         {
-            ("snack", Menu.Fries, new string[0], true, 10, PatienceScale, null),
-            ("meal", Menu.FalafelWrap, new[] { "extra garlic" }, false, 50, PatienceScale, "lemonade"), // spec 033: the tour's drink
-            ("meal", Menu.GrilledVeggies, new string[0], true, 10, PatienceScale, null),
-            ("meal", Menu.SeitanWrap, new[] { "no lettuce" }, false, 20, ShortPatienceScale, null),
+            ("snack", Menu.Fries, new string[0], true, 10, PatienceScale, null, true), // spec 035: eats in (its plate comes back dirty)
+            ("meal", Menu.FalafelWrap, new[] { "extra garlic" }, false, 50, PatienceScale, "lemonade", false), // spec 033: the tour's drink
+            ("meal", Menu.GrilledVeggies, new string[0], true, 10, PatienceScale, null, true),
+            ("meal", Menu.SeitanWrap, new[] { "no lettuce" }, false, 20, ShortPatienceScale, null, false),
         };
+
+        /// <summary>Spec 035: the last <see cref="TryNext(string, out MenuDish, out GuestOrder, out float, out string)"/> gave a scripted guest, and whether it eats in.</summary>
+        public bool LastScripted { get; private set; }
+        public bool LastEatIn { get; private set; }
 
         public static bool Requested(string[] args) => args != null && Array.IndexOf(args, Arg) >= 0;
 
@@ -43,6 +47,8 @@ namespace Worktown.Game.Npc
             order = null;
             drink = null;
             patienceScale = PatienceScale;
+            LastScripted = false;
+            LastEatIn = false;
             _next.TryGetValue(market, out int done);
             int seen = 0;
             foreach (var entry in Script)
@@ -58,6 +64,8 @@ namespace Worktown.Game.Npc
                 order = new GuestOrder(mods, GuestPatience.BaseSeconds, entry.Card, entry.Note);
                 patienceScale = entry.Patience;
                 drink = entry.Drink;
+                LastScripted = true;
+                LastEatIn = entry.EatIn;
                 return true;
             }
             return false;

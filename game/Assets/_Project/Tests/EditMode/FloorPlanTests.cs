@@ -41,6 +41,8 @@ namespace Worktown.Game.Tests
             public Station Register;
             /// <summary>Spec 033: the drink dispenser stands on the front counter too.</summary>
             public Station Drinks;
+            /// <summary>Spec 035: the dish return on the front counter, the trash can at its west end by the staff gap, the bin outside.</summary>
+            public Station Return, Trash, Bin;
             public List<Station> BackStations = new List<Station>();
             public List<PlaceSurface> Worktops = new List<PlaceSurface>();
             public List<BoxCollider> FrontRuns = new List<BoxCollider>();
@@ -97,6 +99,9 @@ namespace Worktown.Game.Tests
                 if (s.Kind == StationKind.Counter) plan.Serving = s;
                 else if (s.Kind == StationKind.Register) plan.Register = s; // spec 032: on the front counter
                 else if (s.Kind == StationKind.DrinkDispenser) plan.Drinks = s; // spec 033: on the front counter
+                else if (s.Kind == StationKind.DishReturn) plan.Return = s; // spec 035: on the front counter
+                else if (s.Kind == StationKind.TrashCan) plan.Trash = s; // spec 035: in line with the front counter, by the staff gap
+                else if (s.Kind == StationKind.Bin) plan.Bin = s; // spec 035: outside the staff gap
                 else plan.BackStations.Add(s);
                 if (s.Kind == StationKind.PlateShelf) plan.Shelf = s;
             }
@@ -293,7 +298,10 @@ namespace Worktown.Game.Tests
                 {
                     // A station's front (controls, crate opening, the serving counter's cook side) is its local -z.
                     // Spec 032: the register stands on the front counter like the serving counter: its front faces back across it.
-                    Vector3 intoAisle = station == plan.Serving || station == plan.Register || station == plan.Drinks ? -plan.Street : plan.Street; // spec 033 too
+                    // Spec 035: so do the dish return and the trash can; the bin outside faces the staff gap (the kitchen's way, +Right).
+                    bool front = station == plan.Serving || station == plan.Register || station == plan.Drinks || station == plan.Return
+                        || station == plan.Trash;
+                    Vector3 intoAisle = station == plan.Bin ? plan.Right : front ? -plan.Street : plan.Street; // spec 033 too
                     Assert.Greater(Vector3.Dot(Flat(-station.transform.forward), intoAisle), 0.7f, station.name + " faces the aisle");
                     // The catalog wrappers show their front (knobs, oven door, crate opening) on their local +z.
                     Transform art = station.transform.Find("Art_" + Worktown.Game.Art.ArtCatalogRules.StationKey(station.Kind));
@@ -505,7 +513,14 @@ namespace Worktown.Game.Tests
                 Assert.IsTrue(Array.Exists(drinks.GetComponents<Component>(), c => c != null && c.GetType().Name == "DrinkDispenserView"), "the spill's view");
                 Assert.IsTrue(Array.Exists(drinks.GetComponents<Component>(), c => c != null && c.GetType().Name == "NetworkObject"), "networked");
 
-                Assert.AreEqual(DrinkRules.ToolCount, drinks.SlotCount, "three taps, the cup stack, the lid stack");
+                // Spec 035: and the spill's slot after them (the cloth is held on the puddle), in reach, no collider, with its wipe view.
+                Assert.AreEqual(DrinkRules.ToolCount + 1, drinks.SlotCount, "three taps, the cup stack, the lid stack, the spill");
+                Assert.IsTrue(drinks.TryGetSlot(Worktown.Game.Shop.CleaningRules.SpillTool, out StockSlot spillSlot), "the spill's slot");
+                Assert.AreEqual(Worktown.Game.Shop.CleaningRules.SpillTool, spillSlot.Option);
+                Assert.IsEmpty(spillSlot.GetComponentsInChildren<Collider>(true), "the spill's slot never blocks a ray");
+                Assert.IsTrue(PickupRules.IsInReach(plan.AislePointNear(spillSlot.Anchor), spillSlot.Anchor), "the spill is in reach from the aisle");
+                Assert.IsTrue(Array.Exists(spillSlot.GetComponents<Component>(), c => c != null && c.GetType().Name == "SpillWipeView"), "the wipe's view");
+                Assert.Greater(plan.U(d) - plan.U(spillSlot.Anchor), 0.1f, "the puddle lies in front of the dispenser, on the cook's side");
                 for (int tool = 0; tool < DrinkRules.ToolCount; tool++)
                 {
                     Assert.IsTrue(drinks.TryGetSlot(tool, out StockSlot slot), "tool " + tool);
@@ -537,6 +552,72 @@ namespace Worktown.Game.Tests
                 drinks.TryGetSlot(DrinkRules.TapCount - 1, out StockSlot last);
                 Assert.Less(Across(cups.Anchor), Across(first.Anchor), "the cups left of the taps");
                 Assert.Greater(Across(lids.Anchor), Across(last.Anchor), "the lids right of the taps");
+            }
+            finally { Close(plan); }
+        }
+
+        // ---- Spec 035: cleaning ----
+
+        [Test]
+        public void Cleaning_SinkByThePlates_DishReturnOnTheCounter_TrashAtTheStaffGap_BinOutside()
+        {
+            Plan plan = Open();
+            try
+            {
+                var sinks = plan.BackStations.FindAll(s => s.Kind == StationKind.Sink);
+                Assert.AreEqual(1, sinks.Count, "one sink");
+                Station sink = sinks[0];
+                Vector3 k = sink.transform.position, shelf = plan.Shelf.transform.position;
+                float sinkToShelf = new Vector2(k.x - shelf.x, k.z - shelf.z).magnitude;
+                TestContext.WriteLine("the sink to the plate shelf " + sinkToShelf.ToString("0.00") + " m");
+                Assert.Greater(plan.V(k), plan.V(shelf), "the sink after the plate shelf: the end of the line");
+                Assert.LessOrEqual(sinkToShelf, 1.5f, "the sink next to the plates, centre to centre");
+                Assert.Greater(Vector3.Dot(Flat(-sink.transform.forward), plan.Street), 0.7f, "the sink faces the aisle");
+                Assert.IsTrue(sink.TryGetSlot(Worktown.Game.Shop.CleaningRules.BasinTool, out StockSlot basin), "the basin");
+                Assert.IsTrue(PickupRules.IsInReach(plan.AislePointNear(basin.Anchor), basin.Anchor), "the basin is in reach from the aisle");
+                Assert.IsEmpty(basin.GetComponentsInChildren<Collider>(true), "the basin's looks never block a ray");
+                Assert.IsTrue(Array.Exists(basin.GetComponents<Component>(), c => c != null && c.GetType().Name == "SinkView"), "water, plates, bubbles");
+                Bounds sinkBody = BodyOf(sink);
+                Assert.IsTrue(basin.Anchor.x > sinkBody.min.x && basin.Anchor.x < sinkBody.max.x && basin.Anchor.z > sinkBody.min.z
+                    && basin.Anchor.z < sinkBody.max.z, "the basin is part of the sink");
+                PlaceSurface drain = sink.GetComponentInChildren<PlaceSurface>();
+                Assert.IsNotNull(drain, "the drainboard (a place surface on the sink)");
+                Component cloth = Array.Find(All<Transform>(plan.Scene).ToArray(), t => t.GetComponent<WipeCloth>() != null);
+                Assert.IsNotNull(cloth, "the wipe cloth");
+                Assert.LessOrEqual(Vector2.Distance(new Vector2(cloth.transform.position.x, cloth.transform.position.z),
+                    new Vector2(drain.transform.position.x, drain.transform.position.z)), 0.5f, "the cloth's home on the drainboard");
+
+                Station ret = plan.Return;
+                Assert.IsNotNull(ret, "the dish return");
+                Assert.That(plan.U(ret.transform.position), Is.InRange(plan.AisleEnd, plan.CounterStreetSide), "on the front counter");
+                Assert.Greater(Vector3.Dot(Flat(-ret.transform.forward), -plan.Street), 0.7f, "its open side faces the aisle (the cook)");
+                float returnToSink = Vector3.Distance(plan.AislePointNear(ret.transform.position), plan.AislePointNear(k));
+                TestContext.WriteLine("the dish return to the sink's aisle point " + returnToSink.ToString("0.00") + " m");
+                Assert.LessOrEqual(returnToSink, 1.5f, "a step from the dish return to the sink");
+                Assert.IsTrue(ret.TryGetSlot(0, out StockSlot stack) && stack.transform.childCount > 0, "the stack's take slot shows its top plate");
+
+                Station trash = plan.Trash;
+                Assert.IsNotNull(trash, "the trash can");
+                Vector3 t0 = trash.transform.position;
+                Assert.Less(plan.V(t0) - plan.AisleLeft, 1.0f, "the trash at the staff gap's end of the kitchen");
+                Assert.That(plan.U(t0), Is.InRange(plan.AisleEnd, plan.CounterStreetSide), "in line with the front counter, not in the aisle");
+                Assert.GreaterOrEqual(MinAlong(BodyOf(trash), plan.Street), plan.AisleEnd - 0.01f, "it leaves the aisle clear");
+                Assert.IsTrue(PickupRules.IsInReach(plan.AislePointNear(t0), t0), "the trash can is in reach from the aisle");
+
+                Station bin = plan.Bin;
+                Assert.IsNotNull(bin, "the bin");
+                Vector3 b = bin.transform.position;
+                Assert.Less(plan.V(b), plan.AisleLeft - 0.5f, "the bin stands outside the staff gap's side wall");
+                Vector3 gapOutside = plan.Street * plan.AisleCentre + plan.Right * (plan.AisleLeft - 0.6f);
+                Assert.IsTrue(PickupRules.IsInReach(gapOutside, b), "a step out of the staff gap reaches the bin");
+                Assert.IsFalse(PickupRules.IsInReach(plan.AislePointNear(b), b), "taking the trash out means leaving the kitchen");
+                Assert.Greater(Vector3.Dot(Flat(-bin.transform.forward), plan.Right), 0.7f, "the bin faces the staff gap");
+
+                foreach (Station s in new[] { plan.Shelf, ret, sink, trash })
+                {
+                    Assert.IsTrue(Array.Exists(s.GetComponents<Component>(), c => c != null && c.GetType().Name == "StationContents"), s.name + "'s byte");
+                    Assert.IsTrue(Array.Exists(s.GetComponents<Component>(), c => c != null && c.GetType().Name == "NetworkObject"), s.name + " networked");
+                }
             }
             finally { Close(plan); }
         }
@@ -793,7 +874,7 @@ namespace Worktown.Game.Tests
             {
                 var boxes = new List<(string Name, Bounds Bounds)>();
                 foreach (Station s in plan.Stations)
-                    if (s != plan.Register && s != plan.Drinks) boxes.Add((s.name, BodyOf(s))); // spec 032/033: on a front run (checked below)
+                    if (s != plan.Register && s != plan.Drinks && s != plan.Return) boxes.Add((s.name, BodyOf(s))); // spec 032/033/035: on a front run (checked below)
                 Assert.IsNotNull(plan.Register, "spec 032: the register");
                 Assert.IsNotNull(plan.Drinks, "spec 033: the drink dispenser");
                 bool OnARun(Bounds b)
@@ -811,6 +892,10 @@ namespace Worktown.Game.Tests
                 Assert.IsFalse(till.min.x < BodyOf(plan.Serving).max.x && till.max.x > BodyOf(plan.Serving).min.x, "beside the serving counter, not on it");
                 Assert.IsFalse(drinks.min.x < BodyOf(plan.Serving).max.x && drinks.max.x > BodyOf(plan.Serving).min.x, "the dispenser beside the serving counter");
                 Assert.IsFalse(drinks.min.x < till.max.x && drinks.max.x > till.min.x, "the dispenser and the register do not overlap");
+                Assert.IsNotNull(plan.Return, "spec 035: the dish return");
+                Bounds dishes = BodyOf(plan.Return);
+                Assert.IsTrue(OnARun(dishes), "spec 035: the dish return stands within a front counter run, on its top");
+                Assert.IsFalse(dishes.min.x < till.max.x && dishes.max.x > till.min.x, "the dish return beside the register");
                 foreach (PlaceSurface w in plan.Worktops) boxes.Add((w.name, w.GetComponent<BoxCollider>().bounds));
                 foreach (BoxCollider b in plan.FrontRuns) boxes.Add((b.name, b.bounds));
                 foreach (BoxCollider b in plan.Walls) boxes.Add((b.name, b.bounds));
@@ -857,7 +942,8 @@ namespace Worktown.Game.Tests
                         + Vector3.Distance(cook, target).ToString("0.00") + " m)");
                 }
                 foreach (StationButton button in All<StationButton>(plan.Scene)) Reach(button.name, button.transform.position);
-                foreach (Station station in plan.Stations) Reach(station.name, station.transform.position);
+                foreach (Station station in plan.Stations)
+                    if (station != plan.Bin) Reach(station.name, station.transform.position); // spec 035: the bin is outside (its own test)
                 foreach (StockSlot slot in All<StockSlot>(plan.Scene)) Reach(slot.name, slot.Anchor); // spec 028b: reach is to the slot
                 int spots = 0;
                 foreach (PlaceSurface surface in All<PlaceSurface>(plan.Scene))

@@ -608,6 +608,27 @@
         "Unpack into the slot: does it fill at once, and a full slot keep the rest in the box?",
         "Use up the cups or a sauce: is it refused with 'Out of stock'? Does the HUD say 'Low stock' first?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-035",
+      "date": "2026-11-09",
+      "title": "Cleaning: dirty dishes, the sink, the trash, spills and the hygiene score",
+      "items": [
+        "The shop owns eight plates. Half the guests eat in ('for here' on their bubble): their plate comes back dirty to the dish return on the counter, by the register, after their meal",
+        "Take a dirty plate from the dish return, put it in the sink next to the plate shelf, and hold to scrub (1.5 s): it goes back on the clean shelf. Without washing, plates run out",
+        "Throw burnt food, scraps and empty cups into the trash can by the staff gap; at 12 items it is full",
+        "With empty hands take the bag out of the can and carry it to the bin outside the staff gap",
+        "A spilled drink leaves a puddle: take the cloth from the sink's drainboard and hold it on the puddle to wipe it",
+        "The HUD shows the hygiene score (a drop and %): dirty dishes left out over two game minutes, a full trash, spills and burning food lower it; it recovers when all is clean",
+        "Guests notice: below 50 % a review loses a star, below 30 % new guests are 20 % less patient"
+      ],
+      "test": [
+        "Serve an eat-in guest a plate dish: about 20 s later, is a dirty plate on the dish return? Wash it: is the shelf one plate fuller?",
+        "Hold the scrub only a second: does the plate stay dirty? Hold it 1.5 s: is it clean, with bubbles and the scrub sound?",
+        "Fill the trash to 12: does it refuse more and turn red? Take the bag out to the bin: is it empty again?",
+        "Overfill a cup, then wipe the puddle with the cloth: does it shrink away?",
+        "Leave dishes and a spill: does the hygiene meter drop and turn yellow, then red? Clean up: does it climb again?"
+      ]
     }
   ]
 }

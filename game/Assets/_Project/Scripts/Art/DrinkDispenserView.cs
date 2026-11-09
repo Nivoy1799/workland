@@ -30,6 +30,31 @@ namespace Worktown.Game.Art
         /// <summary>True while the puddle is drawn.</summary>
         public bool PuddleShown => _shown;
 
+        // Spec 035: the wipe. While someone wipes the puddle shrinks (SpillWipeView sets the share left); the wiping player's finished
+        // wipe hides it at once until the server's bit agrees (or a few seconds).
+        private float _left = 1f;
+        private float _wipedUntil = float.NegativeInfinity;
+        private Vector3 _fullScale;
+
+        /// <summary>Spec 035: the puddle's centre on the counter (world).</summary>
+        public Vector3 PuddleCentre => _puddle != null ? _puddle.transform.position : transform.position;
+
+        /// <summary>Spec 035: the share of the puddle still drawn (1 untouched, 0 gone), set every frame of a wipe.</summary>
+        public void SetWipeLeft(float left)
+        {
+            left = Mathf.Clamp01(left);
+            if (Mathf.Approximately(left, _left) || _puddle == null) return;
+            _left = left;
+            _puddle.transform.localScale = new Vector3(_fullScale.x * Mathf.Max(0.05f, left), _fullScale.y, _fullScale.z * Mathf.Max(0.05f, left));
+        }
+
+        /// <summary>Spec 035: our own wipe finished: the puddle goes now (the server's bit follows).</summary>
+        public void PredictWiped(float seconds)
+        {
+            _wipedUntil = Time.unscaledTime + Mathf.Max(0.5f, seconds);
+            _predictedAt = float.NegativeInfinity;
+        }
+
         private void Awake()
         {
             if (Application.isBatchMode || SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
@@ -53,6 +78,7 @@ namespace Worktown.Game.Art
             block.SetColor(BaseColorId, Palette.SoftBlue);
             _puddle.SetPropertyBlock(block);
             _puddle.enabled = false;
+            _fullScale = puddle.transform.localScale;
         }
 
         /// <summary>The pouring player's cup ran over at <paramref name="where"/>: the splash now, the puddle at once.</summary>
@@ -69,7 +95,9 @@ namespace Worktown.Game.Art
             if (_hasSeen && bit && !_seenBit && now - _predictedAt > PredictedSpillSeconds) Play(SoundKey.Splash, _puddle.transform.position);
             _seenBit = bit;
             _hasSeen = true;
-            bool show = bit || now - _predictedAt <= PredictedSpillSeconds;
+            if (!bit && now < _wipedUntil) _wipedUntil = float.NegativeInfinity; // the server agrees
+            bool show = (bit && now >= _wipedUntil) || now - _predictedAt <= PredictedSpillSeconds;
+            if (!show && _left < 1f) SetWipeLeft(1f); // the next spill is whole again
             if (show == _shown) return;
             _shown = show;
             _puddle.enabled = show;

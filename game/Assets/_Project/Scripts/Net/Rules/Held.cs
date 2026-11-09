@@ -46,11 +46,21 @@ namespace Worktown.Game.Net.Rules
         public readonly int BoxLine;
         /// <summary>Spec 034, a delivery box: the units in it.</summary>
         public readonly int BoxUnits;
+        /// <summary>Spec 035: a dirty dish from the dish return (it goes into the sink only).</summary>
+        public readonly bool IsDirtyDish;
+        /// <summary>Spec 035: a trash bag taken out of the can (it goes into the bin outside).</summary>
+        public readonly bool IsTrashBag;
+        /// <summary>Spec 035: the wipe cloth (held on a spill, it wipes it).</summary>
+        public readonly bool IsCloth;
 
         private Held(bool holding, bool food, bool knife, bool plated, string name, bool vessel = false,
             VesselKind kind = default, int count = 0, string contentName = null, bool spatula = false, bool pending = false,
-            bool build = false, bool cup = false, bool lidded = false, int cupTap = -1, byte cupLevel = 0, int boxLine = -1, int boxUnits = 0)
+            bool build = false, bool cup = false, bool lidded = false, int cupTap = -1, byte cupLevel = 0, int boxLine = -1, int boxUnits = 0,
+            bool dirty = false, bool bag = false, bool cloth = false)
         {
+            IsDirtyDish = dirty;
+            IsTrashBag = bag;
+            IsCloth = cloth;
             BoxLine = boxLine < 0 ? -1 : boxLine;
             BoxUnits = BoxLine >= 0 ? boxUnits : 0;
             IsCup = cup;
@@ -88,8 +98,20 @@ namespace Worktown.Game.Net.Rules
         {
             return new Held(true, item.IsFood, item.IsKnife, item.IsPlated, item.Name, item.IsVessel, item.Vessel, item.ContentCount,
                 item.ContentName, item.IsSpatula, true, item.IsBuild, item.IsCup, item.CupLidded, item.CupTap, item.CupLevel, item.BoxLine,
-                item.BoxUnits);
+                item.BoxUnits, item.IsDirtyDish, item.IsTrashBag, item.IsCloth);
         }
+
+        /// <summary>Spec 035: a dirty dish from the dish return.</summary>
+        public static Held DirtyDish => new Held(true, false, false, false, "dirty plate", dirty: true);
+
+        /// <summary>Spec 035: a trash bag.</summary>
+        public static Held TrashBag => new Held(true, false, false, false, "trash bag", bag: true);
+
+        /// <summary>Spec 035: the wipe cloth.</summary>
+        public static Held Cloth => new Held(true, false, false, false, "cloth", cloth: true);
+
+        /// <summary>Spec 035: what the trash takes from the hands: food (a cup too) or cookware with food in it.</summary>
+        public bool IsDiscardable => IsFood || HasContents;
 
         /// <summary>Spec 034: a delivery box of <paramref name="units"/> units of stock line <paramref name="line"/>, named for the prompt.</summary>
         public static Held Box(string name, int line, int units)

@@ -63,6 +63,12 @@ namespace Worktown.Game.Art
             // Spec 034: the ordering terminal (a wall screen) and the delivery box (world size: a box is carried with both hands).
             World(ArtKey.StationTerminal, TerminalArtRules.Height, SizeAxis.Height, "Ordering terminal"),
             World(ArtKey.PropDeliveryBox, DeliveryBoxSize, SizeAxis.Largest, "Delivery box"),
+            // Spec 035: the cleaning stations (graybox): the sink worktop high, the dish return on the front counter (its own height
+            // above the counter top), the kitchen trash can and the bin outside.
+            World(ArtKey.StationSink, WorktopHeight, SizeAxis.Height, Worktop),
+            World(ArtKey.StationDishReturn, CleaningArtRules.ReturnHeight, SizeAxis.Height, "Dish return"),
+            World(ArtKey.StationTrash, CleaningArtRules.TrashHeight, SizeAxis.Height, "Kitchen trash can"),
+            World(ArtKey.StationBin, CleaningArtRules.BinHeight, SizeAxis.Height, "Bin (outside)"),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).

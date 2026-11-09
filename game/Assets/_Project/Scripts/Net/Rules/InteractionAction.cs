@@ -41,6 +41,14 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 034: a row of the ordering terminal orders its good (paid on placing it).</summary>
         Order,
         /// <summary>Spec 034: a button of the terminal turns the page or picks the pack count (the client's own view; nothing is sent).</summary>
-        Page
+        Page,
+        /// <summary>Spec 035: what the hands hold goes into the trash can (food, an empty cup, the food in cookware), or the trash bag into the bin.</summary>
+        Discard,
+        /// <summary>Spec 035: the dirty dish in the hands goes into the sink.</summary>
+        Wash,
+        /// <summary>Spec 035: hold left click on the sink with empty hands to scrub the dish in it (server-timed).</summary>
+        Scrub,
+        /// <summary>Spec 035: hold left click on a spill with the cloth in the hands to wipe it (server-timed).</summary>
+        Wipe
     }
 }

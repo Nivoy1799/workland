@@ -87,6 +87,28 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 034: this box holds another good (it is unpacked at its own slot).</summary>
         WrongBox,
         /// <summary>Spec 034: too many orders are on their way (Sim.Economy.SupplyBook.MaxPending).</summary>
-        TooManyOrders
+        TooManyOrders,
+        /// <summary>Spec 035: every clean plate is in use or dirty: wash some at the sink.</summary>
+        NoCleanPlates,
+        /// <summary>Spec 035: no dirty dish waits at the dish return.</summary>
+        NoDirtyDishes,
+        /// <summary>Spec 035: only a dirty dish goes into the sink (take one from the dish return).</summary>
+        NotDirty,
+        /// <summary>Spec 035: the sink holds no more dishes: scrub one first.</summary>
+        SinkFull,
+        /// <summary>Spec 035: nothing in the sink to scrub.</summary>
+        SinkEmpty,
+        /// <summary>Spec 035: the trash can is full: take the bag out first.</summary>
+        TrashFull,
+        /// <summary>Spec 035: the trash can is empty (no bag to take out).</summary>
+        TrashEmpty,
+        /// <summary>Spec 035: that does not go into the trash (a tool, cookware without food, a dirty dish: wash it).</summary>
+        CannotDiscard,
+        /// <summary>Spec 035: only a trash bag goes into the bin outside.</summary>
+        NotABag,
+        /// <summary>Spec 035: wiping needs the cloth in the hands.</summary>
+        NoCloth,
+        /// <summary>Spec 035: there is nothing to wipe here.</summary>
+        NoSpill
     }
 }

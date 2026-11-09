@@ -673,7 +673,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void TheSyncedSurface_GrowsOnlyBySmallPresentationFields()
         {
-            CollectionAssert.AreEquivalent(new[] { "Wish", "Bubble", "Dish", "Mood", "Patience" }, Synced(typeof(Customer)));
+            CollectionAssert.AreEquivalent(new[] { "Wish", "Bubble", "Dish", "Mood", "Patience", "EatIn" }, Synced(typeof(Customer)));
             Assert.AreEqual(typeof(byte), SyncArgument(typeof(Customer).GetField("Patience", Instance)), "the patience ring: one byte");
             CollectionAssert.AreEquivalent(new[] { "Payment", "Tray" }, Synced(typeof(Register)));
             Assert.AreEqual(typeof(ushort), SyncArgument(typeof(Register).GetField("Payment", Instance)));

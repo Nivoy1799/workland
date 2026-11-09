@@ -8,7 +8,9 @@ namespace Worktown.Game.Shop
     /// squeeze draws its portion (10 to 30 % of a bottle) from the opened bottle of that sauce (the next one opens from the dry shelf's
     /// bottles), packaging takes one from the rack, a pour draws its share of a cup from the tap's keg (the cup itself came from the cup
     /// stack). Nothing is charged in money: the orders paid for it. A press finds nothing left: OutOfStock. The refund backstop puts
-    /// back exactly what the charge took. Goods the shop does not stock are free. One instance per server step.
+    /// back exactly what the charge took. 034 review: a good the shop does not stock is never free: OutOfStock (every sauce, packaging
+    /// and drink has a stock line; a test pins it). A portion or a pour is drawn whole or not at all (no last drops: the wholesaler's
+    /// cap counts the bucket's least share). One instance per server step; each charge starts from nothing drawn.
     /// </summary>
     public sealed class StockWallet : IAssemblyWallet, IDrinkWallet
     {
@@ -32,21 +34,22 @@ namespace Worktown.Game.Shop
         public CookOutcome Charge(int owner, string grocerId, int percent, out long cost)
         {
             cost = 0;
+            _taken = _drawn = 0;
             int line = LineOf(grocerId);
-            if (line < 0) return CookOutcome.Ok;
+            if (line < 0) return CookOutcome.OutOfStock;
             if (percent >= 100)
             {
                 CookOutcome took = _room.Take(line);
                 _taken = took == CookOutcome.Ok ? 1 : 0;
                 return took;
             }
-            return _room.Draw(line, percent, out _drawn);
+            return _room.Draw(line, percent, percent, out _drawn);
         }
 
         public bool CanAfford(int owner, string grocerId, int percent)
         {
             int line = LineOf(grocerId);
-            return line < 0 || (percent >= 100 ? _room.CanTake(line) : _room.CanDraw(line));
+            return line >= 0 && (percent >= 100 ? _room.CanTake(line) : _room.CanDraw(line));
         }
 
         public void Refund(int owner, string grocerId, int percent, long cost)
@@ -62,14 +65,15 @@ namespace Worktown.Game.Shop
         public CookOutcome Charge(int owner, string drinkId, int percent, bool withCup, out long cost)
         {
             cost = 0;
+            _taken = _drawn = 0;
             int line = LineOf(drinkId);
-            return line < 0 ? CookOutcome.Ok : _room.Draw(line, percent, out _drawn);
+            return line < 0 ? CookOutcome.OutOfStock : _room.Draw(line, percent, percent, out _drawn);
         }
 
         public bool CanAfford(int owner, string drinkId, int percent, bool withCup)
         {
             int line = LineOf(drinkId);
-            return line < 0 || _room.CanDraw(line);
+            return line >= 0 && _room.CanDraw(line);
         }
 
         public void Refund(int owner, string drinkId, int percent, bool withCup, long cost)

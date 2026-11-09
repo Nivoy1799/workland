@@ -14,7 +14,7 @@ namespace Worktown.Sim.Economy
         {
             int stars = packed & 0x7;
             int key = packed >> 3;
-            if (stars < 1 || stars > 5 || key > (int)ReviewKey.WrongChange) return null;
+            if (stars < 1 || stars > 5 || key > (int)ReviewKey.Dirty) return null; // spec 035: the last key
             return new GuestReview(stars, (ReviewKey)key);
         }
     }

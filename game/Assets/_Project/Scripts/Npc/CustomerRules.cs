@@ -164,6 +164,22 @@ namespace Worktown.Game.Npc
             return line.Length == 0 ? text : text + "\n" + line;
         }
 
+        /// <summary>Spec 035: the order bubble says whether the guest eats in ("for here") or takes it away ("to go").</summary>
+        public static string OrderText(byte dish, byte modifiers, byte drink, bool eatIn) =>
+            OrderText(dish, modifiers, drink) + "\n" + DiningText(eatIn);
+
+        public static string DiningText(bool eatIn) => eatIn ? "· for here" : "· to go";
+
+        /// <summary>Seed of the server's eat-in RNG (AGENTS rule 7), its own so the 022/032/033 draws keep their sequence.</summary>
+        public const ulong EatInSeed = 35;
+
+        /// <summary>
+        /// Spec 035: a new guest's patience (s): the 032 base and layers (and the 033 drink), the tour's scale, and the shop's hygiene
+        /// (Sim.Economy.HygieneRules.Patience: 20 % less below 30 %). Deterministic.
+        /// </summary>
+        public static float PatienceFor(GuestOrder order, int layers, bool drink, float scale, int hygienePercent) =>
+            HygieneRules.Patience(GuestOrders.PatienceSeconds(order, layers + (drink ? 1 : 0)) * scale, hygienePercent);
+
         /// <summary>
         /// Spec 033: the wishes the queue is reconciled to, with one more for each queued guest whose dish came already
         /// (<paramref name="dishServed"/>) and that still waits for its drink: its dish was sold to the demand, so without it the

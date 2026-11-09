@@ -150,6 +150,18 @@ namespace Worktown.Game.Economy
         public bool CanAfford(NetworkObject player, long cost) =>
             player != null && _economy.BalanceOf(EconomyRules.AccountId(player.OwnerId)) >= cost;
 
+        /// <summary>
+        /// 034 review: the game this economy is (the object identity of its state's owner): a new economy is a new game. The stock and
+        /// other per-game state tie their start to it, not to a server start in the same process.
+        /// </summary>
+        public object Game => _economy;
+
+        /// <summary>
+        /// 034 review, server: a refund to account <paramref name="accountId"/> (its player may be gone, e.g. a supply order refunded when
+        /// the server stops); bounded like <see cref="Refund"/> by what the account paid.
+        /// </summary>
+        public EconomyError RefundAccount(string accountId, long amount) => _economy.Refund(accountId, amount);
+
         /// <summary>Spec 034, server, the refund backstop: <paramref name="amount"/> goes back to the player's account.</summary>
         public EconomyError Refund(NetworkObject player, long amount)
         {

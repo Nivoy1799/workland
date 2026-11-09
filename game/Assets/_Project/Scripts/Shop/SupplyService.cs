@@ -41,6 +41,14 @@ namespace Worktown.Game.Shop
         private int _publishedVersion = -1;
         private float _nextCheck;
         private bool _tourStock;
+        // 034 review: the game (economy) the stock belongs to: a new economy is a new game (the starting stock); a server restart in the
+        // same game keeps it.
+        private object _stockGame;
+        // 034 review: the spawned boxes by object id (a lost one comes back at the back door) and the spots used in one spawn pass.
+        private readonly Dictionary<int, NetworkObject> _boxObjects = new Dictionary<int, NetworkObject>();
+        private readonly List<int> _boxIds = new List<int>();
+        private bool[] _occupied = new bool[0];
+        private bool[] _used = new bool[0];
 
         /// <summary>Server: the stock (KitchenService takes and draws from it).</summary>
         public StockRoom Room => _room;
@@ -50,7 +58,6 @@ namespace Worktown.Game.Shop
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
             _tourStock = Worktown.Game.Npc.TourOrders.Requested(System.Environment.GetCommandLineArgs());
-            if (_tourStock) StartTourStock();
 #endif
         }
 
@@ -63,8 +70,30 @@ namespace Worktown.Game.Shop
         private void OnServerConnectionState(ServerConnectionStateArgs args)
         {
             if (args.ConnectionState != LocalConnectionState.Stopped || _networkManager.ServerManager.IsAnyServerStarted()) return;
-            // A new game next time: the starting stock, no orders, no boxes (FishNet despawned them).
-            _room.Reset();
+            // 034 review: the server stops, the game goes on (the economy keeps its money): the orders on their way are refunded to their
+            // payers, the boxes FishNet despawned wait for the back door again, the stock stays. Only a new game starts at half.
+            int refunded = _room.EndSession(RefundAccount);
+            if (refunded > 0) Debug.Log("[Supply] the server stopped: " + refunded + " order(s) on their way refunded");
+            _boxObjects.Clear();
+            _publishedVersion = -1;
+        }
+
+        private void RefundAccount(string accountId, long amount)
+        {
+            if (_economy == null) return;
+            Worktown.Sim.Economy.EconomyError back = _economy.RefundAccount(accountId, amount);
+            if (back != Worktown.Sim.Economy.EconomyError.None)
+                Debug.LogError("[Supply] could not refund " + EconomyRules.Money(amount) + " to " + accountId + ": " + back);
+        }
+
+        /// <summary>034 review: a new economy is a new game: the starting stock (and the tour's), no orders, no boxes.</summary>
+        private void EnsureGame()
+        {
+            object game = _economy != null ? _economy.Game : this;
+            if (ReferenceEquals(game, _stockGame)) return;
+            bool first = _stockGame == null;
+            _stockGame = game;
+            if (!first) _room.Reset(); // a fresh room already holds the starting stock
             if (_tourStock) StartTourStock();
             _publishedVersion = -1;
         }
@@ -80,9 +109,11 @@ namespace Worktown.Game.Shop
         private void Update()
         {
             if (!_networkManager.IsServerStarted) return;
+            EnsureGame();
             PublishIfChanged();
             if (Time.unscaledTime < _nextCheck) return;
             _nextCheck = Time.unscaledTime + CheckInterval;
+            WatchLostBoxes();
             if (_economy != null)
             {
                 _room.Deliver(_economy.GameMinute, _arrived);
@@ -108,28 +139,67 @@ namespace Worktown.Game.Shop
             _counts.ServerPublish(_bytes, _bytes.Length);
         }
 
+        /// <summary>
+        /// Spawns the waiting boxes on free delivery spots. 034 review: one pass can spawn several boxes, and the physics probe does not
+        /// see a box moved in this frame (no auto-synced transforms), so the spots used in this pass count as taken
+        /// (<see cref="StockRoom.FreeSpot"/>, pure and tested).
+        /// </summary>
         private void SpawnWaitingBoxes()
         {
             if (_boxPrefab == null || _deliverySpots == null) return;
+            int n = _deliverySpots.Length;
+            if (_occupied.Length != n)
+            {
+                _occupied = new bool[n];
+                _used = new bool[n];
+            }
+            bool probed = false;
             while (_room.TryPeekWaiting(out BoxContents box))
             {
-                Transform spot = FreeSpot();
-                if (spot == null) return; // the rest waits for a free spot
+                if (!probed)
+                {
+                    probed = true;
+                    for (int i = 0; i < n; i++)
+                    {
+                        _occupied[i] = _deliverySpots[i] == null || PickupService.IsSpotOccupied(_deliverySpots[i].position, _probe);
+                        _used[i] = false;
+                    }
+                }
+                int s = StockRoom.FreeSpot(_occupied, _used);
+                if (s < 0) return; // the rest waits for a free spot
+                _used[s] = true;
+                Transform spot = _deliverySpots[s];
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_boxPrefab, true);
                 float lift = nob.TryGetComponent(out Pickup pickup) ? pickup.BottomOffset : 0f;
                 nob.transform.SetPositionAndRotation(spot.position + Vector3.up * lift, spot.rotation);
                 if (nob.TryGetComponent(out SupplyBox supplyBox)) supplyBox.ServerSet(box);
                 _networkManager.ServerManager.Spawn(nob);
                 _room.ConfirmSpawned(nob.ObjectId);
+                _boxObjects[nob.ObjectId] = nob;
                 Debug.Log("[Supply] a box of " + StockCatalog.Describe(box.Line, box.Units) + " at the back door (" + spot.name + ")");
             }
         }
 
-        private Transform FreeSpot()
+        /// <summary>
+        /// 034 review: a box that fell below the world, or whose object went without its unpack, comes back at the back door with its
+        /// contents (StockRoom.ReturnLostBox); a lost object still spawned is despawned first.
+        /// </summary>
+        private void WatchLostBoxes()
         {
-            foreach (Transform spot in _deliverySpots)
-                if (spot != null && !PickupService.IsSpotOccupied(spot.position, _probe)) return spot;
-            return null;
+            _room.BoxIds(_boxIds);
+            foreach (int id in _boxIds)
+            {
+                _boxObjects.TryGetValue(id, out NetworkObject nob);
+                bool exists = nob != null && nob.IsSpawned && nob.ObjectId == id;
+                if (!VesselRules.IsLost(exists, exists ? nob.transform.position.y : 0f)) continue;
+                _boxObjects.Remove(id);
+                _room.ReturnLostBox(id);
+                if (exists)
+                {
+                    _networkManager.ServerManager.Despawn(nob);
+                }
+                Debug.Log("[Supply] box " + id + " was lost; it comes back at the back door");
+            }
         }
 
         // ---- the terminal ----
@@ -202,6 +272,7 @@ namespace Worktown.Game.Shop
             if (done != CookOutcome.Ok) return done;
             if (left <= 0)
             {
+                _boxObjects.Remove(box.ObjectId); // 034 review: unpacked, not lost
                 _pickups.TakeAway(player, out _);
                 _networkManager.ServerManager.Despawn(box);
             }
@@ -217,10 +288,12 @@ namespace Worktown.Game.Shop
 
         private string Presented(int line) => StockCatalog.Presented(_room.LineOf(line)) + "/" + StockCatalog.PresentedCapacity(line);
 
-        /// <summary>Server: a box object is gone (despawned some other way): forget what was in it.</summary>
+        /// <summary>Server: a box object is gone with its contents used up: forget it (never comes back).</summary>
         public void ForgetBox(NetworkObject box)
         {
-            if (box != null) _room.ForgetBox(box.ObjectId);
+            if (box == null) return;
+            _room.ForgetBox(box.ObjectId);
+            _boxObjects.Remove(box.ObjectId);
         }
     }
 }

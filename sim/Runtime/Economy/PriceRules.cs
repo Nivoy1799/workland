@@ -181,7 +181,9 @@ namespace Worktown.Sim.Economy
         /// Spec 034: what the item's parts cost the shop when its stock came from the supplier: every component at
         /// <see cref="Supplier.BulkUnitPrice"/> (never above what a unit cost in any order); a squeezed portion at the least share of a
         /// bottle any squeeze of its amount bucket draws, a pour's drink at the least share of a cup its fill bucket draws, both rounded
-        /// down (a draw takes exactly that share of a bought unit, so the count is never above it, merged squeezes and top-ups too); the
+        /// down. 034 review (last drops): the shop's draws are all or nothing (StockWallet asks ShopStock.TryDraw for the whole share
+        /// as its minimum), so a portion or a pour is never drawn short of its bucket's least share and the count is never above what
+        /// was drawn, merged squeezes and top-ups too; the
         /// cup itself is not counted (as in 033). Null if any component is unpriced. Always at most <see cref="ItemCost"/>.
         /// </summary>
         public static long? StockCost(EconomyCatalog c, Item item)

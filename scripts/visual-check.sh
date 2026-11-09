@@ -47,7 +47,7 @@ timeout_for() {
   case "$1" in
     look) echo 360 ;;
     walk) echo 420 ;;
-    cook) echo 1440 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register; spec 033: the lemonade; spec 034: the stock run
+    cook) echo 1620 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register; spec 033: the lemonade; spec 034: the stock run; spec 035: the cleaning loop
     *) echo 420 ;;
   esac
 }

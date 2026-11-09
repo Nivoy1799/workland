@@ -38,6 +38,9 @@ namespace Worktown.Game.Shop
 
         public RegisterDesk Desk => _desk;
 
+        /// <summary>Spec 035: the shop's hygiene score when a guest reviews (below 50 % the review loses a star; Sim.Economy.HygieneRules).</summary>
+        public int HygienePercent { get; set; } = HygieneRules.StartPercent;
+
         /// <summary>
         /// 032 review: the counter pays the bill at once only when the hand-over did not happen and the guest is not in the register's
         /// line (a guest in the line pays there, exactly once, whatever failed after it joined).
@@ -158,7 +161,7 @@ namespace Worktown.Game.Shop
         private void Finish(RegisterSettlement s, IGuestStage stage, bool leaves)
         {
             RegisterPayment p = s.Payment;
-            GuestReview review = ReviewRules.Review(p.OrderStars, p.WaitedTenths, p.PatienceTenths, p.Misses, s.WrongChange);
+            GuestReview review = ReviewRules.Review(p.OrderStars, p.WaitedTenths, p.PatienceTenths, p.Misses, s.WrongChange, HygienePercent);
             if (leaves) Show(stage, st => st.Leave(p.GuestId, CustomerRules.ReviewText(review), CustomerRules.MoodOf(review)));
             Show(stage, st => st.LineMoved());
             long tip = s.TipPaid;

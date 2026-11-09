@@ -85,6 +85,11 @@ namespace Worktown.Game.Cooking
                 case StationKind.DrinkDispenser: return stationName + ": E take a cup or a lid, hold E to pour";
                 // Spec 034: E orders the nearest row; the page and the pack count are picked in first person.
                 case StationKind.Terminal: return stationName + ": E order the nearest row, page in first person (V)";
+                // Spec 035: the cleaning stations.
+                case StationKind.DishReturn: return stationName + ": E take a dirty dish";
+                case StationKind.Sink: return stationName + ": E put a dish in, hold E to scrub";
+                case StationKind.TrashCan: return stationName + ": E throw away, E with empty hands takes the bag";
+                case StationKind.Bin: return stationName + ": E throw the bag in";
                 default: return stationName;
             }
         }

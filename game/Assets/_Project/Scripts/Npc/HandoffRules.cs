@@ -13,6 +13,28 @@ namespace Worktown.Game.Npc
         public const float FlySeconds = 0.35f;
         public const float Lift = 0.12f;
 
+        /// <summary>
+        /// Spec 035: an eat-in guest takes a plate dish on its plate (it comes back dirty later); a build is held in its paper, box or
+        /// bag either way, and a take-away guest gets its parcel.
+        /// </summary>
+        public static ArtKey ParcelOf(byte dish, bool eatIn) => eatIn && IsPlateDish(dish) ? ArtKey.FoodPlate : ParcelOf(dish);
+
+        /// <summary>Spec 035: the dishes served on a plate (everything but the assembly board's builds).</summary>
+        public static bool IsPlateDish(byte dish)
+        {
+            switch (dish)
+            {
+                case Menu.SeitanWrap:
+                case Menu.FalafelWrap:
+                case Menu.SeitanFlatbread:
+                case Menu.VeggieBox:
+                case Menu.None:
+                    return false;
+                default:
+                    return true;
+            }
+        }
+
         public static ArtKey ParcelOf(byte dish)
         {
             switch (dish)

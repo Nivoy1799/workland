@@ -577,6 +577,68 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>
+        /// Spec 035: scrubbing a plate in water (a loop): a brush's band of noise pulsing back and forth about four times a second, with
+        /// a little wet gurgle under it. The ends fade so the loop has no click.
+        /// </summary>
+        public static float[] Scrub()
+        {
+            var rng = new System.Random(3501);
+            var s = new float[(int)(SampleRate * 1.0f)];
+            float band = 0f, low = 0f, previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                band += (high - band) * 0.35f;
+                low += (noise - low) * 0.02f;
+                float stroke = 0.5f + 0.5f * (float)Math.Sin(2.0 * Math.PI * 4.0 * t); // four strokes a second (one loop is whole strokes)
+                float gurgle = (float)Math.Sin(2.0 * Math.PI * 180.0 * t + 3.0 * Math.Sin(2.0 * Math.PI * 6.0 * t)) * 0.05f;
+                float edge = Math.Min(1f, Math.Min(t, 1f - t) / 0.02f);
+                s[i] = (band * 0.35f * stroke + low * 0.5f + gurgle) * edge;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 035: a plastic trash bag: a crinkly rustle (bursts of bright noise) that settles.</summary>
+        public static float[] TrashRustle()
+        {
+            var rng = new System.Random(3502);
+            var s = new float[(int)(SampleRate * 0.5f)];
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                float crinkle = rng.NextDouble() < 0.08 ? 1f : 0.25f; // sparse crackles in the rustle
+                float env = (float)Math.Exp(-t / 0.18f) * Math.Min(1f, t / 0.01f);
+                s[i] = high * 0.35f * crinkle * env;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 035: the trash can's lid falling shut: a dull low thump with a short plastic rattle.</summary>
+        public static float[] LidThump()
+        {
+            var rng = new System.Random(3503);
+            var s = new float[(int)(SampleRate * 0.3f)];
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                band += (noise - band) * 0.12f;
+                float thump = (float)Math.Sin(2.0 * Math.PI * 110.0 * t) * 0.5f * (float)Math.Exp(-t / 0.05f);
+                float rattle = t > 0.04f ? band * 0.4f * (float)Math.Exp(-(t - 0.04f) / 0.03f) : 0f;
+                s[i] = (thump + band * 0.3f * (float)Math.Exp(-t / 0.01f) + rattle) * Math.Min(1f, t / 0.001f);
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -617,12 +679,16 @@ namespace Worktown.Game.Audio
                 case SoundKey.Splash: return Splash();
                 case SoundKey.Delivery: return Delivery(); // spec 034
                 case SoundKey.Unpack: return Unpack();
+                case SoundKey.Scrub: return Scrub(); // spec 035
+                case SoundKey.TrashRustle: return TrashRustle();
+                case SoundKey.LidThump: return LidThump();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }
 
         public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer || key == SoundKey.Squeeze
-            || key == SoundKey.Pour; // spec 033
+            || key == SoundKey.Pour // spec 033
+            || key == SoundKey.Scrub; // spec 035
 
         public static AudioClip CreateClip(SoundKey key)
         {

@@ -80,12 +80,18 @@ namespace Worktown.Game.Shop
         public bool CanDraw(int line) => LineOf(line) is StockLine l && !l.IsEmpty;
 
         /// <summary>A portion of <paramref name="percent"/> % of one grocer item from line <paramref name="line"/> (a squeeze, a pour). OutOfStock when empty.</summary>
-        public CookOutcome Draw(int line, int percent, out int drawn)
+        public CookOutcome Draw(int line, int percent, out int drawn) => Draw(line, percent, 1, out drawn);
+
+        /// <summary>
+        /// 034 review (last drops): as <see cref="Draw(int, int, out int)"/>, refused (OutOfStock, nothing changes) when less than
+        /// <paramref name="minPercent"/> is left (ShopStock.TryDraw).
+        /// </summary>
+        public CookOutcome Draw(int line, int percent, int minPercent, out int drawn)
         {
             drawn = 0;
             StockLine l = LineOf(line);
             if (l == null) return CookOutcome.InvalidOption;
-            StockResult r = Stock.TryDraw(l.GoodId, percent);
+            StockResult r = Stock.TryDraw(l.GoodId, percent, minPercent);
             if (r.Ok) drawn = r.Amount;
             return Apply(r);
         }
@@ -177,6 +183,64 @@ namespace Worktown.Game.Shop
 
         /// <summary>A box object is gone (despawned): its contents go with it.</summary>
         public void ForgetBox(int boxId) => _boxes.Remove(boxId);
+
+        /// <summary>The ids of the boxes lying in the shop, into <paramref name="ids"/> (cleared first).</summary>
+        public void BoxIds(List<int> ids)
+        {
+            if (ids == null) return;
+            ids.Clear();
+            foreach (int id in _boxes.Keys) ids.Add(id);
+            ids.Sort(); // a stable order (deterministic logs and tests)
+        }
+
+        /// <summary>
+        /// 034 review: box <paramref name="boxId"/> was lost (below the world, or despawned without its unpack): its object is forgotten
+        /// and its contents wait first in line for the back door again (kept, never lost, never doubled). False for no such box.
+        /// </summary>
+        public bool ReturnLostBox(int boxId)
+        {
+            if (!_boxes.TryGetValue(boxId, out BoxContents box)) return false;
+            _boxes.Remove(boxId);
+            _waiting.Insert(0, box);
+            Version++;
+            return true;
+        }
+
+        /// <summary>
+        /// 034 review: the server stops but the game (the economy) goes on. Every order still on its way is refunded to its payer through
+        /// <paramref name="refund"/> (account id, amount), once, and leaves the book; the boxes lying in the shop (FishNet despawns
+        /// them) wait for the back door again with their contents. The stock itself is kept: it belongs to the game, not to the server
+        /// run (<see cref="Reset"/> is a new game). Returns the number of orders refunded.
+        /// </summary>
+        public int EndSession(System.Action<string, long> refund)
+        {
+            int refunded = 0;
+            foreach (SupplyOrder o in Book.Pending)
+            {
+                if (o.Cost > 0) refund?.Invoke(o.PayerId, o.Cost);
+                refunded++;
+            }
+            Book = SupplyBook.Empty;
+            var ids = new List<int>(_boxes.Keys);
+            ids.Sort();
+            for (int i = ids.Count - 1; i >= 0; i--) _waiting.Insert(0, _boxes[ids[i]]);
+            _boxes.Clear();
+            Version++;
+            return refunded;
+        }
+
+        /// <summary>
+        /// 034 review (pure): the delivery spot for the next box in one spawn pass: the first spot neither <paramref name="occupied"/>
+        /// (the physics probe) nor <paramref name="usedThisPass"/> (a box was just put there; the probe does not see it before the
+        /// transforms sync), or -1. The caller marks the chosen spot used.
+        /// </summary>
+        public static int FreeSpot(IReadOnlyList<bool> occupied, IReadOnlyList<bool> usedThisPass)
+        {
+            if (occupied == null) return -1;
+            for (int i = 0; i < occupied.Count; i++)
+                if (!occupied[i] && (usedThisPass == null || i >= usedThisPass.Count || !usedThisPass[i])) return i;
+            return -1;
+        }
 
         /// <summary>
         /// Box <paramref name="boxId"/> is unpacked into line <paramref name="line"/>: as many units as fit go in (<paramref name="accepted"/>),

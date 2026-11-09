@@ -51,7 +51,8 @@ namespace Worktown.Game.Tests
                     StationKind.Fridge, StationKind.Shelf, StationKind.Fryer, StationKind.Griddle, StationKind.Assembly, // spec 029, 030, 031
                     StationKind.Register, // spec 032
                     StationKind.DrinkDispenser, // spec 033
-                    StationKind.Terminal }, // spec 034
+                    StationKind.Terminal, // spec 034
+                    StationKind.DishReturn, StationKind.Sink, StationKind.TrashCan, StationKind.Bin }, // spec 035
                 System.Enum.GetValues(typeof(StationKind)));
         }
 

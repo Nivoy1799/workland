@@ -59,6 +59,8 @@ namespace Worktown.Game.Npc
         [SerializeField] private Vector3 _payDirection = Vector3.right;
         [Tooltip("Spec 032: the serve feed (the reward moment when a guest pays).")]
         [SerializeField] private ServeFeed _feed;
+        [Tooltip("Spec 035: the shop's cleaning (its hygiene score shortens patience and costs review stars). Optional.")]
+        [SerializeField] private CleaningService _cleaning;
 
         private readonly CustomerQueue _queue = new CustomerQueue();
         private readonly Dictionary<int, Customer> _customers = new Dictionary<int, Customer>();
@@ -69,6 +71,8 @@ namespace Worktown.Game.Npc
         private readonly Shift _shift = new Shift();
         private IRandom _orders = new SeededRandom(CustomerRules.OrderSeed);
         private IRandom _drinkOrders = new SeededRandom(CustomerRules.DrinkSeed); // spec 033
+        private IRandom _eatInOrders = new SeededRandom(CustomerRules.EatInSeed); // spec 035: its own RNG
+        private readonly HashSet<int> _eatIn = new HashSet<int>(); // spec 035: the guests that eat in (their plate comes back dirty)
         private readonly GuestTab _tab = new GuestTab(); // spec 033: the order's lines (dish and drink)
         private readonly Dictionary<int, PickupInteractor> _linePayees = new Dictionary<int, PickupInteractor>();
         private bool _synced;
@@ -136,6 +140,8 @@ namespace Worktown.Game.Npc
             _shift.Reset();
             _orders = new SeededRandom(CustomerRules.OrderSeed);
             _drinkOrders = new SeededRandom(CustomerRules.DrinkSeed);
+            _eatInOrders = new SeededRandom(CustomerRules.EatInSeed);
+            _eatIn.Clear();
             _tab.Clear();
             _linePayees.Clear();
             _synced = false;
@@ -158,6 +164,7 @@ namespace Worktown.Game.Npc
                 PublishShift();
                 _economy.SkipHours(Shift.HoursToNextOpen(_economy.Tick));
             }
+            Flow.HygienePercent = Hygiene; // spec 035: reviews notice a dirty shop
             UpdatePatience(Time.deltaTime, Time.time);
             SettleForPayeesWhoLeft();
             // 032 review: a head payment nobody took for 30 s settles by itself (bill only), so one cook away never blocks the till.
@@ -218,6 +225,12 @@ namespace Worktown.Game.Npc
         }
 
         private static bool HasDishes(string market) => Menu.HasDishes(market, Menu.CrateIngredients);
+
+        /// <summary>Spec 035: the shop's hygiene score (100 without the cleaning service).</summary>
+        private int Hygiene => _cleaning != null ? _cleaning.HygienePercent : HygieneRules.StartPercent;
+
+        /// <summary>Spec 035, server: guest <paramref name="guestId"/> eats in (the plate it gets comes back dirty after its meal).</summary>
+        public bool EatsIn(int guestId) => _eatIn.Contains(guestId);
 
         /// <summary>
         /// Spec 032, server, a pure read: the guest that gets <paramref name="plated"/> (the first in queue order whose order, with
@@ -494,16 +507,22 @@ namespace Worktown.Game.Npc
                 nob.transform.SetPositionAndRotation(_entry.position, _entry.rotation);
                 var customer = nob.GetComponent<Customer>();
                 byte drinkByte = DrinkRules.DrinkByte(drink); // spec 033
-                customer.ServerInit(wish, dish.Id, modifiers, drinkByte, _entry.position); // before Spawn: values go out with the spawn
+                bool eatIn = GuestOrders.DrawEatIn(_eatInOrders); // spec 035: its own RNG, one draw per guest
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                if (_tourOrders != null && _tourOrders.LastScripted) eatIn = _tourOrders.LastEatIn; // the tour's scripted guests
+#endif
+                customer.ServerInit(wish, dish.Id, modifiers, drinkByte, eatIn, _entry.position); // before Spawn: values go out with the spawn
                 _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;
                 _queue.Add(nob.ObjectId, wish, dish.Id, modifiers, drinkByte);
                 _tab.Open(nob.ObjectId, drink);
                 _arrivedAt[nob.ObjectId] = Time.time;
                 _guests[nob.ObjectId] = new Guest { Order = order, Modifiers = modifiers };
-                // Spec 033: a drink is one more layer of work for the patience.
-                _patience.Add(nob.ObjectId, GuestOrders.PatienceSeconds(order, CustomerRules.LayersOf(dish, modifiers) + (drink != null ? 1 : 0))
-                    * patienceScale);
+                if (eatIn) _eatIn.Add(nob.ObjectId);
+                else _eatIn.Remove(nob.ObjectId);
+                // Spec 033: a drink is one more layer of work for the patience. Spec 035: a dirty shop (below 30 %) makes it 20 % shorter.
+                _patience.Add(nob.ObjectId, CustomerRules.PatienceFor(order, CustomerRules.LayersOf(dish, modifiers), drink != null, patienceScale,
+                    Hygiene));
                 spawned++;
             }
 
@@ -546,7 +565,7 @@ namespace Worktown.Game.Npc
                 long paid = 0;
                 if (_economy != null && bill > 0 && !_economy.TryPayGuest(payeeId, nob, bill, out paid))
                     Debug.LogError("[Customers] could not pay " + EconomyRules.Money(bill) + " for guest " + guestId + "'s open order");
-                GuestReview review = ReviewRules.Review(stars, 0, 1, misses, false);
+                GuestReview review = ReviewRules.Review(stars, 0, 1, misses, false, Hygiene); // spec 035
                 _shift.RecordSale(stars, paid, 0, review);
                 if (_feed != null) _feed.ServerAdd("Guest paid " + EconomyRules.Money(paid) + " for what it got (" + why + ", no tip)");
                 Debug.Log("[Customers] guest " + guestId + " left with its order open (" + why + "): paid " + EconomyRules.Money(paid)
@@ -576,6 +595,7 @@ namespace Worktown.Game.Npc
             _customers.Remove(customer.ObjectId);
             _guests.Remove(customer.ObjectId);
             _patience.Remove(customer.ObjectId);
+            _eatIn.Remove(customer.ObjectId); // spec 035
             // 032 review: a guest whose object went while it waited to pay settles by itself (bill only), so no money is lost.
             if (Flow.Desk.IsWaiting(customer.ObjectId)) Flow.Exited(customer.ObjectId, WalletFor(customer.ObjectId), Stage);
             _payees.Remove(customer.ObjectId);

@@ -65,6 +65,11 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Takeaway cup (400 ml) | 0.12 | 0.18 | x1.5; the Kenney soda glass, a lid and the fill line drawn on it; added in spec 033 |
 | Ordering terminal | 0.46 | same | height of the wall screen; 1.0 x 0.46 m, 2 cm deep, on the back wall above the landing worktop; graybox; added in spec 034 |
 | Delivery box | 0.40 | same | largest side; the Kenney cardboard box (Furniture Kit), carried with both hands; added in spec 034 |
+| Dish return | 0.30 | same | height above the counter top; a 0.60 x 0.40 m rack on the front counter where eat-in guests' dirty plates come back; graybox; added in spec 035 |
+| Kitchen trash can | 0.85 | same | height; 0.46 x 0.46 m with a flip lid, by the staff gap; graybox; added in spec 035 |
+| Bin (outside) | 1.10 | same | height; a 0.62 x 0.74 m wheelie bin outside the staff gap; graybox; added in spec 035 |
+| Trash bag | 0.45 | same | largest side (world size: carried with both hands); graybox; added in spec 035 |
+| Wipe cloth | 0.25 | 0.29 | x1.15 (a tool, like the knife); folded flat, 2 cm thick; graybox; added in spec 035 |
 | Small house (2 storeys, to the ridge) | 7–8 | same | |
 | Shop (ground floor 4 m + 1 storey) | 7–8 | same | |
 | Tree small / large | 4 / 8 | same | |

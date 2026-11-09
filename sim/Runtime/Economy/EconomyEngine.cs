@@ -268,19 +268,21 @@ namespace Worktown.Sim.Economy
         /// <summary>
         /// Spec 034, the refund backstop: <paramref name="amount"/> paid to the grocer or supplier goes back to the account (a server
         /// path charged but could not hand over). Money only moves: the grocer's revenue falls by the same amount. UnknownAccount,
-        /// InvalidQuantity for 0 or less or more than the grocer ever took, BalanceLimit; nothing changes then.
+        /// InvalidQuantity for 0 or less, more than the grocer ever took or (034 review) more than this account paid it (Account.GrocerPaid),
+        /// BalanceLimit; nothing changes then.
         /// </summary>
         public LedgerResult Refund(EconomyState s, string accountId, long amount)
         {
             Need(s);
             int ai = FindAccount(s, accountId);
             if (ai < 0) return Led(s, EconomyError.UnknownAccount);
-            if (amount <= 0 || amount > s.Totals.GrocerRevenue) return Led(s, EconomyError.InvalidQuantity);
             var acc = s.Accounts[ai];
+            // 034 review: never more than this account paid the grocer and supplier (less what it got back already).
+            if (amount <= 0 || amount > s.Totals.GrocerRevenue || amount > acc.GrocerPaid) return Led(s, EconomyError.InvalidQuantity);
             if (acc.Balance > EconomyLimits.MaxBalance - amount) return Led(s, EconomyError.BalanceLimit);
             var next = s with
             {
-                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance + amount }),
+                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance + amount, GrocerPaid = acc.GrocerPaid - amount }),
                 Totals = s.Totals with { GrocerRevenue = s.Totals.GrocerRevenue - amount },
             };
             return new LedgerResult(next, EconomyError.None);
@@ -294,7 +296,7 @@ namespace Worktown.Sim.Economy
             if (cost > acc.Balance) return new PurchaseResult(s, EconomyError.InsufficientFunds, 0);
             var next = s with
             {
-                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance - cost }),
+                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance - cost, GrocerPaid = Sat(acc.GrocerPaid, cost) }),
                 Totals = s.Totals with { GrocerRevenue = Sat(s.Totals.GrocerRevenue, cost) },
             };
             return new PurchaseResult(next, EconomyError.None, cost);

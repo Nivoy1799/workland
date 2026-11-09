@@ -77,6 +77,28 @@ namespace Worktown.Game.Tests
                 Assert.IsTrue(supplied.Exists(s => s.StartsWith("_boxPrefab")), "the delivery box");
                 Assert.IsNotNull(kitchen.GetType().GetField("_supply", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     .GetValue(kitchen), "the kitchen draws from the supply's stock");
+                Assert.IsTrue(spawned.Exists(s => s.StartsWith("_clothPrefab")), "spec 035: the wipe cloth (respawned at home)");
+
+                // Spec 035: the cleaning service spawns the dirty dishes and the trash bags; every prefab it holds is registered too.
+                Worktown.Game.Shop.CleaningService cleaning = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                    if (cleaning == null) cleaning = root.GetComponentInChildren<Worktown.Game.Shop.CleaningService>(true);
+                Assert.IsNotNull(cleaning, "no CleaningService in the scene");
+                var cleaned = new List<string>();
+                SerializedProperty c = new SerializedObject(cleaning).GetIterator();
+                while (c.Next(true))
+                {
+                    if (c.propertyType != SerializedPropertyType.ObjectReference || c.objectReferenceValue == null) continue;
+                    string path = AssetDatabase.GetAssetPath(c.objectReferenceValue);
+                    if (!path.EndsWith(".prefab")) continue;
+                    cleaned.Add(c.propertyPath + " " + path);
+                    Assert.IsTrue(registered.Contains(path), c.propertyPath + " (" + path + ") is not in " + DefaultPrefabsPath);
+                }
+                TestContext.WriteLine(string.Join("\n", cleaned));
+                Assert.IsTrue(cleaned.Exists(s => s.StartsWith("_dirtyDishPrefab")), "the dirty dish");
+                Assert.IsTrue(cleaned.Exists(s => s.StartsWith("_trashBagPrefab")), "the trash bag");
+                Assert.IsNotNull(kitchen.GetType().GetField("_cleaning", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .GetValue(kitchen), "the kitchen's plates are counted by the cleaning service");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

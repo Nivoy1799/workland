@@ -42,6 +42,10 @@ namespace Worktown.Game.Audio
         Splash,
         /// <summary>Spec 034: a delivery at the back door (two knocks on the door, then the boxes set down) and a box unpacked into a slot.</summary>
         Delivery,
-        Unpack
+        Unpack,
+        /// <summary>Spec 035: scrubbing a plate in the sink (loop while held), a trash bag's rustle, the trash can's lid thump.</summary>
+        Scrub,
+        TrashRustle,
+        LidThump
     }
 }

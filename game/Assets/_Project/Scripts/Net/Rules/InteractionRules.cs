@@ -324,16 +324,128 @@ namespace Worktown.Game.Net.Rules
             {
                 case StationKind.Crate: // spec 034: a fridge or shelf slot (described like a crate) gives nothing once it is empty
                     return held.IsHolding || IsOutOfStock(target) ? InteractionAction.None : InteractionAction.Buy;
-                case StationKind.PlateShelf: return held.IsHolding ? InteractionAction.None : InteractionAction.Take;
+                case StationKind.PlateShelf: // spec 035: the clean plates are counted (none left: wash some)
+                    return held.IsHolding || (target.Known && target.StoveFlags == 0) ? InteractionAction.None : InteractionAction.Take;
+                case StationKind.DishReturn:
+                case StationKind.Sink:
+                case StationKind.TrashCan:
+                case StationKind.Bin:
+                    return CleaningAction(held, target); // spec 035
                 case StationKind.Counter: return SellsAtCounter(held) ? InteractionAction.Sell : InteractionAction.None;
                 case StationKind.Assembly: // spec 031: a dispenser or the packaging rack; the board's body itself does nothing
                     return target.Vessel == VesselKind.Assembly ? ToolAction(held, target) : InteractionAction.None;
                 case StationKind.DrinkDispenser: // spec 033: a tap, the cup stack or the lid stack; the body itself does nothing
+                    if (target.Option == Worktown.Game.Shop.CleaningRules.SpillTool) return WipeAction(held, target); // spec 035: the spill
                     return target.Option >= 0 && target.Option < DrinkRules.ToolCount ? DrinkToolAction(held, target) : InteractionAction.None;
                 case StationKind.Register: // spec 032: a slot of the register (any hands: the food is already handed over)
                     return target.Option >= 0 && target.Option < Worktown.Game.Shop.RegisterRules.SlotCount && RegisterReason(target) == null
                         ? InteractionAction.Pay : InteractionAction.None;
                 default: return InteractionAction.None; // the stove's body: its knobs, buttons and burners do the work
+            }
+        }
+
+        // ---- Spec 035: cleaning ----
+
+        public const string NoCleanPlatesText = "No clean plates: wash some at the sink";
+        public const string WashItText = "Wash it at the sink";
+        public const string ToTheBinText = "Take the bag to the bin outside";
+
+        /// <summary>
+        /// Spec 035: the cleaning stations as clients see their bytes (the server checks again): the dish return gives empty hands a
+        /// dirty dish; the sink takes a dirty dish and is held to scrub with empty hands; the trash can takes food (and the food in
+        /// cookware) and gives empty hands its bag; the bin takes the bag.
+        /// </summary>
+        private static InteractionAction CleaningAction(Held held, AimTarget target)
+        {
+            byte b = target.StoveFlags;
+            switch (target.Station)
+            {
+                case StationKind.DishReturn:
+                    return Worktown.Game.Shop.CleaningRules.CanTakeDirty(held.IsHolding, target.Known ? b : 0) == CookOutcome.Ok
+                        ? InteractionAction.Take : InteractionAction.None;
+                case StationKind.Sink:
+                {
+                    int basin = target.Known ? Worktown.Game.Shop.CleaningRules.BasinOf(b) : 0;
+                    if (held.IsDirtyDish)
+                        return Worktown.Game.Shop.CleaningRules.CanPutInSink(true, basin) == CookOutcome.Ok ? InteractionAction.Wash : InteractionAction.None;
+                    return Worktown.Game.Shop.CleaningRules.CanScrub(held.IsHolding, basin, Worktown.Game.Shop.CleaningRules.IsScrubbing(b)) == CookOutcome.Ok
+                        ? InteractionAction.Scrub : InteractionAction.None;
+                }
+                case StationKind.TrashCan:
+                    if (!held.IsHolding)
+                        return Worktown.Game.Shop.CleaningRules.CanTakeBag(false, target.Known ? b : 0) == CookOutcome.Ok
+                            ? InteractionAction.Take : InteractionAction.None;
+                    return Worktown.Game.Shop.CleaningRules.CanDiscard(held.IsDiscardable, b) == CookOutcome.Ok
+                        ? InteractionAction.Discard : InteractionAction.None;
+                case StationKind.Bin:
+                    return held.IsTrashBag ? InteractionAction.Discard : InteractionAction.None;
+                default:
+                    return InteractionAction.None;
+            }
+        }
+
+        /// <summary>Spec 035: the drink dispenser's spill: the cloth in the hands wipes it (a hold); nothing without a spill.</summary>
+        private static InteractionAction WipeAction(Held held, AimTarget target) =>
+            Worktown.Game.Shop.CleaningRules.CanWipe(held.IsCloth, DrinkRules.HasSpill(target.StoveFlags),
+                Worktown.Game.Shop.CleaningRules.IsWiping(target.StoveFlags)) == CookOutcome.Ok ? InteractionAction.Wipe : InteractionAction.None;
+
+        /// <summary>Spec 035: why a cleaning station (or the plate shelf, or a spill) does nothing now, or null.</summary>
+        public static string CleaningReason(Held held, AimTarget target)
+        {
+            byte b = target.StoveFlags;
+            switch (target.Station)
+            {
+                case StationKind.PlateShelf:
+                    return !held.IsHolding && target.Known && b == 0 ? NoCleanPlatesText : null;
+                case StationKind.DishReturn:
+                    if (held.IsHolding) return held.IsDirtyDish ? WashItText : null;
+                    return target.Known ? "No dirty dishes here" : null;
+                case StationKind.Sink:
+                {
+                    int basin = target.Known ? Worktown.Game.Shop.CleaningRules.BasinOf(b) : 0;
+                    if (held.IsDirtyDish) return "The sink is full: scrub a dish first";
+                    if (held.IsHolding) return "Only dirty dishes go in the sink";
+                    if (basin <= 0) return "Bring a dirty dish from the dish return";
+                    return "Someone is scrubbing";
+                }
+                case StationKind.TrashCan:
+                    if (!held.IsHolding) return target.Known ? "The trash is empty" : null;
+                    if (held.IsDirtyDish) return WashItText;
+                    if (held.IsTrashBag) return ToTheBinText;
+                    if (!held.IsDiscardable) return "That doesn't go in the trash";
+                    return "The trash is full: take the bag out";
+                case StationKind.Bin:
+                    return held.IsHolding ? "Only the trash bag goes in here" : null;
+                case StationKind.DrinkDispenser:
+                    if (!DrinkRules.HasSpill(b)) return null;
+                    if (!held.IsCloth) return "Take the cloth to wipe the spill";
+                    return "Someone is wiping it";
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>Spec 035: the prompt of a cleaning action ("Hold · scrub the plate (2 in the sink)"), or null for another action.</summary>
+        public static string CleaningPrompt(InteractionAction action, Held held, AimTarget target)
+        {
+            byte b = target.StoveFlags;
+            switch (action)
+            {
+                case InteractionAction.Take when target.Station == StationKind.PlateShelf:
+                    return Click("take a plate" + (target.Known ? " (" + b + " clean)" : string.Empty));
+                case InteractionAction.Take when target.Station == StationKind.DishReturn:
+                    return Click("take a dirty plate (" + b + " waiting)");
+                case InteractionAction.Take when target.Station == StationKind.TrashCan:
+                    return Click("take the trash bag out (" + b + "/" + Worktown.Sim.Economy.HygieneRules.TrashCapacity + ")");
+                case InteractionAction.Wash: return Click("put the plate in the sink");
+                case InteractionAction.Scrub:
+                    int basin = Worktown.Game.Shop.CleaningRules.BasinOf(b);
+                    return HoldKey + " · scrub the plate" + (basin > 1 ? " (" + basin + " in the sink)" : string.Empty);
+                case InteractionAction.Discard:
+                    return target.Station == StationKind.Bin ? Click("throw the bag in")
+                        : Click("throw away " + (held.IsVessel ? "the food" : string.IsNullOrEmpty(held.Name) ? "it" : held.Name));
+                case InteractionAction.Wipe: return HoldKey + " · wipe the spill";
+                default: return null;
             }
         }
 
@@ -392,6 +504,9 @@ namespace Worktown.Game.Net.Rules
                 case AimKind.Spot: return held.IsHolding ? "No room here" : null;
                 case AimKind.Vessel: return VesselReason(held, target);
                 case AimKind.Station:
+                    if (Worktown.Game.Shop.CleaningRules.IsCleaningStation(target.Station) || target.Station == StationKind.PlateShelf
+                        || (target.Station == StationKind.DrinkDispenser && target.Option == Worktown.Game.Shop.CleaningRules.SpillTool))
+                        return CleaningReason(held, target); // spec 035
                     if (target.Station == StationKind.Assembly) return target.Vessel == VesselKind.Assembly ? ToolReason(target) : null; // spec 031
                     if (target.Station == StationKind.Register) return RegisterReason(target); // spec 032
                     if (target.Station == StationKind.DrinkDispenser) // spec 033
@@ -430,7 +545,10 @@ namespace Worktown.Game.Net.Rules
         /// <summary>The text under the dot: what a click does, else the grey reason, else null (no prompt).</summary>
         public static string PromptFor(Held held, AimTarget target)
         {
-            switch (ActionFor(held, target))
+            InteractionAction action = ActionFor(held, target);
+            string cleaning = CleaningPrompt(action, held, target); // spec 035
+            if (cleaning != null) return cleaning;
+            switch (action)
             {
                 case InteractionAction.Press:
                     if (target.Station == StationKind.Griddle) return Click(GriddleRules.PowerText(GriddleRules.IsOn(target.StoveFlags))); // spec 030

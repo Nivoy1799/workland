@@ -36,6 +36,16 @@ namespace Worktown.Game.Cooking
         DrinkDispenser,
         /// <summary>Spec 034: the ordering terminal on the back wall: its screen's rows order a good, its buttons page and pick the pack
         /// count (Shop.TerminalRules; the rows and buttons are its slots).</summary>
-        Terminal
+        Terminal,
+        /// <summary>Spec 035: the dish return on the front counter: eat-in guests' dirty plates come back here; empty hands take one
+        /// (Shop.CleaningRules).</summary>
+        DishReturn,
+        /// <summary>Spec 035: the sink at the end of the back line: a dirty dish goes in, holding scrubs it (server-timed), and it goes to
+        /// the clean plate shelf (Shop.CleaningRules; the basin is its slot).</summary>
+        Sink,
+        /// <summary>Spec 035: the trash can by the staff gap: discard food and empty packaging; empty hands take the bag out.</summary>
+        TrashCan,
+        /// <summary>Spec 035: the bin outside the staff gap, where the trash bag goes.</summary>
+        Bin
     }
 }

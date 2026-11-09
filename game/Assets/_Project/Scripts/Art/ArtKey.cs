@@ -116,6 +116,11 @@ namespace Worktown.Game.Art
         /// <summary>Spec 034: the ordering terminal on the back wall (graybox, TerminalArtRules) and the delivery box (the Kenney
         /// cardboard box of the Furniture Kit).</summary>
         StationTerminal,
-        PropDeliveryBox
+        PropDeliveryBox,
+        /// <summary>Spec 035: the sink, the dish return, the kitchen trash can and the bin outside (graybox, CleaningArtRules).</summary>
+        StationSink,
+        StationDishReturn,
+        StationTrash,
+        StationBin
     }
 }

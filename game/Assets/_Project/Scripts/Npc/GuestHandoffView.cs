@@ -54,7 +54,7 @@ namespace Worktown.Game.Npc
         private void Take(bool fly)
         {
             Drop();
-            ArtKey key = HandoffRules.ParcelOf(_customer.Dish.Value);
+            ArtKey key = HandoffRules.ParcelOf(_customer.Dish.Value, _customer.EatIn.Value); // spec 035: an eat-in plate
             if (_catalog == null || !_catalog.TryGet(key, out GameObject prefab)) return;
             _parcel = Instantiate(prefab);
             _parcel.name = "Handed dish";

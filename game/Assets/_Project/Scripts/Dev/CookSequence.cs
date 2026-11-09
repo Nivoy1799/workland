@@ -90,6 +90,9 @@ namespace Worktown.Game.Dev
             // Spec 029 (AC5, AC6): first an order of fries from potato to the counter, through the fryer.
             if (capture != null) yield return FryFries(actor, capture, laneZ);
             if (capture != null) yield return UnpackTheDelivery(actor, capture, laneZ); // spec 034
+            // Spec 035 (AC4): the fries guest ate in: its dirty plate comes back and is washed; a spilled cup fills the trash, the bag goes
+            // out to the bin, the spill is wiped with the cloth; the hygiene meter drops and climbs again.
+            if (capture != null) yield return CleanUp(actor, capture, laneZ);
             // Spec 031 (AC5): then one falafel wrap on the assembly board, layer by layer, folded, in paper, to the counter.
             if (capture != null) yield return BuildFalafelWrap(actor, capture, laneZ);
             // Spec 030 (AC5, AC6): then "Grilled veggies" with seitan strips on the griddle (flips, grill marks), to the counter.
@@ -883,6 +886,200 @@ namespace Worktown.Game.Dev
             if (!latest.Contains("lemonade")) actor.CountTimeout("cook: the lemonade was not served");
             if (!latest.Contains("drink order: exact order")) Debug.LogWarning("[Demo] drinks: no exact lemonade order was served");
         }
+
+        // ---- Spec 035: cleaning in the tour ----
+
+        /// <summary>Spec 035: the score's and the stations' bytes for the log.</summary>
+        private static string CleaningText()
+        {
+            var hygiene = UnityEngine.Object.FindFirstObjectByType<Worktown.Game.Shop.ShopHygiene>();
+            string Byte(StationKind kind)
+            {
+                Station s = FindStation(kind);
+                return s != null && s.TryGetComponent(out StationContents c) ? c.StoveFlags.Value.ToString() : "?";
+            }
+            return "hygiene " + (hygiene != null ? hygiene.Percent.Value + " %" : "?") + ", clean plates " + Byte(StationKind.PlateShelf)
+                + ", dirty at the return " + Byte(StationKind.DishReturn) + ", sink byte " + Byte(StationKind.Sink) + ", trash " + Byte(StationKind.TrashCan);
+        }
+
+        private static byte ByteOf(Station s) => s != null && s.TryGetComponent(out StationContents c) ? c.StoveFlags.Value : (byte)0;
+
+        private static bool Holds<T>(PickupInteractor me) where T : Component
+        {
+            Pickup held = me.FindHeldPickup();
+            return held != null && held.TryGetComponent(out T _);
+        }
+
+        /// <summary>
+        /// Spec 035 AC4: the full cleaning loop, through the player's normal intents. The fries guest (scripted to eat in) brought its plate
+        /// back dirty: take it from the dish return, put it in the sink, hold to scrub it (frames: the bubbles, the scrub); overfill a cup
+        /// at the lemonade tap (the spill) and throw it in the trash (the host starts the trash one short of full), take the full bag out
+        /// through the staff gap to the bin, take the cloth from the sink's drainboard and wipe the spill (frames), put the cloth back. The
+        /// HUD meter is shot before, at its low and after.
+        /// </summary>
+        private static IEnumerator CleanUp(TourActor actor, CookCapture capture, float laneZ)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            Station ret = FindStation(StationKind.DishReturn), sink = FindStation(StationKind.Sink), trash = FindStation(StationKind.TrashCan);
+            Station bin = FindStation(StationKind.Bin), drinks = FindStation(StationKind.DrinkDispenser);
+            StockSlot stack = null, basin = null, can = null, spill = null, cups = null, lemonade = null;
+            if (ret != null) ret.TryGetSlot(0, out stack);
+            if (sink != null) sink.TryGetSlot(Worktown.Game.Shop.CleaningRules.BasinTool, out basin);
+            if (trash != null) trash.TryGetSlot(0, out can);
+            if (drinks != null)
+            {
+                drinks.TryGetSlot(Worktown.Game.Shop.CleaningRules.SpillTool, out spill);
+                drinks.TryGetSlot(DrinkRules.CupTool, out cups);
+                drinks.TryGetSlot(0, out lemonade);
+            }
+            if (stack == null || basin == null || can == null || bin == null || spill == null || cups == null || lemonade == null)
+            {
+                Debug.LogWarning("[Demo] cleaning: a cleaning station or the spill's slot is missing");
+                actor.CountTimeout("cook: cleaning stations missing");
+                yield break;
+            }
+            Debug.Log("[Demo] cleaning starts (" + Time.time.ToString("0.0") + " s): " + CleaningText());
+
+            // 1. The dirty plate: from the dish return into the sink, scrubbed.
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(ret.transform.position.x, 0f, laneZ), false, false);
+            float until = Time.unscaledTime + 45f;
+            while (ByteOf(ret) == 0 && Time.unscaledTime < until) yield return null;
+            if (ByteOf(ret) == 0) actor.CountTimeout("cook: no dirty plate came back (the eat-in guest)");
+            yield return actor.AimAt(stack.Anchor, 1f);
+            yield return capture.Shot("dish-return");
+            yield return actor.Use("take a dirty plate", stack.Anchor, InteractionAction.Take, () => me.DevSendStation(ret.Index, 0),
+                capture.Before("dirty-aim", "dirty-take", frames));
+            until = Time.unscaledTime + 3f;
+            while (!Holds<Worktown.Game.Shop.DirtyDish>(me) && Time.unscaledTime < until) yield return null;
+            if (!Holds<Worktown.Game.Shop.DirtyDish>(me)) actor.CountTimeout("cook: no dirty plate in the hands");
+            yield return actor.LevelView();
+            yield return capture.Shot("dirty-in-hand");
+            LogHold(me, "dirty plate");
+            yield return actor.WalkTo(new Vector3(sink.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("put the plate in the sink", basin.Anchor, InteractionAction.Wash,
+                () => me.DevSendStation(sink.Index, Worktown.Game.Shop.CleaningRules.SinkPutOption), capture.Before("wash-aim", "wash", frames));
+            until = Time.unscaledTime + 3f;
+            while (Worktown.Game.Shop.CleaningRules.BasinOf(ByteOf(sink)) == 0 && Time.unscaledTime < until) yield return null;
+            yield return capture.WaitForFrames();
+            yield return capture.Shot("dish-in-sink");
+            yield return actor.AimAt(basin.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Scrub);
+            yield return capture.Shot("scrub-aim");
+            if (me.CurrentAction != InteractionAction.Scrub) Debug.LogWarning("[Demo] cleaning: the sink offers " + me.CurrentAction);
+            Debug.Log("[Demo] cleaning: hold to scrub: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "' (" + CleaningText() + ")");
+            byte clean = ByteOf(FindStation(StationKind.PlateShelf));
+            me.DevSqueezePress(basin);
+            float pressed = Time.unscaledTime;
+            if (capture.Frames != null) yield return capture.Frames("scrub", ScrubHoldSeconds + 0.3f);
+            while (Time.unscaledTime - pressed < ScrubHoldSeconds) yield return null;
+            me.DevSqueezeRelease();
+            float released = Time.unscaledTime;
+            while ((me.DevSqueezeBusy || Worktown.Game.Shop.CleaningRules.BasinOf(ByteOf(sink)) > 0) && Time.unscaledTime - released < 3f) yield return null;
+            yield return capture.WaitForFrames();
+            Debug.Log("[Demo] cleaning: scrubbed for " + (released - pressed).ToString("0.00") + " s: " + CleaningText());
+            if (ByteOf(FindStation(StationKind.PlateShelf)) <= clean) actor.CountTimeout("cook: the scrubbed plate is not back on the shelf");
+            yield return capture.Shot("scrubbed");
+
+            // 2. The spill: a cup held under the tap past the brim.
+            yield return actor.WalkTo(new Vector3(drinks.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("take a cup", cups.Anchor, InteractionAction.Take, () => me.DevTakeCup(drinks), null);
+            until = Time.unscaledTime + 3f;
+            while (HeldCup(me) == null && Time.unscaledTime < until) yield return null;
+            yield return actor.AimAt(lemonade.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Fill);
+            me.DevSqueezePress(lemonade);
+            pressed = Time.unscaledTime;
+            while (Time.unscaledTime - pressed < OverfillSeconds) yield return null;
+            me.DevSqueezeRelease();
+            released = Time.unscaledTime;
+            while (me.DevSqueezeBusy && Time.unscaledTime - released < 3f) yield return null;
+            until = Time.unscaledTime + 3f;
+            while (!DrinkRules.HasSpill(ByteOf(drinks)) && Time.unscaledTime < until) yield return null;
+            if (!DrinkRules.HasSpill(ByteOf(drinks))) actor.CountTimeout("cook: the overfilled cup made no spill");
+            yield return actor.AimAt(spill.Anchor, 1f);
+            yield return capture.Shot("spill");
+            Debug.Log("[Demo] cleaning: spilled (" + HeldName(me) + "): " + CleaningText());
+
+            // 3. The trash: the spilled cup goes in (it is full then), the bag goes out to the bin outside the staff gap.
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(trash.transform.position.x + 0.25f, 0f, laneZ), false, false);
+            yield return actor.Use("throw the cup away", can.Anchor + Vector3.up * 0.3f, InteractionAction.Discard,
+                () => me.DevSendStation(trash.Index, Worktown.Game.Shop.CleaningRules.TrashOption), capture.Before("discard-aim", "discard", frames));
+            until = Time.unscaledTime + 3f;
+            while (!Worktown.Sim.Economy.HygieneRules.IsTrashFull(ByteOf(trash)) && Time.unscaledTime < until) yield return null;
+            yield return capture.WaitForFrames();
+            yield return actor.AimAt(can.Anchor, 1f);
+            yield return capture.Shot("trash-full");
+            Debug.Log("[Demo] cleaning: the trash is " + (Worktown.Sim.Economy.HygieneRules.IsTrashFull(ByteOf(trash)) ? "full" : "not full") + ": " + CleaningText());
+            yield return actor.Use("take the bag out", can.Anchor, InteractionAction.Take, () => me.DevSendStation(trash.Index, Worktown.Game.Shop.CleaningRules.TrashOption),
+                capture.Before("bag-aim", "bag-take", frames));
+            until = Time.unscaledTime + 3f;
+            while (!Holds<Worktown.Game.Shop.TrashBag>(me) && Time.unscaledTime < until) yield return null;
+            if (!Holds<Worktown.Game.Shop.TrashBag>(me)) actor.CountTimeout("cook: no trash bag in the hands");
+            yield return actor.LevelView();
+            yield return capture.Shot("bag-in-hand");
+            yield return capture.Shot("hygiene-low");
+            Vector3 outside = new Vector3(bin.transform.position.x + 1.05f, 0f, laneZ);
+            yield return actor.WalkTo(new Vector3(trash.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.WalkTo(outside, false, false);
+            Vector3 binTop = bin.transform.position + Vector3.up * (Worktown.Game.Art.CleaningArtRules.BinHeight * 0.5f);
+            yield return actor.Use("throw the bag in the bin", binTop, InteractionAction.Discard,
+                () => me.DevSendStation(bin.Index, Worktown.Game.Shop.CleaningRules.BinOption), capture.Before("bin-aim", "bin", frames));
+            until = Time.unscaledTime + 3f;
+            while (Holds<Worktown.Game.Shop.TrashBag>(me) && Time.unscaledTime < until) yield return null;
+            if (Holds<Worktown.Game.Shop.TrashBag>(me)) actor.CountTimeout("cook: the bag is still in the hands");
+            yield return capture.WaitForFrames();
+            yield return capture.Shot("trash-out");
+            Debug.Log("[Demo] cleaning: the trash is out: " + CleaningText());
+
+            // 4. The cloth from the sink's drainboard, the spill wiped, the cloth back.
+            WipeCloth cloth = UnityEngine.Object.FindFirstObjectByType<WipeCloth>();
+            if (cloth == null)
+            {
+                actor.CountTimeout("cook: no wipe cloth");
+                yield break;
+            }
+            Vector3 clothHome = cloth.transform.position;
+            yield return actor.WalkTo(new Vector3(trash.transform.position.x + 0.3f, 0f, laneZ), false, false);
+            yield return actor.WalkTo(new Vector3(sink.transform.position.x, 0f, laneZ), false, false);
+            NetworkObject clothObject = cloth.GetComponent<NetworkObject>();
+            yield return actor.Use("take the cloth", cloth.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(clothObject), null);
+            until = Time.unscaledTime + 3f;
+            while (!Holds<WipeCloth>(me) && Time.unscaledTime < until) yield return null;
+            yield return actor.WalkTo(new Vector3(drinks.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.AimAt(spill.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Wipe);
+            yield return capture.Shot("wipe-aim");
+            if (me.CurrentAction != InteractionAction.Wipe) Debug.LogWarning("[Demo] cleaning: the spill offers " + me.CurrentAction);
+            me.DevSqueezePress(spill);
+            pressed = Time.unscaledTime;
+            if (capture.Frames != null) yield return capture.Frames("wipe", WipeHoldSeconds + 0.3f);
+            while (Time.unscaledTime - pressed < WipeHoldSeconds) yield return null;
+            me.DevSqueezeRelease();
+            released = Time.unscaledTime;
+            while ((me.DevSqueezeBusy || DrinkRules.HasSpill(ByteOf(drinks))) && Time.unscaledTime - released < 3f) yield return null;
+            yield return capture.WaitForFrames();
+            if (DrinkRules.HasSpill(ByteOf(drinks))) actor.CountTimeout("cook: the spill is still there");
+            yield return actor.AimAt(spill.Anchor, 0.6f);
+            yield return capture.Shot("wiped");
+            Debug.Log("[Demo] cleaning: wiped: " + CleaningText());
+            yield return actor.WalkTo(new Vector3(sink.transform.position.x, 0f, laneZ), false, false);
+            PlaceSurface drain = SurfaceUnder(clothHome);
+            if (drain != null)
+            {
+                int spot = PlaceSpots.NearestFree(drain.Size, drain.ToTopPlane(clothHome), null);
+                yield return actor.Use("put the cloth back", drain.SpotWorldPosition(spot), InteractionAction.Place,
+                    () => me.DevSendPlace(drain.Index, spot), null);
+            }
+            yield return actor.LevelView();
+            yield return new WaitForSecondsRealtime(6f); // all clean: the meter climbs
+            yield return capture.Shot("hygiene-climbs");
+            Debug.Log("[Demo] cleaning done (" + Time.time.ToString("0.0") + " s): " + CleaningText());
+        }
+
+        /// <summary>Spec 035: how long the tour holds the scrub (over the 1.5 s), the overfilling pour (past 500 ml) and the wipe.</summary>
+        public const float ScrubHoldSeconds = 1.8f;
+        public const float OverfillSeconds = 2.9f;
+        public const float WipeHoldSeconds = 1.3f;
 
         /// <summary>Spec 033: the cup the player holds, or null.</summary>
         private static Food HeldCup(PickupInteractor me)

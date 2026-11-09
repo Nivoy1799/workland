@@ -110,8 +110,24 @@ namespace Worktown.Game.Audio
             if (item.TryGetComponent(out Knife _)) return SoundMaterial.Metal;
             if (item.TryGetComponent(out Spatula _)) return SoundMaterial.Metal; // spec 030
             if (item.TryGetComponent(out Food _)) return SoundMaterial.Food;
+            if (item.TryGetComponent(out Worktown.Game.Shop.DirtyDish _)) return SoundMaterial.Ceramic; // spec 035: a plate
+            if (item.TryGetComponent(out Worktown.Game.Shop.TrashBag _)) return SoundMaterial.Food; // spec 035: soft
+            if (item.TryGetComponent(out WipeCloth _)) return SoundMaterial.Food;
             return null;
         }
+
+        /// <summary>
+        /// Spec 035: the cleaning sounds. Something goes into the trash can: the lid's thump; the bag goes into the bin, or comes out of the
+        /// can: its rustle; a dish into the sink: the splash; the scrub's loop while held (<see cref="SoundKey.Scrub"/>).
+        /// </summary>
+        public static SoundKey DiscardSound(bool intoTheBin) => intoTheBin ? SoundKey.TrashRustle : SoundKey.LidThump;
+
+        public static SoundKey BagSound => SoundKey.TrashRustle;
+        public static SoundKey IntoTheSinkSound => SoundKey.Splash;
+        public static SoundKey ScrubLoop => SoundKey.Scrub;
+
+        /// <summary>Spec 035: the scrub loop's pitch: a little higher while the plate is nearly clean (share 0..1 of the scrub).</summary>
+        public static float ScrubPitch(float share) => 0.95f + 0.15f * (share < 0f ? 0f : share > 1f ? 1f : share);
 
         /// <summary>The place tock: the item's material, else the surface's (metal on a burner, wood elsewhere).</summary>
         public static SoundKey PlaceSound(SoundMaterial? item, bool onBurner)

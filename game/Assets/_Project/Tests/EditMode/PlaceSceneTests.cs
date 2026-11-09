@@ -88,7 +88,7 @@ namespace Worktown.Game.Tests
                         Assert.IsFalse(overlapX && overlapZ, surface.name + " overlaps " + station.name);
                     }
                 }
-                Assert.AreEqual(5, worktops);
+                Assert.AreEqual(4, worktops); // spec 035: the bowl's worktop after the plate shelf is the sink (its drainboard)
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

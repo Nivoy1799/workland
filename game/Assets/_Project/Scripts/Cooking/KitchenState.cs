@@ -119,11 +119,9 @@ namespace Worktown.Game.Cooking
         /// <summary>Removes the food (it was served or despawned).</summary>
         public bool TryRemove(int objectId, out Item item)
         {
-            _cupMl.Remove(objectId); // spec 033
-            CancelPoursOfCup(objectId); // 033 review
-            if (!_items.TryGetValue(objectId, out item)) return false;
-            _items.Remove(objectId);
-            return true;
+            bool had = _items.TryGetValue(objectId, out item);
+            Forget(objectId); // 034 review: the one path (the item, its ml, its pours)
+            return had;
         }
 
         /// <summary>Everything goes: food, contents, burners (switched off) and positions.</summary>

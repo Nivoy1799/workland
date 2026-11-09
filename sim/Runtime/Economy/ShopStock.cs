@@ -76,13 +76,22 @@ namespace Worktown.Sim.Economy
         /// sealed units as needed; when less is left than asked, what is left (at least 1 %). InvalidQuantity below 1, UnknownGood,
         /// OutOfStock when nothing is left.
         /// </summary>
-        public StockResult TryDraw(string goodId, int percent)
+        public StockResult TryDraw(string goodId, int percent) => TryDraw(goodId, percent, 1);
+
+        /// <summary>
+        /// 034 review (last drops): as <see cref="TryDraw(string, int)"/>, but OutOfStock (nothing changes) when less than
+        /// <paramref name="minPercent"/> is left: the least share the draw's bucket counts (PriceRules.LeastPortionShare,
+        /// LeastFillShare), so a "lots" squeeze never comes out of 20 % left and a full cup never out of the last 1 %; the wholesaler's
+        /// cap (PriceRules.StockCost) then never counts more than was drawn.
+        /// </summary>
+        public StockResult TryDraw(string goodId, int percent, int minPercent)
         {
             if (percent < 1) return Refuse(StockError.InvalidQuantity);
+            minPercent = Math.Max(1, Math.Min(minPercent, percent));
             int i = IndexOf(goodId);
             if (i < 0) return Refuse(StockError.UnknownGood);
             StockLine line = _lines[i];
-            if (line.IsEmpty) return Refuse(StockError.OutOfStock);
+            if (line.IsEmpty || line.AvailablePercent < minPercent) return Refuse(StockError.OutOfStock);
             int count = line.Count;
             long open = line.OpenPercent;
             while (open < percent && count > 0)
@@ -91,13 +100,8 @@ namespace Worktown.Sim.Economy
                 open += line.PercentPerUnit;
             }
             int drawn = (int)Math.Min(percent, open);
+            // 034 review: a unit is opened only while the opened part is short of the draw, so what is left is always below one unit.
             int left = (int)(open - drawn);
-            // An opened unit holds at most one unit (opening a second only happens when the first could not cover the draw).
-            while (left > line.PercentPerUnit)
-            {
-                left -= line.PercentPerUnit;
-                count++;
-            }
             return new StockResult(With(i, line with { Count = count, OpenPercent = left }), StockError.None, drawn);
         }
 

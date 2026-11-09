@@ -18,7 +18,7 @@ namespace Worktown.Game.Cooking
     /// at its home spot like the knife; plates come from the shelf (at most <see cref="VesselRules.MaxPlatesInWorld"/>).
     /// Lives next to the NetworkManager; does nothing on pure clients.
     /// </summary>
-    public sealed class KitchenService : MonoBehaviour
+    public sealed class KitchenService : MonoBehaviour, Worktown.Game.Shop.ICleaningKitchen
     {
         [SerializeField] private NetworkManager _networkManager;
         [SerializeField] private PickupService _pickups;
@@ -38,6 +38,10 @@ namespace Worktown.Game.Cooking
         [SerializeField] private NetworkObject _spatulaPrefab;
         [Tooltip("Spec 034: the shop's stock and supply. Without it every slot is endless and the grocer is paid per take (as before).")]
         [SerializeField] private Worktown.Game.Shop.SupplyService _supply;
+        [Tooltip("Spec 035: the shop's cleaning (plates, dishes, the trash, spills, the hygiene score). Without it plates are endless as before.")]
+        [SerializeField] private Worktown.Game.Shop.CleaningService _cleaning;
+        [Tooltip("Spec 035: the wipe cloth prefab for replacing a lost cloth (the scene cloth is an instance of it).")]
+        [SerializeField] private NetworkObject _clothPrefab;
 
         private const float HomeCheckInterval = 0.5f;
         private const int MaxInitAttempts = 300;
@@ -90,6 +94,7 @@ namespace Worktown.Game.Cooking
         {
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
             if (_pickups != null) _pickups.ItemMoved += OnItemMoved;
+            if (_cleaning != null) _cleaning.Bind(this); // spec 035
         }
 
         private void OnDestroy()
@@ -141,6 +146,22 @@ namespace Worktown.Game.Cooking
                 return UnpackInto(player, station, option, box, contents);
             // Spec 028b: stock checks its option (the slot) and the reach to that slot's anchor itself (StockRules).
             if (station.Kind == StationKind.Crate || StockLayout.IsStock(station.Kind)) return TakeIngredient(player, station, option);
+            // Spec 035: the cloth on a drink dispenser's spill (its release anywhere, like a tap's) and the cleaning stations (a scrub's
+            // release anywhere).
+            if (station.Kind == StationKind.DrinkDispenser && Worktown.Game.Shop.CleaningRules.IsWipeOption(option))
+            {
+                if (Worktown.Game.Shop.CleaningRules.NeedsReach(station.Kind, option)
+                    && !StationRules.IsInReach(player.transform.position, station.transform.position)) return CookOutcome.TooFar;
+                EnsureInitialized();
+                return _cleaning != null ? _cleaning.Wipe(player, station, option) : CookOutcome.UnknownStation;
+            }
+            if (Worktown.Game.Shop.CleaningRules.IsCleaningStation(station.Kind))
+            {
+                if (Worktown.Game.Shop.CleaningRules.NeedsReach(station.Kind, option)
+                    && !StationRules.IsInReach(player.transform.position, station.transform.position)) return CookOutcome.TooFar;
+                EnsureInitialized();
+                return _cleaning != null ? _cleaning.Use(player, station, option) : CookOutcome.UnknownStation;
+            }
             // Spec 031: a dispenser's release ends the squeeze wherever the player is now (the press was in reach).
             if (!AssemblyDesk.NeedsReach(station.Kind, option))
             {
@@ -507,7 +528,17 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome StopPour(PickupInteractor player, Station dispenser, int tap)
         {
-            if (!_kitchen.IsPouring(dispenser.Index, tap, out int owner, out _, out _) || owner != player.OwnerId) return CookOutcome.Ok;
+            if (!_kitchen.IsPouring(dispenser.Index, tap, out int owner, out _, out _) || owner != player.OwnerId)
+            {
+                // 034 review: the pour may be gone already (its cup was put down, sold or discarded: CancelPoursOfCup): the server's table
+                // forgets it too and the tap's bit goes off.
+                long key = DrinkDesk.KeyOf(dispenser.Index, tap);
+                if (!_kitchen.IsPouring(dispenser.Index, tap, out _, out _, out _) && _pourers.TryGetValue(key, out PickupInteractor was)
+                    && was == player)
+                    _pourers.Remove(key);
+                RefreshDrinks(dispenser);
+                return CookOutcome.Ok;
+            }
             return EndPour(player, dispenser, tap);
         }
 
@@ -634,7 +665,84 @@ namespace Worktown.Game.Cooking
         private void RefreshDrinks(Station dispenser)
         {
             if (dispenser == null || !dispenser.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
-            contents.ServerSetStoveFlags(_kitchen.DrinkFlags(dispenser.Index));
+            byte flags = _kitchen.DrinkFlags(dispenser.Index);
+            // Spec 035: someone wipes its spill (onlookers see the cloth go round).
+            if (_cleaning != null && _cleaning.IsWiping(dispenser.Index)) flags |= Worktown.Game.Shop.CleaningRules.WipingBit;
+            contents.ServerSetStoveFlags(flags);
+        }
+
+        // ---- Spec 035: what the cleaning service needs from the kitchen ----
+
+        private int _burningCount;
+
+        /// <summary>Spec 035: open spills (every drink dispenser's flag).</summary>
+        public int SpillCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (Station s in _stations)
+                    if (s != null && s.Kind == StationKind.DrinkDispenser && _kitchen.HasSpill(s.Index)) n++;
+                return n;
+            }
+        }
+
+        /// <summary>Spec 035: something burns on the heat now (counted while the heat bytes are published).</summary>
+        public bool Burning => _burningCount > 0;
+
+        public bool HoldsCloth(PickupInteractor player) =>
+            player != null && _pickups.TryGetHeld(player, out NetworkObject held) && held != null && held.TryGetComponent(out WipeCloth _);
+
+        public bool HasSpill(int station) => _kitchen.HasSpill(station);
+
+        public bool ClearSpill(int station)
+        {
+            bool had = _kitchen.ClearSpill(station);
+            RefreshDispenser(station);
+            return had;
+        }
+
+        public void RefreshDispenser(int station)
+        {
+            if (station >= 0 && station < _stations.Length && _stations[station] != null && _stations[station].Kind == StationKind.DrinkDispenser)
+                RefreshDrinks(_stations[station]);
+        }
+
+        /// <summary>
+        /// Spec 035: what the trash takes: food (burnt, scraps, a build, a cup, full or empty) and the food in held cookware (the cookware
+        /// stays). Not a tool, a box, a dirty dish, a bag or empty cookware.
+        /// </summary>
+        public bool CanDiscardHeld(PickupInteractor player)
+        {
+            if (player == null || !_pickups.TryGetHeld(player, out NetworkObject held) || held == null) return false;
+            if (held.TryGetComponent(out Food _)) return _kitchen.TryGet(held.ObjectId, out _);
+            if (held.TryGetComponent(out Vessel vessel)) return _kitchen.ContentCount(vessel.ObjectId, vessel.Kind) > 0;
+            return false;
+        }
+
+        /// <summary>
+        /// Spec 035: the discard: the held food is removed and despawned, or the held cookware's food is cleared. No money and no stock
+        /// move (the anti-faucet rule: a discard refunds nothing and creates nothing).
+        /// </summary>
+        public CookOutcome DiscardHeld(PickupInteractor player, out string what)
+        {
+            what = "nothing";
+            if (!CanDiscardHeld(player)) return CookOutcome.CannotDiscard;
+            _pickups.TryGetHeld(player, out NetworkObject held);
+            EnsureInitialized();
+            if (held.TryGetComponent(out Vessel vessel))
+            {
+                what = "the food from the " + VesselRules.Name(vessel.Kind);
+                _kitchen.ClearContents(vessel.ObjectId, vessel.Kind);
+                RefreshVessel(vessel);
+                return CookOutcome.Ok;
+            }
+            Food food = held.GetComponent<Food>();
+            what = food != null && food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food";
+            _kitchen.TryRemove(held.ObjectId, out _);
+            _pickups.TakeAway(player, out _);
+            _networkManager.ServerManager.Despawn(held);
+            return CookOutcome.Ok;
         }
 
         /// <summary>
@@ -774,6 +882,12 @@ namespace Worktown.Game.Cooking
             if (plates >= VesselRules.MaxPlatesInWorld) return CookOutcome.NoPlatesLeft;
             NetworkObject prefab = VesselPrefab(VesselKind.Plate);
             if (prefab == null) return CookOutcome.UnknownStation;
+            // Spec 035: the shelf holds a finite number of clean plates (the backstop puts it back if the hand-over fails).
+            if (_cleaning != null)
+            {
+                CookOutcome clean = _cleaning.TakeCleanPlate();
+                if (clean != CookOutcome.Ok) return clean;
+            }
 
             NetworkObject plate = _networkManager.GetPooledInstantiated(prefab, true);
             plate.transform.SetPositionAndRotation(player.HoldPoint.position, player.HoldPoint.rotation);
@@ -785,6 +899,7 @@ namespace Worktown.Game.Cooking
             if (_pickups.HandTo(player, plate)) return CookOutcome.Ok;
             Debug.LogError("[Kitchen] could not hand a plate to player " + player.OwnerId);
             DespawnVessel(fresh);
+            if (_cleaning != null) _cleaning.UndoTakeCleanPlate();
             return CookOutcome.SimRefused;
         }
 
@@ -863,6 +978,9 @@ namespace Worktown.Game.Cooking
             // Spec 030: the spatula comes back at its home spot like the knife.
             foreach (Spatula spatula in FindObjectsByType<Spatula>(FindObjectsSortMode.None))
                 if (spatula.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _spatulaPrefab));
+            // Spec 035: so does the wipe cloth.
+            foreach (WipeCloth cloth in FindObjectsByType<WipeCloth>(FindObjectsSortMode.None))
+                if (cloth.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _clothPrefab));
             // Spec 030: the griddle spots (fixed scene objects on their griddle).
             _griddleSpots.Clear();
             foreach (GriddleSpot gs in FindObjectsByType<GriddleSpot>(FindObjectsSortMode.None))
@@ -950,6 +1068,7 @@ namespace Worktown.Game.Cooking
                 {
                     Debug.Log("[Kitchen] a plate fell out of the world");
                     DespawnVessel(vessel);
+                    if (_cleaning != null) _cleaning.PlateLost(); // spec 035: it turns up on the shelf again (plates are finite)
                 }
             }
 
@@ -1043,8 +1162,16 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private void PublishHeat(uint tick, double tickRate)
         {
+            int burning = 0;
             foreach (Vessel vessel in _vessels)
-                if (vessel != null) PublishHeatOf(vessel, tick, tickRate);
+            {
+                if (vessel == null) continue;
+                PublishHeatOf(vessel, tick, tickRate);
+                // Spec 035: the burnt smell (a hygiene source) while anything on the heat is in the Burnt zone.
+                if (vessel.IsServerInitialized && VesselRules.IsHeat(vessel.Kind) && HeatZoneRules.ZoneOf(vessel.HeatZone.Value) == HeatZone.Burnt)
+                    burning++;
+            }
+            _burningCount = burning;
         }
 
         private void PublishHeatOf(Vessel vessel, uint tick, double tickRate)
@@ -1130,7 +1257,7 @@ namespace Worktown.Game.Cooking
             public CookOutcome Pay()
             {
                 // Spec 034: the shop's stock: the unit leaves the slot (the order paid for it); an empty slot is OutOfStock.
-                _line = _service._supply != null ? Worktown.Game.Shop.StockCatalog.LineOfSlot(_stock.Kind, _option) : -1;
+                _line = _service._supply != null ? Worktown.Game.Shop.StockCatalog.IndexOf(_baseId) : -1; // 034 review: the good taken
                 if (_line >= 0)
                 {
                     CookOutcome took = _service._supply.Room.Take(_line);
@@ -1254,7 +1381,19 @@ namespace Worktown.Game.Cooking
             }
 
             _pickups.TakeAway(player, out _);
-            if (plate != null) DespawnVessel(plate);
+            if (plate != null)
+            {
+                // Spec 035: the plate goes with the meal. An eat-in guest brings it back dirty; take-away (the meal went into its parcel)
+                // and the wholesaler leave it clean on the shelf.
+                bool eatIn = false;
+                if (served)
+                {
+                    try { eatIn = _customers.EatsIn(pick.CustomerId); }
+                    catch (System.Exception e) { Debug.LogException(e); }
+                }
+                DespawnVessel(plate);
+                if (_cleaning != null) _cleaning.PlateServed(eatIn);
+            }
             else
             {
                 _kitchen.TryRemove(held.ObjectId, out _);

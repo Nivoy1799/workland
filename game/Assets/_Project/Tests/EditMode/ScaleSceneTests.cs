@@ -61,19 +61,22 @@ namespace Worktown.Game.Tests
                     bool register = station.Kind == StationKind.Register;
                     bool drinks = station.Kind == StationKind.DrinkDispenser; // spec 033: on the front counter too
                     bool terminal = station.Kind == StationKind.Terminal; // spec 034: a screen hanging on the back wall
-                    float floor = register || drinks ? ArtSizeTable.ServingCounterHeight
+                    bool cleaning = Worktown.Game.Shop.CleaningRules.IsCleaningStation(station.Kind); // spec 035
+                    bool onCounter = register || drinks || station.Kind == StationKind.DishReturn;
+                    float floor = onCounter ? ArtSizeTable.ServingCounterHeight
                         : terminal ? TerminalArtRules.CentreHeight - TerminalArtRules.Height * 0.5f : 0f;
                     float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
                         : register ? floor + RegisterArtRules.Height
                         : drinks ? floor + DrinkArtRules.Height
                         : terminal ? floor + TerminalArtRules.Height
+                        : cleaning ? floor + CleaningArtRules.SizeOf(station.Kind).y
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");
                     Bounds body = station.transform.Find("Body").GetComponent<BoxCollider>().bounds;
                     // Spec 029: the fryer's collider stops under its oil wells (a lowered basket is aimed at above it).
                     float colliderTop = station.Kind == StationKind.Fryer ? FryerArt.BodyColliderTop : expected;
                     Assert.AreEqual(colliderTop, body.max.y, HeightTolerance, station.name + " collider top");
-                    Assert.AreEqual(floor, body.min.y, 0.001f, station.name + (register || drinks ? " stands on the counter top"
+                    Assert.AreEqual(floor, body.min.y, 0.001f, station.name + (onCounter ? " stands on the counter top"
                         : terminal ? " hangs at its height on the wall" : " stands on the floor"));
                     if (station.Kind == StationKind.Counter) counters++;
                     if (station.Kind == StationKind.Stove) stoves++;
@@ -147,7 +150,7 @@ namespace Worktown.Game.Tests
                         surface.name + ": modules of " + width + " m");
                     Assert.IsNull(surface.transform.Find("Art_" + ArtKey.Worktop), surface.name + " still has the stretched cabinet");
                 }
-                Assert.AreEqual(5, worktops);
+                Assert.AreEqual(4, worktops); // spec 035: the bowl's worktop after the plate shelf is the sink (its drainboard)
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

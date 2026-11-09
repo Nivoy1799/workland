@@ -296,7 +296,7 @@ namespace Worktown.Game.Tests
             while (room.CanDraw(lemonade)) room.Draw(lemonade, 100, out _);
             Assert.IsFalse(drinks.CanAfford(Owner, "lemonade", 1, false), "the kegs are empty");
             Assert.AreEqual(CookOutcome.OutOfStock, drinks.Charge(Owner, "lemonade", 50, false, out _));
-            Assert.IsTrue(wallet.CanAfford(Owner, "basil", 10), "a good the shop does not stock is free");
+            Assert.IsFalse(wallet.CanAfford(Owner, "basil", 10), "034 review: a good the shop does not stock is never free");
         }
 
         [Test]
