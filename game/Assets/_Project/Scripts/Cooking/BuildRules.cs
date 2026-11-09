@@ -161,5 +161,32 @@ namespace Worktown.Game.Cooking
             double s = CookingTime.ElapsedTicks(startTick, stopTick) / tickRate;
             return (float)System.Math.Min(Assembly.MaxSqueezeSeconds, System.Math.Max(0d, s));
         }
+
+        // ---- Spec 031b: short build names in labels ----
+
+        /// <summary>A build without a dish name shows at most this many words in a label.</summary>
+        public const int LabelWords = 3;
+        /// <summary>What follows a shortened label name.</summary>
+        public const string Ellipsis = "…";
+
+        /// <summary>
+        /// 031b: the name a world label shows. A build without a dish name (the sim's "wrap with golden falafel balls and lettuce
+        /// slices" form, Assembly.NameOf) shows its first <see cref="LabelWords"/> words and "…" ("wrap with golden…"); a dish
+        /// ("falafel wrap in paper") and anything that is no build show their full name. The full name stays in the sim, the
+        /// prompts and the ticket.
+        /// </summary>
+        public static string LabelName(string name, bool build)
+        {
+            if (string.IsNullOrEmpty(name)) return name ?? string.Empty;
+            if (!build || name.IndexOf(" with ", System.StringComparison.Ordinal) < 0) return name;
+            int words = 0;
+            for (int i = 0; i < name.Length; i++)
+            {
+                if (name[i] != ' ' || (i > 0 && name[i - 1] == ' ')) continue;
+                words++;
+                if (words == LabelWords) return name.Substring(0, i) + Ellipsis;
+            }
+            return name;
+        }
     }
 }

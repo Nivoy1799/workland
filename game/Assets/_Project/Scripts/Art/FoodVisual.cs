@@ -47,6 +47,14 @@ namespace Worktown.Game.Art
         private HeatZone _heatZone = HeatZone.None;
         private float _heatProgress;
         private bool _heatBoiled;
+        // Spec 031b: grill marks on grilled food, except on a griddle spot (GriddleSpotView draws its own there).
+        private bool _noGrillMarks;
+        private Vector3 _barSize;
+
+        private void Awake()
+        {
+            _noGrillMarks = GetComponentInParent<GriddleSpot>() != null;
+        }
 
         private struct PieceTint
         {
@@ -199,12 +207,59 @@ namespace Worktown.Game.Art
             if (!TryGetPrefab(piece.Key, out _)) return false;
             // Spec 029: a part that stands on its own (the fries box) keeps more of its size on a plate.
             if (scale < 1f) scale = Mathf.Min(1f, scale * FoodArtRules.PartBoost(piece.Key));
+            bool marks = !_noGrillMarks && FoodArtRules.HasGrillMarks(look);
             for (int i = 0; i < piece.Count; i++)
             {
                 Vector3 position = offset + FoodArtRules.PilePosition(i, piece.Count) * scale;
                 Add(piece.Key, position, FoodArtRules.PileYaw(i, piece.Count), scale, look, piece.Tinted, true);
+                if (marks && i < FoodArtRules.MarkedPieces) AddGrillMarks(_active[_active.Count - 1]);
             }
             return true;
+        }
+
+        /// <summary>
+        /// Spec 031b: grill marks on a grilled piece (in the hands, on a plate, in a build): dark Charcoal bars across its top, as
+        /// the griddle spot draws them (GriddleSpotView). Pooled like every piece.
+        /// </summary>
+        private void AddGrillMarks(GameObject piece)
+        {
+            if (piece == null || !TryGetPrefab(ArtKey.FoodPieceStick, out GameObject bar)) return;
+            piece.GetComponentsInChildren(false, _renderers);
+            bool any = false;
+            Bounds b = default;
+            foreach (Renderer r in _renderers)
+            {
+                if (!any) b = r.bounds;
+                else b.Encapsulate(r.bounds);
+                any = true;
+            }
+            _renderers.Clear();
+            if (!any) return;
+            float unit = Mathf.Max(1e-4f, transform.lossyScale.x);
+            Vector3 top = transform.InverseTransformPoint(new Vector3(b.center.x, b.max.y, b.center.z));
+            float length = Mathf.Clamp(Mathf.Min(b.size.x, b.size.z) / unit, 0.01f, 0.25f);
+            Vector3 barSize = BarSize(bar);
+            var scale = new Vector3(length * 0.12f / barSize.x, length * 0.05f / barSize.y, length * 0.75f / barSize.z);
+            for (int k = 0; k < FoodArtRules.MarksPerPiece; k++)
+            {
+                float across = (k - (FoodArtRules.MarksPerPiece - 1) * 0.5f) * length * 0.3f;
+                AddFixed(ArtKey.FoodPieceStick, top + new Vector3(across, length * 0.01f, 0f), scale, Palette.Charcoal);
+            }
+        }
+
+        /// <summary>The bar prefab's own size (m, its renderers at scale 1), measured once.</summary>
+        private Vector3 BarSize(GameObject prefab)
+        {
+            if (_barSize.x > 0f) return _barSize;
+            Vector3 size = Vector3.one * 0.03f;
+            foreach (MeshFilter f in prefab.GetComponentsInChildren<MeshFilter>(true))
+                if (f.sharedMesh != null)
+                {
+                    size = Vector3.Scale(f.sharedMesh.bounds.size, f.transform.lossyScale);
+                    break;
+                }
+            _barSize = new Vector3(Mathf.Max(size.x, 1e-4f), Mathf.Max(size.y, 1e-4f), Mathf.Max(size.z, 1e-4f));
+            return _barSize;
         }
 
         /// <summary>

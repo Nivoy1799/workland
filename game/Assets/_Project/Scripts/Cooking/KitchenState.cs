@@ -1313,7 +1313,8 @@ namespace Worktown.Game.Cooking
             if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
             if (Assembly.IsBuild(item))
             {
-                // A build back on the board: only on an empty spot, and only an unplated one (a finished one is sold).
+                // A build back on the board: only on an empty spot, and never on a plate (a plate of a build is sold as it is);
+                // a finished build (in paper, a box or a bag) goes back as it was.
                 if (spot.Build != null) return CookOutcome.VesselFull;
                 if (Assembly.BuildNode(item) == null || item.OperationId == "plate") return CookOutcome.AlreadyPlated;
                 spot.Build = item;
@@ -1388,7 +1389,7 @@ namespace Worktown.Game.Cooking
         /// <summary>
         /// A player presses dispenser <paramref name="dispenser"/> of board <paramref name="board"/>: the squeeze starts at
         /// <paramref name="tick"/> (the server's clock). StationEmpty (nothing on the board), BuildClosed, DispenserBusy (someone
-        /// else squeezes it); a second press by the same player restarts it. Nothing is charged or changed but the squeeze record.
+        /// else squeezes it); a second press by the same player while it runs keeps the first start. Nothing is charged or changed but the squeeze record.
         /// </summary>
         public CookOutcome TryStartSqueeze(int board, int dispenser, int owner, uint tick)
         {
@@ -1398,7 +1399,12 @@ namespace Worktown.Game.Cooking
             CookOutcome can = BuildRules.CanSqueeze(LayerCount(spot), BuildMode(spot));
             if (can != CookOutcome.Ok) return can;
             long key = SqueezeKey(board, dispenser);
-            if (_squeezes.TryGetValue(key, out SqueezeRecord busy) && busy.Owner != owner) return CookOutcome.DispenserBusy;
+            if (_squeezes.TryGetValue(key, out SqueezeRecord running))
+            {
+                // Spec 031b 10.0: a repeated press by the same player keeps the original start (Ok, nothing changes), so pressing
+                // again before the auto-stop can never hold the dispenser for ever.
+                return running.Owner == owner ? CookOutcome.Ok : CookOutcome.DispenserBusy;
+            }
             _squeezes[key] = new SqueezeRecord { Owner = owner, StartTick = tick };
             return CookOutcome.Ok;
         }
@@ -1421,14 +1427,24 @@ namespace Worktown.Game.Cooking
         /// squeezing it; the preview's refusals (StationEmpty, BuildClosed, VesselFull, SimRefused). Nothing changes on the board:
         /// the caller charges the sauce, then <see cref="CommitBuild"/>s the build with the top sauce and seconds.
         /// </summary>
-        public CookOutcome TryEndSqueeze(int board, int dispenser, int owner, uint tick, double tickRate, out Item build, out float seconds)
+        public CookOutcome TryEndSqueeze(int board, int dispenser, int owner, uint tick, double tickRate, out Item build, out float seconds) =>
+            TryEndSqueeze(board, dispenser, owner, tick, tickRate, out build, out seconds, out _);
+
+        /// <summary>
+        /// 031b: as <see cref="TryEndSqueeze(int, int, int, uint, double, out Item, out float)"/>, plus this squeeze's own seconds
+        /// (<paramref name="ownSeconds"/>, what its portion costs), set as soon as the record is found.
+        /// </summary>
+        public CookOutcome TryEndSqueeze(int board, int dispenser, int owner, uint tick, double tickRate, out Item build, out float seconds,
+            out float ownSeconds)
         {
             build = null;
             seconds = 0f;
+            ownSeconds = 0f;
             long key = SqueezeKey(board, dispenser);
             if (!_squeezes.TryGetValue(key, out SqueezeRecord r) || r.Owner != owner) return CookOutcome.InvalidOption;
             _squeezes.Remove(key);
             seconds = Cap(BuildRules.SqueezeSeconds(r.StartTick, tick, tickRate), BuildRules.AutoStopSeconds);
+            ownSeconds = seconds;
             string sauce = BuildRules.SauceOf(dispenser);
             int spot = BuildSpotOf(board);
             if (spot < 0) return CookOutcome.UnknownStation;

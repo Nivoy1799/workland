@@ -294,7 +294,7 @@ namespace Worktown.Game.Tests
             HeatTimeline falafel = kitchen.FreshTimeline(mix, DeepFry.OperationId, FryerRules.OilTempC);
             double s = CookingTime.TimeScale;
             TestContext.WriteLine("fries (real s): good " + (fries.GoodFrom / s).ToString("0.0") + ", perfect " + (fries.PerfectFrom / s).ToString("0.0")
-                + ", warning " + ((fries.OverdoneFrom - HeatZoneRules.WarnSimSeconds) / s).ToString("0.0") + ", overdone "
+                + ", warning " + ((fries.OverdoneFrom - HeatZoneRules.WarnLeadSimSeconds(fries)) / s).ToString("0.0") + ", overdone "
                 + (fries.OverdoneFrom / s).ToString("0.0") + ", burnt " + (fries.BurntFrom / s).ToString("0.0"));
             TestContext.WriteLine("falafel (real s): good " + (falafel.GoodFrom / s).ToString("0.0") + ", perfect " + (falafel.PerfectFrom / s).ToString("0.0")
                 + ", overdone " + (falafel.OverdoneFrom / s).ToString("0.0") + ", burnt " + (falafel.BurntFrom / s).ToString("0.0"));

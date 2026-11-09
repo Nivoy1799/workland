@@ -110,8 +110,19 @@ namespace Worktown.Game.Art
         /// <summary>Spec 029: one portion of falafel mix becomes this many balls in the fryer (the sim's DeepFry shape).</summary>
         public const int FalafelBalls = 4;
 
-        /// <summary>Fried in the pan or (spec 029) in the fryer: both shift golden.</summary>
-        public static bool IsFried(byte heat) => heat == FoodLook.HeatFried || heat == FoodLook.HeatDeepFried;
+        /// <summary>Fried in the pan or (spec 029) in the fryer, or (spec 031b) grilled: all shift golden.</summary>
+        public static bool IsFried(byte heat) => heat == FoodLook.HeatFried || heat == FoodLook.HeatDeepFried || heat == FoodLook.HeatGrilled;
+
+        /// <summary>
+        /// Spec 031b: grilled food done to the medium bucket or longer (both sides at least medium: the sim's "time" is the shorter
+        /// side) shows grill marks wherever it is drawn (in the hands, on a plate, in a build), not only on the griddle.
+        /// </summary>
+        public static bool HasGrillMarks(FoodLook look) => look.Heat == FoodLook.HeatGrilled && look.Doneness >= FoodLook.DonenessMedium;
+
+        /// <summary>Spec 031b: grill marks drawn on one pile: on each of its first pieces, at most this many pieces.</summary>
+        public const int MarkedPieces = 3;
+        /// <summary>Spec 031b: dark bars per marked piece.</summary>
+        public const int MarksPerPiece = 2;
 
         private static FoodPiece Generic(byte shape, int count) => new FoodPiece(GenericPiece(shape), count, true);
 

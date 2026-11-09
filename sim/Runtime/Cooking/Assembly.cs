@@ -155,6 +155,21 @@ namespace Worktown.Sim.Cooking
             return null;
         }
 
+        /// <summary>
+        /// Spec 031b: the layer is one ingredient and what was done to it (cut, heat, squeeze), each step with one input: no mix,
+        /// plate or build anywhere in its chain.
+        /// </summary>
+        public static bool IsSingleChain(Item layer)
+        {
+            for (Item? c = layer; c != null; c = c.Inputs.Count > 0 ? c.Inputs[0] : null)
+            {
+                if (c.Kind == null) return c.Inputs.Count == 0;
+                if (c.Kind != OperationKind.Cut && c.Kind != OperationKind.Heat && c.Kind != OperationKind.Portion) return false;
+                if (c.Inputs.Count != 1) return false;
+            }
+            return false;
+        }
+
         /// <summary>True when the layer (or what it was made from) was cut.</summary>
         public static bool IsCut(Item layer)
         {

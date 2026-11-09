@@ -459,12 +459,15 @@ namespace Worktown.Game.Tests
             hold.Release();
             Assert.AreEqual(SqueezeHold.Send.Start, hold.Poll(true));
             Assert.AreEqual(SqueezeHold.Send.Stop, hold.Poll(true));
-            // Another dispenser waits until the first one's stop went out.
+            // Another dispenser waits until the first one's stop went out (031b: queued behind it, not dropped).
             hold.Press(Board, 0);
             hold.Poll(true);
             hold.Release();
-            Assert.IsFalse(hold.Press(Board, 1));
+            Assert.IsTrue(hold.Press(Board, 1));
             Assert.AreEqual(SqueezeHold.Send.Stop, hold.Poll(true));
+            Assert.AreEqual(0, hold.SendDispenser, "the first dispenser's stop goes first");
+            Assert.AreEqual(SqueezeHold.Send.Start, hold.Poll(true));
+            Assert.AreEqual(1, hold.SendDispenser, "then the queued press");
             hold.Reset();
             Assert.IsTrue(hold.Idle);
         }

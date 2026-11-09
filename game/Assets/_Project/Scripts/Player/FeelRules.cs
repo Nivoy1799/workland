@@ -245,6 +245,14 @@ namespace Worktown.Game.Player
         public static ItemSnapshot FlipStart(ItemSnapshot atClick, int ahead) =>
             new ItemSnapshot(atClick.Exists, atClick.Holder, atClick.Position, atClick.VesselCount, ahead < 0 ? 0 : ahead);
 
+        /// <summary>
+        /// 031b (review of 031): the start of a fold or packaging prediction: the spot's synced close and pack bits at the click and,
+        /// in <see cref="ItemSnapshot.HeldId"/>, the bits the step leads to (<paramref name="targetBits"/>). It is confirmed only when
+        /// the synced bits equal the target.
+        /// </summary>
+        public static ItemSnapshot BuildStepStart(ItemSnapshot atClick, int targetBits) =>
+            new ItemSnapshot(atClick.Exists, atClick.Holder, atClick.Position, atClick.VesselCount, targetBits < 0 ? 0 : targetBits);
+
         /// <summary>030 review: the counter steps (mod 4) from <paramref name="before"/> to <paramref name="after"/>.</summary>
         public static int FlipSteps(int before, int after) => ((after - before) % 4 + 4) % 4;
 
@@ -290,8 +298,11 @@ namespace Worktown.Game.Player
                     return FlipSteps(start.VesselCount, now.VesselCount) > System.Math.Max(0, start.HeldId)
                         ? PredictionPhase.Confirmed : PredictionPhase.Pending;
                 case PredictionKind.BuildStep:
-                    // Spec 031: confirmed once the build's close or pack bits changed; an emptied board denies it.
+                    // Spec 031: confirmed once the build's close or pack bits changed; an emptied board denies it. 031b: with the
+                    // step's target bits in the start (<see cref="BuildStepStart"/>) only those bits confirm it, so a fold that
+                    // arrives never confirms the paper clicked right after it.
                     if (!now.Exists) return PredictionPhase.Denied;
+                    if (start.HeldId >= 0) return now.VesselCount == start.HeldId ? PredictionPhase.Confirmed : PredictionPhase.Pending;
                     return now.VesselCount != start.VesselCount ? PredictionPhase.Confirmed : PredictionPhase.Pending;
                 default:
                     return PredictionPhase.Pending;

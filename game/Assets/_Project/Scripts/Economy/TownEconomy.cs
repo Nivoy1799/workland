@@ -73,6 +73,15 @@ namespace Worktown.Game.Economy
             return result.Error;
         }
 
+        /// <summary>Spec 031b: buys <paramref name="percent"/> % of one base item (a squeezed portion). On failure nothing changes.</summary>
+        public EconomyError TryBuyPortion(string accountId, string baseId, int percent, out long cost)
+        {
+            PurchaseResult result = _engine.TryBuyPortion(_state, accountId, baseId, percent);
+            cost = result.Cost;
+            if (result.Ok) _state = result.State;
+            return result.Error;
+        }
+
         /// <summary>Sells a plated item. On failure nothing changes.</summary>
         public SaleResult TrySell(string accountId, Item platedItem)
         {

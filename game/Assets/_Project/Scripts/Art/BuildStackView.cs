@@ -34,16 +34,14 @@ namespace Worktown.Game.Art
         private bool _modeStarted;
         private float _stepStart = float.NegativeInfinity;
         private float _closedSince = float.NegativeInfinity;
-        private bool _predicting;
-        private byte _predictedMode;
-        private float _predictUntil;
+        private readonly Worktown.Game.Player.BuildStepLook _prediction = new Worktown.Game.Player.BuildStepLook();
         private float _height;
         private KitchenSounds _sounds;
         private bool _soundsLooked;
 
         /// <summary>The mode byte this client shows: its own pending step first, else the synced one.</summary>
-        public byte SeenMode => _predicting ? _predictedMode : (_vessel != null ? _vessel.Mode.Value : (byte)0);
-        public bool IsPredicting => _predicting;
+        public byte SeenMode => _prediction.Seen(Time.unscaledTime, _vessel != null ? _vessel.Mode.Value : (byte)0);
+        public bool IsPredicting => _prediction.Predicting;
         /// <summary>The frame the predicted step was first drawn (for the click-to-visual log); -1 before.</summary>
         public int PredictionDrawnFrame { get; private set; } = -1;
         /// <summary>The top of the stack in world space (where the sauce ribbon lands).</summary>
@@ -80,29 +78,28 @@ namespace Worktown.Game.Art
         {
             _shownCount = -1;
             _modeStarted = false;
-            _predicting = false;
+            _prediction.Reset();
         }
 
-        /// <summary>Owner: a fold or packaging click shows now as <paramref name="mode"/> until the server answers.</summary>
-        public void PredictStep(byte mode, float confirmTimeout)
+        /// <summary>Owner: a fold or packaging click shows now as <paramref name="mode"/> until the server answers. 031b: the
+        /// prediction's own token, for <see cref="EndPrediction"/>.</summary>
+        public int PredictStep(byte mode, float confirmTimeout)
         {
-            _predicting = true;
-            _predictedMode = mode;
-            _predictUntil = Time.unscaledTime + Mathf.Max(0.1f, confirmTimeout) + 0.5f;
             PredictionDrawnFrame = -1;
+            return _prediction.Predict(mode, Time.unscaledTime + Mathf.Max(0.1f, confirmTimeout) + 0.5f);
         }
 
-        /// <summary>The prediction is over: confirmed (the synced mode caught up) or denied (it turns back to the synced mode).</summary>
-        public void EndPrediction(bool confirmed) => _predicting = false;
+        /// <summary>The prediction <paramref name="token"/> is over: confirmed (the synced mode caught up) or denied (it turns back to
+        /// the synced mode). 031b: only the newest prediction ends the look; an older one that resolves changes nothing.</summary>
+        public void EndPrediction(int token, bool confirmed) => _prediction.End(token);
 
         private void LateUpdate()
         {
             if (_vessel == null || _contents == null) return;
             float now = Time.unscaledTime;
-            if (_predicting && now > _predictUntil) _predicting = false;
             UpdateLayers(now);
             UpdateMode(now);
-            if (_predicting && PredictionDrawnFrame < 0) PredictionDrawnFrame = Time.frameCount;
+            if (_prediction.Predicting && PredictionDrawnFrame < 0) PredictionDrawnFrame = Time.frameCount;
         }
 
         private void UpdateLayers(float now)

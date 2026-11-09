@@ -48,6 +48,8 @@ namespace Worktown.Sim.Cooking
         public static OperationCatalog CreateDefault()
         {
             var plated = new[] { "plated" };
+            // Spec 031b: builds stay builds: no cut, heat op or mix takes a build (a plate takes one only alone, ItemFactory).
+            var platedOrBuild = new[] { "plated", Assembly.BuildTag };
             var none = Array.Empty<string>();
 
             var shape = new ParamDef("shape", ParamKind.Choice, 0f, 1f, new[]
@@ -78,20 +80,20 @@ namespace Worktown.Sim.Cooking
             return new OperationCatalog(new[]
             {
                 new OperationDef("cut", "board", OperationKind.Cut, false, 1, 1, new[] { shape }, null,
-                    plated, none, "{in} {shape}"),
+                    platedOrBuild, none, "{in} {shape}"),
                 new OperationDef("fry", "pan", OperationKind.Heat, false, 1, 1, new[] { panTemp, panTime },
-                    new HeatProfile(null, 0.35f, -0.6f, 0.5f, 0.15f, 0f), plated, none, "{temp} {time} fried {in}"),
+                    new HeatProfile(null, 0.35f, -0.6f, 0.5f, 0.15f, 0f), platedOrBuild, none, "{temp} {time} fried {in}"),
                 new OperationDef("saute", "pan", OperationKind.Heat, false, 1, 1, new[] { panTemp, panTime },
-                    new HeatProfile(null, 0.15f, -0.4f, 0.25f, 0.2f, 0f), plated, none, "{temp} {time} sauteed {in}"),
+                    new HeatProfile(null, 0.15f, -0.4f, 0.25f, 0.2f, 0f), platedOrBuild, none, "{temp} {time} sauteed {in}"),
                 new OperationDef("boil", "pot", OperationKind.Heat, false, 1, 1, new[] { boilTime },
-                    new HeatProfile(100f, 0f, 0.5f, -0.8f, 0f, 0.1f), plated, none, "{time} boiled {in}"),
+                    new HeatProfile(100f, 0f, 0.5f, -0.8f, 0f, 0.1f), platedOrBuild, none, "{time} boiled {in}"),
                 new OperationDef("mix", "counter", OperationKind.Mix, true, 2, CookingLimits.MaxMixInputs,
-                    Array.Empty<ParamDef>(), null, plated, none, "{in} mix"),
+                    Array.Empty<ParamDef>(), null, platedOrBuild, none, "{in} mix"),
                 new OperationDef("plate", "counter", OperationKind.Plate, true, 1, CookingLimits.MaxPlateInputs,
                     Array.Empty<ParamDef>(), null, plated, plated, "plate of {in}"),
-                DeepFryOperation(plated, none),
-                GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, plated, none),
-                GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, plated, none),
+                DeepFryOperation(platedOrBuild, none),
+                GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, platedOrBuild, none),
+                GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, platedOrBuild, none),
                 // Spec 031: the assembly board.
                 new OperationDef(Assembly.SqueezeOperationId, "dispenser", OperationKind.Portion, false, 1, 1, new[]
                 {

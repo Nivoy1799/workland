@@ -56,6 +56,10 @@ namespace Worktown.Sim.Cooking
             foreach (var input in flat)
                 foreach (var tag in input.Tags)
                     if (Contains(op.ForbiddenInputTags, tag)) return Fail(OperationError.ForbiddenInput);
+            // Spec 031b: a build stays a build: a plate holds one alone (the counter plates it as it is), never with other food.
+            if (op.Kind == OperationKind.Plate && flat.Count > 1)
+                foreach (var input in flat)
+                    if (Assembly.IsBuild(input)) return Fail(OperationError.ForbiddenInput);
 
             // 3. params
             if (!TryResolve(op, parameters, out var resolved)) return Fail(OperationError.InvalidParam);

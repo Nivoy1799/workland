@@ -93,7 +93,10 @@ namespace Worktown.Game.Net.Rules
             int layers = target.ContentCount;
             if (held.IsFood)
             {
-                if (held.IsPlated) return layers == 0 ? InteractionAction.PutInto : InteractionAction.None; // a finished build back on an empty board
+                // 031b (review of 031): a build (open or finished) goes back only on an empty board, as the server allows; other
+                // finished food (a plate of fries) goes on no board.
+                if (held.IsBuild) return layers == 0 ? InteractionAction.PutInto : InteractionAction.None;
+                if (held.IsPlated) return InteractionAction.None;
                 return layers < VesselRules.Capacity(VesselKind.Assembly) && (layers == 0 || BuildRules.IsOpen(target.Mode))
                     ? InteractionAction.PutInto : InteractionAction.None;
             }
@@ -106,21 +109,33 @@ namespace Worktown.Game.Net.Rules
         {
             int tool = target.Option;
             if (BuildRules.IsDispenser(tool))
-                return BuildRules.CanSqueeze(target.ContentCount, target.Mode) == CookOutcome.Ok ? InteractionAction.Squeeze : InteractionAction.None;
+                return SqueezeCheck(target) == CookOutcome.Ok ? InteractionAction.Squeeze : InteractionAction.None;
             if (BuildRules.IsPackaging(tool))
                 return BuildRules.CanPackage(BuildRules.PackagingOf(tool), target.ContentCount, target.Mode) == CookOutcome.Ok
                     ? InteractionAction.Pack : InteractionAction.None;
             return InteractionAction.None;
         }
 
+        /// <summary>
+        /// 031b (review of 031): a dispenser as the server sees it: the build first (<see cref="BuildRules.CanSqueeze"/>), then the
+        /// board's squeezing bit (DispenserBusy: someone squeezes it; the interactor clears the bit of its own squeeze).
+        /// </summary>
+        private static CookOutcome SqueezeCheck(AimTarget target)
+        {
+            CookOutcome can = BuildRules.CanSqueeze(target.ContentCount, target.Mode);
+            if (can != CookOutcome.Ok) return can;
+            return BuildRules.IsSqueezing(target.StoveFlags, target.Option) ? CookOutcome.DispenserBusy : CookOutcome.Ok;
+        }
+
         /// <summary>Spec 031: why a tool does nothing now (shown grey), or null.</summary>
         public static string ToolReason(AimTarget target)
         {
             int tool = target.Option;
-            CookOutcome why = BuildRules.IsDispenser(tool) ? BuildRules.CanSqueeze(target.ContentCount, target.Mode)
+            CookOutcome why = BuildRules.IsDispenser(tool) ? SqueezeCheck(target)
                 : BuildRules.CanPackage(BuildRules.PackagingOf(tool), target.ContentCount, target.Mode);
             switch (why)
             {
+                case CookOutcome.DispenserBusy: return "Someone is using that sauce";
                 case CookOutcome.StationEmpty: return "Start with a wrap or flatbread on the board";
                 case CookOutcome.BuildClosed: return BuildRules.IsDispenser(tool) ? "It is closed" : "It is packed already";
                 case CookOutcome.FoldFirst: return "Fold it first";
@@ -254,6 +269,7 @@ namespace Worktown.Game.Net.Rules
             if (target.Vessel == VesselKind.Assembly) // spec 031
             {
                 if (!held.IsFood) return null;
+                if (held.IsBuild) return "Take the other build off first"; // 031b: a build goes back only on an empty board
                 if (target.ContentCount > 0 && !BuildRules.IsOpen(target.Mode)) return "It is closed";
                 return target.ContentCount >= VesselRules.Capacity(VesselKind.Assembly) ? "The build is full" : "Take the finished one to the counter";
             }

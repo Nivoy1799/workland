@@ -184,7 +184,8 @@ namespace Worktown.Game.Cooking
             }
             var lines = new List<string>(Names.Count + 1);
             if (_kind == VesselKind.Pan) lines.Add(Mode.Value == ModeSaute ? "sauté" : "fry");
-            foreach (string name in Names) lines.Add(name);
+            // Spec 031b: a build without a dish name is shortened in the label (BuildRules.LabelName).
+            foreach (string name in Names) lines.Add(BuildRules.LabelName(name, _kind == VesselKind.Assembly));
             _label.text = string.Join("\n", lines);
         }
     }

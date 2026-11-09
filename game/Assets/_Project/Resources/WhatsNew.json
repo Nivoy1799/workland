@@ -521,6 +521,27 @@
         "Try paper before folding: does it say Fold it first, with nothing charged?",
         "Is the board close enough to the plates and the counter?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-031b",
+      "date": "2026-11-09",
+      "title": "Kitchen polish: a calmer view, fair sauce prices, food you can see",
+      "items": [
+        "Heat rings show only for what you aim at and for food about to overcook or burnt; in third person also the 4 nearest",
+        "The warning before overdone now fits short cooks: toast no longer warns before it is done",
+        "A squeeze of sauce costs a portion: 10% of the bottle per started half second, at most 30%; paper, box and bag keep their price",
+        "Food you hold stands whole in the lower right of your view; big things are drawn smaller so the middle stays free",
+        "The takeaway box is closed; a build without a dish name has a short label (wrap with golden...)",
+        "Grilled food keeps its grill marks on a plate; the spatula flips in your hand",
+        "Hold E (or the right trigger) at the board in third person, or the right trigger in first person, to squeeze"
+      ],
+      "test": [
+        "Fill all six griddle spots: in first person, do you see only the ring you aim at (plus warnings)?",
+        "Squeeze a short dash and a long squeeze: does the money go down by a small portion, not the whole bottle?",
+        "Hold a wrap: is it fully visible in the lower right? Hold a pan: does it stay out of the middle?",
+        "Box a build: does the box look closed?",
+        "Grill seitan strips and slide them onto a plate: do the grill marks stay?"
+      ]
     }
   ]
 }

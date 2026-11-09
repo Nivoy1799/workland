@@ -132,6 +132,44 @@ namespace Worktown.Game.Player
             return letters;
         }
 
+        // ---- Spec 031b: the calm view (docs/feel.md 3 and 7) ----
+
+        /// <summary>Third person: at most this many of the nearest heat rings show (besides the alarms).</summary>
+        public const int ThirdPersonRings = 4;
+
+        /// <summary>031b: a ring or heat label that always shows: its food is about to overcook (the warning), overdone or burnt.</summary>
+        public static bool IsAlarm(Worktown.Game.Cooking.HeatZone zone, bool warning) =>
+            warning || zone == Worktown.Game.Cooking.HeatZone.Overdone || zone == Worktown.Game.Cooking.HeatZone.Burnt;
+
+        /// <summary>
+        /// 031b, the calm view: a heat ring (or heat label) shows only for the aimed spot or vessel, an alarm
+        /// (<see cref="IsAlarm"/>), and in third person the <see cref="ThirdPersonRings"/> nearest (<paramref name="nearRank"/>:
+        /// 0 for the nearest, -1 unknown). A full griddle in first person shows the aimed ring and the warnings, never six.
+        /// </summary>
+        public static bool ShowsRing(bool aimed, bool alarm, bool firstPerson, int nearRank) =>
+            aimed || alarm || (!firstPerson && nearRank >= 0 && nearRank < ThirdPersonRings);
+
+        /// <summary>
+        /// 031b: the nearness rank of each distance (0 the nearest; ties by index), into <paramref name="ranks"/> (at least as long).
+        /// NaN counts as farthest. No allocation (a handful of rings).
+        /// </summary>
+        public static void NearRanks(IReadOnlyList<float> distances, int[] ranks)
+        {
+            int count = distances.Count;
+            for (int i = 0; i < count; i++)
+            {
+                int rank = 0;
+                float di = float.IsNaN(distances[i]) ? float.MaxValue : distances[i];
+                for (int j = 0; j < count; j++)
+                {
+                    if (j == i) continue;
+                    float dj = float.IsNaN(distances[j]) ? float.MaxValue : distances[j];
+                    if (dj < di || (dj == di && j < i)) rank++;
+                }
+                ranks[i] = rank;
+            }
+        }
+
         /// <summary>
         /// Greedy overlap culling: rectangles are taken in order of priority (then of distance, nearest first); a rectangle
         /// that overlaps one already kept is dropped. <paramref name="keep"/> receives one flag per rectangle.

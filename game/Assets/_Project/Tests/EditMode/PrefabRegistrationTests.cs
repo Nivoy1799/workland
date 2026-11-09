@@ -53,6 +53,7 @@ namespace Worktown.Game.Tests
                 }
                 TestContext.WriteLine(string.Join("\n", spawned));
                 Assert.GreaterOrEqual(spawned.Count, 4, "at least the food, the knife, the spatula and the cookware");
+                Assert.IsTrue(spawned.Exists(s => s.StartsWith("_foodPrefab")), "the food"); // 031b (review of 031): by name too
                 Assert.IsTrue(spawned.Exists(s => s.StartsWith("_knifePrefab")), "the knife");
                 Assert.IsTrue(spawned.Exists(s => s.StartsWith("_spatulaPrefab")), "the spatula");
                 Assert.IsTrue(spawned.Exists(s => s.StartsWith("_vesselPrefabs")), "the cookware");

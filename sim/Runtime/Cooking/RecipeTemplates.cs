@@ -224,6 +224,8 @@ namespace Worktown.Sim.Cooking
         /// <summary>Whether <paramref name="layer"/> fits the template layer: its ingredient and, with <paramref name="prepared"/>, its prep.</summary>
         private static bool Fits(TemplateLayer tl, Item layer, bool prepared)
         {
+            // Spec 031b: only a single-ingredient chain fills a template layer (a mix or a plate never does).
+            if (!Assembly.IsSingleChain(layer)) return false;
             if (!Assembly.Contains(tl.Bases, Assembly.BaseOf(layer))) return false;
             if (!prepared) return true;
             if (tl.NeedsCut && !Assembly.IsCut(layer)) return false;

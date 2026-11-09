@@ -80,6 +80,7 @@ namespace Worktown.Game.Editor
             public bool AlongZ; // spec 019, Max mode: turn the model so its longest horizontal side runs along Z
             public string Skin = null; // spec 025, Character mode: texture name of the skin material
             public bool Flat; // spec 028: a stand-in model drawn with the white piece material (FoodVisual tints it flat)
+            public bool CloseLid; // spec 031b: the model's "lid" part is turned shut on its hinge (the open clamshell box)
         }
 
         private static readonly Def[] Defs =
@@ -161,7 +162,8 @@ namespace Worktown.Game.Editor
             Piece(ArtKey.FoodLayerDisc, PrimitiveType.Cylinder, new Vector3(0.25f, 0.008f, 0.25f)),
             Piece(ArtKey.FoodWrapFolded, PrimitiveType.Sphere, new Vector3(0.25f, 0.06f, 0.12f)),
             Piece(ArtKey.FoodWrapPaper, PrimitiveType.Sphere, new Vector3(0.25f, 0.075f, 0.135f)),
-            FoodDef(ArtKey.PropTakeawayBox, "styrofoam.fbx"),
+            // Spec 031b: the clamshell's lid is turned shut, so the box reads as one closed box, not two trays.
+            new Def { Key = ArtKey.PropTakeawayBox, Model = FoodKit + "styrofoam.fbx", Mode = Fit.Max, CloseLid = true },
             FoodDef(ArtKey.PropPaperBag, "bag.fbx"),
             // Cookware (real size x1.15).
             FoodDef(ArtKey.FoodPlate, "plate.fbx"),
@@ -257,6 +259,7 @@ namespace Worktown.Game.Editor
                 : def.Primitive.HasValue ? CreatePiece(def.Primitive.Value, root.transform)
                 : InstantiateModel(def.Model, root.transform, "Model");
             model.transform.localRotation = Quaternion.Euler(0f, def.Yaw, 0f);
+            if (def.CloseLid) CloseLid(model, def.Key);
             if (def.Model.StartsWith(Furniture)) Recolour(model);
             if (def.Flat)
                 foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
@@ -360,6 +363,66 @@ namespace Worktown.Game.Editor
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, WrapperPath(def.Key));
             UnityEngine.Object.DestroyImmediate(root);
             return saved;
+        }
+
+        /// <summary>
+        /// Spec 031b: turns the model's "lid" part shut. The hinge is the base's edge that faces the lid, at the base's top; of the
+        /// turns about that edge (every 5 degrees) the one that leaves the lid most squarely on top of the base wins (its middle
+        /// over the base's middle, its bottom on the base's top). Throws when the model has no lid.
+        /// </summary>
+        private static void CloseLid(GameObject model, ArtKey key)
+        {
+            Transform lid = FindChild(model.transform, "lid");
+            if (lid == null) throw new InvalidOperationException(key + ": the model has no 'lid' part to close");
+            Bounds lidBounds = WorldBounds(lid.gameObject);
+            bool any = false;
+            Bounds baseBounds = default;
+            foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
+            {
+                if (r.transform == lid || r.transform.IsChildOf(lid)) continue;
+                if (!any) baseBounds = r.bounds;
+                else baseBounds.Encapsulate(r.bounds);
+                any = true;
+            }
+            if (!any) throw new InvalidOperationException(key + ": the model has nothing but its lid");
+            Vector3 apart = lidBounds.center - baseBounds.center;
+            bool alongX = Mathf.Abs(apart.x) >= Mathf.Abs(apart.z);
+            Vector3 axis = alongX ? Vector3.forward : Vector3.right;
+            Vector3 hinge = alongX
+                ? new Vector3(apart.x >= 0f ? baseBounds.max.x : baseBounds.min.x, baseBounds.max.y, baseBounds.center.z)
+                : new Vector3(baseBounds.center.x, baseBounds.max.y, apart.z >= 0f ? baseBounds.max.z : baseBounds.min.z);
+            Vector3 startPosition = lid.localPosition;
+            Quaternion startRotation = lid.localRotation;
+            float bestAngle = 0f, bestScore = float.MaxValue;
+            for (int angle = -180; angle <= 180; angle += 5)
+            {
+                lid.localPosition = startPosition;
+                lid.localRotation = startRotation;
+                lid.RotateAround(hinge, axis, angle);
+                Bounds b = WorldBounds(lid.gameObject);
+                Vector2 off = new Vector2(b.center.x - baseBounds.center.x, b.center.z - baseBounds.center.z);
+                float score = off.magnitude + Mathf.Abs(b.min.y - baseBounds.max.y) + (b.min.y < baseBounds.min.y ? 1f : 0f);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestAngle = angle;
+                }
+            }
+            lid.localPosition = startPosition;
+            lid.localRotation = startRotation;
+            lid.RotateAround(hinge, axis, bestAngle);
+            Debug.Log("[ArtCatalog] " + key + ": lid turned " + bestAngle + " degrees about the hinge (score " + bestScore.ToString("0.000") + ")");
+        }
+
+        private static Transform FindChild(Transform parent, string name)
+        {
+            foreach (Transform child in parent)
+            {
+                if (string.Equals(child.name, name, StringComparison.OrdinalIgnoreCase)) return child;
+                Transform deeper = FindChild(child, name);
+                if (deeper != null) return deeper;
+            }
+            return null;
         }
 
         /// <summary>

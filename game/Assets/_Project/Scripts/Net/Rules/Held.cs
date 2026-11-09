@@ -31,10 +31,15 @@ namespace Worktown.Game.Net.Rules
         /// the item (a tip, a pour, a place) is sent for something that may never arrive.
         /// </summary>
         public readonly bool IsPending;
+        /// <summary>031b: food that is a build (open, folded, in paper, boxed or bagged; FoodLookRules.IsBuild): it goes back only
+        /// on an empty board.</summary>
+        public readonly bool IsBuild;
 
         private Held(bool holding, bool food, bool knife, bool plated, string name, bool vessel = false,
-            VesselKind kind = default, int count = 0, string contentName = null, bool spatula = false, bool pending = false)
+            VesselKind kind = default, int count = 0, string contentName = null, bool spatula = false, bool pending = false,
+            bool build = false)
         {
+            IsBuild = build;
             IsSpatula = spatula;
             IsPending = pending;
             IsHolding = holding;
@@ -50,9 +55,9 @@ namespace Worktown.Game.Net.Rules
 
         public static Held Nothing => new Held(false, false, false, false, string.Empty);
 
-        public static Held Food(string name, bool plated)
+        public static Held Food(string name, bool plated, bool build = false)
         {
-            return new Held(true, true, false, plated, string.IsNullOrEmpty(name) ? "food" : name);
+            return new Held(true, true, false, plated, string.IsNullOrEmpty(name) ? "food" : name, build: build);
         }
 
         public static Held Knife => new Held(true, false, true, false, "knife");
@@ -64,7 +69,7 @@ namespace Worktown.Game.Net.Rules
         public static Held Pending(Held item)
         {
             return new Held(true, item.IsFood, item.IsKnife, item.IsPlated, item.Name, item.IsVessel, item.Vessel, item.ContentCount,
-                item.ContentName, item.IsSpatula, true);
+                item.ContentName, item.IsSpatula, true, item.IsBuild);
         }
 
         /// <summary>Spec 021: a board, pan, pot, plate or bowl with <paramref name="count"/> things in it.</summary>

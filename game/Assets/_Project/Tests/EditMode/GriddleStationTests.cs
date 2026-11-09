@@ -223,7 +223,7 @@ namespace Worktown.Game.Tests
                 HeatTimeline t = kitchen.FreshSideTimeline(food);
                 double scale = CookingTime.TimeScale;
                 TestContext.WriteLine(baseId + " per side: good " + (t.GoodFrom / scale).ToString("0.0") + " s, perfect "
-                    + (t.PerfectFrom / scale).ToString("0.0") + " s, warning " + ((t.OverdoneFrom - HeatZoneRules.WarnSimSeconds) / scale).ToString("0.0")
+                    + (t.PerfectFrom / scale).ToString("0.0") + " s, warning " + ((t.OverdoneFrom - HeatZoneRules.WarnLeadSimSeconds(t)) / scale).ToString("0.0")
                     + " s, overdone " + (t.OverdoneFrom / scale).ToString("0.0") + " s, burnt " + (t.BurntFrom / scale).ToString("0.0") + " s");
                 Assert.AreEqual(good, t.GoodFrom / scale, 0.1, baseId + " good");
                 Assert.AreEqual(perfect, t.PerfectFrom / scale, 0.1, baseId + " perfect");
@@ -453,15 +453,16 @@ namespace Worktown.Game.Tests
             KitchenState seitan = Kitchen();
             Ingredient(seitan, "paprika", 3, 43);
             Ingredient(seitan, "seitan", 3, 44);
-            seitan.TryPutInto(43, Spot0, VesselKind.Griddle, Start);
-            seitan.TryPutInto(44, Spot1, VesselKind.Griddle, Start);
-            seitan.TryToggleGriddle(Griddle, Start);
-            seitan.TryFlip(Spot0, Real(11));
-            seitan.TryFlip(Spot1, Real(13));
-            seitan.TryPour(Spot0, VesselKind.Griddle, plate, VesselKind.Plate, Real(24), Rate, out _);
-            seitan.TryPour(Spot1, VesselKind.Griddle, plate, VesselKind.Plate, Real(26), Rate, out _);
-            seitan.TryPreviewTake(plate, VesselKind.Plate, out Item withSeitan);
-            Assert.AreNotEqual(OrderMatch.Exact, OrderRules.Match(withSeitan, dish), KitchenState.NameOf(withSeitan));
+            // 031b (review of 031): every step must work, so the match is about the seitan, not a refused step.
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryPutInto(43, Spot0, VesselKind.Griddle, Start));
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryPutInto(44, Spot1, VesselKind.Griddle, Start));
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryToggleGriddle(Griddle, Start));
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryFlip(Spot0, Real(11)));
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryFlip(Spot1, Real(13)));
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryPour(Spot0, VesselKind.Griddle, plate, VesselKind.Plate, Real(24), Rate, out _));
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryPour(Spot1, VesselKind.Griddle, plate, VesselKind.Plate, Real(26), Rate, out _));
+            Assert.AreEqual(CookOutcome.Ok, seitan.TryPreviewTake(plate, VesselKind.Plate, out Item withSeitan));
+            Assert.AreEqual(OrderMatch.Close, OrderRules.Match(withSeitan, dish), KitchenState.NameOf(withSeitan));
 
             KitchenState bread = Grilling("flatbread", 0);
             bread.TryFlip(Spot0, Real(5));

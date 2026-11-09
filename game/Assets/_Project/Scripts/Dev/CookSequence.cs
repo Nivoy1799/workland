@@ -601,6 +601,8 @@ namespace Worktown.Game.Dev
             Debug.Log("[Demo] wrap: held the dispenser " + (released - pressed).ToString("0.00") + " s; the build is '" + spot.Title.Value + "'");
             if (spot.ContentCount < 4) actor.CountTimeout("cook: no sauce layer on the build");
             yield return StackShot(actor, capture, spot, "stack-4-sauce");
+            // Spec 031b item 9: the squeeze's frames end before the fold's frames start (separate captures).
+            yield return capture.WaitForFrames();
 
             // 5. Fold, then the wrap paper.
             yield return actor.Use("fold the wrap", ContentPoint(spot), InteractionAction.Fold,
@@ -617,6 +619,9 @@ namespace Worktown.Game.Dev
             yield return actor.Look(0f, -35f, 0.6f);
             yield return capture.Shot("wrap-in-hand");
             yield return actor.LevelView();
+            // Spec 031b item 4: the held wrap stands whole in the lower right of the level view.
+            yield return capture.Shot("wrap-held-level");
+            LogHold(me, "wrap");
             yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
             LogOrders();
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
@@ -628,6 +633,54 @@ namespace Worktown.Game.Dev
             Debug.Log("[Demo] wrap: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("falafel wrap")) actor.CountTimeout("cook: the falafel wrap was not sold");
             if (!latest.Contains("Falafel wrap order: exact order")) Debug.LogWarning("[Demo] wrap: no exact Falafel wrap order was served");
+
+            // 7. Spec 031b item 5: box packing: a lettuce on the empty board (no bread: a box needs no fold), into a box, served.
+            yield return PackABox(actor, capture, laneZ, board, spot, lettuceSlot);
+        }
+
+        /// <summary>
+        /// Spec 031b item 5 (AC3): the box from the rack coming down over a build. A whole lettuce goes on the empty board (an open
+        /// build without bread, which a box takes as it is), the box goes on (frames), the boxed build is taken (held in view) and
+        /// put back on the empty board.
+        /// </summary>
+        private static IEnumerator PackABox(TourActor actor, CookCapture capture, float laneZ, Station board, Vessel spot,
+            StockSlot lettuceSlot)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            if (!board.TryGetSlot(BuildRules.DispenserCount + BuildRules.Box, out StockSlot box) || box == null)
+            {
+                actor.CountTimeout("cook: the box rack slot is missing");
+                yield break;
+            }
+            NetworkObject spotObject = spot.NetworkObject;
+            Vector3 atBoard = new Vector3(board.transform.position.x, 0f, laneZ);
+            Debug.Log("[Demo] box: start (" + Time.time.ToString("0.0") + " s)");
+            yield return TakeFrom(actor, lettuceSlot, laneZ);
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return actor.Use("put the lettuce on the empty board", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return StackShot(actor, capture, spot, "box-stack");
+            yield return capture.WaitForFrames();
+            yield return actor.Use("put it into a box", box.Anchor, InteractionAction.Pack,
+                () => me.DevSendStation(board.Index, BuildRules.PackagingOption(BuildRules.Box)), capture.Before("box-aim", "box", frames));
+            yield return capture.WaitForFrames();
+            yield return StackShot(actor, capture, spot, "boxed");
+            Debug.Log("[Demo] box: the board holds '" + spot.Title.Value + "', mode " + spot.Mode.Value);
+            if (BuildRules.PackOf(spot.Mode.Value) != BuildRules.PackBox) actor.CountTimeout("cook: the box did not go on");
+            yield return actor.Use("take the box", ContentPoint(spot), InteractionAction.Take,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return actor.LevelView();
+            yield return capture.Shot("box-held-level");
+            LogHold(me, "box");
+            // A boxed raw lettuce is no dish (the counter would not buy it): it goes back on the empty board (031b: a build, even a
+            // finished one, goes back only on an empty board) and stays there.
+            yield return actor.Use("put the box back on the empty board", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return StackShot(actor, capture, spot, "box-back-on-board");
+            Debug.Log("[Demo] box: back on the board (" + Time.time.ToString("0.0") + " s), holding '" + HeldName(me) + "'");
+            if (spot.ContentCount == 0) actor.CountTimeout("cook: the box did not go back on the board");
         }
 
         /// <summary>Spec 031: a look down at the stack, a shot, and the stack's state in the log.</summary>
@@ -890,7 +943,32 @@ namespace Worktown.Game.Dev
                     + " down, flips " + GriddleRules.FlipsOf(mode) + (view != null && view.TopMarksShown ? ", marks on top" : string.Empty)
                     + " '" + string.Join(" + ", s.Names) + "'");
             }
-            Debug.Log("[Grill] " + what + " at " + at.ToString("0.0") + " s: " + string.Join("; ", parts));
+            Debug.Log("[Grill] " + what + " at " + at.ToString("0.0") + " s: " + string.Join("; ", parts) + "; " + RingCount());
+        }
+
+        /// <summary>Spec 031b (AC3): the held item's size and its scale in the first-person view.</summary>
+        private static void LogHold(PickupInteractor me, string what)
+        {
+            var view = me.GetComponent<Worktown.Game.Player.HeldItemView>();
+            Debug.Log("[Hold] " + what + ": '" + HeldName(me) + "', size " + (view != null ? view.LastViewSize.ToString("0.000") : "?") + " m, drawn x"
+                + (view != null ? view.LastViewScale.ToString("0.00") : "?"));
+        }
+
+        /// <summary>Spec 031b (AC3): how many heat rings draw now, and for what (the calm view: the aimed one and the alarms).</summary>
+        private static string RingCount()
+        {
+            int shown = 0, all = 0;
+            var what = new List<string>();
+            foreach (Worktown.Game.Art.HeatRingView ring in UnityEngine.Object.FindObjectsByType<Worktown.Game.Art.HeatRingView>(FindObjectsSortMode.None))
+            {
+                Vessel v = ring.Vessel;
+                if (v == null || v.ContentCount == 0) continue;
+                all++;
+                if (!ring.IsShown) continue;
+                shown++;
+                what.Add(v.Kind + " " + v.Zone + (v.Warning ? " warn" : string.Empty));
+            }
+            return "rings shown " + shown + " of " + all + (what.Count > 0 ? " (" + string.Join(", ", what) + ")" : string.Empty);
         }
 
         private static float Distance(Component a, Component b) => Vector3.Distance(a.transform.position, b.transform.position);

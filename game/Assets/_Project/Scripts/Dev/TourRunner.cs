@@ -247,7 +247,7 @@ namespace Worktown.Game.Dev
             switch (name)
             {
                 case TourRules.ActCook:
-                    yield return CookSequence.Run(_actor, new CookCapture(shot => _capture.Shot(shot), StartFrames, SetTweenScale), 30f);
+                    yield return CookSequence.Run(_actor, new CookCapture(shot => _capture.Shot(shot), StartFrames, SetTweenScale, () => _framesRunning > 0), 30f);
                     break;
                 case TourRules.ActSlowMotion:
                     SetTweenScale(TourRules.SlowMotionScale);

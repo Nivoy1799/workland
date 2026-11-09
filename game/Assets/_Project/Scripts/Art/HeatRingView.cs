@@ -54,6 +54,21 @@ namespace Worktown.Game.Art
         /// <summary>True while the ring is drawn (for tests and the tour log).</summary>
         public bool IsShown => _renderer != null && _renderer.enabled;
 
+        /// <summary>031b: the cookware or spot this ring belongs to (the label manager's calm view asks it).</summary>
+        public Vessel Vessel => _vessel;
+
+        /// <summary>031b: where the ring's food is (for the calm view's nearest rings).</summary>
+        public Vector3 AnchorPosition => _anchor != null ? _anchor.position : transform.position;
+
+        /// <summary>
+        /// 031b: the label manager's calm view (WorldLabelFade, after every ring's LateUpdate, before the frame is drawn): a ring it
+        /// does not want stops drawing now; the next frame decides again.
+        /// </summary>
+        public void ApplyCalm(bool show)
+        {
+            if (!show && _renderer != null) _renderer.enabled = false;
+        }
+
         /// <summary>Spec 027d: the ring's screen rectangle in pixels while it is drawn; world labels give way to it (it is never culled).</summary>
         public bool TryGetScreenRect(out Rect rect)
         {

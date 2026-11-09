@@ -90,11 +90,11 @@ namespace Worktown.Game.Player
         /// only when that request was the only one in flight; with more in flight (an older one may have gone unanswered)
         /// it could belong to another request, so it is ignored and the prediction waits for the synced state or its
         /// timeout. An "ok" only restarts a timeout, so it is always applied. An answer with nothing in flight (late, after
-        /// a quiet-spell reset) is ignored.
+        /// a quiet-spell reset) is ignored. 031b: returns the number of the request it answered (0 when ignored).
         /// </summary>
-        public void Answer(AnswerKind kind, bool ok, float now)
+        public int Answer(AnswerKind kind, bool ok, float now)
         {
-            if (_answered >= _sent) return;
+            if (_answered >= _sent) return 0;
             bool alone = _sent - _answered == 1;
             _answered++;
             foreach (Entry e in _entries)
@@ -102,6 +102,7 @@ namespace Worktown.Game.Player
                 if (e.Request != _answered || AnswerFor(e.Prediction.Kind) != kind) continue;
                 if (ok || alone) e.Prediction.NoteAnswer(ok, now);
             }
+            return _answered;
         }
 
         /// <summary>Reads the synced state of every waiting prediction; adds those that resolved to <paramref name="resolved"/>.</summary>

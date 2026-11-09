@@ -223,6 +223,29 @@ namespace Worktown.Sim.Economy
             return new PurchaseResult(next, EconomyError.None, cost);
         }
 
+        /// <summary>
+        /// Spec 031b: buys <paramref name="percent"/> % of one base item from the NPC grocer (a squeezed portion of sauce):
+        /// <see cref="PriceRules.PortionCost"/> of its grocer price. Percent outside 1..100 is InvalidQuantity. On failure nothing
+        /// changes.
+        /// </summary>
+        public PurchaseResult TryBuyPortion(EconomyState s, string buyerId, string baseId, int percent)
+        {
+            Need(s);
+            int ai = FindAccount(s, buyerId);
+            if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
+            if (!_catalog.TryGetGrocerPrice(baseId, out var price)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            if (percent < 1 || percent > 100) return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
+            long cost = PriceRules.PortionCost(price, percent);
+            var acc = s.Accounts[ai];
+            if (cost > acc.Balance) return new PurchaseResult(s, EconomyError.InsufficientFunds, 0);
+            var next = s with
+            {
+                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance - cost }),
+                Totals = s.Totals with { GrocerRevenue = Sat(s.Totals.GrocerRevenue, cost) },
+            };
+            return new PurchaseResult(next, EconomyError.None, cost);
+        }
+
         public EconomyState Tick(EconomyState s, TickInput input)
         {
             Need(s);

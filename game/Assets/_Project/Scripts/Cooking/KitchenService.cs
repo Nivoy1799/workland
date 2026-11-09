@@ -61,6 +61,9 @@ namespace Worktown.Game.Cooking
         // Spec 031: the build spot of each assembly board (key: the board's station index), and who squeezes which dispenser.
         private readonly Dictionary<int, Vessel> _assemblySpots = new Dictionary<int, Vessel>();
         private readonly Dictionary<long, PickupInteractor> _squeezers = new Dictionary<long, PickupInteractor>();
+        private readonly List<long> _leftSqueezes = new List<long>(); // 031b
+        private AssemblyDesk _deskField; // 031b: the board's charging steps (pure, tested)
+        private AssemblyDesk Desk => _deskField ??= new AssemblyDesk(_kitchen);
         private uint _lastHeatTick;
         // 030 review: the cooked-ticks stamp of each heat vessel at its last periodic label refresh.
         private readonly Dictionary<Vessel, long> _labelStamps = new Dictionary<Vessel, long>();
@@ -127,7 +130,7 @@ namespace Worktown.Game.Cooking
             // Spec 028b: stock checks its option (the slot) and the reach to that slot's anchor itself (StockRules).
             if (station.Kind == StationKind.Crate || StockLayout.IsStock(station.Kind)) return TakeIngredient(player, station, option);
             // Spec 031: a dispenser's release ends the squeeze wherever the player is now (the press was in reach).
-            if (station.Kind == StationKind.Assembly && BuildRules.TryParseSqueeze(option, out _, out bool press) && !press)
+            if (!AssemblyDesk.NeedsReach(station.Kind, option))
             {
                 EnsureInitialized();
                 return UseAssembly(player, station, option);
@@ -283,7 +286,7 @@ namespace Worktown.Game.Cooking
 
         private CookOutcome StartSqueeze(PickupInteractor player, Station board, int d)
         {
-            CookOutcome started = _kitchen.TryStartSqueeze(board.Index, d, player.OwnerId, Tick);
+            CookOutcome started = Desk.Press(board.Index, d, player.OwnerId, Tick);
             if (started != CookOutcome.Ok) return started;
             _squeezers[BurnerKey(board.Index, d)] = player;
             RefreshAssembly(board);
@@ -291,9 +294,9 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
-        /// The release: the sauce for the time held goes on the build (or on the same sauce on top), its price is charged first;
-        /// a refused step changes nothing and charges nothing. A release with no squeeze of this player (refused at the press,
-        /// or already stopped by the server) is harmless: Ok, nothing happens.
+        /// The release: the sauce for the time held goes on the build (or on the same sauce on top), its portion is charged
+        /// first (spec 031b: AssemblyDesk); a refused step changes nothing and charges nothing. A release with no squeeze of this
+        /// player (refused at the press, or already stopped by the server) is harmless: Ok, nothing happens.
         /// </summary>
         private CookOutcome StopSqueeze(PickupInteractor player, Station board, int d)
         {
@@ -304,28 +307,21 @@ namespace Worktown.Game.Cooking
         private CookOutcome EndSqueeze(PickupInteractor player, Station board, int d)
         {
             _squeezers.Remove(BurnerKey(board.Index, d));
-            CookOutcome made = _kitchen.TryEndSqueeze(board.Index, d, player.OwnerId, Tick, TickRate, out Item build, out float seconds);
+            CookOutcome made = Desk.End(board.Index, d, player.OwnerId, Tick, TickRate, WalletOf(player), out AssemblyDesk.SqueezeResult r);
             RefreshAssembly(board);
             if (made != CookOutcome.Ok) return made;
-            string sauce = BuildRules.SauceOf(d);
-            CookOutcome paid = Charge(player, sauce, out long cost);
-            if (paid != CookOutcome.Ok) return paid;
-            int spotId = _kitchen.BuildSpotOf(board.Index);
-            _kitchen.CommitBuild(spotId, build, sauce, seconds);
             if (_assemblySpots.TryGetValue(board.Index, out Vessel spot)) RefreshVessel(spot);
-            Debug.Log("[Kitchen] player " + player.OwnerId + " squeezed " + sauce + " for " + seconds.ToString("0.00") + " s ("
-                + EconomyRules.Money(cost) + "): " + KitchenState.NameOf(build) + " q=" + KitchenState.QualityOf(build).ToString("0.00"));
+            Debug.Log("[Kitchen] player " + player.OwnerId + " squeezed " + BuildRules.SauceOf(d) + " for " + r.Seconds.ToString("0.00")
+                + " s (" + EconomyRules.Money(r.Cost) + "), top " + r.TopSeconds.ToString("0.00") + " s: " + KitchenState.NameOf(r.Build)
+                + " q=" + KitchenState.QualityOf(r.Build).ToString("0.00"));
             return CookOutcome.Ok;
         }
 
         /// <summary>Spec 031: wrap paper, a box or a bag from the rack onto the build: checked in the sim, paid, then applied.</summary>
         private CookOutcome Package(PickupInteractor player, Vessel spot, int p)
         {
-            CookOutcome fits = _kitchen.TryPreviewPackaging(spot.ObjectId, p, out Item packed);
-            if (fits != CookOutcome.Ok) return fits;
-            CookOutcome paid = Charge(player, BuildRules.PackagingId(p), out long cost);
-            if (paid != CookOutcome.Ok) return paid;
-            _kitchen.CommitBuild(spot.ObjectId, packed);
+            CookOutcome done = Desk.Package(spot.ObjectId, p, player.OwnerId, WalletOf(player), out Item packed, out long cost);
+            if (done != CookOutcome.Ok) return done;
             RefreshVessel(spot);
             Debug.Log("[Kitchen] player " + player.OwnerId + " used the " + BuildRules.PackagingName(p) + " (" + EconomyRules.Money(cost)
                 + "): " + KitchenState.NameOf(packed) + " q=" + KitchenState.QualityOf(packed).ToString("0.00"));
@@ -343,12 +339,30 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        /// <summary>Spec 031: the price of <paramref name="grocerId"/> from the player's wallet (free without an economy).</summary>
-        private CookOutcome Charge(PickupInteractor player, string grocerId, out long cost)
+        /// <summary>Spec 031b: the player's wallet for the board's charges (free without an economy).</summary>
+        private IAssemblyWallet WalletOf(PickupInteractor player) => _economy != null ? new PlayerWallet(_economy, player) : null;
+
+        /// <summary>Spec 031b: <see cref="IAssemblyWallet"/> through the economy service: a portion or the full grocer price.</summary>
+        private sealed class PlayerWallet : IAssemblyWallet
         {
-            cost = 0;
-            if (_economy == null) return CookOutcome.Ok;
-            return StockRules.PaidOutcome(_economy.TryBuy(player.NetworkObject, grocerId, out cost));
+            private readonly Worktown.Game.Economy.EconomyService _economy;
+            private readonly PickupInteractor _player;
+
+            public PlayerWallet(Worktown.Game.Economy.EconomyService economy, PickupInteractor player)
+            {
+                _economy = economy;
+                _player = player;
+            }
+
+            public CookOutcome Charge(int owner, string grocerId, int percent, out long cost)
+            {
+                cost = 0;
+                if (_player == null || _player.OwnerId != owner) return CookOutcome.SimRefused;
+                Worktown.Sim.Economy.EconomyError paid = percent >= 100
+                    ? _economy.TryBuy(_player.NetworkObject, grocerId, out cost)
+                    : _economy.TryBuyPortion(_player.NetworkObject, grocerId, percent, out cost);
+                return StockRules.PaidOutcome(paid);
+            }
         }
 
         /// <summary>Spec 031: the board's light byte (who squeezes).</summary>
@@ -358,9 +372,26 @@ namespace Worktown.Game.Cooking
             contents.ServerSetStoveFlags(_kitchen.AssemblyFlags(board.Index));
         }
 
-        /// <summary>Spec 031: a squeeze held past <see cref="BuildRules.AutoStopSeconds"/> ends as if released (or is dropped when the player left).</summary>
+        /// <summary>
+        /// Spec 031: a squeeze held past <see cref="BuildRules.AutoStopSeconds"/> ends as if released. 031b: a squeeze whose player
+        /// left (despawned) is dropped at once, without a charge, so the dispenser is free for everyone.
+        /// </summary>
         private void StopOverdueSqueezes(uint tick, double tickRate)
         {
+            if (_squeezers.Count > 0)
+            {
+                _leftSqueezes.Clear();
+                foreach (KeyValuePair<long, PickupInteractor> kv in _squeezers)
+                    if (kv.Value == null || !kv.Value.IsSpawned) _leftSqueezes.Add(kv.Key);
+                foreach (long key in _leftSqueezes)
+                {
+                    int board = (int)(key >> 8), d = (int)(key & 0xFF);
+                    _squeezers.Remove(key);
+                    Desk.Cancel(board, d);
+                    RefreshAssembly(board >= 0 && board < _stations.Length ? _stations[board] : null);
+                    Debug.Log("[Kitchen] the squeeze of a player who left was dropped (board " + board + ", dispenser " + d + ")");
+                }
+            }
             while (_kitchen.TryFindOverdueSqueeze(tick, tickRate, out int board, out int d, out int owner))
             {
                 Station station = board >= 0 && board < _stations.Length ? _stations[board] : null;

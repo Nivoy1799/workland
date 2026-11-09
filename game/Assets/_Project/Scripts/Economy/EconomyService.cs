@@ -97,6 +97,14 @@ namespace Worktown.Game.Economy
             return error;
         }
 
+        /// <summary>Spec 031b, server: charge <paramref name="percent"/> % of one base item's grocer price (a squeezed portion).</summary>
+        public EconomyError TryBuyPortion(NetworkObject player, string baseId, int percent, out long cost)
+        {
+            EconomyError error = _economy.TryBuyPortion(EconomyRules.AccountId(player.OwnerId), baseId, percent, out cost);
+            PublishWallet(player);
+            return error;
+        }
+
         /// <summary>Server: sell a plated dish to NPC demand or the wholesaler.</summary>
         public SaleResult TrySell(NetworkObject player, Item plated)
         {

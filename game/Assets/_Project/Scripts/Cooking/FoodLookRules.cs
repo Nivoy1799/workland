@@ -136,10 +136,11 @@ namespace Worktown.Game.Cooking
             return look;
         }
 
-        /// <summary>The heat byte of a heat op: boiled, deep-fried (spec 029), else fried.</summary>
+        /// <summary>The heat byte of a heat op: boiled, deep-fried (spec 029), grilled (spec 031b: the griddle), else fried.</summary>
         public static byte HeatOf(string operationId)
         {
             if (operationId == BoilOp) return FoodLook.HeatBoiled;
+            if (operationId == Griddle.OperationId || operationId == Griddle.ToastOperationId) return FoodLook.HeatGrilled;
             return operationId == DeepFryOp ? FoodLook.HeatDeepFried : FoodLook.HeatFried;
         }
 

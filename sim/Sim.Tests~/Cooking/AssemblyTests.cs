@@ -313,8 +313,95 @@ namespace Worktown.Sim.Tests.Cooking
             Assert.Equal(OperationError.StepOrder, Assembly.CheckStep(Assembly.CloseOperationId, "spin", open));
             Assert.NotNull(RecipeTemplates.Named(open));
             Assert.Null(RecipeTemplates.Named(TestItems.Ok(Assemble(Lettuce()))));
-            Assert.Equal(1f, ItemRater.Rate(TestItems.Ok(Assemble(Base("wrap")))).Quality <= 1f ? 1f : 0f);
             Assert.Throws<ArgumentNullException>(() => RecipeTemplates.Score(null!, RecipeTemplates.Default[0]));
+        }
+
+        // ---- Spec 031b (review of 031): old items keep their hashes and ratings ----
+
+        /// <summary>
+        /// Pinned at commit 1710193 (spec 030, before 031): crispy fried potato sticks, grilled seitan strips (13 kitchen s a side) and a
+        /// sauteed potato. Spec 031 and 031b changed the op catalog, the factory and the rater; these must not move.
+        /// </summary>
+        [Fact]
+        public void Pre031Items_KeepTheirHashesAndRatings()
+        {
+            Item fries = TestItems.Fries();
+            Item strips = Cut(Base("seitan"), "sticks");
+            float side = 13f * DeepFry.KitchenTimeScale;
+            Item grilled = TestItems.Ok(Factory.Apply(Griddle.OperationId, new[] { strips }, Griddle.Params(side, side)));
+            Item pan = TestItems.Ok(TestItems.Heat("saute", TestItems.Base("potato"), 150f, 100f));
+
+            Assert.Equal("2ab1f86227c96055d1d69a98ce1485820e94a0805096d923ef51a6b4286857d3", fries.Hash);
+            Assert.Equal(0.6969903f, Quality(fries));
+            Assert.Equal("crispy fried potato sticks", Name(fries));
+            Assert.Equal("f81768d9941d99ff3e8ded4f87ddbd6dcc22577c3b562bca9b112bcefc3f5799", grilled.Hash);
+            Assert.Equal(0.40560204f, Quality(grilled));
+            Assert.Equal("grilled seitan strips", Name(grilled));
+            Assert.Equal("25c75ec22905276f114edb3a25534eff11a5d899e5cdc1eb69da51f78723eb2c", pan.Hash);
+            Assert.Equal(0.121469915f, Quality(pan));
+            Assert.Equal("sauteed potato", Name(pan));
+        }
+
+        // ---- Spec 031b (review of 031): builds stay builds ----
+
+        [Fact]
+        public void ABuild_IsNeverCutHeatedOrMixed_AndAPlateTakesItOnlyAlone()
+        {
+            Item open = FalafelWrapOpen();
+            Item folded = TestItems.Ok(Close(open, Assembly.Folded));
+            foreach (Item build in new[] { open, folded })
+            {
+                Assert.Equal(OperationError.ForbiddenInput, Factory.Apply("cut", new[] { build },
+                    new Dictionary<string, ParamValue> { ["shape"] = ParamValue.Choice("slices") }).Error);
+                foreach (string op in new[] { "fry", "saute" })
+                    Assert.Equal(OperationError.ForbiddenInput, Factory.Apply(op, new[] { build }, new Dictionary<string, ParamValue>
+                    {
+                        ["temp"] = ParamValue.Number(150f),
+                        ["time"] = ParamValue.Number(60f),
+                    }).Error);
+                Assert.Equal(OperationError.ForbiddenInput, Factory.Apply("boil", new[] { build },
+                    new Dictionary<string, ParamValue> { ["time"] = ParamValue.Number(60f) }).Error);
+                Assert.Equal(OperationError.ForbiddenInput, Factory.Apply(Griddle.OperationId, new[] { build }, Griddle.Params(10f, 10f)).Error);
+                Assert.Equal(OperationError.ForbiddenInput, Factory.Apply(Griddle.ToastOperationId, new[] { build }, Griddle.Params(10f, 10f)).Error);
+                Assert.Equal(OperationError.ForbiddenInput, Factory.Apply(DeepFry.OperationId, new[] { build }, new Dictionary<string, ParamValue>
+                {
+                    ["temp"] = ParamValue.Number(DeepFry.ReferenceTempC),
+                    ["time"] = ParamValue.Number(60f),
+                    [DeepFry.ShakeParam] = ParamValue.Choice(DeepFry.NotShaken),
+                    [DeepFry.DrainParam] = ParamValue.Choice(DeepFry.Drained),
+                }).Error);
+                Assert.Equal(OperationError.ForbiddenInput, Factory.Apply("mix", new[] { build, Lettuce() }, TestItems.NoParams).Error);
+                // Never on a plate with other food.
+                Assert.Equal(OperationError.ForbiddenInput, Factory.Apply("plate", new[] { build, Lettuce() }, TestItems.NoParams).Error);
+                Assert.True(Factory.Apply("plate", new[] { build }, TestItems.NoParams).Ok, "alone: the counter plates it as it is");
+            }
+            Assert.True(Factory.Apply("plate", new[] { Lettuce(), Cucumber() }, TestItems.NoParams).Ok, "other food plates as before");
+        }
+
+        [Fact]
+        public void OnlyASingleIngredientChain_FillsATemplateLayer()
+        {
+            Assert.True(Assembly.IsSingleChain(Base("wrap")));
+            Assert.True(Assembly.IsSingleChain(Lettuce()));
+            Assert.True(Assembly.IsSingleChain(Falafel()));
+            Assert.True(Assembly.IsSingleChain(Sauce()));
+            Item mix = TestItems.Ok(Factory.Apply("mix", new[] { Lettuce(), Cucumber() }, TestItems.NoParams));
+            Item plate = TestItems.Ok(Factory.Apply("plate", new[] { Falafel() }, TestItems.NoParams));
+            Assert.False(Assembly.IsSingleChain(mix));
+            Assert.False(Assembly.IsSingleChain(plate));
+            Assert.False(Assembly.IsSingleChain(FalafelWrapOpen()));
+
+            // A plate never goes on a build at all; falafel mixed with lettuce is neither a falafel nor a lettuce layer: the
+            // template counts both missing.
+            Assert.Equal(OperationError.ForbiddenInput, Assemble(Base("wrap"), plate).Error);
+            Item mixed = TestItems.Ok(Factory.Apply("mix", new[] { Falafel(), Lettuce() }, TestItems.NoParams));
+            Item real = TestItems.Ok(Assemble(Base("wrap"), Falafel(), Lettuce(), Sauce()));
+            Item fake = TestItems.Ok(Assemble(Base("wrap"), mixed, Sauce()));
+            TemplateScore good = RecipeTemplates.Score(real, T("falafel_wrap"));
+            TemplateScore bad = RecipeTemplates.Score(fake, T("falafel_wrap"));
+            Assert.Equal(0, good.Missing);
+            Assert.True(bad.Missing > good.Missing);
+            Assert.True(bad.Quality < good.Quality);
         }
     }
 }
