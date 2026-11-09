@@ -85,6 +85,14 @@ namespace Worktown.Game.Player
             LastViewScale = scale;
             Quaternion rotation = eye.rotation * HoldViewRules.Tilt;
             Vector3 inView = HoldViewRules.CentreInView(_camera.fieldOfView, _camera.aspect);
+            if (item.TryGetComponent(out Worktown.Game.Shop.SupplyBox _))
+            {
+                // Spec 034: a delivery box is carried with both hands, low in the middle of the view (its top below the centre).
+                scale = HoldViewRules.BoxFitScale(size, _camera.fieldOfView);
+                LastViewScale = scale;
+                rotation = eye.rotation * HoldViewRules.BoxTilt;
+                inView = HoldViewRules.BoxCentreInView(_camera.fieldOfView, _camera.aspect);
+            }
             if (item.TryGetComponent(out Worktown.Game.Cooking.Spatula _))
             {
                 // Spec 031b: on a flip the spatula scoops forward and turns over its long side (local, like the knife's chop).

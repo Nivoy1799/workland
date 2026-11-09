@@ -24,6 +24,37 @@ namespace Worktown.Game.Player
         /// <summary>Degrees the item's top is tilted towards the eye.</summary>
         public const float TiltDegrees = 28f;
 
+        // ---- Spec 034: a delivery box is carried with both hands, low in the middle of the view ----
+
+        /// <summary>A box's centre on screen (fractions of the view): in the middle, low.</summary>
+        public const float BoxCentreX = 0.5f;
+        public const float BoxCentreY = 0.12f;
+        /// <summary>A box fills at most this share of the view height (its top stays below the view centre).</summary>
+        public const float BoxMaxShare = 0.42f;
+        /// <summary>Degrees a carried box's top is tilted towards the eye.</summary>
+        public const float BoxTiltDegrees = 14f;
+        /// <summary>Third person: a carried box's middle in front of the chest (m above the feet, m forward).</summary>
+        public const float BoxCarryHeight = 1.0f;
+        public const float BoxCarryForward = 0.34f;
+
+        public static Quaternion BoxTilt => Quaternion.Euler(-BoxTiltDegrees, 0f, 0f);
+
+        /// <summary>The scale a box of <paramref name="size"/> m is drawn at in first person: 1, or less to fill at most <see cref="BoxMaxShare"/>.</summary>
+        public static float BoxFitScale(float size, float verticalFov)
+        {
+            float share = Share(size, verticalFov);
+            return share > BoxMaxShare ? BoxMaxShare / share : 1f;
+        }
+
+        /// <summary>A carried box's centre in camera space (right, up, forward).</summary>
+        public static Vector3 BoxCentreInView(float verticalFov, float aspect)
+        {
+            float depth = Depth(verticalFov);
+            float halfHeight = depth * HalfTan(verticalFov);
+            float a = float.IsNaN(aspect) || aspect <= 0.1f ? 16f / 9f : aspect;
+            return new Vector3((BoxCentreX * 2f - 1f) * halfHeight * a, (BoxCentreY * 2f - 1f) * halfHeight, depth);
+        }
+
         /// <summary>The tilt of a held item in camera space (its top towards the eye).</summary>
         public static Quaternion Tilt => Quaternion.Euler(-TiltDegrees, 0f, 0f);
 

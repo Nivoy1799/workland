@@ -92,7 +92,7 @@ namespace Worktown.Sim.Cooking
                 new OperationDef("mix", "counter", OperationKind.Mix, true, 2, CookingLimits.MaxMixInputs,
                     Array.Empty<ParamDef>(), null, platedOrBuild, none, "{in} mix"),
                 new OperationDef("plate", "counter", OperationKind.Plate, true, 1, CookingLimits.MaxPlateInputs,
-                    Array.Empty<ParamDef>(), null, plated, plated, "plate of {in}"),
+                    Array.Empty<ParamDef>(), null, plated, new[] { "plated" }, "plate of {in}"), // 033 review: the plate adds only "plated"
                 DeepFryOperation(platedOrBuild, none),
                 GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, platedOrBuild, none),
                 GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, platedOrBuild, none),

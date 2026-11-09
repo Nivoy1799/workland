@@ -47,6 +47,14 @@ namespace Worktown.Game.Tests
             }
 
             public bool CanAfford(int owner, string drinkId, int percent, bool withCup) => !Broke;
+
+            /// <summary>Spec 034: what a refused press answers (money here).</summary>
+            public CookOutcome Short => CookOutcome.NotEnoughMoney;
+
+            /// <summary>Spec 034: the refund backstop's calls.</summary>
+            public int Refunds;
+
+            public void Refund(int owner, string drinkId, int percent, bool withCup, long cost) => Refunds++;
         }
 
         private static KitchenState WithCup(int id = Cup)
@@ -270,6 +278,9 @@ namespace Worktown.Game.Tests
             Assert.AreNotEqual(CookOutcome.Ok, kitchen.TryPutInto(Cup, 90, VesselKind.Assembly, Start), "not on a build");
             Assert.AreNotEqual(CookOutcome.Ok, kitchen.TryPutInto(Cup, 91, VesselKind.Plate, Start), "not on a plate");
             Assert.AreNotEqual(CookOutcome.Ok, kitchen.TryPutInto(Cup, 92, VesselKind.Board, Start), "not on a board");
+            // 033 review (rule 6): not into an empty bowl either (a lone first item in a bowl skips the mix check).
+            Assert.AreEqual(CookOutcome.NotFood, kitchen.TryPutInto(Cup, 93, VesselKind.Bowl, Start), "not into an empty bowl");
+            Assert.AreEqual(CookOutcome.NotFood, AssemblyRules.CanAdd(VesselKind.Bowl, 0, CupOf(kitchen)), "the rule refuses any cup");
             Assert.IsTrue(kitchen.TryGet(Cup, out _), "still in the hands");
         }
 

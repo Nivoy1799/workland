@@ -32,6 +32,8 @@ namespace Worktown.Game.Cooking
         {
             if (!IsAssembly(kind)) return CookOutcome.InvalidOption;
             if (item == null) return CookOutcome.NotFood;
+            // 033 review (rule 6): a cup (empty, filled or lidded) goes onto no plate and into no bowl.
+            if (Drinks.IsCup(item)) return CookOutcome.NotFood;
             return VesselRules.CanPutIn(kind, count, IsPlated(item));
         }
     }

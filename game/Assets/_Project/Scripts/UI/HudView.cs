@@ -30,6 +30,11 @@ namespace Worktown.Game.UI
         private Label _wallet;
         private Label _clock;
         private Label _orders;
+        // Spec 034: "Low stock: tomato, cups" (lines below a quarter of their capacity), rebuilt only when the counts change.
+        private Label _lowStock;
+        private Worktown.Game.Shop.StockCounts _stockCounts;
+        private int _stockVersion = -1;
+        private float _nextStockLookup;
         private TicketRailView _rail;
         private VisualElement _promptBox;
         private Label _prompt;
@@ -68,6 +73,7 @@ namespace Worktown.Game.UI
             _wallet = AddLabel(walletBox, "wallet");
             _clock = AddLabel(walletBox, "clock");
             _orders = AddLabel(walletBox, "clock"); // spec 022
+            _lowStock = AddLabel(walletBox, "clock"); // spec 034
             _root.Add(walletBox);
 
             _promptBox = Panel("prompt-box");
@@ -118,6 +124,7 @@ namespace Worktown.Game.UI
             if (_board == null) _board = FindFirstObjectByType<MarketBoard>();
             _clock.text = _board != null && _board.IsSpawned ? _board.Clock.Value : string.Empty;
             UpdateShift();
+            UpdateLowStock();
 
             Pickup held = player.FindHeldPickup();
             Station station = player.NearestStation;
@@ -136,6 +143,35 @@ namespace Worktown.Game.UI
         }
 
         /// <summary>Spec 022: "Shift until 14:00" after the clock, and "Orders open: 3 · served 2 · missed 1".</summary>
+        /// <summary>Spec 034: the low-stock line under the clock (empty when nothing is low).</summary>
+        private void UpdateLowStock()
+        {
+            if (_stockCounts == null)
+            {
+                if (Time.unscaledTime < _nextStockLookup) return;
+                _nextStockLookup = Time.unscaledTime + 1f;
+                _stockCounts = FindFirstObjectByType<Worktown.Game.Shop.StockCounts>();
+                if (_stockCounts == null) return;
+            }
+            if (_stockCounts.Version == _stockVersion) return;
+            _stockVersion = _stockCounts.Version;
+            _lowStock.text = LowStockText(_stockCounts.Counts);
+            _lowStock.style.color = Palette.Mustard;
+        }
+
+        /// <summary>Spec 034, pure: "Low stock: tomato, cups" for every line below a quarter (StockCatalog.IsLow), or empty.</summary>
+        public static string LowStockText(IReadOnlyList<byte> counts)
+        {
+            if (counts == null) return string.Empty;
+            var low = new System.Text.StringBuilder();
+            for (int line = 0; line < Worktown.Game.Shop.StockCatalog.Count && line < counts.Count; line++)
+            {
+                if (!Worktown.Game.Shop.StockCatalog.IsLow(line, counts[line])) continue;
+                low.Append(low.Length == 0 ? "Low stock: " : ", ").Append(Worktown.Game.Shop.StockCatalog.NameOf(line));
+            }
+            return low.ToString();
+        }
+
         private void UpdateShift()
         {
             if (_rail == null) _rail = FindFirstObjectByType<TicketRailView>();
@@ -323,6 +359,10 @@ namespace Worktown.Game.UI
                 case CookOutcome.CupFull: return "The cup is full";
                 case CookOutcome.NotFilled: return "Fill the cup first";
                 case CookOutcome.NoCupsLeft: return "Enough empty cups about: use one first";
+                case CookOutcome.OutOfStock: return "Out of stock: order more at the terminal"; // spec 034
+                case CookOutcome.StockFull: return "That slot is full";
+                case CookOutcome.WrongBox: return "That box goes somewhere else";
+                case CookOutcome.TooManyOrders: return "Enough orders on the way already";
                 default: return outcome.ToString();
             }
         }

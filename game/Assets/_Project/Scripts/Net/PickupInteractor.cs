@@ -486,6 +486,15 @@ namespace Worktown.Game.Net
                 case InteractionAction.Pay when Target is StockSlot till:
                     PayWithLook(till); // spec 032: the clink or the beep and the coin in the tray at the click
                     break;
+                case InteractionAction.Unpack when Target is StockSlot into:
+                    UnpackWithLook(into); // spec 034: the box tips into the slot at the click
+                    break;
+                case InteractionAction.Order when Target is StockSlot row:
+                    TerminalClick(row); // spec 034: the beep and the lit row
+                    break;
+                case InteractionAction.Page when Target is StockSlot pageButton:
+                    TerminalClick(pageButton); // spec 034: the page or the pack count at once
+                    break;
                 case InteractionAction.Take when Target is StockSlot cups && cups.Station != null && cups.Station.Kind == StationKind.DrinkDispenser:
                     TakeWithLook(cups, DrinkRules.CupOption, "empty cup"); // spec 033: the top cup flies into the hand at the click
                     break;
@@ -581,6 +590,11 @@ namespace Worktown.Game.Net
         {
             PlaySound(SoundKey.Pick, slot.Anchor);
             SendStation(slot.Station.Index, option >= 0 ? option : slot.Option); // spec 033: the cup stack's option is its own
+            if (slot.TryGetComponent(out Worktown.Game.Art.StockSlotLook stockLook)) // spec 034: one fewer at once
+            {
+                stockLook.PredictTake(_lastRequest);
+                _pendingStockLook = stockLook;
+            }
             if (_snapshotOf == null) _snapshotOf = Snapshot;
             float now = Time.unscaledTime;
             Worktown.Game.Art.StockTakeLook look = Worktown.Game.Art.StockTakeLook.Begin(slot.transform, HandPose, now, FeelSettings.Current, this);
@@ -912,6 +926,9 @@ namespace Worktown.Game.Net
                 return Held.Food(food.DisplayName.Value, FoodLookRules.IsFinished(look), // spec 031: a finished build too
                     FoodLookRules.IsBuild(look)); // 031b: a build goes back only on an empty board
             }
+            // Spec 034: a delivery box: its good and units (the box's synced contents), so it unpacks only into its own slot.
+            if (held.TryGetComponent(out Worktown.Game.Shop.SupplyBox supply) && supply.TryGetContents(out Worktown.Game.Shop.BoxContents box))
+                return Held.Box("box of " + Worktown.Game.Shop.StockCatalog.NameOf(box.Line), box.Line, box.Units);
             return Held.Item("box");
         }
 
@@ -953,18 +970,23 @@ namespace Worktown.Game.Net
                         return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value, stackView.SeenMode);
                     return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value, vessel.Mode.Value);
                 case StockSlot slot:
-                    if (slot.Station != null && slot.Station.Kind == StationKind.Assembly) return DescribeTool(slot); // spec 031
+                    if (slot.Station != null && slot.Station.Kind == StationKind.Assembly) return WithStock(DescribeTool(slot), slot); // spec 031
                     if (slot.Station != null && slot.Station.Kind == StationKind.Register) return DescribeRegister(slot); // spec 032
-                    if (slot.Station != null && slot.Station.Kind == StationKind.DrinkDispenser) return DescribeDrinkTool(slot); // spec 033
-                    return DescribeStock(slot.IngredientIndex); // spec 028b: a slot takes like a crate
+                    if (slot.Station != null && slot.Station.Kind == StationKind.DrinkDispenser) return WithStock(DescribeDrinkTool(slot), slot); // spec 033
+                    if (slot.Station != null && slot.Station.Kind == StationKind.Terminal) return DescribeTerminal(slot); // spec 034
+                    return WithStock(DescribeStock(slot.IngredientIndex), slot); // spec 028b: a slot takes like a crate (034: from its count)
                 case Station station:
                     // Spec 032: the register's body (between its slots) is no slot: nothing to click, no prompt.
                     if (station.Kind == StationKind.Register) return AimTarget.RegisterSlot(-1, 0, 0);
                     if (station.Kind == StationKind.DrinkDispenser) return AimTarget.DrinkTool(-1, 0, null, -1); // spec 033: the body itself
+                    if (station.Kind == StationKind.Terminal) return AimTarget.TerminalSlot(-1, null, -1); // spec 034: the frame itself
                     return station.Kind == StationKind.Crate ? DescribeStock(station.IngredientIndex) : AimTarget.OnStation(station.Kind);
                 case Pickup pickup:
                     if (pickup.TryGetComponent(out Knife _)) return AimTarget.Item("knife");
                     if (pickup.TryGetComponent(out Spatula _)) return AimTarget.Item("spatula"); // spec 030
+                    // Spec 034: a delivery box says what is in it ("Click · pick up the box of 6 tomato").
+                    if (pickup.TryGetComponent(out Worktown.Game.Shop.SupplyBox delivery) && delivery.TryGetContents(out Worktown.Game.Shop.BoxContents inBox))
+                        return AimTarget.Item(delivery.PickupName(inBox));
                     if (pickup.TryGetComponent(out Food food))
                         return AimTarget.Item(food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food");
                     return AimTarget.Item("box");
@@ -972,6 +994,164 @@ namespace Worktown.Game.Net
                     return AimTarget.Nothing;
             }
         }
+
+        // ---- Spec 034: stock counts, delivery boxes and the ordering terminal ----
+
+        private Worktown.Game.Shop.StockCounts _stockCounts;
+        private float _nextStockCountsLookup;
+
+        /// <summary>Spec 034: the synced stock counts (found once, looked for again at most once a second while missing).</summary>
+        private Worktown.Game.Shop.StockCounts StockCountsNow()
+        {
+            if (_stockCounts == null && Time.unscaledTime >= _nextStockCountsLookup)
+            {
+                _nextStockCountsLookup = Time.unscaledTime + 1f;
+                _stockCounts = FindFirstObjectByType<Worktown.Game.Shop.StockCounts>();
+            }
+            return _stockCounts;
+        }
+
+        /// <summary>
+        /// Spec 034: the target with the stock of its slot as this client sees it: the synced count, our own pending take or unpack first
+        /// (Art.StockSlotLook), so a second click never acts on a count that already went.
+        /// </summary>
+        private AimTarget WithStock(AimTarget target, StockSlot slot)
+        {
+            if (slot == null || slot.Station == null) return target;
+            int line = Worktown.Game.Shop.StockCatalog.LineOfSlot(slot.Station.Kind, slot.Option);
+            if (line < 0) return target;
+            int count = -1;
+            Worktown.Game.Shop.StockCounts counts = StockCountsNow();
+            if (counts != null && counts.TryGet(line, out byte synced)) count = synced;
+            if (count >= 0 && slot.TryGetComponent(out Worktown.Game.Art.StockSlotLook look)) count = look.Shown(count);
+            return target.WithStock(line, count);
+        }
+
+        /// <summary>Spec 034: a slot of the terminal: a row's order words and price, a button's words (the terminal's own page and packs).</summary>
+        private AimTarget DescribeTerminal(StockSlot slot)
+        {
+            if (!slot.Station.TryGetComponent(out Worktown.Game.Shop.TerminalView view)) return AimTarget.TerminalSlot(slot.Option, null, -1);
+            string words = view.WordsFor(slot.Option, out long price); // cached per page and pack count
+            return AimTarget.TerminalSlot(slot.Option, words, price);
+        }
+
+        /// <summary>
+        /// Spec 034: a terminal click: a row orders (RequestStation(terminal, TerminalRules.OrderOption(line, packs)), the beep and the
+        /// row lit at the click, the server checks and charges); a button turns the page or the pack count at once (the client's view).
+        /// </summary>
+        private void TerminalClick(StockSlot slot)
+        {
+            if (slot == null || slot.Station == null || !slot.Station.TryGetComponent(out Worktown.Game.Shop.TerminalView view)) return;
+            if (Worktown.Game.Shop.TerminalRules.IsRow(slot.Option))
+            {
+                int line = Worktown.Game.Shop.TerminalRules.LineAt(view.Page, slot.Option);
+                if (line < 0) return;
+                PlaySound(SoundKey.Beep, slot.Anchor);
+                SendStation(slot.Station.Index, Worktown.Game.Shop.TerminalRules.OrderOption(line, view.Packs));
+                view.PredictOrder(slot.Option, _lastRequest);
+                _pendingTerminal = view;
+                return;
+            }
+            PlaySound(SoundKey.Button, slot.Anchor);
+            view.Press(slot.Option);
+        }
+
+        /// <summary>
+        /// Spec 034: the carried box into its slot: RequestStation(station, the slot's unpack option) and the unpack look at the click (the
+        /// box tips and shakes, the slot's samples pop in up to what fits); a refusal takes the slot's predicted count back with "nope".
+        /// </summary>
+        private void UnpackWithLook(StockSlot slot)
+        {
+            if (slot == null || slot.Station == null) return;
+            int option = Worktown.Game.Shop.StockCatalog.UnpackOptionOf(slot.Station.Kind, slot.Option);
+            if (option < 0) return;
+            Pickup held = FindHeldPickup();
+            Held hands = Describe(held);
+            PlaySound(SoundKey.Unpack, slot.Anchor);
+            SendStation(slot.Station.Index, option);
+            AimTarget seen = WithStock(AimTarget.Nothing, slot);
+            int room = Worktown.Game.Shop.StockCatalog.RoomFor(seen.StockLine, seen.StockCount);
+            if (held != null && held.TryGetComponent(out Worktown.Game.Shop.SupplyBox box))
+            {
+                if (room >= hands.BoxUnits && box.Model != null)
+                {
+                    // Everything fits: the box's copy tips into the slot and shrinks away; the real box hides until the server empties it.
+                    Pose from = new Pose(box.Model.transform.position, box.Model.transform.rotation);
+                    float scale = 1f;
+                    if (_heldView != null && _heldView.TryGetViewPose(held, out Pose root, out scale))
+                    {
+                        Vector3 local = held.transform.InverseTransformPoint(box.Model.transform.position);
+                        from = new Pose(root.position + root.rotation * (local * scale), root.rotation);
+                    }
+                    Worktown.Game.Art.UnpackLook.Begin(box.Model, from, scale, slot.Anchor);
+                    box.HideForUnpack(Mathf.Max(1f, FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+                        TimeManager != null ? (float)TimeManager.TickDelta : 0f)));
+                    _pendingUnpackBox = box;
+                }
+                else box.PlayUnpack(); // part of it fits: the box tips and shakes in the hands, the rest stays in it
+            }
+            if (slot.TryGetComponent(out Worktown.Game.Art.StockSlotLook look))
+            {
+                look.PredictUnpack(hands.BoxUnits, _lastRequest);
+                _pendingStockLook = look;
+            }
+        }
+
+        /// <summary>Spec 034, third person: the slot of <paramref name="station"/> that takes the carried box's good, or null.</summary>
+        private static StockSlot SlotForBox(Station station, Held hands)
+        {
+            if (station == null || !hands.IsBox) return null;
+            for (int s = 0; s < station.SlotCount; s++)
+                if (Worktown.Game.Shop.StockCatalog.LineOfSlot(station.Kind, s) == hands.BoxLine && station.TryGetSlot(s, out StockSlot slot))
+                    return slot;
+            return null;
+        }
+
+        /// <summary>Spec 034, third person: the terminal's row nearest to the player (on its current page).</summary>
+        private StockSlot NearestTerminalRow(Station terminal)
+        {
+            StockSlot best = null;
+            float bestSqr = float.MaxValue;
+            for (int r = 0; r < Worktown.Game.Shop.TerminalRules.Rows; r++)
+            {
+                if (!terminal.TryGetSlot(r, out StockSlot row) || row == null) continue;
+                if (terminal.TryGetComponent(out Worktown.Game.Shop.TerminalView view) && Worktown.Game.Shop.TerminalRules.LineAt(view.Page, r) < 0) continue;
+                float sqr = (row.Anchor - transform.position).sqrMagnitude;
+                if (sqr >= bestSqr) continue;
+                bestSqr = sqr;
+                best = row;
+            }
+            return best;
+        }
+
+        // Spec 034: the stock looks waiting for the server's answer to our request (one each: a take or unpack, an order).
+        private Worktown.Game.Art.StockSlotLook _pendingStockLook;
+        private Worktown.Game.Shop.TerminalView _pendingTerminal;
+        private Worktown.Game.Shop.SupplyBox _pendingUnpackBox;
+
+        /// <summary>Spec 034: the server answered request <paramref name="answered"/>: a refused take, unpack or order takes its look back, "nope".</summary>
+        private void AnswerStockLooks(int answered, CookOutcome outcome)
+        {
+            bool ok = outcome == CookOutcome.Ok;
+            if (_pendingStockLook != null && _pendingStockLook.Answer(answered, ok))
+            {
+                if (!ok && outcome != CookOutcome.TooFast) PlaySound(SoundKey.Nope, _pendingStockLook.transform.position);
+                if (!ok && _pendingUnpackBox != null) _pendingUnpackBox.ShowAgain(); // a refused unpack: the box is still in the hands
+                _pendingStockLook = null;
+                _pendingUnpackBox = null;
+            }
+            if (_pendingTerminal != null && _pendingTerminal.Answer(answered, ok))
+            {
+                if (!ok && outcome != CookOutcome.TooFast) PlaySound(SoundKey.Nope, _pendingTerminal.transform.position);
+                _pendingTerminal = null;
+            }
+        }
+
+        /// <summary>Spec 034, the tours: a terminal row or button clicked through the normal path.</summary>
+        public void DevTerminal(StockSlot slot) => TerminalClick(slot);
+
+        /// <summary>Spec 034, the tours: the carried box unpacked into <paramref name="slot"/> through the normal path.</summary>
+        public void DevUnpack(StockSlot slot) => UnpackWithLook(slot);
 
         // ---- Spec 032: the register ----
 
@@ -1319,6 +1499,7 @@ namespace Worktown.Game.Net
         // 031b: the request number of the last squeeze start and its dispenser's view (a refusal ends the predicted ribbon at once).
         private int _squeezeStartRequest;
         private Worktown.Game.Art.IPourView _squeezeStartView;
+        private bool _squeezeStartIsPour; // 033 review: the start was a drink tap's (only then does a refusal undo the cup's level)
         // 031b: our own stop went out for this dispenser; until the board's byte catches up its bit is still ours.
         private int _ownStopBoard = -1;
         private int _ownStopDispenser = -1;
@@ -1333,7 +1514,8 @@ namespace Worktown.Game.Net
             {
                 case SqueezeHold.Send.Start:
                     // Spec 033: a drink tap's press goes out as its own option.
-                    SendStation(_squeeze.SendBoard, StationKindOf(_squeeze.SendBoard) == StationKind.DrinkDispenser
+                    _squeezeStartIsPour = StationKindOf(_squeeze.SendBoard) == StationKind.DrinkDispenser;
+                    SendStation(_squeeze.SendBoard, _squeezeStartIsPour
                         ? DrinkRules.PourStartOption(_squeeze.SendDispenser) : BuildRules.SqueezeStartOption(_squeeze.SendDispenser));
                     _squeezeStartRequest = _lastRequest;
                     _squeezeStartView = DispenserView(_squeeze.SendBoard, _squeeze.SendDispenser);
@@ -1864,8 +2046,26 @@ namespace Worktown.Game.Net
         /// <summary>Third person (spec 007/021): E at a crate or the shelf with empty hands, at the counter holding something.</summary>
         private bool TryHandleStationKey(Station station, bool holding)
         {
+            // Spec 034, third person: a carried delivery box goes into this station's slot for its good (E).
+            if (holding)
+            {
+                StockSlot boxSlot = SlotForBox(station, Hands(FindHeldPickup()));
+                if (boxSlot != null)
+                {
+                    UnpackWithLook(boxSlot);
+                    return true;
+                }
+            }
             switch (station.Kind)
             {
+                case StationKind.Terminal:
+                {
+                    // Spec 034, third person: E orders the nearest row of the terminal's page (paging is a first-person job).
+                    StockSlot row = NearestTerminalRow(station);
+                    if (row == null) return false;
+                    TerminalClick(row);
+                    return true;
+                }
                 case StationKind.Crate:
                 case StationKind.PlateShelf:
                     if (holding) return false;
@@ -2071,12 +2271,13 @@ namespace Worktown.Game.Net
         private void ReportCook(NetworkConnection target, CookOutcome outcome)
         {
             int answered = NoteAnswer(AnswerKind.Cook, outcome == CookOutcome.Ok);
+            if (answered != 0) AnswerStockLooks(answered, outcome); // spec 034
             if (answered != 0 && answered == _squeezeStartRequest)
             {
                 // 031b (review of 031): a refused squeeze start ends the predicted ribbon at once (not after its 8 s hold).
                 _squeezeStartRequest = 0;
                 if (outcome != CookOutcome.Ok && _squeezeStartView != null) _squeezeStartView.Predict(false);
-                if (outcome != CookOutcome.Ok && outcome != CookOutcome.TooFast)
+                if (outcome != CookOutcome.Ok && outcome != CookOutcome.TooFast && _squeezeStartIsPour) // 033 review: only a tap's start
                 {
                     StopPourLook(false); // spec 033: no pour: back to the hand
                     if (_lastPourCup != null && _lastPourCup.Visual != null) _lastPourCup.Visual.EndPrediction();

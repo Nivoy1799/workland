@@ -33,6 +33,9 @@ namespace Worktown.Game.Cooking
         Register,
         /// <summary>Spec 033: the drink dispenser on the front counter: three taps held to pour into the cup in the hands, the cup
         /// stack and the lid stack are its slots (<see cref="DrinkRules"/>).</summary>
-        DrinkDispenser
+        DrinkDispenser,
+        /// <summary>Spec 034: the ordering terminal on the back wall: its screen's rows order a good, its buttons page and pick the pack
+        /// count (Shop.TerminalRules; the rows and buttons are its slots).</summary>
+        Terminal
     }
 }

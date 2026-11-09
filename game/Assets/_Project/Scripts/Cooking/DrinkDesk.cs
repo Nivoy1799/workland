@@ -64,7 +64,7 @@ namespace Worktown.Game.Cooking
                 CookOutcome can = _kitchen.CanPourInto(heldCupId, tap);
                 if (can != CookOutcome.Ok) return can;
                 bool empty = _kitchen.TryGet(heldCupId, out Item cup) && Drinks.IsEmptyCup(cup);
-                if (wallet != null && !wallet.CanAfford(owner, DrinkRules.DrinkOf(tap), 1, empty)) return CookOutcome.NotEnoughMoney;
+                if (wallet != null && !wallet.CanAfford(owner, DrinkRules.DrinkOf(tap), 1, empty)) return wallet.Short; // 034: or OutOfStock
             }
             return _kitchen.TryStartPour(station, tap, owner, heldCupId, tick);
         }
@@ -99,7 +99,11 @@ namespace Worktown.Game.Cooking
                 CookOutcome paid = wallet.Charge(owner, DrinkRules.DrinkOf(tap), PriceRules.FillPercent(poured), wasEmpty, out cost);
                 if (paid != CookOutcome.Ok) return paid;
             }
-            _kitchen.CommitCup(cupId, cup, total);
+            if (!_kitchen.CommitCup(cupId, cup, total))
+            {
+                wallet?.Refund(owner, DrinkRules.DrinkOf(tap), PriceRules.FillPercent(poured), wasEmpty, cost); // spec 034: the backstop
+                return CookOutcome.SimRefused;
+            }
             bool spilled = total >= Drinks.SpillFrom;
             if (spilled) _kitchen.MarkSpill(station);
             result = new PourResult(poured, total, cost, cup, cupId, spilled);

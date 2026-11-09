@@ -177,10 +177,62 @@ namespace Worktown.Sim.Economy
             return sum;
         }
 
-        /// <summary>ItemCost - 1 - Weight * B, may be negative; 0 if the item is unpriced.</summary>
+        /// <summary>
+        /// Spec 034: what the item's parts cost the shop when its stock came from the supplier: every component at
+        /// <see cref="Supplier.BulkUnitPrice"/> (never above what a unit cost in any order); a squeezed portion at the least share of a
+        /// bottle any squeeze of its amount bucket draws, a pour's drink at the least share of a cup its fill bucket draws, both rounded
+        /// down (a draw takes exactly that share of a bought unit, so the count is never above it, merged squeezes and top-ups too); the
+        /// cup itself is not counted (as in 033). Null if any component is unpriced. Always at most <see cref="ItemCost"/>.
+        /// </summary>
+        public static long? StockCost(EconomyCatalog c, Item item)
+        {
+            if (c == null) throw new ArgumentNullException(nameof(c));
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            long sum = 0;
+            foreach (var comp in item.Components)
+            {
+                if (!c.TryGetGrocerPrice(comp.BaseId, out var p)) return null;
+                sum += Supplier.BulkUnitPrice(c, p);
+            }
+            return sum - StockDiscount(c, item);
+        }
+
+        private static long StockDiscount(EconomyCatalog c, Item item)
+        {
+            if (item.Kind == OperationKind.Fill || item.Kind == OperationKind.Portion)
+            {
+                int percent;
+                if (item.Kind == OperationKind.Fill)
+                {
+                    item.Buckets.TryGetValue(Drinks.MlParam, out string? level);
+                    percent = FillPercentOf(level);
+                }
+                else
+                {
+                    item.Buckets.TryGetValue(Assembly.AmountParam, out string? bucket);
+                    percent = PortionPercentOf(bucket);
+                }
+                long discount = 0;
+                foreach (var comp in item.Components)
+                    if (c.TryGetGrocerPrice(comp.BaseId, out var p))
+                    {
+                        long unit = Supplier.BulkUnitPrice(c, p);
+                        discount += unit - unit * percent / 100;
+                    }
+                return discount;
+            }
+            long sum = 0;
+            foreach (var input in item.Inputs) sum += StockDiscount(c, input);
+            return sum;
+        }
+
+        /// <summary>
+        /// StockCost - 1 - Weight * B, may be negative; 0 if the item is unpriced. Spec 034: the cost counts the supplier's bulk unit
+        /// price (<see cref="StockCost"/>), so nothing sells to the wholesaler for more than its stock cost.
+        /// </summary>
         public static long SurplusCap(EconomyCatalog c, Item item)
         {
-            var cost = ItemCost(c, item);
+            var cost = StockCost(c, item);
             if (cost == null) return 0;
             return cost.Value - 1 - item.Weight * c.ByproductMaxPerComponent;
         }

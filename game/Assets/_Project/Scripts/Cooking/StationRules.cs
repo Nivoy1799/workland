@@ -83,6 +83,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Griddle: return stationName + ": grill in first person (V)";
                 // Spec 033: E takes a cup or lids one, holding E pours from the nearest tap.
                 case StationKind.DrinkDispenser: return stationName + ": E take a cup or a lid, hold E to pour";
+                // Spec 034: E orders the nearest row; the page and the pack count are picked in first person.
+                case StationKind.Terminal: return stationName + ": E order the nearest row, page in first person (V)";
                 default: return stationName;
             }
         }

@@ -42,11 +42,17 @@ namespace Worktown.Game.Net.Rules
         public readonly int CupTap;
         /// <summary>Spec 033, a cup: its level (DrinkRules.LevelEmpty .. LevelSpilled), as this client sees it.</summary>
         public readonly byte CupLevel;
+        /// <summary>Spec 034: a delivery box: the stock line it holds (Shop.StockCatalog), -1 for no box.</summary>
+        public readonly int BoxLine;
+        /// <summary>Spec 034, a delivery box: the units in it.</summary>
+        public readonly int BoxUnits;
 
         private Held(bool holding, bool food, bool knife, bool plated, string name, bool vessel = false,
             VesselKind kind = default, int count = 0, string contentName = null, bool spatula = false, bool pending = false,
-            bool build = false, bool cup = false, bool lidded = false, int cupTap = -1, byte cupLevel = 0)
+            bool build = false, bool cup = false, bool lidded = false, int cupTap = -1, byte cupLevel = 0, int boxLine = -1, int boxUnits = 0)
         {
+            BoxLine = boxLine < 0 ? -1 : boxLine;
+            BoxUnits = BoxLine >= 0 ? boxUnits : 0;
             IsCup = cup;
             CupLidded = cup && lidded;
             CupTap = cup ? cupTap : -1;
@@ -81,8 +87,18 @@ namespace Worktown.Game.Net.Rules
         public static Held Pending(Held item)
         {
             return new Held(true, item.IsFood, item.IsKnife, item.IsPlated, item.Name, item.IsVessel, item.Vessel, item.ContentCount,
-                item.ContentName, item.IsSpatula, true, item.IsBuild, item.IsCup, item.CupLidded, item.CupTap, item.CupLevel);
+                item.ContentName, item.IsSpatula, true, item.IsBuild, item.IsCup, item.CupLidded, item.CupTap, item.CupLevel, item.BoxLine,
+                item.BoxUnits);
         }
+
+        /// <summary>Spec 034: a delivery box of <paramref name="units"/> units of stock line <paramref name="line"/>, named for the prompt.</summary>
+        public static Held Box(string name, int line, int units)
+        {
+            return new Held(true, false, false, false, string.IsNullOrEmpty(name) ? "box" : name, boxLine: line, boxUnits: units);
+        }
+
+        /// <summary>Spec 034: the hands carry a delivery box.</summary>
+        public bool IsBox => BoxLine >= 0;
 
         /// <summary>
         /// Spec 033: a cup from the drink dispenser: its drink's tap (-1 empty), level and lid, from its coarse look. A lidded cup is

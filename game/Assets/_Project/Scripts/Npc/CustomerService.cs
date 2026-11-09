@@ -265,6 +265,23 @@ namespace Worktown.Game.Npc
         public bool HasBill(GuestPick pick) => Flow.Desk.IsWaiting(pick.CustomerId) || _tab.IsBilled(pick.CustomerId, pick.IsDrink);
 
         /// <summary>
+        /// 033 review: what the counter's fallback pays for <paramref name="pick"/> when its hand-over failed: the combined bill when the
+        /// order's last line came but the guest never reached the register's line (once), else the line's own bill.
+        /// </summary>
+        public long FallbackBill(GuestPick pick, long simPayout) => FallbackBill(_tab, pick, simPayout);
+
+        /// <summary>Pure core of <see cref="FallbackBill(GuestPick, long)"/> (tested).</summary>
+        public static long FallbackBill(GuestTab tab, GuestPick pick, long simPayout) =>
+            tab != null && tab.TakeCompletedBill(pick.CustomerId, out long whole) ? whole : GuestTab.LineBill(pick, simPayout);
+
+        /// <summary>
+        /// 033 review: whether the counter's fallback pays for this hand-over: not handed over, and its money not committed elsewhere. A
+        /// line billed already before this hand-over (<paramref name="billedBefore"/>: a duplicate) is no commitment for this dish.
+        /// </summary>
+        public static bool FallbackPaysFor(bool handed, bool billedBefore, bool billedAfter) =>
+            Worktown.Game.Shop.RegisterFlow.FallbackPays(handed, billedAfter && !billedBefore);
+
+        /// <summary>
         /// Spec 032, server, after the sim sold the dish (credited nothing yet: TrySellForGuest): guest <paramref name="pick"/> takes it
         /// from <paramref name="payee"/>, walks to the register and waits to pay its bill (<paramref name="simPayout"/> at the pick's
         /// share) and its tip. False only when the guest is gone (then the caller pays the bill at once). 032 review: the register's
@@ -275,6 +292,8 @@ namespace Worktown.Game.Npc
         public bool OnHandedOver(GuestPick pick, PickupInteractor payee, long simPayout)
         {
             if (payee == null || _queue.IndexOf(pick.CustomerId) < 0) return false;
+            // 033 review: a line this guest already got is refused (nothing changes); the counter's fallback pays it at once.
+            if (_tab.IsDuplicate(pick)) return false;
             // Spec 033: one line of the order: on the tab (the commit point for a line) until the last one comes; then one pick for all.
             if (!_tab.Serve(pick, payee.OwnerId, GuestTab.LineBill(pick, simPayout), out GuestPick whole, out long bill))
             {
@@ -300,6 +319,7 @@ namespace Worktown.Game.Npc
             _patience.Remove(pick.CustomerId); // spec 032: no patience at the register
             _payees[pick.CustomerId] = payee;
             Flow.HandOver(whole, payee.OwnerId, bill, g != null ? g.Order : null, Stage, Time.time);
+            _tab.Close(pick.CustomerId); // 033 review: only now is the combined bill the register's
             try
             {
                 Sync();

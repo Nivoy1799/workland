@@ -84,8 +84,12 @@ namespace Worktown.Game.Dev
             float standZ = laneZ;
             Vector3 atA = new Vector3(stoveA.transform.position.x, 0f, standZ);
             Vector3 atB = new Vector3(stoveB.transform.position.x, 0f, standZ);
+            // Spec 034 (AC4): the tomatoes run out (the host starts them at one), and a pack is ordered at the terminal; its box comes
+            // while the fries cook and is unpacked right after them.
+            if (capture != null) yield return RunOutAndOrder(actor, capture, laneZ);
             // Spec 029 (AC5, AC6): first an order of fries from potato to the counter, through the fryer.
             if (capture != null) yield return FryFries(actor, capture, laneZ);
+            if (capture != null) yield return UnpackTheDelivery(actor, capture, laneZ); // spec 034
             // Spec 031 (AC5): then one falafel wrap on the assembly board, layer by layer, folded, in paper, to the counter.
             if (capture != null) yield return BuildFalafelWrap(actor, capture, laneZ);
             // Spec 030 (AC5, AC6): then "Grilled veggies" with seitan strips on the griddle (flips, grill marks), to the counter.
@@ -1159,6 +1163,148 @@ namespace Worktown.Game.Dev
             if (!latest.Contains("Grilled veggies order: exact order")) Debug.LogWarning("[Demo] griddle: no exact Grilled veggies order was served");
             yield return PayAtRegister(actor, capture, laneZ, "veggies"); // spec 032
             yield return LookAtOrders(actor, capture, laneZ, "orders-later"); // spec 032: the rings have drained since
+        }
+
+        // ---- Spec 034: a slot runs empty, the order at the terminal, the delivery at the back door, the unpack ----
+
+        /// <summary>The longest the tour waits for the delivery's boxes after the fries (s; the delay is one game hour, about 60 s).</summary>
+        public const float DeliveryWait = 100f;
+
+        private static Station FindStation(StationKind kind)
+        {
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+                if (s.Kind == kind) return s;
+            return null;
+        }
+
+        private static string StockText(StockSlot slot)
+        {
+            var counts = UnityEngine.Object.FindFirstObjectByType<Worktown.Game.Shop.StockCounts>();
+            int line = Worktown.Game.Shop.StockCatalog.LineOfSlot(slot.Station.Kind, slot.Option);
+            return counts != null && counts.TryGet(line, out byte n) ? n + "/" + Worktown.Game.Shop.StockCatalog.PresentedCapacity(line) : "?";
+        }
+
+        /// <summary>
+        /// Spec 034: the last tomato is taken (the slot's last sample flies into the hand, the tag turns "empty"), the empty slot is
+        /// aimed at ("Out of stock"), the tomato is put down on the landing worktop's back corner, and at the terminal the page buttons
+        /// are tried and one pack of tomatoes is ordered (the row lights, the feed says when it is due).
+        /// </summary>
+        private static IEnumerator RunOutAndOrder(TourActor actor, CookCapture capture, float laneZ)
+        {
+            PickupInteractor me = actor.Interactor;
+            StockSlot tomato = FindSlot(Worktown.Game.Shop.SupplyService.TourLine);
+            Station terminal = FindStation(StationKind.Terminal);
+            PlaceSurface landing = SurfaceUnder(new Vector3(1.6f, 0.9f, 14.5f));
+            if (tomato == null || terminal == null || landing == null)
+            {
+                actor.CountTimeout("stock: the tomato slot, the terminal or the landing worktop missing");
+                yield break;
+            }
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
+            // From the left of the slot: the fridge's open right door hides its right column from the right.
+            yield return actor.WalkTo(new Vector3(tomato.Anchor.x - 0.5f, 0f, laneZ), false, false);
+            yield return actor.AimAt(tomato.Anchor, 1f);
+            Debug.Log("[Stock] the tomato slot shows " + StockText(tomato) + " before the last take");
+            yield return capture.Shot("stock-last-tomato");
+            yield return actor.Use("take the last tomato", tomato.Anchor, InteractionAction.Buy, () => me.DevTake(tomato),
+                capture.Before(null, "stock-last-take", TourRules.ClickFramesSeconds));
+            yield return new WaitForSecondsRealtime(0.4f);
+            Debug.Log("[Stock] the tomato slot shows " + StockText(tomato) + " after the take, hands '" + HeldName(me) + "'");
+            yield return actor.AimAt(tomato.Anchor, 1f);
+            Debug.Log("[Stock] aimed at the empty slot: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
+            yield return capture.Shot("stock-empty-slot");
+            yield return actor.AimAt(tomato.Anchor + new Vector3(-0.35f, -0.35f, 0f), 1f); // the slot off the prompt: no samples, "tomato · empty"
+            yield return capture.Shot("stock-empty-slot-view");
+
+            // Put the tomato down at the landing worktop's back corner (away from the delivery spots at its front).
+            int spot = 0;
+            float best = float.MaxValue;
+            for (int s = 0; s < landing.SpotCount; s++)
+            {
+                float d = Vector3.Distance(landing.SpotWorldPosition(s), new Vector3(1.62f, 0.9f, 14.7f));
+                if (d < best) { best = d; spot = s; }
+            }
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(landing.SpotWorldPosition(spot).x + 0.3f, 0f, laneZ), false, false);
+            yield return actor.Use("put the tomato down on the landing worktop", landing.SpotWorldPosition(spot), InteractionAction.Place,
+                () => me.DevSendPlace(landing.Index, spot));
+
+            // The terminal: page on and back (the client's own page), then order one pack of tomatoes.
+            int line = Worktown.Game.Shop.StockCatalog.IndexOf(Worktown.Game.Shop.SupplyService.TourLine);
+            int row = line % Worktown.Game.Shop.TerminalRules.Rows;
+            if (!terminal.TryGetSlot(row, out StockSlot tomatoRow) || !terminal.TryGetSlot(Worktown.Game.Shop.TerminalRules.NextSlot, out StockSlot next)
+                || !terminal.TryGetSlot(Worktown.Game.Shop.TerminalRules.PrevSlot, out StockSlot back))
+            {
+                actor.CountTimeout("stock: the terminal's slots missing");
+                yield break;
+            }
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(terminal.transform.position.x + 0.2f, 0f, laneZ + 0.25f), false, false);
+            yield return actor.AimAt(terminal.transform.position, 1f);
+            yield return capture.Shot("terminal");
+            yield return actor.Use("next page", next.Anchor, InteractionAction.Page, () => me.DevTerminal(next),
+                capture.Before("terminal-next-aim", "terminal-page", TourRules.ClickFramesSeconds));
+            yield return actor.Use("page back", back.Anchor, InteractionAction.Page, () => me.DevTerminal(back));
+            long before = me.TryGetComponent(out Worktown.Game.Economy.Wallet wallet) ? wallet.Balance.Value : -1;
+            yield return actor.Use("order a pack of tomatoes", tomatoRow.Anchor, InteractionAction.Order, () => me.DevTerminal(tomatoRow),
+                capture.Before("terminal-order-aim", "terminal-order", TourRules.ClickFramesSeconds));
+            yield return new WaitForSecondsRealtime(0.5f);
+            long after = wallet != null ? wallet.Balance.Value : -1;
+            Debug.Log("[Stock] ordered at the terminal: the wallet went from " + before + " to " + after + " (" + (before - after) + " paid)");
+            yield return capture.Shot("terminal-ordered");
+            yield return actor.LevelView();
+        }
+
+        /// <summary>
+        /// Spec 034: after the fries, the delivery's box waits on the worktop by the back door (it came with a knock about a game hour
+        /// after the order): it is picked up (carried low in front, with both hands), carried to the fridge's tomato slot and unpacked
+        /// (the box tips into the slot, the samples pop back, the tag reads "tomato 6/12").
+        /// </summary>
+        private static IEnumerator UnpackTheDelivery(TourActor actor, CookCapture capture, float laneZ)
+        {
+            PickupInteractor me = actor.Interactor;
+            StockSlot tomato = FindSlot(Worktown.Game.Shop.SupplyService.TourLine);
+            if (tomato == null) yield break;
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
+            yield return actor.WalkTo(new Vector3(1.3f, 0f, laneZ), false, false);
+            Worktown.Game.Shop.SupplyBox box = null;
+            float until = Time.unscaledTime + DeliveryWait;
+            while (box == null && Time.unscaledTime < until)
+            {
+                foreach (Worktown.Game.Shop.SupplyBox b in UnityEngine.Object.FindObjectsByType<Worktown.Game.Shop.SupplyBox>(FindObjectsSortMode.None))
+                    if (b.IsSpawned && b.TryGetContents(out _)) box = b;
+                if (box == null) yield return new WaitForSecondsRealtime(0.5f);
+            }
+            if (box == null)
+            {
+                actor.CountTimeout("stock: no delivery box within " + DeliveryWait + " s");
+                yield break;
+            }
+            box.TryGetContents(out Worktown.Game.Shop.BoxContents contents);
+            Debug.Log("[Stock] the delivery is at the back door: a box of " + Worktown.Game.Shop.StockCatalog.Describe(contents.Line, contents.Units)
+                + " at " + box.transform.position.ToString("0.00") + " (" + Time.time.ToString("0.0") + " s)");
+            yield return actor.AimAt(box.transform.position, 1f);
+            yield return capture.Shot("delivery-boxes");
+            NetworkObject boxObject = box.NetworkObject;
+            yield return actor.Use("pick up the delivery box", box.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(boxObject),
+                capture.Before("delivery-box-aim", "delivery-box-pickup", TourRules.ClickFramesSeconds));
+            yield return actor.LevelView();
+            LogHold(me, "delivery box");
+            yield return capture.Shot("delivery-box-carried");
+            yield return actor.WalkTo(new Vector3(tomato.Anchor.x - 0.5f, 0f, laneZ), false, false);
+            yield return actor.AimAt(tomato.Anchor, 1f, () => me.CurrentAction == InteractionAction.Unpack);
+            Debug.Log("[Stock] aimed at the slot with the box: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
+            yield return actor.Use("unpack the tomatoes", tomato.Anchor, InteractionAction.Unpack, () => me.DevUnpack(tomato),
+                capture.Before("unpack-aim", "unpack", TourRules.ClickFramesSeconds));
+            yield return new WaitForSecondsRealtime(0.5f);
+            Debug.Log("[Stock] the tomato slot shows " + StockText(tomato) + " after the unpack, hands '"
+                + (me.IsHoldingSomething() ? "something" : "empty") + "'");
+            yield return capture.Shot("tomato-restocked");
+            yield return actor.AimAt(tomato.Anchor + new Vector3(-0.35f, -0.35f, 0f), 1f); // the slot off the prompt: the samples back, "tomato 6/12"
+            yield return capture.Shot("tomato-restocked-view");
+            yield return actor.LevelView();
         }
 
         /// <summary>

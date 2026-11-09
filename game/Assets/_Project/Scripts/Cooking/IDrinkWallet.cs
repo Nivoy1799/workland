@@ -12,5 +12,14 @@ namespace Worktown.Game.Cooking
 
         /// <summary>Whether <paramref name="owner"/> could pay such a pour now (a press checks the smallest one). Charges nothing.</summary>
         bool CanAfford(int owner, string drinkId, int percent, bool withCup);
+
+        /// <summary>Spec 034: what a press answers when <see cref="CanAfford"/> says no: NotEnoughMoney (money) or OutOfStock (stock).</summary>
+        CookOutcome Short { get; }
+
+        /// <summary>
+        /// Spec 034, the refund backstop: a <see cref="Charge"/> of <paramref name="cost"/> whose cup could not be committed afterwards is
+        /// given back (the money, or the drink drawn from the keg). Called at most once per successful charge, never after a refusal.
+        /// </summary>
+        void Refund(int owner, string drinkId, int percent, bool withCup, long cost);
     }
 }

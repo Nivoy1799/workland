@@ -112,6 +112,10 @@ namespace Worktown.Game.Art
         StationRegister,
         /// <summary>Spec 033: the drink dispenser on the front counter (graybox, DrinkArtRules) and the takeaway cup (Kenney cup).</summary>
         StationDrinkDispenser,
-        PropCup
+        PropCup,
+        /// <summary>Spec 034: the ordering terminal on the back wall (graybox, TerminalArtRules) and the delivery box (the Kenney
+        /// cardboard box of the Furniture Kit).</summary>
+        StationTerminal,
+        PropDeliveryBox
     }
 }

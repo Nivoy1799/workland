@@ -109,6 +109,10 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationRegister, Mode = Fit.Graybox },
             // Spec 033: no drink dispenser in the packs: a graybox (Steel body, a panel per drink, spouts, a drip tray).
             new Def { Key = ArtKey.StationDrinkDispenser, Mode = Fit.Graybox },
+            // Spec 034: no ordering terminal in the packs: a graybox wall screen (a Charcoal frame, a DeepBlue screen).
+            new Def { Key = ArtKey.StationTerminal, Mode = Fit.Graybox },
+            // Spec 034: the delivery box is the Furniture Kit's cardboard box (the crate's model), 0.40 m.
+            Fitted(ArtKey.PropDeliveryBox, Furniture + "cardboardBoxOpen.fbx", Fit.Max),
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -899,6 +903,7 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationRegister) return BuildRegister(parent); // spec 032
             if (key == ArtKey.StationDrinkDispenser) return BuildDrinkDispenser(parent); // spec 033
             if (key == ArtKey.PropCup) return BuildCup(parent);
+            if (key == ArtKey.StationTerminal) return BuildTerminal(parent); // spec 034
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -1081,6 +1086,22 @@ namespace Worktown.Game.Editor
         /// each compartment (palette colours by value), the Terracotta BACK and Sage GIVE buttons, the DeepBlue card terminal and the
         /// WoodLight change mat. Front on +Z like the kit (the scene builder turns it to the cook).
         /// </summary>
+        /// <summary>
+        /// Spec 034: the graybox ordering terminal as the wrapper's "Model" (TerminalArtRules; its bottom on the origin, front on +Z like
+        /// the kit): a Charcoal frame and a DeepBlue screen inset on its front. Its rows, buttons and texts are the scene's (they change).
+        /// </summary>
+        private static GameObject BuildTerminal(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material frame = GrayboxMaterial("TerminalFrame", Palette.Charcoal);
+            Material screen = GrayboxMaterial("TerminalScreen", Palette.DeepBlue);
+            float w = TerminalArtRules.Width, h = TerminalArtRules.Height, d = TerminalArtRules.Depth;
+            Box(model, "Frame", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
+            Box(model, "Screen", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.05f, h - 0.05f, 0.002f), screen);
+            return model;
+        }
+
         private static GameObject BuildRegister(Transform parent)
         {
             var model = new GameObject("Model");

@@ -85,7 +85,7 @@ namespace Worktown.Sim.Tests.Economy
             var r = E.TrySellItem(s, "alice", 1, TestEconomy.PlatedFries());
             Assert.True(r.Ok);
             Assert.Equal(SaleChannel.Wholesaler, r.Channel);
-            Assert.Equal(28, r.Payout); // min(84, 60 - 1 - 31)
+            Assert.Equal(16, r.Payout); // min(84, 48 - 1 - 31): spec 034, the bulk unit price
             var m = TestEconomy.Mkt(r.State, "snack");
             Assert.Equal(1, m.WholesaleThisTick);
             Assert.Equal(0, m.PlayerFilledThisTick);
@@ -100,17 +100,19 @@ namespace Worktown.Sim.Tests.Economy
             var second = E.TrySellItem(first.State, "alice", 2, TestEconomy.PlatedFries());
             Assert.Equal(SaleChannel.NpcDemand, first.Channel);
             Assert.Equal(SaleChannel.Wholesaler, second.Channel);
-            Assert.Equal(478 + 28, TestEconomy.Acct(second.State, "alice").Balance);
+            Assert.Equal(478 + 16, TestEconomy.Acct(second.State, "alice").Balance); // spec 034: the cap at the bulk price
         }
 
         [Fact]
         public void CheapPlateGetsOnlyTheSmallCap()
         {
             var s = TestEconomy.Open(E, E.Initial(), "alice", 0);
+            // Spec 034: the caps count the bulk unit price: salt 32 - 1 - 31 = 0, so the wholesaler refuses it.
             var salt = E.TrySellItem(s, "alice", 1, TestEconomy.PlatedSalt());
-            Assert.Equal(3, salt.Payout); // 35 - 1 - 31
+            Assert.Equal(EconomyError.WholesaleRefused, salt.Error);
+            Assert.Equal(0, salt.Payout);
             var cashew = E.TrySellItem(s, "alice", 2, TestEconomy.PlatedTomatoCashew());
-            Assert.Equal(157, cashew.Payout); // 220 - 1 - 62
+            Assert.Equal(113, cashew.Payout); // (56 + 120) - 1 - 62
         }
 
         [Fact]

@@ -53,7 +53,7 @@ namespace Worktown.Sim.Tests.Economy
             Assert.Empty(Byproducts.ForOperation(C, "plate", new[] { fries }, plateRes));
             var plate = T.Ok(plateRes);
 
-            var sale = E.TrySellItem(s, "alice", 1, plate);            // saturated at tick 0: +28
+            var sale = E.TrySellItem(s, "alice", 1, plate);            // saturated at tick 0: +16 (spec 034: the bulk cap)
             Assert.Equal(SaleChannel.Wholesaler, sale.Channel);
             s = sale.State;
             s = TestEconomy.SetMarket(s, "food_scraps", m => m with { OpenDemand = 5, Price = 3 });
@@ -61,8 +61,8 @@ namespace Worktown.Sim.Tests.Economy
             var scraps = E.TrySellGoods(s, "alice", "food_scraps", 1); // +3
             var oil = E.TrySellGoods(scraps.State, "alice", "used_cooking_oil", 1); // +4
             Assert.True(scraps.Ok && oil.Ok);
-            // 1000 - 60 + 28 + 3 + 4 = 975
-            Assert.Equal(975, TestEconomy.Acct(oil.State, "alice").Balance);
+            // 1000 - 60 + 16 + 3 + 4 = 963
+            Assert.Equal(963, TestEconomy.Acct(oil.State, "alice").Balance);
             Assert.True(TestEconomy.Acct(oil.State, "alice").Balance < 1000);
             Assert.Empty(TestEconomy.Acct(oil.State, "alice").Goods);
         }

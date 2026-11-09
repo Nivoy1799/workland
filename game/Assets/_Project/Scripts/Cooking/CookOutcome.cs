@@ -79,6 +79,14 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 033: a lid goes only on a filled cup.</summary>
         NotFilled,
         /// <summary>Spec 033: enough empty cups lie about already (DrinkRules.MaxEmptyCups).</summary>
-        NoCupsLeft
+        NoCupsLeft,
+        /// <summary>Spec 034: the slot (or the sauce's bottles, the tap's kegs, the rack, the cups) is empty: order more at the terminal.</summary>
+        OutOfStock,
+        /// <summary>Spec 034: the slot is full: the box stays as it is.</summary>
+        StockFull,
+        /// <summary>Spec 034: this box holds another good (it is unpacked at its own slot).</summary>
+        WrongBox,
+        /// <summary>Spec 034: too many orders are on their way (Sim.Economy.SupplyBook.MaxPending).</summary>
+        TooManyOrders
     }
 }

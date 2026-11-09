@@ -169,6 +169,8 @@ namespace Worktown.Game.Dev
         // Spec 033: the drink dispenser on the front counter, left of the serving counter (GrayboxSceneBuilder.DrinkDispenserX), and the
         // front counter's middle line.
         private const float DrinksX = 10.49f;
+        /// <summary>Spec 034: the ordering terminal's x (the middle of the landing worktop, GrayboxSceneBuilder.TerminalX).</summary>
+        private const float TerminalX = 1.11f;
         private const float FrontCounterZ = 11.85f;
         /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
         public const float ParkX = -2.5f; // spec 028b: 2.8 m west of the side wall, as in 027a
@@ -247,6 +249,11 @@ namespace Worktown.Game.Dev
                 // Spec 033: the drink dispenser on the front counter from the aisle (first person): the taps, the cup and lid stacks.
                 TourStep.WalkTo(DrinksX, AisleZ), TourStep.LookAt(DrinksX, 1.25f, FrontCounterZ), TourStep.Wait(0.6f),
                 TourStep.Shot("drinks-first"),
+                // Spec 034: the ordering terminal on the back wall over the landing worktop, and the back door (first person).
+                TourStep.WalkTo(TerminalX + 0.3f, AisleZ), TourStep.LookAt(TerminalX, 1.3f, 14.9f), TourStep.Wait(0.6f),
+                TourStep.Shot("terminal-first"),
+                TourStep.WalkTo(2.8f, AisleZ), TourStep.LookAt(0.36f, 1.5f, AisleZ), TourStep.Wait(0.6f),
+                TourStep.Shot("back-door-first"),
                 TourStep.WalkTo(LookObserverX, AisleZ), TourStep.LookAt(LookObserverX, 1.4f, LookObserverZ), TourStep.Wait(0.6f),
                 TourStep.Shot("scale-person"),
                 TourStep.WalkTo(StoveBX, AisleZ), TourStep.View(ViewMode.ThirdPerson), TourStep.Look(0f, -10f), TourStep.Wait(1.2f),
@@ -301,7 +308,7 @@ namespace Worktown.Game.Dev
             {
                 new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
             };
-            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 1020f); // spec 030: + the griddle; spec 031: + the wrap; spec 032: + the register; spec 033: + the lemonade
+            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 1140f); // spec 030: + the griddle; spec 031: + the wrap; spec 032: + the register; spec 033: + the lemonade; spec 034: + the stock run
         }
     }
 }

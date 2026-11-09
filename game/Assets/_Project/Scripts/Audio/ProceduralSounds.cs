@@ -524,6 +524,59 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>
+        /// Spec 034: a delivery at the back door: two knocks on a wooden door (a low thump with a short knock partial), then the boxes set
+        /// down (a soft cardboard thud).
+        /// </summary>
+        public static float[] Delivery()
+        {
+            var rng = new System.Random(3401);
+            var s = new float[(int)(SampleRate * 0.9f)];
+            float[] knocks = { 0f, 0.17f };
+            const float thudAt = 0.5f;
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float v = 0f;
+                foreach (float at in knocks)
+                {
+                    if (t < at) continue;
+                    float k = t - at;
+                    v += (float)Math.Sin(2.0 * Math.PI * 150.0 * k) * 0.45f * (float)Math.Exp(-k / 0.03f) * Math.Min(1f, k / 0.001f);
+                    v += (float)Math.Sin(2.0 * Math.PI * 410.0 * k) * 0.18f * (float)Math.Exp(-k / 0.012f);
+                }
+                if (t >= thudAt)
+                {
+                    float k = t - thudAt;
+                    float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                    band += (noise - band) * 0.08f;
+                    v += band * 0.9f * (float)Math.Exp(-k / 0.06f) * Math.Min(1f, k / 0.004f);
+                    v += (float)Math.Sin(2.0 * Math.PI * 95.0 * k) * 0.3f * (float)Math.Exp(-k / 0.05f);
+                }
+                s[i] = v;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 034: a box unpacked into a slot: a cardboard flap (a dull rustle) and the goods sliding out.</summary>
+        public static float[] Unpack()
+        {
+            var rng = new System.Random(3402);
+            var s = new float[(int)(SampleRate * 0.4f)];
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                band += (noise - band) * (0.18f - 0.12f * Math.Min(1f, t / 0.4f));
+                float flap = (float)Math.Exp(-t / 0.05f) * Math.Min(1f, t / 0.003f);
+                float slide = (float)Math.Sin(Math.PI * Math.Min(1f, Math.Max(0f, t - 0.08f) / 0.3f)) * 0.5f;
+                s[i] = band * 0.8f * (flap + slide);
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -562,6 +615,8 @@ namespace Worktown.Game.Audio
                 case SoundKey.Pour: return Pour(); // spec 033
                 case SoundKey.LidClick: return LidClick();
                 case SoundKey.Splash: return Splash();
+                case SoundKey.Delivery: return Delivery(); // spec 034
+                case SoundKey.Unpack: return Unpack();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }

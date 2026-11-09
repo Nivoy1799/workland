@@ -586,6 +586,28 @@
         "Serve a wrap to a guest who wants a lemonade: does it wait for the drink, then go to the register with one bill?",
         "Watch your money: is a pour charged once, cup plus drink, when you let go?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-034",
+      "date": "2026-11-09",
+      "title": "Stock and supply: slots run empty, order at the terminal, unpack the delivery",
+      "items": [
+        "Every fridge and shelf slot, the packaging rack, the cup stack and the drink taps now hold a counted stock; a new game starts at half",
+        "Taking from a slot is free (the order paid for it); the samples and the tag show what is left, an empty slot says 'empty'",
+        "Sauces come in bottles (a squeeze uses 10 to 30 % of one, the next opens from the dry shelf); drinks come in kegs of 20 cups",
+        "The ordering terminal hangs on the back wall by the staff door: pick a row (page and pack count with its buttons); it shows the price and the delivery time",
+        "Orders cost the supplier's bulk price (80 % of the grocer's) and are paid when you place them",
+        "About a minute later (one game hour) the boxes arrive on the worktop by the back door, with a knock",
+        "Carry a box (both hands) to its slot and click: the slot fills up to its capacity, the rest stays in the box",
+        "The HUD lists 'Low stock' under a quarter; third person: E unpacks into the station you stand at, E at the terminal orders the nearest row"
+      ],
+      "test": [
+        "Take tomatoes until the slot is empty: do the samples go one by one, does the tag turn red and say 'empty'?",
+        "Order one pack at the terminal: is the price taken from your money once, and does the feed say when it is due?",
+        "Wait for the knock: are the boxes on the worktop by the back door? Carry one: is it held low in front of you?",
+        "Unpack into the slot: does it fill at once, and a full slot keep the rest in the box?",
+        "Use up the cups or a sauce: is it refused with 'Out of stock'? Does the HUD say 'Low stock' first?"
+      ]
     }
   ]
 }

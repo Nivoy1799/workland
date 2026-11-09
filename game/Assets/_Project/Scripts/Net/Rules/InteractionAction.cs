@@ -35,6 +35,12 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 033: hold left click on a tap of the drink dispenser with a cup in the hands (the level by the time held).</summary>
         Fill,
         /// <summary>Spec 033: the lid stack puts a lid on the filled cup in the hands.</summary>
-        Lid
+        Lid,
+        /// <summary>Spec 034: the carried delivery box goes into its slot (the count rises up to the capacity).</summary>
+        Unpack,
+        /// <summary>Spec 034: a row of the ordering terminal orders its good (paid on placing it).</summary>
+        Order,
+        /// <summary>Spec 034: a button of the terminal turns the page or picks the pack count (the client's own view; nothing is sent).</summary>
+        Page
     }
 }

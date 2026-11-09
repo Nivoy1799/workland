@@ -34,10 +34,17 @@ namespace Worktown.Game.Net.Rules
         public readonly bool IsTooFar;
         /// <summary>Spec 029, cookware: its synced mode byte (a basket's <see cref="FryerRules.Mode"/>).</summary>
         public readonly byte Mode;
+        /// <summary>Spec 034: the stock line this slot shows and a delivery box unpacks into (Shop.StockCatalog), -1 for none.</summary>
+        public readonly int StockLine;
+        /// <summary>Spec 034: that line's synced count as this client sees it (Shop.StockCounts), -1 while unknown.</summary>
+        public readonly int StockCount;
 
         private AimTarget(AimKind kind, StationKind station, VesselKind vessel, int contentCount, string contentName, int option,
-            byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar, byte mode = 0)
+            byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar, byte mode = 0, int stockLine = -1,
+            int stockCount = -1)
         {
+            StockLine = stockLine < 0 ? -1 : stockLine;
+            StockCount = stockCount < 0 ? -1 : stockCount;
             Mode = mode;
             Kind = kind;
             Station = station;
@@ -63,7 +70,25 @@ namespace Worktown.Game.Net.Rules
 
         private AimTarget With(bool tooFar)
         {
-            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar, Mode);
+            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar, Mode,
+                StockLine, StockCount);
+        }
+
+        /// <summary>Spec 034: the same target showing stock line <paramref name="line"/> at <paramref name="count"/> (-1: unknown).</summary>
+        public AimTarget WithStock(int line, int count)
+        {
+            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, IsTooFar,
+                Mode, line, count);
+        }
+
+        /// <summary>
+        /// Spec 034: a slot of the ordering terminal (Shop.TerminalRules): <see cref="Option"/> the slot (a row or a button), <see cref="Name"/>
+        /// the words of its click ("order 1 pack of tomato ($336, 1 h)", "next page (2/4)"), null when it does nothing (a row past the list's
+        /// end), <see cref="Price"/> a row's order price.
+        /// </summary>
+        public static AimTarget TerminalSlot(int slot, string words, long price)
+        {
+            return new AimTarget(AimKind.Station, StationKind.Terminal, default, 0, null, slot, 0, words, price, PlaceSpots.None, false, false);
         }
 
         public static AimTarget Button(int option, byte stoveFlags) => Button(StationKind.Stove, option, stoveFlags);

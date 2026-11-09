@@ -129,6 +129,35 @@ namespace Worktown.Game.Economy
             return _economy.BalanceOf(EconomyRules.AccountId(player.OwnerId)) >= PriceRules.FillCost(cup, drink, percent, withCup);
         }
 
+        /// <summary>Spec 034: the economy's catalog (the supplier's offers).</summary>
+        public EconomyCatalog Catalog => _economy.Catalog;
+
+        /// <summary>
+        /// Spec 034, server: the game minute (one economy tick is an hour; the minutes run with the real seconds into it), for the
+        /// supplier's delivery times.
+        /// </summary>
+        public long GameMinute => _economy.Tick * 60L + (long)System.Math.Floor(_secondsIntoHour * 60f / EconomyRules.SecondsPerHour);
+
+        /// <summary>Spec 034, server: pays an order from the supplier, once (the bulk price).</summary>
+        public EconomyError TryBuySupply(NetworkObject player, SupplierOffer offer, int packs, out long cost)
+        {
+            EconomyError error = _economy.TryBuySupply(EconomyRules.AccountId(player.OwnerId), offer, packs, out cost);
+            PublishWallet(player);
+            return error;
+        }
+
+        /// <summary>Spec 034, server: whether the player could pay <paramref name="cost"/> now (no charge).</summary>
+        public bool CanAfford(NetworkObject player, long cost) =>
+            player != null && _economy.BalanceOf(EconomyRules.AccountId(player.OwnerId)) >= cost;
+
+        /// <summary>Spec 034, server, the refund backstop: <paramref name="amount"/> goes back to the player's account.</summary>
+        public EconomyError Refund(NetworkObject player, long amount)
+        {
+            EconomyError error = _economy.Refund(EconomyRules.AccountId(player.OwnerId), amount);
+            PublishWallet(player);
+            return error;
+        }
+
         /// <summary>Server: sell a plated dish to NPC demand or the wholesaler.</summary>
         public SaleResult TrySell(NetworkObject player, Item plated)
         {

@@ -26,6 +26,10 @@ namespace Worktown.Game.Net.Rules
         {
             if (target.IsTooFar) return InteractionAction.None; // spec 020: the server would refuse it (TooFar)
             if (held.IsPending) return InteractionAction.None; // spec 030: a pick-up in flight only refuses (see Held.IsPending)
+            // Spec 034: a delivery box goes into the slot that stocks its good; the terminal's rows order, its buttons page.
+            if (held.IsBox && target.StockLine >= 0)
+                return UnpackCheck(held, target) == CookOutcome.Ok ? InteractionAction.Unpack : InteractionAction.None;
+            if (target.Kind == AimKind.Station && target.Station == StationKind.Terminal) return TerminalAction(target);
             switch (target.Kind)
             {
                 case AimKind.Button: return InteractionAction.Press;
@@ -79,6 +83,53 @@ namespace Worktown.Game.Net.Rules
             return !held.IsHolding && hasFood ? InteractionAction.Take : InteractionAction.None;
         }
 
+        // ---- Spec 034: stock, delivery boxes and the ordering terminal ----
+
+        /// <summary>Spec 034: the grey reason of an empty slot, rack, cup stack or tap.</summary>
+        public const string OutOfStockText = "Out of stock: order more at the terminal";
+
+        /// <summary>Spec 034: a slot that shows its stock and has none left (as this client sees it).</summary>
+        public static bool IsOutOfStock(AimTarget target) => target.StockLine >= 0 && target.StockCount == 0;
+
+        /// <summary>
+        /// Spec 034: the carried box into the aimed slot, as the server would answer it: the box holds that slot's good (WrongBox), the
+        /// slot has room (StockFull, from its synced count against its capacity), else Ok.
+        /// </summary>
+        public static CookOutcome UnpackCheck(Held held, AimTarget target)
+        {
+            if (!held.IsBox || target.StockLine < 0) return CookOutcome.InvalidOption;
+            if (held.BoxLine != target.StockLine) return CookOutcome.WrongBox;
+            int room = Worktown.Game.Shop.StockCatalog.RoomFor(target.StockLine, target.StockCount);
+            return room == 0 ? CookOutcome.StockFull : CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 034: why the carried box does not go in here, or null.</summary>
+        public static string UnpackReason(Held held, AimTarget target)
+        {
+            switch (UnpackCheck(held, target))
+            {
+                case CookOutcome.WrongBox: return "This box is for the " + Worktown.Game.Shop.StockCatalog.NameOf(held.BoxLine);
+                case CookOutcome.StockFull: return "That slot is full";
+                default: return null;
+            }
+        }
+
+        /// <summary>"Click · unpack 6 lettuce" (", 4 fit" when the slot takes fewer than the box holds).</summary>
+        public static string UnpackPrompt(Held held, AimTarget target)
+        {
+            int room = Worktown.Game.Shop.StockCatalog.RoomFor(target.StockLine, target.StockCount);
+            string what = Worktown.Game.Shop.StockCatalog.Describe(held.BoxLine, held.BoxUnits);
+            return Click("unpack " + what + (room >= 0 && room < held.BoxUnits ? " (" + room + " fit)" : string.Empty));
+        }
+
+        /// <summary>Spec 034: a row with a good orders it; a page or pack button pages; anything else (a row past the end) nothing.</summary>
+        private static InteractionAction TerminalAction(AimTarget target)
+        {
+            if (string.IsNullOrEmpty(target.Name)) return InteractionAction.None;
+            if (Worktown.Game.Shop.TerminalRules.IsRow(target.Option)) return InteractionAction.Order;
+            return target.Option < Worktown.Game.Shop.TerminalRules.SlotCount && target.Option >= 0 ? InteractionAction.Page : InteractionAction.None;
+        }
+
         // ---- Spec 031: the assembly board ----
 
         /// <summary>Spec 031: the key word of a held action ("Hold · squeeze garlic-herb sauce").</summary>
@@ -118,7 +169,7 @@ namespace Worktown.Game.Net.Rules
                 return SqueezeCheck(target) == CookOutcome.Ok ? InteractionAction.Squeeze : InteractionAction.None;
             if (BuildRules.IsPackaging(tool))
                 return BuildRules.CanPackage(BuildRules.PackagingOf(tool), target.ContentCount, target.Mode) == CookOutcome.Ok
-                    ? InteractionAction.Pack : InteractionAction.None;
+                    && !IsOutOfStock(target) ? InteractionAction.Pack : InteractionAction.None; // spec 034: the rack's count
             return InteractionAction.None;
         }
 
@@ -142,8 +193,10 @@ namespace Worktown.Game.Net.Rules
             int tool = target.Option;
             CookOutcome why = BuildRules.IsDispenser(tool) ? SqueezeCheck(target)
                 : BuildRules.CanPackage(BuildRules.PackagingOf(tool), target.ContentCount, target.Mode);
+            if (why == CookOutcome.Ok && BuildRules.IsPackaging(tool) && IsOutOfStock(target)) why = CookOutcome.OutOfStock; // spec 034
             switch (why)
             {
+                case CookOutcome.OutOfStock: return OutOfStockText;
                 case CookOutcome.DispenserBusy: return "Someone is using that sauce";
                 case CookOutcome.VesselFull: return "The build is full";
                 case CookOutcome.StationEmpty: return "Start with a wrap or flatbread on the board";
@@ -175,8 +228,15 @@ namespace Worktown.Game.Net.Rules
         {
             int tool = target.Option;
             if (DrinkRules.IsTap(tool))
-                return DrinkRules.CanPour(held.IsCup, held.CupLidded, held.CupTap, held.CupLevel, tool, target.StoveFlags);
-            if (tool == DrinkRules.CupTool) return DrinkRules.CanTakeCup(held.IsHolding);
+            {
+                CookOutcome pour = DrinkRules.CanPour(held.IsCup, held.CupLidded, held.CupTap, held.CupLevel, tool, target.StoveFlags);
+                return pour == CookOutcome.Ok && IsOutOfStock(target) ? CookOutcome.OutOfStock : pour; // spec 034: the tap's kegs
+            }
+            if (tool == DrinkRules.CupTool)
+            {
+                CookOutcome cup = DrinkRules.CanTakeCup(held.IsHolding);
+                return cup == CookOutcome.Ok && IsOutOfStock(target) ? CookOutcome.OutOfStock : cup; // spec 034: the stack's cups
+            }
             if (tool == DrinkRules.LidTool) return DrinkRules.CanLid(held.IsCup, held.CupLidded, held.CupLevel);
             return CookOutcome.InvalidOption;
         }
@@ -193,6 +253,7 @@ namespace Worktown.Game.Net.Rules
                 case CookOutcome.CupFull: return "The cup is full";
                 case CookOutcome.NotFilled: return "Fill the cup first";
                 case CookOutcome.DispenserBusy: return "Someone is using that tap";
+                case CookOutcome.OutOfStock: return OutOfStockText; // spec 034
                 case CookOutcome.HandsFull: return null; // the cup stack with full hands: nothing to say
                 default: return null;
             }
@@ -261,7 +322,8 @@ namespace Worktown.Game.Net.Rules
         {
             switch (target.Station)
             {
-                case StationKind.Crate: return held.IsHolding ? InteractionAction.None : InteractionAction.Buy;
+                case StationKind.Crate: // spec 034: a fridge or shelf slot (described like a crate) gives nothing once it is empty
+                    return held.IsHolding || IsOutOfStock(target) ? InteractionAction.None : InteractionAction.Buy;
                 case StationKind.PlateShelf: return held.IsHolding ? InteractionAction.None : InteractionAction.Take;
                 case StationKind.Counter: return SellsAtCounter(held) ? InteractionAction.Sell : InteractionAction.None;
                 case StationKind.Assembly: // spec 031: a dispenser or the packaging rack; the board's body itself does nothing
@@ -322,6 +384,9 @@ namespace Worktown.Game.Net.Rules
                 return ActionFor(held, near) != InteractionAction.None || Reason(held, near) != null ? TooFarText : null;
             }
             if (ActionFor(held, target) != InteractionAction.None) return null;
+            if (held.IsBox && target.StockLine >= 0) return UnpackReason(held, target); // spec 034
+            if (target.Kind == AimKind.Station && target.Station == StationKind.Crate && IsOutOfStock(target))
+                return OutOfStockText; // spec 034: also with full hands (it says why the slot looks empty)
             switch (target.Kind)
             {
                 case AimKind.Spot: return held.IsHolding ? "No room here" : null;
@@ -375,10 +440,15 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Shake: return Click("shake the basket");
                 case InteractionAction.Squeeze: return HoldKey + " · squeeze " + (string.IsNullOrEmpty(target.Name) ? "sauce" : target.Name); // spec 031
                 case InteractionAction.Fold: return Click("fold " + TakeWhat(target));
-                case InteractionAction.Pack: return PackPrompt(BuildRules.PackagingOf(target.Option), target.Price);
+                case InteractionAction.Pack: // spec 034: from the rack's stock (paid with the order), so what is left, not a price
+                    if (target.StockCount > 0) return PackPrompt(BuildRules.PackagingOf(target.Option), -1) + " (" + target.StockCount + " left)";
+                    return PackPrompt(BuildRules.PackagingOf(target.Option), target.Price);
                 case InteractionAction.Pay: return Click(Worktown.Game.Shop.RegisterRules.ActionWords(target.Option, target.ContentCount)); // spec 032
                 case InteractionAction.Fill: return FillPrompt(target.Name); // spec 033
                 case InteractionAction.Lid: return Click("put a lid on it");
+                case InteractionAction.Unpack: return UnpackPrompt(held, target); // spec 034
+                case InteractionAction.Order:
+                case InteractionAction.Page: return Click(target.Name);
                 case InteractionAction.Flip: return Click("flip " + TakeWhat(target)); // spec 030
                 case InteractionAction.Cut: return "Drag down · cut   Right click · turn";
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));
@@ -389,6 +459,8 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.PickUp: return Click("pick up " + (string.IsNullOrEmpty(target.Name) ? "it" : target.Name));
                 case InteractionAction.Buy:
                     string what = string.IsNullOrEmpty(target.Name) ? "one" : target.Name;
+                    // Spec 034: a stocked slot says what is left (the take is free, the order paid for it); a crate still its price.
+                    if (target.StockLine >= 0 && target.StockCount > 0) return Click("take " + what + " (" + target.StockCount + " left)");
                     return Click("take " + what + (target.Price >= 0 ? " (" + EconomyRules.Money(target.Price) + ")" : string.Empty));
                 case InteractionAction.Take when target.Kind == AimKind.Station && target.Station == StationKind.DrinkDispenser:
                     return Click("take a cup"); // spec 033: the cup stack (its price comes with the first pour)

@@ -36,6 +36,8 @@ namespace Worktown.Game.Cooking
         [SerializeField] private NetworkObject[] _vesselPrefabs = new NetworkObject[0];
         [Tooltip("Spec 030: spatula prefab for replacing a lost spatula (the scene spatula is an instance of it).")]
         [SerializeField] private NetworkObject _spatulaPrefab;
+        [Tooltip("Spec 034: the shop's stock and supply. Without it every slot is endless and the grocer is paid per take (as before).")]
+        [SerializeField] private Worktown.Game.Shop.SupplyService _supply;
 
         private const float HomeCheckInterval = 0.5f;
         private const int MaxInitAttempts = 300;
@@ -133,6 +135,10 @@ namespace Worktown.Game.Cooking
             if (stationIndex < 0 || stationIndex >= _stations.Length || _stations[stationIndex] == null)
                 return CookOutcome.UnknownStation;
             Station station = _stations[stationIndex];
+            // Spec 034: a carried delivery box unpacks into the slot it is clicked on (reach to that slot's anchor).
+            if (_supply != null && Worktown.Game.Shop.StockCatalog.UnpackSlotOf(station.Kind, option) >= 0
+                && _supply.TryGetHeldBox(player, out NetworkObject box, out Worktown.Game.Shop.BoxContents contents))
+                return UnpackInto(player, station, option, box, contents);
             // Spec 028b: stock checks its option (the slot) and the reach to that slot's anchor itself (StockRules).
             if (station.Kind == StationKind.Crate || StockLayout.IsStock(station.Kind)) return TakeIngredient(player, station, option);
             // Spec 031: a dispenser's release ends the squeeze wherever the player is now (the press was in reach).
@@ -162,8 +168,27 @@ namespace Worktown.Game.Cooking
                 case StationKind.PlateShelf: return TakePlate(player);
                 // Spec 032: the register's slots (the change tray, take back, hand over, the card terminal); the guests' service decides.
                 case StationKind.Register: return _customers != null ? _customers.UseRegister(player, option) : CookOutcome.NoPayment;
+                // Spec 034: a row of the ordering terminal (an order option); paid once, the boxes come after the delay.
+                case StationKind.Terminal: return _supply != null ? _supply.Order(player, option) : CookOutcome.UnknownStation;
                 default: return CookOutcome.UnknownStation;
             }
+        }
+
+        /// <summary>
+        /// Spec 034: the delivery box in the hands goes into slot (option) <paramref name="option"/> of <paramref name="station"/>: the
+        /// player reaches the slot's anchor, the box holds that slot's good (else WrongBox), then the SupplyService fills the slot up to
+        /// its capacity; the rest stays in the box.
+        /// </summary>
+        private CookOutcome UnpackInto(PickupInteractor player, Station station, int option, NetworkObject box,
+            Worktown.Game.Shop.BoxContents contents)
+        {
+            int slot = Worktown.Game.Shop.StockCatalog.UnpackSlotOf(station.Kind, option);
+            if (!station.TryGetSlot(slot, out StockSlot target)) return CookOutcome.InvalidOption;
+            if (!StationRules.IsInReach(player.transform.position, target.Anchor)) return CookOutcome.TooFar;
+            int line = Worktown.Game.Shop.StockCatalog.LineOfSlot(station.Kind, slot);
+            if (line < 0) return CookOutcome.InvalidOption;
+            if (contents.Line != line) return CookOutcome.WrongBox;
+            return _supply.Unpack(player, box, line, station.DisplayName);
         }
 
         /// <summary>Spec 021: a burner knob (on/off) or button (fry/saute) on the stove's front.</summary>
@@ -354,8 +379,12 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        /// <summary>Spec 031b: the player's wallet for the board's charges (free without an economy).</summary>
-        private IAssemblyWallet WalletOf(PickupInteractor player) => _economy != null ? new PlayerWallet(_economy, player) : null;
+        /// <summary>
+        /// Spec 031b: the player's wallet for the board's charges (free without an economy). Spec 034: with the shop's stock, the board
+        /// draws its sauce portions and packaging from stock instead (the orders paid for them).
+        /// </summary>
+        private IAssemblyWallet WalletOf(PickupInteractor player) =>
+            _supply != null ? new Worktown.Game.Shop.StockWallet(_supply.Room) : _economy != null ? new PlayerWallet(_economy, player) : null;
 
         /// <summary>Spec 031b: <see cref="IAssemblyWallet"/> through the economy service: a portion or the full grocer price.</summary>
         private sealed class PlayerWallet : IAssemblyWallet
@@ -381,6 +410,16 @@ namespace Worktown.Game.Cooking
 
             public bool CanAfford(int owner, string grocerId, int percent) =>
                 _player != null && _player.OwnerId == owner && _economy.CanAffordPortion(_player.NetworkObject, grocerId, percent);
+
+            public CookOutcome Short => CookOutcome.NotEnoughMoney;
+
+            /// <summary>Spec 034, the refund backstop: the money goes back through the economy.</summary>
+            public void Refund(int owner, string grocerId, int percent, long cost)
+            {
+                if (_player == null || cost <= 0) return;
+                Worktown.Sim.Economy.EconomyError back = _economy.Refund(_player.NetworkObject, cost);
+                Debug.LogWarning("[Kitchen] refunded " + EconomyRules.Money(cost) + " to player " + _player.OwnerId + ": " + back);
+            }
         }
 
         private static readonly System.Func<PickupInteractor, bool> IsPresent = p => p != null && p.IsSpawned;
@@ -486,16 +525,61 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        /// <summary>Spec 033: empty hands at the cup stack take an empty cup (free: its price comes with its first pour).</summary>
+        /// <summary>
+        /// Spec 033: empty hands at the cup stack take an empty cup (free: its price comes with its first pour). Spec 034: with the shop's
+        /// stock the cup comes from the stack's count (OutOfStock when empty), in the StockTakeSequence order with its refund backstop.
+        /// </summary>
         private CookOutcome TakeCup(PickupInteractor player)
         {
-            CookOutcome can = DrinkSteps.CanTakeCup(_pickups.TryGetHeld(player, out _));
-            if (can != CookOutcome.Ok) return can;
-            if (_foodPrefab == null || !_pickups.CanHandTo(player, _foodPrefab)) return CookOutcome.HandsFull;
-            if (_kitchen.TryCreateCup(out Item cup) != CookOutcome.Ok) return CookOutcome.SimRefused;
-            if (!SpawnFoodInHands(player, cup)) return CookOutcome.SimRefused;
-            Debug.Log("[Kitchen] player " + player.OwnerId + " took an empty cup");
-            return CookOutcome.Ok;
+            var take = new CupTake(this, player);
+            CookOutcome outcome = StockTakeSequence.Run(take);
+            if (outcome == CookOutcome.Ok) Debug.Log("[Kitchen] player " + player.OwnerId + " took an empty cup");
+            return outcome;
+        }
+
+        /// <summary>Spec 034: the server's steps of taking a cup from the stack (<see cref="StockTakeSequence"/>).</summary>
+        private sealed class CupTake : IStockTakeSteps
+        {
+            private readonly KitchenService _service;
+            private readonly PickupInteractor _player;
+            private Item _cup;
+            private bool _took;
+
+            public CupTake(KitchenService service, PickupInteractor player)
+            {
+                _service = service;
+                _player = player;
+            }
+
+            private static int CupLine => Worktown.Game.Shop.StockCatalog.IndexOf(Drinks.CupId);
+
+            public CookOutcome Check()
+            {
+                CookOutcome can = _service.DrinkSteps.CanTakeCup(_service._pickups.TryGetHeld(_player, out _));
+                if (can != CookOutcome.Ok) return can;
+                return _service._foodPrefab != null && _service._pickups.CanHandTo(_player, _service._foodPrefab) ? CookOutcome.Ok : CookOutcome.HandsFull;
+            }
+
+            public CookOutcome Create() => _service._kitchen.TryCreateCup(out _cup) == CookOutcome.Ok ? CookOutcome.Ok : CookOutcome.SimRefused;
+
+            public bool CanHandOver() => _service._foodPrefab != null && _service._pickups.CanHandTo(_player, _service._foodPrefab);
+
+            public CookOutcome Pay()
+            {
+                if (_service._supply == null) return CookOutcome.Ok;
+                CookOutcome took = _service._supply.Room.Take(CupLine);
+                _took = took == CookOutcome.Ok;
+                return took;
+            }
+
+            public bool HandOver() => _service.SpawnFoodInHands(_player, _cup);
+
+            public void Refund()
+            {
+                if (!_took) return;
+                _service._supply.Room.Return(CupLine, 1);
+                Debug.LogWarning("[Kitchen] a cup went back on the stack (the hand-over failed)");
+            }
         }
 
         /// <summary>Spec 033: the lid stack puts a lid on the filled cup in the hands (free; a lid only on a filled cup, once).</summary>
@@ -509,8 +593,9 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        /// <summary>Spec 033: the player's wallet for a pour (free without an economy).</summary>
-        private IDrinkWallet DrinkWalletOf(PickupInteractor player) => _economy != null ? new PlayerDrinkWallet(_economy, player) : null;
+        /// <summary>Spec 033: the player's wallet for a pour (free without an economy). Spec 034: from the tap's keg with the shop's stock.</summary>
+        private IDrinkWallet DrinkWalletOf(PickupInteractor player) =>
+            _supply != null ? new Worktown.Game.Shop.StockWallet(_supply.Room) : _economy != null ? new PlayerDrinkWallet(_economy, player) : null;
 
         /// <summary>Spec 033: <see cref="IDrinkWallet"/> through the economy service: one debit per pour.</summary>
         private sealed class PlayerDrinkWallet : IDrinkWallet
@@ -533,6 +618,16 @@ namespace Worktown.Game.Cooking
 
             public bool CanAfford(int owner, string drinkId, int percent, bool withCup) =>
                 _player != null && _player.OwnerId == owner && _economy.CanAffordFill(_player.NetworkObject, drinkId, percent, withCup);
+
+            public CookOutcome Short => CookOutcome.NotEnoughMoney;
+
+            /// <summary>Spec 034, the refund backstop: the money goes back through the economy.</summary>
+            public void Refund(int owner, string drinkId, int percent, bool withCup, long cost)
+            {
+                if (_player == null || cost <= 0) return;
+                Worktown.Sim.Economy.EconomyError back = _economy.Refund(_player.NetworkObject, cost);
+                Debug.LogWarning("[Kitchen] refunded " + EconomyRules.Money(cost) + " to player " + _player.OwnerId + ": " + back);
+            }
         }
 
         /// <summary>Spec 033: the dispenser's byte (who pours, the spill).</summary>
@@ -982,10 +1077,10 @@ namespace Worktown.Game.Cooking
             var take = new StockTake(this, player, stock, option);
             CookOutcome outcome = StockTakeSequence.Run(take); // spec 029b: never paid without the item
             if (outcome == CookOutcome.Ok)
-                Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(take.Item) + " from the "
-                    + stock.DisplayName + " (option " + option + ") for " + EconomyRules.Money(take.Cost));
-            else if (take.Paid)
-                Debug.LogError("[Kitchen] paid but could not hand " + KitchenState.NameOf(take.Item) + " to player " + player.OwnerId);
+                Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(take.Item) + " from the " + stock.DisplayName
+                    + " (option " + option + ")" + (take.FromStock ? ", " + take.StockLeft + " left" : " for " + EconomyRules.Money(take.Cost)));
+            else if (take.Refunded)
+                Debug.LogError("[Kitchen] could not hand " + KitchenState.NameOf(take.Item) + " to player " + player.OwnerId + ": put back or refunded");
             return outcome;
         }
 
@@ -1009,6 +1104,11 @@ namespace Worktown.Game.Cooking
             public Item Item { get; private set; }
             public long Cost { get; private set; }
             public bool Paid { get; private set; }
+            /// <summary>Spec 034: the unit came from the slot's stock (no money), and what is left there.</summary>
+            public bool FromStock { get; private set; }
+            public int StockLeft { get; private set; }
+            public bool Refunded { get; private set; }
+            private int _line = -1;
 
             public CookOutcome Check()
             {
@@ -1029,6 +1129,15 @@ namespace Worktown.Game.Cooking
 
             public CookOutcome Pay()
             {
+                // Spec 034: the shop's stock: the unit leaves the slot (the order paid for it); an empty slot is OutOfStock.
+                _line = _service._supply != null ? Worktown.Game.Shop.StockCatalog.LineOfSlot(_stock.Kind, _option) : -1;
+                if (_line >= 0)
+                {
+                    CookOutcome took = _service._supply.Room.Take(_line);
+                    FromStock = took == CookOutcome.Ok;
+                    if (FromStock) StockLeft = _service._supply.Room.LineOf(_line).Count;
+                    return took;
+                }
                 if (_service._economy == null) return CookOutcome.Ok;
                 CookOutcome paid = StockRules.PaidOutcome(_service._economy.TryBuy(_player.NetworkObject, _baseId, out long cost));
                 Cost = cost;
@@ -1037,6 +1146,14 @@ namespace Worktown.Game.Cooking
             }
 
             public bool HandOver() => _service.SpawnFoodInHands(_player, Item);
+
+            /// <summary>Spec 034, the refund backstop: the unit goes back to the slot, or the money back through the economy.</summary>
+            public void Refund()
+            {
+                if (FromStock) _service._supply.Room.Return(_line, 1);
+                else if (Paid && Cost > 0) _service._economy.Refund(_player.NetworkObject, Cost);
+                Refunded = FromStock || Paid;
+            }
         }
 
         /// <summary>Spawns a food object for a sim item directly in the player's hands.</summary>
@@ -1156,14 +1273,22 @@ namespace Worktown.Game.Cooking
             // 032 review: never for a guest already in the register's line (it pays there, once; GuestFallback).
             if (served)
             {
+                bool billedBefore = false; // 033 review: a line already on the tab makes this dish a duplicate, not paid there
+                try { billedBefore = _customers.HasBill(pick); }
+                catch (System.Exception e) { Debug.LogException(e); }
                 bool handed = false;
                 try { handed = _customers.OnHandedOver(pick, player, soldPayout); }
                 catch (System.Exception e) { Debug.LogException(e); }
                 bool waiting = true;
                 try { waiting = _customers.HasBill(pick); } // spec 033: in the register's line, or the line is on its tab
                 catch (System.Exception e) { Debug.LogException(e); }
-                if (Worktown.Game.Shop.RegisterFlow.FallbackPays(handed, waiting))
-                    _economy.TryPayGuest(player.OwnerId, player.NetworkObject, EconomyRules.ApplyPermille(soldPayout, pick.BillPermille), out _);
+                if (Worktown.Game.Npc.CustomerService.FallbackPaysFor(handed, billedBefore, waiting))
+                {
+                    long fallback = EconomyRules.ApplyPermille(soldPayout, pick.BillPermille);
+                    try { fallback = _customers.FallbackBill(pick, soldPayout); } // 033 review: the whole order when it was complete
+                    catch (System.Exception e) { Debug.LogException(e); }
+                    _economy.TryPayGuest(player.OwnerId, player.NetworkObject, fallback, out _);
+                }
             }
             return CookOutcome.Ok;
         }

@@ -57,6 +57,26 @@ namespace Worktown.Game.Tests
                 Assert.IsTrue(spawned.Exists(s => s.StartsWith("_knifePrefab")), "the knife");
                 Assert.IsTrue(spawned.Exists(s => s.StartsWith("_spatulaPrefab")), "the spatula");
                 Assert.IsTrue(spawned.Exists(s => s.StartsWith("_vesselPrefabs")), "the cookware");
+
+                // Spec 034: the supply service spawns the delivery boxes; every prefab it holds is registered too.
+                Worktown.Game.Shop.SupplyService supply = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                    if (supply == null) supply = root.GetComponentInChildren<Worktown.Game.Shop.SupplyService>(true);
+                Assert.IsNotNull(supply, "no SupplyService in the scene");
+                var supplied = new List<string>();
+                SerializedProperty q = new SerializedObject(supply).GetIterator();
+                while (q.Next(true))
+                {
+                    if (q.propertyType != SerializedPropertyType.ObjectReference || q.objectReferenceValue == null) continue;
+                    string path = AssetDatabase.GetAssetPath(q.objectReferenceValue);
+                    if (!path.EndsWith(".prefab")) continue;
+                    supplied.Add(q.propertyPath + " " + path);
+                    Assert.IsTrue(registered.Contains(path), q.propertyPath + " (" + path + ") is not in " + DefaultPrefabsPath);
+                }
+                TestContext.WriteLine(string.Join("\n", supplied));
+                Assert.IsTrue(supplied.Exists(s => s.StartsWith("_boxPrefab")), "the delivery box");
+                Assert.IsNotNull(kitchen.GetType().GetField("_supply", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .GetValue(kitchen), "the kitchen draws from the supply's stock");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

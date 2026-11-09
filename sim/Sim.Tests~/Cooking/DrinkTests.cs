@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Worktown.Sim.Core;
@@ -223,7 +224,36 @@ namespace Worktown.Sim.Tests.Cooking
                     Assert.True(counted <= paidOnce - cupPrice, drink.Id + " " + ml + " ml: counted " + counted + ", paid " + paidOnce);
                     Assert.True(counted >= 0);
                 }
+                // 033 review: a cup topped up over several pours (each charged on its own, the cup once) never counts more than the pours cost.
+                foreach (float[] pours in new[] { new[] { 100f, 100f, 160f }, new[] { 6.7f, 6.7f }, new[] { 200f, 180f }, new[] { 339f, 1f, 1f }, new[] { 300f, 200f } })
+                {
+                    float total = Math.Min(Drinks.MaxMl, pours.Sum());
+                    Item cup = T.Ok(Lid(Fill(drink.Id, total)));
+                    long counted = PriceRules.ItemCost(catalog, cup)!.Value;
+                    long paid = 0;
+                    for (int i = 0; i < pours.Length; i++)
+                        paid += PriceRules.FillCost(cupPrice, price, PriceRules.FillPercent(pours[i]), i == 0);
+                    Assert.True(counted <= paid - cupPrice, drink.Id + " " + string.Join("+", pours) + " ml: counted " + counted + ", paid " + paid);
+                    // Spec 034: drawn from a keg, the same pours drew at least the stock cost's share of a bought cup.
+                    long stock = PriceRules.StockCost(catalog, cup)!.Value;
+                    long drawnPercent = pours.Sum(ml => (long)PriceRules.FillPercent(ml));
+                    Assert.True(stock * 100 <= Supplier.BulkUnitPrice(catalog, price) * drawnPercent, drink.Id + " stock " + stock);
+                }
             }
+        }
+
+        [Fact]
+        public void APlatedOldDish_HasExactlyItsOldTags_NoCup()
+        {
+            // 033 review: the plate op adds only "plated" (the cup tag is only forbidden, never added).
+            Item fries = T.Ok(Factory.Apply("plate", new[] { Base("potato") }, T.NoParams));
+            Assert.Equal(new[] { "plated" }, fries.Tags.Where(t => t == "plated" || t == Drinks.CupTag).ToArray());
+            Assert.DoesNotContain(Drinks.CupTag, fries.Tags);
+            Item wrap = T.Ok(Factory.Apply("plate", new[] { Base("wrap"), Base("lettuce") }, T.NoParams));
+            Assert.DoesNotContain(Drinks.CupTag, wrap.Tags);
+            Assert.Contains("plated", wrap.Tags);
+            Assert.Equal(Base("potato").Tags.Concat(new[] { "plated" }).OrderBy(t => t, StringComparer.Ordinal),
+                fries.Tags.OrderBy(t => t, StringComparer.Ordinal));
         }
 
         [Fact]

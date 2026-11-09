@@ -56,6 +56,7 @@ namespace Worktown.Game.Editor
         private const string CustomerPrefabPath = Root + "/Prefabs/Customer.prefab";
         private const string KnifePrefabPath = Root + "/Prefabs/Knife.prefab";
         private const string SpatulaPrefabPath = Root + "/Prefabs/Spatula.prefab"; // spec 030
+        private const string DeliveryBoxPrefabPath = Root + "/Prefabs/DeliveryBox.prefab"; // spec 034
         private const string StoveButtonMaterialPath = Root + "/Settings/StoveButton.mat";
         // Spec 019: the knife's pickup collider (long side along Z, like its model).
         private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.345f); // spec 026: the 0.345 m knife
@@ -191,6 +192,7 @@ namespace Worktown.Game.Editor
             NetworkObject customerPrefab = CreateCustomerPrefab(builtCatalog);
             NetworkObject knifePrefab = CreateKnifePrefab(builtCatalog); // spec 019
             NetworkObject spatulaPrefab = CreateSpatulaPrefab(builtCatalog); // spec 030
+            NetworkObject boxPrefab = CreateDeliveryBoxPrefab(builtCatalog); // spec 034
             List<NetworkObject> vesselPrefabs = CreateVesselPrefabs(builtCatalog); // spec 021
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
@@ -208,7 +210,7 @@ namespace Worktown.Game.Editor
             Transform[] spawns = CreateSpawnPoints();
             CreatePickups(pickupPrefab);
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
-            CreateKitchen(networkManager, foodPrefab, knifePrefab, spatulaPrefab, vesselPrefabs, catalog);
+            CreateKitchen(networkManager, foodPrefab, knifePrefab, spatulaPrefab, vesselPrefabs, catalog, boxPrefab);
             CreateCustomers(networkManager, customerPrefab);
             CreateBootstrap(networkManager);
 
@@ -1640,7 +1642,7 @@ namespace Worktown.Game.Editor
         /// feed and the kitchen service.
         /// </summary>
         private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab, NetworkObject spatulaPrefab,
-            List<NetworkObject> vesselPrefabs, ArtCatalog catalog)
+            List<NetworkObject> vesselPrefabs, ArtCatalog catalog, NetworkObject boxPrefab)
         {
             var parent = new GameObject("Kitchen");
             var stations = new List<Station>();
@@ -1681,6 +1683,8 @@ namespace Worktown.Game.Editor
             stations.Add(CreateRegister(catalog, parent.transform, stations.Count));
             // Spec 033: the drink dispenser on the front counter, left of the serving counter (appended last, so the earlier indices stay).
             stations.Add(CreateDrinkDispenser(catalog, parent.transform, stations.Count));
+            // Spec 034: the ordering terminal on the back wall above the landing worktop (appended last, so the earlier indices stay).
+            stations.Add(CreateTerminal(catalog, parent.transform, stations.Count));
 
             // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, the pass at the
             // right end (spec 029b: it stood between the stoves; created in the same order, so the surface indices stay),
@@ -1705,6 +1709,7 @@ namespace Worktown.Game.Editor
             surfaces.Add(griddleDeck);
             CreateFrontCounter(parent.transform, catalog);
             CreateShopWalls(parent.transform);
+            Transform[] deliverySpots = CreateBackDoor(parent.transform); // spec 034
             SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
             foreach (Station stove in new[] { stoveA, stoveB })
             {
@@ -1765,6 +1770,206 @@ namespace Worktown.Game.Editor
             SetField(economy, "_networkManager", networkManager);
             SetField(economy, "_board", board);
             SetField(kitchen, "_economy", economy);
+
+            // Spec 034: the shop's stock counts (global, like the feed: one byte per stock line) and the supply service (orders,
+            // deliveries at the back door, unpacking).
+            var countsObject = new GameObject("StockCounts");
+            NetworkObject countsNob = countsObject.AddComponent<NetworkObject>();
+            SetField(countsNob, "_isGlobal", true);
+            var counts = countsObject.AddComponent<StockCounts>();
+            var supply = networkManager.gameObject.AddComponent<SupplyService>();
+            SetField(supply, "_networkManager", networkManager);
+            SetField(supply, "_pickups", networkManager.GetComponent<PickupService>());
+            SetField(supply, "_economy", economy);
+            SetField(supply, "_feed", feed);
+            SetField(supply, "_counts", counts);
+            SetField(supply, "_boxPrefab", boxPrefab);
+            SetField(supply, "_deliverySpots", deliverySpots);
+            SetField(kitchen, "_supply", supply);
+        }
+
+        // ---- Spec 034: the ordering terminal, the back door and the delivery box ----
+
+        /// <summary>Spec 034: the terminal's name (its sign and the server log) and its parts' object names.</summary>
+        public const string TerminalName = "Orders";
+        public const string TerminalSlotName = "Terminal slot";
+        public const string DeliverySpotName = "Delivery spot";
+        public const string BackDoorName = "Back door";
+        /// <summary>Spec 034: the terminal hangs on the back wall over the landing worktop (by the staff door and the stock).</summary>
+        public const float TerminalX = KitchenMinX + LandingWidth * 0.5f;
+        /// <summary>Spec 034: the delivery spots on the landing worktop (x from the staff door end), their z on its front half.</summary>
+        public static readonly float[] DeliverySpotX = { KitchenMinX + 0.24f, KitchenMinX + 0.65f, KitchenMinX + 1.06f };
+        public const float DeliverySpotZ = KitchenZ - 0.38f; // at the front: the screen above reads over the boxes
+
+        /// <summary>
+        /// Spec 034: the ordering terminal: a wall screen (TerminalArtRules) on the back wall's inner face, its glass towards the aisle.
+        /// Built like the register: the root at the middle of its "Body" (a box collider of the screen's size, no renderer), the
+        /// catalog's graybox (Art_StationTerminal), the sign under it. The scene adds what changes: the header, a row per
+        /// TerminalRules.Rows (a Charcoal bar and its text, the slot's anchor on the glass) and the three buttons, as the station's slots
+        /// (slot option = TerminalRules slot), and the client's TerminalView. Static; no NetworkObject (it syncs nothing).
+        /// </summary>
+        private static Station CreateTerminal(ArtCatalog catalog, Transform parent, int index)
+        {
+            float wallFace = KitchenZ + StationWidth * 0.5f + WallGap;
+            var root = new GameObject(TerminalName);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(new Vector3(TerminalX, TerminalArtRules.CentreHeight, wallFace - TerminalArtRules.Depth * 0.5f),
+                Quaternion.identity);
+            var station = root.AddComponent<Station>();
+            SetField(station, "_index", index);
+            SetField(station, "_kind", (int)StationKind.Terminal);
+            SetField(station, "_displayName", TerminalName);
+            SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(root.transform, false);
+            body.transform.localScale = new Vector3(TerminalArtRules.Width, TerminalArtRules.Height, TerminalArtRules.Depth);
+            body.AddComponent<BoxCollider>(); // size one: the body's scale is the screen (aim: the nearest slot to the hit)
+            float h = TerminalArtRules.Height;
+            if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(StationKind.Terminal), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = ArtFrontRotation; // the model's front (+Z) towards the aisle
+            }
+            else Debug.LogError("[Graybox] no terminal model in the catalog");
+            TextMesh sign = CreateLabel(root.transform, new Vector3(0f, -h * 0.5f - 0.03f, TerminalArtRules.FrontZ - StationSign.Standoff), 60, 0.05f);
+            sign.anchor = TextAnchor.UpperCenter;
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = "Orders · deliveries at the back door";
+
+            Material rowMaterial = CreateMaterial(Root + "/Settings/TerminalRow.mat", Palette.Charcoal);
+            Material buttonMaterial = CreateMaterial(Root + "/Settings/TerminalButton.mat", Palette.SoftBlue);
+            TextMesh header = CreateLabel(root.transform, TerminalArtRules.HeaderCentre, 48, 0.0085f);
+            header.name = "Header";
+            header.anchor = TextAnchor.MiddleCenter;
+            header.text = "ORDER STOCK";
+            var slots = new List<StockSlot>(TerminalRules.SlotCount);
+            var rows = new TextMesh[TerminalRules.Rows];
+            var backs = new Renderer[TerminalRules.Rows];
+            for (int s = 0; s < TerminalRules.SlotCount; s++)
+            {
+                var slotObject = new GameObject(TerminalSlotName + " " + s);
+                slotObject.transform.SetParent(root.transform, false);
+                slotObject.transform.localPosition = TerminalArtRules.SlotCentre(s);
+                var slot = slotObject.AddComponent<StockSlot>();
+                SetField(slot, "_station", station);
+                SetField(slot, "_option", s);
+                SetField(slot, "_ingredientIndex", -1);
+                slots.Add(slot);
+                GameObject back = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                back.name = "Back";
+                UnityEngine.Object.DestroyImmediate(back.GetComponent<Collider>());
+                back.transform.SetParent(slotObject.transform, false);
+                back.transform.localScale = TerminalArtRules.SlotSize(s);
+                back.GetComponent<MeshRenderer>().sharedMaterial = TerminalRules.IsRow(s) ? rowMaterial : buttonMaterial;
+                // The text in front of the bar, outside the slot (the highlight outlines the bar, not the letters).
+                TextMesh text = CreateLabel(root.transform, TerminalArtRules.SlotCentre(s) + new Vector3(TerminalRules.IsRow(s) ? -TerminalArtRules.RowWidth * 0.47f : 0f,
+                    0f, -0.004f), 44, 0.0095f);
+                text.name = (TerminalRules.IsRow(s) ? "Row " : "Button ") + s;
+                text.anchor = TerminalRules.IsRow(s) ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
+                text.alignment = TextAlignment.Left;
+                text.text = TerminalRules.IsRow(s) ? string.Empty : TerminalArtRules.ButtonText(s);
+                if (TerminalRules.IsRow(s))
+                {
+                    rows[s] = text;
+                    backs[s] = back.GetComponent<MeshRenderer>();
+                }
+                else text.color = Palette.Ink;
+            }
+            SetField(station, "_slots", slots);
+            var view = root.AddComponent<TerminalView>();
+            SetField(view, "_header", header);
+            SetField(view, "_rows", rows);
+            SetField(view, "_rowBacks", backs);
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t != root.transform && t.GetComponent<TextMesh>() == null && t.GetComponent<StockSlot>() == null && t.parent.GetComponent<StockSlot>() == null)
+                    t.gameObject.isStatic = true; // the row bars change colour; the texts change
+            return station;
+        }
+
+        /// <summary>
+        /// Spec 034: the back door: a WoodDark frame in the staff gap at the aisle's west end (the cooks' way in, where the supplier
+        /// knocks), a sign over it, and the delivery spots on the landing worktop right inside it, where a delivery's boxes are set
+        /// down (one per pack, as spots are free). Returns the spots in order.
+        /// </summary>
+        private static Transform[] CreateBackDoor(Transform parent)
+        {
+            Material frame = CreateMaterial(Root + "/Settings/BackDoor.mat", Palette.WoodDark);
+            var door = new GameObject(BackDoorName);
+            door.transform.SetParent(parent, false);
+            float x = KitchenMinX - WallGap - WallThickness * 0.5f;
+            float near = FrontCounterZ + CounterDepth * 0.5f, far = KitchenZ - StationWidth * 0.5f;
+            const float postWidth = 0.09f, doorHeight = 2.1f;
+            foreach (float z in new[] { near + postWidth * 0.5f, far - postWidth * 0.5f })
+                FramePart(door.transform, "Post", new Vector3(x, doorHeight * 0.5f, z), new Vector3(WallThickness + 0.04f, doorHeight, postWidth), frame);
+            FramePart(door.transform, "Lintel", new Vector3(x, doorHeight + postWidth * 0.5f, (near + far) * 0.5f),
+                new Vector3(WallThickness + 0.04f, postWidth, far - near), frame);
+            TextMesh sign = CreateLabel(door.transform, new Vector3(x + WallThickness * 0.5f + 0.03f, doorHeight + postWidth + 0.04f, (near + far) * 0.5f), 60, 0.05f);
+            sign.transform.localRotation = Quaternion.Euler(0f, -90f, 0f); // read from inside the kitchen (looking west)
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = "Back door · deliveries";
+            SetStaticRecursive(door);
+
+            var spots = new Transform[DeliverySpotX.Length];
+            float top = ArtSizeTable.WorktopHeight;
+            for (int i = 0; i < spots.Length; i++)
+            {
+                var spot = new GameObject(DeliverySpotName + " " + i);
+                spot.transform.SetParent(parent, false);
+                spot.transform.SetPositionAndRotation(new Vector3(DeliverySpotX[i], top, DeliverySpotZ), Quaternion.Euler(0f, 8f * (i - 1), 0f));
+                spots[i] = spot.transform;
+            }
+            return spots;
+        }
+
+        private static void FramePart(Transform parent, string name, Vector3 position, Vector3 size, Material material)
+        {
+            GameObject part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            part.name = name;
+            UnityEngine.Object.DestroyImmediate(part.GetComponent<Collider>());
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = position;
+            part.transform.localScale = size;
+            part.GetComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        /// <summary>
+        /// Spec 034: the delivery box: a pickup (carried like the knife or food) with a SupplyBox (its synced contents, its label, the
+        /// unpack look) and the Kenney cardboard box at 0.40 m. The model sits under "Visual/Model" (the pickup draws the visual child,
+        /// the unpack look turns the model). Registered in DefaultPrefabObjects (the supply service spawns it).
+        /// </summary>
+        private static NetworkObject CreateDeliveryBoxPrefab(ArtCatalog catalog)
+        {
+            var root = new GameObject("DeliveryBox");
+            float size = ArtSizeTable.DeliveryBoxSize;
+            GameObject wrapper = null;
+            if (catalog == null || !catalog.TryGet(ArtKey.PropDeliveryBox, out wrapper)) Debug.LogError("[Graybox] no delivery box model in the catalog");
+            float height = wrapper != null ? ArtCatalogBuilder.HeightOf(wrapper) : size * 0.6f;
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = new Vector3(size, height, size);
+
+            var visual = new GameObject("Visual");
+            visual.transform.SetParent(root.transform, false);
+            visual.transform.localPosition = new Vector3(0f, -height * 0.5f, 0f);
+            var model = new GameObject("Model");
+            model.transform.SetParent(visual.transform, false);
+            if (wrapper != null) PrefabUtility.InstantiatePrefab(wrapper, model.transform);
+
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, height * 0.5f + 0.06f, 0f), 40, 0.035f);
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            AddServerAuthoritativeTransform(root);
+            root.AddComponent<Pickup>();
+            var box = root.AddComponent<SupplyBox>();
+            SetField(box, "_label", label);
+            SetField(box, "_model", model.transform);
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, DeliveryBoxPrefabPath);
+            UnityEngine.Object.DestroyImmediate(root);
+            return saved.GetComponent<NetworkObject>();
         }
 
         /// <summary>
@@ -1948,6 +2153,10 @@ namespace Worktown.Game.Editor
                 tag.transform.localScale = Vector3.one * (StationSign.BaseScale * SlotTagScale);
                 tag.text = name + price;
                 tag.gameObject.AddComponent<StationSign>();
+                // Spec 034: the slot shows its stock: the samples for the count, the tag "tomato 4/12", the empty look.
+                var stockLook = slotObject.AddComponent<StockSlotLook>();
+                SetField(stockLook, "_slot", slot);
+                SetField(stockLook, "_tag", tag);
             }
             SetField(station, "_slots", slots);
         }

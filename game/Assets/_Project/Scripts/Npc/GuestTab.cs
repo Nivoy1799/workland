@@ -30,10 +30,14 @@ namespace Worktown.Game.Npc
         }
 
         private readonly Dictionary<int, Entry> _entries = new Dictionary<int, Entry>();
+        // 033 review: the combined bill of an order whose last line came, until the register's line took it (Close). Should the
+        // hand-over fail in between, the counter's fallback pays this whole bill (TakeCompletedBill), never only the last line.
+        private readonly Dictionary<int, long> _completed = new Dictionary<int, long>();
 
         /// <summary>Guest <paramref name="guest"/> ordered drink <paramref name="drink"/> with its dish (null: no drink line, no tab).</summary>
         public void Open(int guest, string drink)
         {
+            _completed.Remove(guest);
             if (drink == null)
             {
                 _entries.Remove(guest);
@@ -73,6 +77,13 @@ namespace Worktown.Game.Npc
             whole = line;
             wholeBill = Math.Max(0L, lineBill);
             if (!_entries.TryGetValue(line.CustomerId, out Entry e)) return true;
+            // 033 review: a line already served (or a drink nobody ordered) is refused: false, nothing changes.
+            if (IsDuplicate(e, line.IsDrink))
+            {
+                whole = default;
+                wholeBill = 0;
+                return false;
+            }
             if (line.IsDrink) e.DrinkServed = true;
             else
             {
@@ -92,6 +103,26 @@ namespace Worktown.Game.Npc
             var fit = new OrderFit(e.Worst, e.Misses, e.QualitySum / e.Lines, stars);
             whole = new GuestPick(line.CustomerId, e.Dish, fit, OrderRules.ExactPermille, line.WaitedTenths, line.PatienceTenths);
             wholeBill = e.Bill;
+            _completed[line.CustomerId] = e.Bill;
+            return true;
+        }
+
+        private static bool IsDuplicate(Entry e, bool drink) => drink ? e.Drink == null || e.DrinkServed : e.FoodServed;
+
+        /// <summary>Whether <see cref="Serve"/> would refuse <paramref name="line"/> as a line already served (or a drink not ordered).</summary>
+        public bool IsDuplicate(GuestPick line) => _entries.TryGetValue(line.CustomerId, out Entry e) && IsDuplicate(e, line.IsDrink);
+
+        /// <summary>033 review: the completed order of <paramref name="guest"/> is in the register's line now; its bill is no longer kept here.</summary>
+        public void Close(int guest) => _completed.Remove(guest);
+
+        /// <summary>
+        /// 033 review: the counter's fallback for an order whose last line came but whose guest never reached the register's line: the
+        /// combined bill of every line (once: forgotten after this). False when there is none.
+        /// </summary>
+        public bool TakeCompletedBill(int guest, out long bill)
+        {
+            if (!_completed.TryGetValue(guest, out bill)) return false;
+            _completed.Remove(guest);
             return true;
         }
 
@@ -115,9 +146,17 @@ namespace Worktown.Game.Npc
             return true;
         }
 
-        public void Remove(int guest) => _entries.Remove(guest);
+        public void Remove(int guest)
+        {
+            _entries.Remove(guest);
+            _completed.Remove(guest);
+        }
 
-        public void Clear() => _entries.Clear();
+        public void Clear()
+        {
+            _entries.Clear();
+            _completed.Clear();
+        }
 
         private static int Rank(OrderMatch m) => m == OrderMatch.Exact ? 0 : m == OrderMatch.Close ? 1 : 2;
 

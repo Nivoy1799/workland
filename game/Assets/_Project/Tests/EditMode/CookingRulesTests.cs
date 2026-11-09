@@ -50,7 +50,8 @@ namespace Worktown.Game.Tests
             CollectionAssert.AreEquivalent(new[] { StationKind.Crate, StationKind.Counter, StationKind.Stove, StationKind.PlateShelf,
                     StationKind.Fridge, StationKind.Shelf, StationKind.Fryer, StationKind.Griddle, StationKind.Assembly, // spec 029, 030, 031
                     StationKind.Register, // spec 032
-                    StationKind.DrinkDispenser }, // spec 033
+                    StationKind.DrinkDispenser, // spec 033
+                    StationKind.Terminal }, // spec 034
                 System.Enum.GetValues(typeof(StationKind)));
         }
 

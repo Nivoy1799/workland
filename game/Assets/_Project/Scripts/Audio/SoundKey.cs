@@ -39,6 +39,9 @@ namespace Worktown.Game.Audio
         /// <summary>Spec 033: a tap pouring into a cup (loop while held), the lid clicking on, a spill splashing on the counter.</summary>
         Pour,
         LidClick,
-        Splash
+        Splash,
+        /// <summary>Spec 034: a delivery at the back door (two knocks on the door, then the boxes set down) and a box unpacked into a slot.</summary>
+        Delivery,
+        Unpack
     }
 }
