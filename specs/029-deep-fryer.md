@@ -1,7 +1,7 @@
 ---
 id: 029
 title: Deep fryer (basket, oil, timer by ring and sound, shake, drain, burn)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

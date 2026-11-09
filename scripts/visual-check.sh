@@ -41,7 +41,7 @@ if [ ! -f "$GAME" ]; then echo "no client build at $GAME (run WorktownBuild.Buil
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 OUT_WIN="$(cygpath -w "$OUT")"
-WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew)
+WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew -force-d3d11)  # D3D11: D3D12 crashes on exit after tours (2026-11-09, see human-inbox)
 
 timeout_for() {
   case "$1" in

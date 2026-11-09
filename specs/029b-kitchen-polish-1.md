@@ -1,7 +1,7 @@
 ---
 id: 029b
 title: Kitchen polish 1 (stock take fixes, readable food labels, basket and fryer touches)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

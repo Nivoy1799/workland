@@ -1,7 +1,7 @@
 ---
 id: 031b
 title: Kitchen polish 2 (calm first-person view, fair prices for portions, readable held food, cue timing)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

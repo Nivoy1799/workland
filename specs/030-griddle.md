@@ -1,7 +1,7 @@
 ---
 id: 030
 title: Griddle with flipping (two-sided doneness, spatula, toasting flatbread)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

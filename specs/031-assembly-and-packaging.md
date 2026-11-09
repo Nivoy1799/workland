@@ -1,7 +1,7 @@
 ---
 id: 031
 title: Assembly station and packaging (build wraps in order, wrap paper, boxes, bags)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

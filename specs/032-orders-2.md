@@ -1,7 +1,7 @@
 ---
 id: 032
 title: Orders 2.0 (order at the counter, modifiers, patience, register, tips, reviews)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---
