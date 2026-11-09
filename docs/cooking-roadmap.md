@@ -81,3 +81,6 @@ tuned later by the human.
   despawn; destroy the HeatRingView material; HeatRingView rig lookup and Contents via Vessel.ContentsAnchor;
   cached _BaseColor id; coin after the distance check; no closure per click. Later: RTT 0 before the first ping;
   tests that copy glue from PickupInteractor/Pickup.
+- Netcode list (spec 004 load test and later): disconnect a client after many TooFast replies in a row; a late
+  refusal after a server hitch over 1 s can bounce one prediction (synced state corrects it); with RTT over about
+  0.24 s two requests are usually in flight, so refusals wait for the full timeout; WSL MTU 1280 path (Tugboat).

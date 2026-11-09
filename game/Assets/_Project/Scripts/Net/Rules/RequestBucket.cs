@@ -12,9 +12,9 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Tokens a player can save up.</summary>
         public const float Burst = 2f;
 
-        private readonly float _interval;
-        private float _tokens = Burst;
-        private float _last = float.NaN;
+        private readonly double _interval;
+        private double _tokens = Burst;
+        private double _last = double.NaN;
 
         public RequestBucket() : this(PickupRules.ServerRequestInterval)
         {
@@ -26,20 +26,23 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>Tokens available at the last request (for tests).</summary>
-        public float Tokens => _tokens;
+        public float Tokens => (float)_tokens;
 
-        /// <summary>A request at <paramref name="now"/> (seconds, never decreasing): true when it may be carried out.</summary>
-        public bool TryTake(float now)
+        /// <summary>
+        /// A request at <paramref name="now"/> (seconds, never decreasing; second review: a double, Time.unscaledTimeAsDouble,
+        /// so a server that runs for days keeps its precision): true when it may be carried out.
+        /// </summary>
+        public bool TryTake(double now)
         {
-            if (float.IsNaN(now)) return false;
-            if (!float.IsNaN(_last) && now > _last)
+            if (double.IsNaN(now)) return false;
+            if (!double.IsNaN(_last) && now > _last)
             {
                 _tokens += (now - _last) / _interval;
                 if (_tokens > Burst) _tokens = Burst;
             }
-            if (float.IsNaN(_last) || now > _last) _last = now;
-            if (_tokens < 1f - 1e-4f) return false; // float rounding of the refill must not cost a token
-            _tokens -= 1f;
+            if (double.IsNaN(_last) || now > _last) _last = now;
+            if (_tokens < 1.0 - 1e-6) return false; // float rounding of the refill must not cost a token
+            _tokens -= 1.0;
             return true;
         }
     }

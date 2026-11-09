@@ -230,7 +230,8 @@ namespace Worktown.Game.Player
             int id = _variantByOwner ? _nob.OwnerId : _nob.ObjectId;
             if (id == _variantId) return;
             _variantId = id;
-            _variant = ArtCatalogRules.CharacterVariant(id, _variants.Length);
+            // Players: even owner ids male, odd female. Customers (second review of 027d): hashed, so the looks spread evenly.
+            _variant = _variantByOwner ? ArtCatalogRules.CharacterVariant(id, _variants.Length) : ArtCatalogRules.CustomerVariant(id, _variants.Length);
             for (int i = 0; i < _variants.Length; i++)
                 if (_variants[i] != null) _variants[i].SetActive(i == _variant);
             BuildGraph(_variants[_variant]);

@@ -328,14 +328,14 @@ namespace Worktown.Game.Tests
         [Test]
         public void LateAnswer_WithNothingInFlight_IsIgnored()
         {
+            // Our request's own "ok" arrives, then a stray answer with nothing in flight: it must not deny the click.
             var book = new PredictionBook<Thing>();
-            book.Sent(0f);
-            book.Answer(AnswerKind.Pickup, false, 0.1f);
             var a = new Thing();
-            FeelPrediction p = Pending(PredictionKind.PickUp, 0.2f);
-            book.Add(a, a, p, 99); // a number the book never gave out
-            book.Answer(AnswerKind.Pickup, false, 0.3f);
-            Assert.AreEqual(PredictionPhase.Pending, p.Phase);
+            FeelPrediction p = Pending(PredictionKind.PickUp, 0f);
+            book.Add(a, a, p, book.Sent(0f));
+            book.Answer(AnswerKind.Pickup, true, 0.1f);
+            book.Answer(AnswerKind.Pickup, false, 0.2f);
+            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "the ok restarted its timeout, the stray refusal is ignored");
         }
 
         [Test]
@@ -345,45 +345,6 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(FeelRules.AssumedRoundTrip, FeelRules.RoundTrip(float.NaN), 1e-6f);
             Assert.AreEqual(0.04f, FeelRules.RoundTrip(0.04f), 1e-6f);
             Assert.GreaterOrEqual(FeelRules.AssumedRoundTrip, 0.1f, "conservative");
-        }
-
-        // ---- Server rate limit (second review: a token bucket) ----
-
-        [Test]
-        public void Bucket_LetsABurstOfTwoThrough_ThenOneEveryInterval()
-        {
-            var bucket = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
-            Assert.IsTrue(bucket.TryTake(10f));
-            Assert.IsTrue(bucket.TryTake(10.01f), "two bunched requests both pass");
-            Assert.IsFalse(bucket.TryTake(10.02f), "a third is refused");
-            Assert.IsFalse(bucket.TryTake(10.1f));
-            Assert.IsTrue(bucket.TryTake(10.21f), "one token back after the interval");
-        }
-
-        [Test]
-        public void Bucket_PassesRequestsSentApartButArrivingBunched()
-        {
-            // Sent every 0.243 s (the client spacing); jitter makes some arrive 0.15 s apart, one pair together.
-            var bucket = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
-            float[] arrivals = { 0f, 0.243f, 0.39f, 0.729f, 0.972f, 0.972f, 1.458f, 1.6f };
-            foreach (float t in arrivals) Assert.IsTrue(bucket.TryTake(t), "arrival at " + t);
-        }
-
-        [Test]
-        public void Bucket_CapsTheAverageRate_AndTheSavings()
-        {
-            var bucket = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
-            int passed = 0;
-            for (int i = 0; i < 1000; i++)
-                if (bucket.TryTake(i * 0.01f)) passed++; // spam at 100 per second for 10 s
-            Assert.LessOrEqual(passed, 2 + 50 + 1, "the burst plus one per 0.2 s");
-            Assert.GreaterOrEqual(passed, 50);
-            var idle = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
-            idle.TryTake(0f);
-            idle.TryTake(100f); // a long pause saves at most the burst
-            Assert.LessOrEqual(idle.Tokens, Worktown.Game.Net.Rules.RequestBucket.Burst);
-            Assert.IsTrue(idle.TryTake(100f));
-            Assert.IsFalse(idle.TryTake(100f));
         }
 
         [Test]

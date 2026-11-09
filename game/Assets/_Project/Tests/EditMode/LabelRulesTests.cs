@@ -140,5 +140,48 @@ namespace Worktown.Game.Tests
                 new[] { LabelRules.PriorityAimed, LabelRules.PriorityRing }, new[] { 1f, 0f }, withRing);
             Assert.AreEqual(new[] { true, false }, withRing, "only the aimed target outranks the ring");
         }
+
+        [Test]
+        public void LabelCull_ReusedEveryFrame_GivesTheSameAnswerAsTheRule()
+        {
+            // Second review of 027d: the per-frame form keeps its buffers; it must decide exactly like LabelRules.Cull.
+            var cull = new LabelCull();
+            var rects = new[] { new Rect(0, 0, 10, 10), new Rect(5, 0, 10, 10), new Rect(30, 0, 5, 5), new Rect(32, 2, 5, 5) };
+            var priorities = new[] { 5, 3, 5, 5 };
+            var distances = new[] { 1f, 9f, 2f, 1f };
+            var expected = new bool[4];
+            LabelRules.Cull(rects, priorities, distances, expected);
+            for (int frame = 0; frame < 3; frame++)
+            {
+                var keep = new bool[8];
+                cull.Run(rects, priorities, distances, keep);
+                for (int i = 0; i < 4; i++) Assert.AreEqual(expected[i], keep[i], "frame " + frame + ", rect " + i);
+            }
+            var many = new Rect[100];
+            var p = new int[100];
+            var d = new float[100];
+            for (int i = 0; i < 100; i++) many[i] = new Rect(i * 20, 0, 10, 10);
+            var keepMany = new bool[100];
+            cull.Run(many, p, d, keepMany);
+            foreach (bool k in keepMany) Assert.IsTrue(k, "the buffers grow when there are more labels");
+        }
+
+        [Test]
+        public void Icon_ReturnsTheSameStringEachTime()
+        {
+            Assert.AreSame(LabelRules.Icon("tomato"), LabelRules.Icon("Tea"), "no new string per collapsed bubble per frame");
+            Assert.AreEqual("É", LabelRules.Icon("éclair"), "other letters still work");
+        }
+
+        [Test]
+        public void WorldTextShader_IsTheClientOnlyShader()
+        {
+            // Second review of 027d: a dedicated server build strips it (Editor/Build/ServerShaderStripping).
+            var shader = UnityEditor.AssetDatabase.LoadAssetAtPath<Shader>("Assets/_Project/Resources/Labels/WorldText.shader");
+            Assert.IsNotNull(shader);
+            Assert.AreEqual(Worktown.Game.Art.LabelMaterials.ShaderName, shader.name);
+            Assert.IsTrue(Worktown.Game.Art.LabelMaterials.IsClientOnlyShader(shader.name));
+            Assert.IsFalse(Worktown.Game.Art.LabelMaterials.IsClientOnlyShader("Universal Render Pipeline/Lit"));
+        }
     }
 }

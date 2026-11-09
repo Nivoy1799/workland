@@ -36,6 +36,7 @@ namespace Worktown.Game.Art
         private PlayerCameraRig _rig;
         private float _lastHot = float.NegativeInfinity;
         private Rect _screenRect;
+        private bool _screenInFront;
         private int _shownProgress = -1;
         private HeatZone _shownZone = HeatZone.None;
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -49,7 +50,7 @@ namespace Worktown.Game.Art
         public bool TryGetScreenRect(out Rect rect)
         {
             rect = _screenRect;
-            return IsShown;
+            return IsShown && _screenInFront; // second review: not a rectangle when the ring is behind the camera
         }
 
         /// <summary>Called once by the vessel's <see cref="VesselSteam"/> (client only).</summary>
@@ -132,6 +133,7 @@ namespace Worktown.Game.Art
             int progress = _vessel.HeatProgress.Value;
             if (progress != _shownProgress || zone != _shownZone) Rebuild(progress, zone);
             Vector3 ringScreen = cam.WorldToScreenPoint(centre);
+            _screenInFront = ringScreen.z > 0f;
             float halfPixels = HeatRingRules.RingPixels * 0.5f;
             _screenRect = new Rect(ringScreen.x - halfPixels, ringScreen.y - halfPixels, halfPixels * 2f, halfPixels * 2f);
             _ring.transform.SetPositionAndRotation(centre, view.rotation);

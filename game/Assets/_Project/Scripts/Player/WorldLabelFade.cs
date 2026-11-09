@@ -44,6 +44,7 @@ namespace Worktown.Game.Player
             public Transform Back;
             public MeshRenderer BackRenderer;
             public int Rank = -1;
+            public float QueueKey; // squared distance to the counter, for the queue order
             public float Distance;
             public bool Hidden; // drawn with zero alpha (overlap): the renderer stays on so its bounds stay current
         }
@@ -56,6 +57,16 @@ namespace Worktown.Game.Player
         private readonly List<Rect> _rects = new List<Rect>();
         private readonly List<int> _priorities = new List<int>();
         private readonly List<float> _distances = new List<float>();
+        // Second review: buffers and comparers kept between frames (no allocation per frame).
+        private readonly LabelCull _cull = new LabelCull();
+        private bool[] _keep = new bool[64];
+        private static readonly IComparer<Entry> ByQueueKey = new QueueKeyComparer();
+        private float _nextRigLookup;
+
+        private sealed class QueueKeyComparer : IComparer<Entry>
+        {
+            public int Compare(Entry a, Entry b) => a.QueueKey.CompareTo(b.QueueKey);
+        }
         private HeatRingView[] _rings = new HeatRingView[0];
         private PlayerCameraRig _rig;
         private PickupInteractor _interactor;
@@ -96,7 +107,11 @@ namespace Worktown.Game.Player
             Camera cam = Camera.main;
             if (cam == null) return;
             if (Time.unscaledTime >= _nextScan) Scan();
-            if (_rig == null) _rig = FindFirstObjectByType<PlayerCameraRig>();
+            if (_rig == null && Time.unscaledTime >= _nextRigLookup)
+            {
+                _nextRigLookup = Time.unscaledTime + 1f; // second review: not every frame while there is none
+                _rig = FindFirstObjectByType<PlayerCameraRig>();
+            }
             bool firstPerson = _rig != null && _rig.IsFirstPerson;
             Transform view = cam.transform;
             Vector3 eye = view.position;
@@ -155,8 +170,9 @@ namespace Worktown.Game.Player
                 _distances.Add(0f);
             }
 
-            var keep = new bool[_rects.Count];
-            LabelRules.Cull(_rects, _priorities, _distances, keep);
+            if (_keep.Length < _rects.Count) _keep = new bool[Mathf.NextPowerOfTwo(_rects.Count)];
+            bool[] keep = _keep;
+            _cull.Run(_rects, _priorities, _distances, keep);
             for (int i = 0; i < labels; i++)
             {
                 Entry entry = _wanted[i];
@@ -254,8 +270,8 @@ namespace Worktown.Game.Player
                 if (entry.Customer != null && entry.Customer.Waiting) _queue.Add(entry);
             }
             Vector3 head = _counter != null ? _counter.position : eye;
-            _queue.Sort((a, b) =>
-                (a.Transform.position - head).sqrMagnitude.CompareTo((b.Transform.position - head).sqrMagnitude));
+            foreach (Entry entry in _queue) entry.QueueKey = (entry.Transform.position - head).sqrMagnitude;
+            _queue.Sort(ByQueueKey);
             for (int i = 0; i < _queue.Count; i++) _queue[i].Rank = i;
         }
 

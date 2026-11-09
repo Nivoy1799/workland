@@ -1,7 +1,7 @@
 ---
 id: 027d
 title: World labels that never clutter, and customers that look different
-status: approved
+status: done
 owner: architect
 builder: sonnet
 ---

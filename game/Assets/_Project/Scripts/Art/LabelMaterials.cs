@@ -13,6 +13,14 @@ namespace Worktown.Game.Art
         public const string PanelPath = "Labels/WorldPanel";
         public const int TextQueue = 3000;
         public const int PanelQueue = 2999; // before the text, so the panel never covers it
+        /// <summary>The world text shader (Resources/Labels/WorldText.shader).</summary>
+        public const string ShaderName = "Worktown/WorldText";
+
+        /// <summary>
+        /// Second review of 027d: shaders only clients draw with. A dedicated server build compiles none of their variants
+        /// (Editor/Build/ServerShaderStripping); the materials stay in Resources, where a client loads them.
+        /// </summary>
+        public static bool IsClientOnlyShader(string shaderName) => shaderName == ShaderName;
 
         /// <summary>A text material for <paramref name="font"/>; null when the asset is missing.</summary>
         public static Material CreateText(Font font)

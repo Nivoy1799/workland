@@ -36,6 +36,32 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(0, ArtCatalogRules.CharacterVariant(5, 0), "no variants");
         }
 
+        /// <summary>Second review of 027d: object ids of customers come in steps (other objects spawn between them); the
+        /// hashed variant spreads the six looks and both sexes evenly for any step, the same on every client.</summary>
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(6)]
+        [TestCase(7)]
+        public void CustomerLooks_SpreadEvenly_ForIdsInSteps(int step)
+        {
+            int looks = ArtCatalogRules.CustomerCharacterKeys().Length;
+            var counts = new int[looks];
+            int female = 0;
+            const int customers = 1200;
+            for (int i = 0; i < customers; i++)
+            {
+                int variant = ArtCatalogRules.CustomerVariant(100 + i * step, looks);
+                Assert.That(variant, Is.InRange(0, looks - 1));
+                counts[variant]++;
+                if (CustomerLooks.Of(ArtCatalogRules.CustomerCharacterKeys()[variant]).Female) female++;
+            }
+            foreach (int count in counts) Assert.That(count, Is.InRange(customers / looks * 0.7f, customers / looks * 1.3f), "step " + step);
+            Assert.That(female, Is.InRange(customers * 0.4f, customers * 0.6f), "both sexes, step " + step);
+            Assert.AreEqual(ArtCatalogRules.CustomerVariant(12345, looks), ArtCatalogRules.CustomerVariant(12345, looks), "deterministic");
+            Assert.AreEqual(0, ArtCatalogRules.CustomerVariant(5, 0), "no looks");
+        }
+
         [Test]
         public void PlayerAndCustomerKeys_AreDistinctCharacters()
         {
@@ -43,9 +69,9 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(ArtKey.CharacterPlayerFemale, ArtCatalogRules.PlayerCharacterKey(1), "odd owner id");
             Assert.AreEqual(ArtKey.CharacterPlayerMale, ArtCatalogRules.PlayerCharacterKey(2));
             var customers = new HashSet<ArtKey>();
-            for (int id = 0; id < 6; id++) customers.Add(ArtCatalogRules.CustomerCharacterKey(id));
-            Assert.AreEqual(ArtCatalogRules.CustomerCharacterKeys().Length, customers.Count, "ids in a row show different customers (spec 027d: six looks)");
-            Assert.AreEqual(ArtCatalogRules.CustomerCharacterKey(1), ArtCatalogRules.CustomerCharacterKey(7));
+            for (int id = 0; id < 60; id++) customers.Add(ArtCatalogRules.CustomerCharacterKey(id));
+            Assert.AreEqual(ArtCatalogRules.CustomerCharacterKeys().Length, customers.Count, "a few dozen customers show all six looks (spec 027d)");
+            Assert.AreEqual(ArtCatalogRules.CustomerCharacterKey(7), ArtCatalogRules.CustomerCharacterKey(7), "the same id, the same look");
             foreach (ArtKey key in ArtCatalogRules.PlayerCharacterKeys())
                 Assert.IsFalse(customers.Contains(key), key + " is a player character, not a customer");
             Assert.AreEqual(2 + ArtCatalogRules.CustomerCharacterKeys().Length, new HashSet<ArtKey>(AllCharacterKeys()).Count);

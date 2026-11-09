@@ -1,7 +1,7 @@
 ---
 id: 027a
 title: Shop floor plan (a kitchen with a counter between cook and guests)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

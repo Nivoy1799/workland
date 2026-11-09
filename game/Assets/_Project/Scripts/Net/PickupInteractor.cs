@@ -33,7 +33,6 @@ namespace Worktown.Game.Net
     public sealed class PickupInteractor : NetworkBehaviour
     {
         private const float ClientSearchRadius = 4f;
-        private const float MinRequestInterval = PickupRules.ServerRequestInterval;
         /// <summary>Spec 027b: m (horizontal) from an item's centre within which a ray hit counts as on its body (a pan's
         /// handle or a wide collider edge does not; then the cone decides).</summary>
         public const float DirectHitRadius = 0.11f;
@@ -1206,7 +1205,7 @@ namespace Worktown.Game.Net
         /// </summary>
         private bool IsRateLimited()
         {
-            return !_serverBucket.TryTake(Time.unscaledTime);
+            return !_serverBucket.TryTake(Time.unscaledTimeAsDouble);
         }
 
         [TargetRpc]

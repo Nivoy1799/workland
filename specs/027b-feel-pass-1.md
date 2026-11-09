@@ -1,7 +1,7 @@
 ---
 id: 027b
 title: Feel pass 1 (instant feedback, no teleports, forgiving aim, tuning panel)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---
@@ -222,6 +222,23 @@ minimum 0.1 s; third-person damping 0.08 / 0.05; Preset B values above.
       only after the view-distance check;
     - `HeatRingView` destroys its overlay material, looks up the rig at most once a second, and uses
       `Vessel.ContentsAnchor`.
+- **Third review round (on top of 027d).**
+  - Heat timeline key: the cache key (`KitchenState.TimelineKeyOf`) is now the exact state the heat op reads: the hash,
+    op and temperature, plus the float bits of the surface, the heat tolerance, and each component's doneness and ideal
+    window. Two onions sautéed 60 s and 170 s share a hash but get their own timelines.
+  - Label pass: no per-frame allocations. `LabelCull` keeps its buffers and uses an insertion sort; queue ranks use a
+    cached comparer; icon letters come from a table. The camera rig lookup is throttled to once a second.
+  - `HeatRingView.TryGetScreenRect` returns false for a ring behind the camera.
+  - `RequestBucket` uses double time; its tests are in `RequestBucketTests`.
+  - Customer looks: hashed (`ArtCatalogRules.CustomerVariant`). An odd id avoids its two even neighbours' looks, so 027d's
+    "neighbours differ" still holds. The looks and both sexes are spread evenly for id steps 1, 2, 3, 6 and 7 (tested).
+  - The WorldText shader stays in Resources for clients. `Editor/Build/ServerShaderStripping` compiles no variant of it
+    in a dedicated server build.
+  - Nits:
+    - the unused `MinRequestInterval` is removed;
+    - the `PredictionBook` comment is fixed;
+    - the dead label hiding is removed from `HeldItemView`;
+    - the late-answer test uses a number the book gave out.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

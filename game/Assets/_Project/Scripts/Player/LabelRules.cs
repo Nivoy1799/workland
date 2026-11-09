@@ -114,8 +114,22 @@ namespace Worktown.Game.Player
         {
             if (!string.IsNullOrEmpty(text))
                 foreach (char c in text)
-                    if (char.IsLetter(c)) return char.ToUpperInvariant(c).ToString();
+                {
+                    if (!char.IsLetter(c)) continue;
+                    char upper = char.ToUpperInvariant(c);
+                    // Second review: the Latin letters come from a table (no string per collapsed bubble per frame).
+                    return upper >= 'A' && upper <= 'Z' ? Letters[upper - 'A'] : upper.ToString();
+                }
             return "?";
+        }
+
+        private static readonly string[] Letters = BuildLetters();
+
+        private static string[] BuildLetters()
+        {
+            var letters = new string[26];
+            for (int i = 0; i < 26; i++) letters[i] = ((char)('A' + i)).ToString();
+            return letters;
         }
 
         /// <summary>
@@ -124,25 +138,8 @@ namespace Worktown.Game.Player
         /// </summary>
         public static void Cull(IReadOnlyList<Rect> rects, IReadOnlyList<int> priorities, IReadOnlyList<float> distances, bool[] keep)
         {
-            int count = rects.Count;
-            var order = new int[count];
-            for (int i = 0; i < count; i++) order[i] = i;
-            System.Array.Sort(order, (a, b) =>
-            {
-                int byPriority = priorities[a].CompareTo(priorities[b]);
-                if (byPriority != 0) return byPriority;
-                int byDistance = distances[a].CompareTo(distances[b]);
-                return byDistance != 0 ? byDistance : a.CompareTo(b);
-            });
-            var kept = new List<Rect>(count);
-            foreach (int index in order)
-            {
-                bool clear = true;
-                foreach (Rect other in kept)
-                    if (rects[index].Overlaps(other)) { clear = false; break; }
-                keep[index] = clear;
-                if (clear) kept.Add(rects[index]);
-            }
+            // The per-frame caller keeps its own LabelCull (no allocations); this one-off form is for tests and tools.
+            new LabelCull().Run(rects, priorities, distances, keep);
         }
     }
 }

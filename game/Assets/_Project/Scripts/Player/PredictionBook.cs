@@ -5,13 +5,15 @@ namespace Worktown.Game.Player
 {
     /// <summary>
     /// Spec 027b (review), pure: the owner's predicted looks that are still waiting for the server, and the matching of
-    /// the server's answers to requests. Every request that gets an answer is numbered when it is sent; the server answers
-    /// in order (one reliable channel), so the n-th answer belongs to the n-th request. An answer only reaches a prediction
-    /// when it is that prediction's request and of the matching kind, so an older refusal never denies a newer click.
-    /// The server drops requests it rate-limits without an answer; after <see cref="LedgerResetSeconds"/> without a request
-    /// every older one counts as answered, so the numbering catches up. A newer prediction for the same item replaces the
-    /// older one silently; predictions for other items keep going until they resolve on their own, so a quick second click
-    /// never makes the first item bounce.
+    /// the server's answers to requests. Every request is numbered when it is sent and the server answers every one, in
+    /// order (one reliable channel; a rate-limited request gets a TooFast answer), so the n-th answer belongs to the n-th
+    /// request. An answer only reaches a prediction when it is that prediction's request and of the matching kind. A
+    /// refusal is applied only when its request was the only one in flight: should an answer ever go missing, a later
+    /// refusal could be counted for the wrong request, so with more in flight the synced state or the timeout decides.
+    /// After a quiet spell (<see cref="LedgerResetSeconds"/>, or three round trips if longer) every older request counts
+    /// as answered, so the numbering catches up; a late answer with nothing in flight is ignored. A newer prediction for
+    /// the same item replaces the older one silently; predictions for other items keep going until they resolve on their
+    /// own, so a quick second click never makes the first item bounce.
     /// </summary>
     public sealed class PredictionBook<T> where T : class
     {

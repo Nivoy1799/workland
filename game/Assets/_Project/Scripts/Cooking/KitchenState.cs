@@ -20,7 +20,7 @@ namespace Worktown.Game.Cooking
         private readonly Dictionary<int, Item> _items = new Dictionary<int, Item>();
         // Spec 016/021: food cooking in a pan (one) or a pot (up to four, each with its own clock), per vessel id.
         private readonly Dictionary<int, List<HeatSession>> _heat = new Dictionary<int, List<HeatSession>>();
-        private readonly Dictionary<TimelineKey, HeatTimeline> _timelines = new Dictionary<TimelineKey, HeatTimeline>();
+        private readonly Dictionary<string, HeatTimeline> _timelines = new Dictionary<string, HeatTimeline>();
         // Spec 021: each burner's switch and mode (per burner id), and the burner a pan or pot stands on.
         private readonly Dictionary<int, StoveSettings> _burners = new Dictionary<int, StoveSettings>();
         private readonly Dictionary<int, int> _burnerOf = new Dictionary<int, int>();
@@ -591,46 +591,67 @@ namespace Worktown.Game.Cooking
 
         /// <summary>
         /// Spec 027c: the zone timeline of <paramref name="food"/> in the heat op, from the sim op itself. Review of spec 027c:
-        /// building it runs the sim op about a hundred times, so it is cached per (item hash, op, temperature): the same
-        /// potato on the same heat reuses it. The cache is cleared when it grows past <see cref="TimelineCacheLimit"/>.
+        /// building it runs the sim op about a hundred times, so it is cached. The key is everything the heat op reads from
+        /// the food (<see cref="TimelineKeyOf"/>), not only its hash: the hash is made of bucket ids, while the doneness
+        /// inside a bucket comes from the exact seconds (two onions sautéed 60 s and 170 s share a hash). The cache is
+        /// cleared when it reaches <see cref="TimelineCacheCapacity"/> entries.
         /// </summary>
         private HeatTimeline TimelineOf(Item food, string opId, int? tempC, ParamDef time)
         {
-            var key = new TimelineKey(food.Hash, opId, tempC);
+            string key = TimelineKeyOf(food, opId, tempC);
             if (_timelines.TryGetValue(key, out HeatTimeline cached)) return cached;
-            HeatTimeline built = HeatZoneRules.Build(time, seconds =>
-            {
-                OperationResult cooked = _factory.Apply(opId, new[] { food }, HeatParams(tempC, seconds));
-                return cooked.Ok && cooked.Item != null ? cooked.Item.Components : null;
-            });
-            if (_timelines.Count >= TimelineCacheLimit) _timelines.Clear();
+            HeatTimeline built = BuildTimeline(food, opId, tempC, time);
+            if (_timelines.Count >= TimelineCacheCapacity) _timelines.Clear();
             _timelines[key] = built;
             return built;
         }
 
+        private HeatTimeline BuildTimeline(Item food, string opId, int? tempC, ParamDef time)
+        {
+            return HeatZoneRules.Build(time, seconds =>
+            {
+                OperationResult cooked = _factory.Apply(opId, new[] { food }, HeatParams(tempC, seconds));
+                return cooked.Ok && cooked.Item != null ? cooked.Item.Components : null;
+            });
+        }
+
+        /// <summary>Review of spec 027c: the cached timeline for this food, op and temperature (as a put-on gets it).</summary>
+        public HeatTimeline TimelineFor(Item food, string opId, int? tempC)
+        {
+            return food != null && TryGetTimeParam(opId, out ParamDef time) ? TimelineOf(food, opId, tempC, time) : default;
+        }
+
+        /// <summary>Review of spec 027c: the same timeline built fresh, never cached (for tests).</summary>
+        public HeatTimeline FreshTimeline(Item food, string opId, int? tempC)
+        {
+            return food != null && TryGetTimeParam(opId, out ParamDef time) ? BuildTimeline(food, opId, tempC, time) : default;
+        }
+
+        /// <summary>
+        /// Review of spec 027c: the cache key: the item hash, the op, the temperature, and the exact bits of what the heat op
+        /// reads (the surface, the heat tolerance, each component's doneness and ideal window).
+        /// </summary>
+        public static string TimelineKeyOf(Item food, string opId, int? tempC)
+        {
+            var key = new System.Text.StringBuilder(64 + 24 * food.Components.Count);
+            key.Append(food.Hash).Append('|').Append(opId).Append('|').Append(tempC.HasValue ? tempC.Value.ToString() : "-")
+                .Append('|').Append(Bits(food.Surface)).Append('|').Append(Bits(food.Stats.HeatTolerance));
+            foreach (ItemComponent c in food.Components)
+                key.Append('|').Append(c.BaseId).Append(':').Append(Bits(c.Doneness)).Append(':')
+                    .Append(Bits(c.Ideal.Min)).Append(':').Append(Bits(c.Ideal.Max));
+            return key.ToString();
+        }
+
+        private static int Bits(float value) => System.BitConverter.SingleToInt32Bits(value);
+
         /// <summary>Review of spec 027c: how many timelines are kept at most.</summary>
         public const int TimelineCacheLimit = 256;
 
+        /// <summary>Review of spec 027c: the cache size actually used (<see cref="TimelineCacheLimit"/>; tests set it lower).</summary>
+        public int TimelineCacheCapacity { get; set; } = TimelineCacheLimit;
+
         /// <summary>Review of spec 027c: how many heat timelines are cached (for tests).</summary>
         public int CachedTimelines => _timelines.Count;
-
-        private readonly struct TimelineKey : System.IEquatable<TimelineKey>
-        {
-            private readonly string _hash;
-            private readonly string _op;
-            private readonly int? _temp;
-
-            public TimelineKey(string hash, string op, int? temp)
-            {
-                _hash = hash ?? string.Empty;
-                _op = op ?? string.Empty;
-                _temp = temp;
-            }
-
-            public bool Equals(TimelineKey other) => _hash == other._hash && _op == other._op && _temp == other._temp;
-            public override bool Equals(object obj) => obj is TimelineKey other && Equals(other);
-            public override int GetHashCode() => (_hash.GetHashCode() * 31 + _op.GetHashCode()) * 31 + _temp.GetHashCode();
-        }
 
         /// <summary>The look of the first ingredient in the pan or pot; null if it is empty.</summary>
         public FoodLook? HeatLook(int vesselId, uint tick, double tickRate)

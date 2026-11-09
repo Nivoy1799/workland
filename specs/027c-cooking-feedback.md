@@ -1,7 +1,7 @@
 ---
 id: 027c
 title: Feel pass 2 - cooking reads at a glance (progress, colour, sound, cues, serve reward)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---
