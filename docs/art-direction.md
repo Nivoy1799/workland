@@ -42,6 +42,15 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Tomato | 0.07 | 0.105 | x1.5 |
 | Tomato slice | 0.07 | 0.105 | x1.5 |
 | Fries (portion) | 0.14 | 0.21 | x1.5 |
+| Flatbread | 0.22 | same | over 15 cm: real size; added in spec 028 |
+| Wrap | 0.25 | same | over 15 cm: real size (the hand footprint is 0.25); added in spec 028 |
+| Seitan block | 0.12 | 0.18 | x1.5; added in spec 028 |
+| Falafel mix | 0.10 | 0.15 | x1.5; added in spec 028 |
+| Lettuce | 0.18 | same | over 15 cm: real size; added in spec 028 |
+| Cucumber | 0.20 | same | over 15 cm: real size; added in spec 028 |
+| Red cabbage | 0.16 | same | over 15 cm: real size; added in spec 028 |
+| Lemon | 0.07 | 0.105 | x1.5; the half is the same width; added in spec 028 |
+| Sauce bottle | 0.20 | same | over 15 cm: real size; added in spec 028 |
 | Small house (2 storeys, to the ridge) | 7–8 | same | |
 | Shop (ground floor 4 m + 1 storey) | 7–8 | same | |
 | Tree small / large | 4 / 8 | same | |

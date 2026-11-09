@@ -10,12 +10,12 @@ namespace Worktown.Game.Dev
     /// scene's (GrayboxSceneBuilder). Spec 027a, the shop floor plan: back line at z 14.3 (stove A at x 6.64, stove B 9.14,
     /// plate shelf 11.64), the cook aisle z 12.2 to 13.7 (centre 12.95; players spawn on that line at x 0.6 to 5.4), the
     /// front counter z 11.5 to 12.2, the guests' queue at z 11.1 (x 6.64 to 11.64), the staff gap at the aisle's west end
-    /// (side walls at x -2.22 to -2.02), the road at z 5.5 to 10.5 east of x 9, a ring of pickup cubes at 5 and 7 m around
+    /// (side walls at x -7.82 to -7.62; spec 028: the stock bank of ten narrow crates stands at x -6.34 to -0.74), the road at z 5.5 to 10.5 east of x 9, a ring of pickup cubes at 5 and 7 m around
     /// the origin, a box at x 15 to 19, z 1.5 to 2.5. Both players start in the single-file aisle and cannot pass each other
     /// there, so every tour first walks out through the staff gap to <see cref="ParkX"/> (the same way as its observer,
     /// whichever of the two is in front; two 0.3 m players can pass in the 1.5 m aisle, but the straight-line steering
     /// would only slide past), and the observers' spots are outside the aisle; observer routes leave the gap
-    /// southwards at x -3.2. If the layout changes, change the points here (TourRulesTests walks every route).
+    /// southwards at x -8.9. If the layout changes, change the points here (TourRulesTests walks every route).
     /// </summary>
     public static class TourRules
     {
@@ -157,8 +157,8 @@ namespace Worktown.Game.Dev
         private const float StoveBX = 9.14f;
         private const float WorktopBetweenX = 7.89f; // the worktop between the stoves
         /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
-        public const float ParkX = -5f;
-        private const float ObserverExitX = -3.2f; // the observers' way south from the staff gap, west of the side wall
+        public const float ParkX = -10.8f;
+        private const float ObserverExitX = -8.9f; // the observers' way south from the staff gap, west of the side wall
         private const float LookObserverX = 2.6f;  // the look tour's person for scale, at the front counter's street side
         private const float LookObserverZ = 10.9f;
 
@@ -177,7 +177,11 @@ namespace Worktown.Game.Dev
             {
                 TourStep.WalkTo(4.5f, AisleZ),
                 TourStep.View(ViewMode.ThirdPerson), TourStep.Look(90f, -12f), TourStep.Wait(1.2f), TourStep.Shot("kitchen-third"),
-                TourStep.View(ViewMode.FirstPerson), TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
+                // Spec 028: the stock bank (ten narrow crates) from the aisle, third person looking west, then close up.
+                TourStep.WalkTo(-0.4f, AisleZ), TourStep.Look(270f, -14f), TourStep.Wait(1.2f), TourStep.Shot("stock-third"),
+                TourStep.View(ViewMode.FirstPerson), TourStep.WalkTo(-3.5f, StandZ), TourStep.LookAt(-3.5f, 0.9f, BackLineZ - 0.15f),
+                TourStep.Wait(0.6f), TourStep.Shot("stock-first"),
+                TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
                 TourStep.Wait(0.6f), TourStep.Shot("stove-first"),
                 // Spec 027b: the pick-up with its frames (highlight and prompt, the arc into the hand), the put-back (ghost, settle),
                 // then both again in slow motion so the arc's shape shows at 0.1 s frames.

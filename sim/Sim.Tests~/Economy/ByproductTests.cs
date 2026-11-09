@@ -64,7 +64,7 @@ namespace Worktown.Sim.Tests.Economy
         public void OperationWithoutRulesGivesNothing()
         {
             var a = T.Base("tomato");
-            var b = T.Base("cheese");
+            var b = T.Base("cashew");
             Assert.Empty(Byproducts.ForOperation(C, "mix", new[] { a, b }, T.Mix(a, b)));
             Assert.Empty(Byproducts.ForOperation(C, "plate", new[] { a }, T.Plate(a)));
         }
@@ -72,7 +72,7 @@ namespace Worktown.Sim.Tests.Economy
         [Fact]
         public void CutScrapsScaleWithInputWeight()
         {
-            var mix = T.Ok(T.Mix(T.Base("tomato"), T.Base("cheese"), T.Base("onion")));
+            var mix = T.Ok(T.Mix(T.Base("tomato"), T.Base("cashew"), T.Base("onion")));
             var (r, inputs) = Cut(mix, "dice");
             Is(Byproducts.ForOperation(C, "cut", inputs, r), ("food_scraps", 3));
         }
@@ -81,7 +81,7 @@ namespace Worktown.Sim.Tests.Economy
         public void DiscardGivesOneFoodScrapsPerComponent()
         {
             Is(Byproducts.ForDiscard(C, TestEconomy.PlatedRaw()), ("food_scraps", 1));
-            Is(Byproducts.ForDiscard(C, TestEconomy.PlatedTomatoCheese()), ("food_scraps", 2));
+            Is(Byproducts.ForDiscard(C, TestEconomy.PlatedTomatoCashew()), ("food_scraps", 2));
         }
 
         [Fact]

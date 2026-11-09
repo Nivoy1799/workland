@@ -76,7 +76,7 @@ namespace Worktown.Sim.Tests.Economy
         public void ItemCostSumsGrocerPricesAndIsNullWhenUnpriced()
         {
             Assert.Equal(60L, PriceRules.ItemCost(TestEconomy.Catalog, TestEconomy.PlatedFries()));
-            Assert.Equal(220L, PriceRules.ItemCost(TestEconomy.Catalog, TestEconomy.PlatedTomatoCheese())); // 70+150
+            Assert.Equal(220L, PriceRules.ItemCost(TestEconomy.Catalog, TestEconomy.PlatedTomatoCashew())); // 70+150
             var noBasil = TestEconomy.Build(grocer: TestEconomy.GrocerWithout("basil"));
             Assert.Null(PriceRules.ItemCost(noBasil, T.Ok(T.Plate(T.Base("basil")))));
         }
@@ -85,7 +85,7 @@ namespace Worktown.Sim.Tests.Economy
         public void SurplusCapIsCostMinusOneMinusWeightTimesB()
         {
             Assert.Equal(28, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedFries()));          // 60-1-31
-            Assert.Equal(157, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedTomatoCheese())); // 220-1-62
+            Assert.Equal(157, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedTomatoCashew())); // 220-1-62
             Assert.Equal(3, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedSalt()));           // 35-1-31
             var noBasil = TestEconomy.Build(grocer: TestEconomy.GrocerWithout("basil"));
             Assert.Equal(0, PriceRules.SurplusCap(noBasil, T.Ok(T.Plate(T.Base("basil")))));
@@ -100,8 +100,8 @@ namespace Worktown.Sim.Tests.Economy
             Assert.Equal(28, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedFries(), 696));
             // plated salt q=166: 100*583/1000 = 58, cap 3
             Assert.Equal(3, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedSalt(), 166));
-            // tomato+cheese q=746: 300*873/1000 = 261, cap 157
-            Assert.Equal(157, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, meal, TestEconomy.PlatedTomatoCheese(), 746));
+            // tomato+cashew q=746: 300*873/1000 = 261, cap 157
+            Assert.Equal(157, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, meal, TestEconomy.PlatedTomatoCashew(), 746));
             // floor payout below cap: apple q=0: 100*500/1000 = 50, cap 48 -> 48; q=0 salt: 50 vs 3 -> 3
             Assert.Equal(48, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedApple(), 0));
         }

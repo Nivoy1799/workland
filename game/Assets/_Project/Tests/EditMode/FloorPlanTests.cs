@@ -330,7 +330,7 @@ namespace Worktown.Game.Tests
             {
                 var crates = plan.BackStations.FindAll(s => s.Kind == StationKind.Crate);
                 var stoves = plan.BackStations.FindAll(s => s.Kind == StationKind.Stove);
-                Assert.AreEqual(4, crates.Count);
+                Assert.AreEqual(DemoIngredients.All.Count, crates.Count); // spec 028: four crates and the ten-crate street-food bank
                 Assert.AreEqual(2, stoves.Count);
                 stoves.Sort((a, b) => plan.V(a.transform.position).CompareTo(plan.V(b.transform.position)));
                 Component board = VesselTestKit.AllOf(plan.Scene, VesselTestKit.VesselType).Find(v => VesselTestKit.KindOf(v) == VesselKind.Board);

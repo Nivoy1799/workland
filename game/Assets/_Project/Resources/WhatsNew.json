@@ -411,6 +411,22 @@
         "Walk behind the counter and stove row: do the signs face you and stay clear of the knobs?",
         "Do neighbouring guests in the queue look different?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-028",
+      "date": "2026-11-09",
+      "title": "Street-food stock: ten new ingredients",
+      "items": [
+        "A bank of ten narrow crates at the left end of the back line: flatbread, wrap, seitan, falafel mix, lettuce, cucumber, red cabbage, lemon, garlic-herb sauce, chili sauce",
+        "Each is bought, carried, placed and cut like the old four; prices $45 to $110 per item",
+        "A new test keeps every item, menu dish and patch note plant-based",
+        "The kitchen is wider: the staff gap is at the left end of the new bank"
+      ],
+      "test": [
+        "Walk to the left end of the kitchen: are the ten crates readable from the aisle?",
+        "Take a cucumber, put it on the board with the knife: two strokes give slices",
+        "Take a lemon and cut it: do you get halves, then slices?"
+      ]
     }
   ]
 }

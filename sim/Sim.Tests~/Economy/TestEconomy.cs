@@ -60,12 +60,14 @@ namespace Worktown.Sim.Tests.Economy
         public static EconomyState SetAccount(EconomyState s, string id, Func<Account, Account> f) =>
             s with { Accounts = s.Accounts.Select(a => a.Id == id ? f(a) : a).ToList().AsReadOnly() };
 
-        // fixtures (qualities measured: fries 0.697, burnt 0.296, raw 0.125, tomato+cheese 0.746, salt 0.167, apple 0.397)
+        // fixtures (qualities measured: fries 0.697, burnt 0.296, raw 0.125, tomato+cashew 0.746, salt 0.167, apple 0.397)
         public static Item PlatedFries() => T.Ok(T.Plate(T.Fries()));
         public static Item PlatedBurnt() =>
             T.Ok(T.Plate(T.Ok(T.Fry(T.Ok(T.Cut(T.Base("potato"), "sticks")), 220f, 600f))));
         public static Item PlatedRaw() => T.Ok(T.Plate(T.Base("potato")));
-        public static Item PlatedTomatoCheese() => T.Ok(T.Plate(T.Ok(T.Mix(T.Base("tomato"), T.Base("cheese")))));
+        public static Item PlatedTomatoCashew() => T.Ok(T.Plate(T.Ok(T.Mix(T.Base("tomato"), T.Base("cashew")))));
+        /// <summary>Old name, kept because DeterminismTests (unchanged by spec 028) calls it.</summary>
+        public static Item PlatedTomatoCheese() => PlatedTomatoCashew();
         public static Item PlatedSalt() => T.Ok(T.Plate(T.Base("salt")));
         public static Item PlatedApple() => T.Ok(T.Plate(T.Base("apple")));
     }

@@ -146,10 +146,10 @@ namespace Worktown.Sim.Tests.Economy
             var rng = new SeededRandom(2024);
             var s = E.Initial();
             foreach (var id in new[] { "a", "b", "c" }) s = TestEconomy.Open(E, s, id, 500);
-            var items = new[] { TestEconomy.PlatedFries(), TestEconomy.PlatedBurnt(), TestEconomy.PlatedRaw(), TestEconomy.PlatedTomatoCheese(), T.Fries() };
+            var items = new[] { TestEconomy.PlatedFries(), TestEconomy.PlatedBurnt(), TestEconomy.PlatedRaw(), TestEconomy.PlatedTomatoCashew(), T.Fries() };
             string[] accounts = { "a", "b", "c", "ghost" };
             string[] goods = { "food_scraps", "used_cooking_oil", "snack", "ghost" };
-            string[] bases = { "potato", "salt", "cheese", "ghost" };
+            string[] bases = { "potato", "salt", "cashew", "ghost" };
             long nextId = 1;
             for (int i = 0; i < 1000; i++)
             {

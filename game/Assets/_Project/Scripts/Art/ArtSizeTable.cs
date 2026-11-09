@@ -74,6 +74,20 @@ namespace Worktown.Game.Art
             Small(ArtKey.FoodPieceStick, 0.09f),
             Small(ArtKey.FoodPieceCube, 0.03f),
 
+            // Spec 028: the street-food stock. Small things are x1.5; the bigger ones (over 15 cm) stay at their real size, because
+            // a held item must fit the 0.25 m hand footprint (FoodArtCatalogTests).
+            Food(ArtKey.FoodFlatbread, 0.22f, "Flatbread"),
+            Food(ArtKey.FoodWrap, 0.25f, "Wrap"),
+            Small(ArtKey.FoodSeitan, 0.12f, "Seitan block"),
+            Small(ArtKey.FoodFalafelMix, 0.10f, "Falafel mix"),
+            Food(ArtKey.FoodLettuce, 0.18f, "Lettuce"),
+            Food(ArtKey.FoodCucumber, 0.20f, "Cucumber"),
+            Food(ArtKey.FoodRedCabbage, 0.16f, "Red cabbage"),
+            Small(ArtKey.FoodLemon, 0.07f, "Lemon"),
+            Small(ArtKey.FoodLemonHalf, 0.07f, "Lemon"),
+            Food(ArtKey.FoodSauceGarlicHerb, 0.20f, "Sauce bottle"),
+            Food(ArtKey.FoodSauceChili, 0.20f, "Sauce bottle"),
+
             // Cookware and tools (x1.15).
             Cookware(ArtKey.FoodPlate, 0.26f, "Plate"),
             Cookware(ArtKey.FoodBowl, 0.18f, "Bowl"),
@@ -147,6 +161,9 @@ namespace Worktown.Game.Art
 
         private static ArtSize World(ArtKey key, float real, SizeAxis axis, string guideRow = null, int guideIndex = 0) =>
             new ArtSize(key, SizeClass.World, real, axis, guideRow, guideIndex);
+
+        private static ArtSize Food(ArtKey key, float real, string guideRow) =>
+            new ArtSize(key, SizeClass.World, real, SizeAxis.Largest, guideRow);
 
         private static ArtSize Cookware(ArtKey key, float real, string guideRow) =>
             new ArtSize(key, SizeClass.Cookware, real, SizeAxis.Largest, guideRow);

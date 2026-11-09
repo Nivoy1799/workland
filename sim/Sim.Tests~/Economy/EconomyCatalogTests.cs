@@ -24,14 +24,18 @@ namespace Worktown.Sim.Tests.Economy
             Assert.Equal(5, D.Markets.Count);
             Assert.Equal(3, D.Rules.Count);
             Assert.Equal(3, D.Byproducts.Count);
-            Assert.Equal(8, D.Grocer.Count);
+            Assert.Equal(18, D.Grocer.Count); // spec 028: eight old entries, ten street-food items
         }
 
         [Fact]
         public void ListsAreSortedAsSpecified()
         {
             Assert.Equal(new[] { "drink", "food_scraps", "meal", "snack", "used_cooking_oil" }, D.Markets.Select(m => m.Id));
-            Assert.Equal(new[] { "apple", "basil", "cheese", "oil", "onion", "potato", "salt", "tomato" }, D.Grocer.Select(g => g.BaseId));
+            Assert.Equal(new[]
+            {
+                "apple", "basil", "cashew", "chili_sauce", "cucumber", "falafel_mix", "flatbread", "garlic_herb_sauce", "lemon",
+                "lettuce", "oil", "onion", "potato", "red_cabbage", "salt", "seitan", "tomato", "wrap"
+            }, D.Grocer.Select(g => g.BaseId));
             Assert.Equal(new[] { "drink", "meal", "snack" }, D.Rules.Select(r => r.MarketId)); // given order
         }
 

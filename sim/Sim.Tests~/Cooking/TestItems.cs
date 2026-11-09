@@ -15,7 +15,7 @@ namespace Worktown.Sim.Tests.Cooking
 
         public static readonly BaseItemDef Salt = Def("salt", 0, 1, 0, 0, 0, 0);
         public static readonly BaseItemDef Tomato = Def("tomato", 0.4f, 0.1f, 0.5f, 0, 0.6f, 0.1f);
-        public static readonly BaseItemDef Cheese = Def("cheese", 0.1f, 0.5f, 0.2f, 0.1f, 0.7f, 0.8f);
+        public static readonly BaseItemDef Cashew = Def("cashew", 0.1f, 0.5f, 0.2f, 0.1f, 0.7f, 0.8f);
         public static readonly BaseItemDef Basil = Def("basil", 0.2f, 0, 0.1f, 0.4f, 0.2f, 0.1f, 0.3f);
         public static readonly BaseItemDef Oil = Def("oil", 0, 0, 0, 0.1f, 0, 1f);
         public static readonly BaseItemDef Onion = Def("onion", 0.5f, 0, 0.2f, 0.3f, 0.3f, 0, 0.6f);
@@ -28,7 +28,7 @@ namespace Worktown.Sim.Tests.Cooking
             new ItemStats(0.6f, 0f, 0.3f, 0.05f, 0f, 0f, 0.7f, 0.3f, 0f, 0.85f),
             new DonenessWindow(0f, 0.3f), Array.Empty<string>());
 
-        public static readonly ItemCatalog Catalog = new ItemCatalog(new[] { Salt, Tomato, Cheese, Basil, Oil, Onion, Potato, Apple });
+        public static readonly ItemCatalog Catalog = new ItemCatalog(new[] { Salt, Tomato, Cashew, Basil, Oil, Onion, Potato, Apple });
         public static readonly ItemFactory Factory = new ItemFactory(Catalog, OperationCatalog.CreateDefault());
 
         public static Item Base(string id) => Ok(Factory.CreateBase(id));

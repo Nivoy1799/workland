@@ -71,7 +71,7 @@ namespace Worktown.Sim.Tests.Economy
         {
             var s = Noon();
             Assert.True(TestEconomy.Mkt(s, "meal").OpenDemand > 0);
-            var r = E.TrySellItem(s, "alice", 1, TestEconomy.PlatedTomatoCheese());
+            var r = E.TrySellItem(s, "alice", 1, TestEconomy.PlatedTomatoCashew());
             Assert.True(r.Ok);
             Assert.Equal("meal", r.MarketId);
             // q = 0.74609 -> 746; payout = 1200 * 1246 / 1000 = 1495.2 -> 1495
@@ -109,8 +109,8 @@ namespace Worktown.Sim.Tests.Economy
             var s = TestEconomy.Open(E, E.Initial(), "alice", 0);
             var salt = E.TrySellItem(s, "alice", 1, TestEconomy.PlatedSalt());
             Assert.Equal(3, salt.Payout); // 35 - 1 - 31
-            var cheese = E.TrySellItem(s, "alice", 2, TestEconomy.PlatedTomatoCheese());
-            Assert.Equal(157, cheese.Payout); // 220 - 1 - 62
+            var cashew = E.TrySellItem(s, "alice", 2, TestEconomy.PlatedTomatoCashew());
+            Assert.Equal(157, cashew.Payout); // 220 - 1 - 62
         }
 
         [Fact]
@@ -231,7 +231,7 @@ namespace Worktown.Sim.Tests.Economy
         public void DiscardGivesScrapsAndConsumesTheInstance()
         {
             var s = TestEconomy.Open(E, E.Initial(), "alice", 50);
-            var r = E.Discard(s, "alice", 9, TestEconomy.PlatedTomatoCheese());
+            var r = E.Discard(s, "alice", 9, TestEconomy.PlatedTomatoCashew());
             Assert.True(r.Ok);
             Assert.Equal(2, TestEconomy.Units(r.State, "alice", "food_scraps"));
             Assert.Equal(50, TestEconomy.Acct(r.State, "alice").Balance);

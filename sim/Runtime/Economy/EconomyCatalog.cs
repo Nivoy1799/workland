@@ -142,7 +142,12 @@ namespace Worktown.Sim.Economy
             {
                 new GrocerPrice("salt", 35), new GrocerPrice("basil", 40), new GrocerPrice("oil", 50),
                 new GrocerPrice("onion", 50), new GrocerPrice("potato", 60), new GrocerPrice("tomato", 70),
-                new GrocerPrice("apple", 80), new GrocerPrice("cheese", 150),
+                new GrocerPrice("apple", 80), new GrocerPrice("cashew", 150),
+                // Spec 028: the street-food stock (D27: plant-based only).
+                new GrocerPrice("lettuce", 45), new GrocerPrice("cucumber", 50), new GrocerPrice("red_cabbage", 55),
+                new GrocerPrice("flatbread", 60), new GrocerPrice("lemon", 60), new GrocerPrice("wrap", 70),
+                new GrocerPrice("garlic_herb_sauce", 80), new GrocerPrice("chili_sauce", 80),
+                new GrocerPrice("falafel_mix", 90), new GrocerPrice("seitan", 110),
             };
             return new EconomyCatalog(markets, rules, byproducts, grocer, OperationCatalog.CreateDefault());
         }

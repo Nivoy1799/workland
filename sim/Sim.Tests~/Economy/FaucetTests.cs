@@ -20,7 +20,7 @@ namespace Worktown.Sim.Tests.Economy
             var plates = new[]
             {
                 TestEconomy.PlatedFries(), TestEconomy.PlatedRaw(), TestEconomy.PlatedBurnt(),
-                TestEconomy.PlatedTomatoCheese(), TestEconomy.PlatedSalt(), TestEconomy.PlatedApple(),
+                TestEconomy.PlatedTomatoCashew(), TestEconomy.PlatedSalt(), TestEconomy.PlatedApple(),
             };
             foreach (var item in plates)
             {
@@ -131,7 +131,7 @@ namespace Worktown.Sim.Tests.Economy
             var s = E.Initial();
             var bots = Enumerable.Range(0, 8).Select(i => new Bot("bot" + i)).ToList();
             foreach (var b in bots) s = TestEconomy.Open(E, s, b.Id, 100_000);
-            string[] baseIds = { "potato", "apple", "tomato", "cheese", "salt", "onion", "basil", "oil" };
+            string[] baseIds = { "potato", "apple", "tomato", "cashew", "salt", "onion", "basil", "oil" };
             string[] shapes = { "halves", "slices", "sticks", "dice" };
             string[] heats = { "fry", "saute", "boil" };
             long nextId = 1;

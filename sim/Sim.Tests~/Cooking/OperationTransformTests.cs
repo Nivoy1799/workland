@@ -109,8 +109,8 @@ namespace Worktown.Sim.Tests.Cooking
         [Fact]
         public void AC8_ComponentLimit()
         {
-            var six = new[] { "salt", "tomato", "cheese", "basil", "oil", "onion" };
-            var five = new[] { "salt", "tomato", "cheese", "basil", "oil" };
+            var six = new[] { "salt", "tomato", "cashew", "basil", "oil", "onion" };
+            var five = new[] { "salt", "tomato", "cashew", "basil", "oil" };
             Item CutMix(string[] ids)
             {
                 var items = new Item[ids.Length];
@@ -118,7 +118,7 @@ namespace Worktown.Sim.Tests.Cooking
                 return Ok(Cut(Ok(Mix(items)), "halves"));
             }
             var a = CutMix(six);
-            var b = CutMix(new[] { "potato", "apple", "salt", "tomato", "cheese", "basil" });
+            var b = CutMix(new[] { "potato", "apple", "salt", "tomato", "cashew", "basil" });
             var c = CutMix(five);
             Assert.Equal(17, a.Weight + b.Weight + c.Weight);
             Assert.Equal(OperationError.ComponentLimit, Mix(a, b, c).Error);
@@ -127,7 +127,7 @@ namespace Worktown.Sim.Tests.Cooking
         [Fact]
         public void AC8_MixArityAfterFlattening()
         {
-            var m1 = Ok(Mix(Base("salt"), Base("tomato"), Base("cheese"), Base("basil")));
+            var m1 = Ok(Mix(Base("salt"), Base("tomato"), Base("cashew"), Base("basil")));
             var m2 = Ok(Mix(Base("oil"), Base("onion"), Base("potato")));
             Assert.Equal(OperationError.ArityViolation, Mix(m1, m2).Error); // 4 + 3 = 7 flattened
             Assert.Equal(OperationError.ArityViolation, Mix(Base("salt")).Error);
