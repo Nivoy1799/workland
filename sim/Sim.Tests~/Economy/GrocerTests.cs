@@ -56,7 +56,7 @@ namespace Worktown.Sim.Tests.Economy
         public void MaxLotAtMaxPriceStaysInRange()
         {
             // 10_000 * 150 = 1_500_000
-            var r = E.TryBuyBase(Start(2_000_000), "alice", "cheese", EconomyLimits.MaxLot);
+            var r = E.TryBuyBase(Start(2_000_000), "alice", "cashew", EconomyLimits.MaxLot);
             Assert.True(r.Ok);
             Assert.Equal(1_500_000, r.Cost);
         }

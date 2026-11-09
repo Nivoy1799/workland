@@ -125,7 +125,12 @@ namespace Worktown.Game.Tests
                     foreach (Station station in root.GetComponentsInChildren<Station>(true))
                     {
                         count++;
-                        float x = station.Index < crates ? -0.12f + station.Index * 1.24f : fixedX[station.Index - crates];
+                        // Spec 028: the first four crates 1.24 m apart; the ten street-food crates are 0.52 m wide, 0.56 m apart, from x -6.34.
+                        bool bank = station.Kind == StationKind.Crate && station.Index >= DemoIngredients.FirstStreetFood;
+                        float width = bank ? 0.52f : 1.2f;
+                        float x = station.Index < crates
+                            ? (bank ? -6.34f + (station.Index - DemoIngredients.FirstStreetFood + 0.5f) * 0.56f : -0.12f + station.Index * 1.24f)
+                            : fixedX[station.Index - crates];
                         // Spec 026: the body is as high as the furniture (0.90 m, the counter 1.05 m; was 1.0 m).
                         float height = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
                         var expected = new Vector3(x, height * 0.5f, station.Kind == StationKind.Counter ? 11.85f : 14.3f);
@@ -135,7 +140,7 @@ namespace Worktown.Game.Tests
                         var box = body.GetComponent<BoxCollider>();
                         Assert.IsNotNull(box, station.name + " lost its BoxCollider");
                         Assert.AreEqual(Vector3.one, box.size);
-                        Assert.AreEqual(new Vector3(1.2f, height, station.Kind == StationKind.Counter ? 0.7f : 1.2f), body.localScale); // spec 027a: the counter is 0.7 m deep
+                        Assert.AreEqual(new Vector3(width, height, station.Kind == StationKind.Counter ? 0.7f : 1.2f), body.localScale); // spec 027a: the counter is 0.7 m deep
                         Vector3 colliderCenter = box.bounds.center;
                         Assert.AreEqual(0f, Vector3.Distance(expected, colliderCenter), 0.001f, station.name + " moved");
                         Assert.IsNull(body.GetComponent<MeshRenderer>(), station.name + " still shows the cube");

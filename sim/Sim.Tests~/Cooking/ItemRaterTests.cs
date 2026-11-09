@@ -10,7 +10,7 @@ namespace Worktown.Sim.Tests.Cooking
         [Fact]
         public void Mix_RatingEqualAcrossAllPermutations()
         {
-            var set = new[] { Base("tomato"), Base("cheese"), Base("basil"), Base("oil"), Base("onion") };
+            var set = new[] { Base("tomato"), Base("cashew"), Base("basil"), Base("oil"), Base("onion") };
             var expected = ItemRater.Rate(Ok(Mix(set)));
             int count = 0;
             foreach (var p in Permutations(set))
@@ -47,7 +47,7 @@ namespace Worktown.Sim.Tests.Cooking
         public void SingleExtremeIngredient_ScoresLowerThanBalancedMix()
         {
             var extreme = ItemRater.Rate(Base("salt"));
-            var balanced = ItemRater.Rate(Ok(Mix(Base("tomato"), Base("cheese"), Base("basil"))));
+            var balanced = ItemRater.Rate(Ok(Mix(Base("tomato"), Base("cashew"), Base("basil"))));
             Assert.True(extreme.Quality < balanced.Quality);
         }
 
@@ -57,7 +57,7 @@ namespace Worktown.Sim.Tests.Cooking
             var sets = new[]
             {
                 new[] { Base("salt") }, new[] { Base("oil") },
-                new[] { Base("tomato"), Base("cheese"), Base("onion"), Base("oil"), Base("basil") },
+                new[] { Base("tomato"), Base("cashew"), Base("onion"), Base("oil"), Base("basil") },
             };
             foreach (var set in sets)
             {

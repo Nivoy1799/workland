@@ -12,7 +12,10 @@ namespace Worktown.Game.Art
         /// <summary>Ingredient colours in DemoIngredients order (were in Food, spec 007; spec 026: from the palette).</summary>
         private static readonly Color[] IngredientColors =
         {
-            Palette.FoodPotato, Palette.FoodApple, Palette.FoodTomato, Palette.FoodOnion
+            Palette.FoodPotato, Palette.FoodApple, Palette.FoodTomato, Palette.FoodOnion,
+            // Spec 028: flatbread, wrap, seitan, falafel mix, lettuce, cucumber, red cabbage, lemon, garlic-herb sauce, chili sauce.
+            Palette.FoodFlatbread, Palette.FoodWrap, Palette.FoodSeitan, Palette.FoodFalafel, Palette.FoodLettuce,
+            Palette.FoodCucumber, Palette.FoodRedCabbage, Palette.FoodLemon, Palette.FoodHerbSauce, Palette.FoodChiliSauce
         };
 
         /// <summary>Darkening for raw / short / medium / long (open question 3).</summary>
@@ -22,6 +25,8 @@ namespace Worktown.Game.Art
         private const float GoldenShift = 0.35f;
 
         private const byte Potato = 0, Apple = 1, Tomato = 2, Onion = 3;
+        private const byte Flatbread = 4, Wrap = 5, Seitan = 6, FalafelMix = 7, Lettuce = 8, Cucumber = 9, RedCabbage = 10,
+            Lemon = 11, HerbSauce = 12, ChiliSauce = 13;
 
         public static int IngredientCount => IngredientColors.Length;
 
@@ -45,11 +50,12 @@ namespace Worktown.Game.Art
             switch (look.Shape)
             {
                 case FoodLook.ShapeWhole:
-                    piece = new FoodPiece(WholeKey(ingredient), 1, ingredient == Potato); // no potato in the kit
+                    piece = new FoodPiece(WholeKey(ingredient), 1, WholeIsTinted(ingredient));
                     return true;
                 case FoodLook.ShapeHalves:
                     if (ingredient == Apple) piece = new FoodPiece(ArtKey.FoodAppleHalf, 2, false);
                     else if (ingredient == Onion) piece = new FoodPiece(ArtKey.FoodOnionHalf, 2, false);
+                    else if (ingredient == Lemon) piece = new FoodPiece(ArtKey.FoodLemonHalf, 2, false);
                     else piece = Generic(look.Shape, 2);
                     return true;
                 case FoodLook.ShapeSlices:
@@ -83,8 +89,29 @@ namespace Worktown.Game.Art
                 case Apple: return ArtKey.FoodApple;
                 case Tomato: return ArtKey.FoodTomato;
                 case Onion: return ArtKey.FoodOnion;
+                case Flatbread: return ArtKey.FoodFlatbread;
+                case Wrap: return ArtKey.FoodWrap;
+                case Seitan: return ArtKey.FoodSeitan;
+                case FalafelMix: return ArtKey.FoodFalafelMix;
+                case Lettuce: return ArtKey.FoodLettuce;
+                case Cucumber: return ArtKey.FoodCucumber;
+                case RedCabbage: return ArtKey.FoodRedCabbage;
+                case Lemon: return ArtKey.FoodLemon;
+                case HerbSauce: return ArtKey.FoodSauceGarlicHerb;
+                case ChiliSauce: return ArtKey.FoodSauceChili;
                 default: throw new System.ArgumentOutOfRangeException(nameof(ingredient), ingredient, "no whole model");
             }
+        }
+
+        /// <summary>
+        /// True for the whole models that stand in for something the kit does not have (potato: egg; spec 028: seitan: patty,
+        /// falafel mix: round loaf, lettuce and red cabbage: cabbage, cucumber: eggplant, garlic-herb sauce: the mustard bottle); they
+        /// take the ingredient colour. The rest keep the kit's own colours.
+        /// </summary>
+        public static bool WholeIsTinted(byte ingredient)
+        {
+            return ingredient == Potato || ingredient == Seitan || ingredient == FalafelMix || ingredient == Lettuce
+                || ingredient == Cucumber || ingredient == RedCabbage || ingredient == HerbSauce;
         }
 
         /// <summary>The generic piece for a cut shape (used when the kit has no model for that ingredient).</summary>

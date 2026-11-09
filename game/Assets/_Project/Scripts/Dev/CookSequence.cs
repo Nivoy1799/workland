@@ -205,6 +205,52 @@ namespace Worktown.Game.Dev
             yield return actor.Use("serve it at the counter", counterTop, InteractionAction.Sell,
                 () => me.DevSendStation(counter.Index, 0), capture.Before("serve-aim", "serve-reward", RewardFramesSeconds));
             yield return shot("served");
+
+            yield return CutCucumber(actor, capture, laneZ);
+        }
+
+        /// <summary>
+        /// Spec 028 AC5: buy a cucumber from the street-food bank, put it on the board, take the knife and make two strokes
+        /// (halves, then slices). The strokes are sent as the knife's use request, as a mouse drag would.
+        /// </summary>
+        private static IEnumerator CutCucumber(TourActor actor, CookCapture capture, float laneZ)
+        {
+            PickupInteractor me = actor.Interactor;
+            Station crate = null;
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+                if (s.Kind == StationKind.Crate && DemoIngredients.All[s.IngredientIndex].Id == "cucumber") crate = s;
+            Vessel board = null;
+            foreach (Vessel v in UnityEngine.Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+                if (v.Kind == VesselKind.Board) board = v;
+            Knife knife = UnityEngine.Object.FindFirstObjectByType<Knife>();
+            if (crate == null || board == null || knife == null)
+            {
+                actor.CountTimeout("cook: cucumber crate, board or knife missing");
+                yield break;
+            }
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
+            yield return actor.WalkTo(new Vector3(crate.transform.position.x, 0f, laneZ), false, false);
+            yield return capture.Shot("cucumber-crate");
+            yield return actor.Use("take a cucumber", crate.transform.position, InteractionAction.Buy, () => me.DevSendStation(crate.Index, 0));
+            yield return capture.Shot("cucumber-in-hand");
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(board.transform.position.x, 0f, laneZ), false, false);
+            NetworkObject boardObject = board.NetworkObject;
+            yield return actor.Use("put the cucumber on the board", ContentPoint(board), InteractionAction.PutInto,
+                () => me.DevSendUse(boardObject, VesselRules.ActionUse));
+            NetworkObject knifeObject = knife.GetComponent<NetworkObject>();
+            yield return actor.Use("pick up the knife", knife.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(knifeObject));
+            yield return actor.AimAt(ContentPoint(board), 1f);
+            for (int stroke = 1; stroke <= 2; stroke++)
+            {
+                Debug.Log("[Demo] knife stroke " + stroke + " on the cucumber (" + Time.time.ToString("0.0") + " s)");
+                me.DevSendUse(boardObject, VesselRules.ActionStroke);
+                yield return new WaitForSeconds(1f);
+                yield return capture.Shot(stroke == 1 ? "cucumber-halves" : "cucumber-slices");
+            }
+            Debug.Log("[Demo] the board holds: " + board.Title.Value);
+            if (!board.Title.Value.Contains("slice")) actor.CountTimeout("cook: the cucumber is not sliced (" + board.Title.Value + ")");
         }
 
         /// <summary>Spec 027c: the zone, progress and ring of the pan and pot, for the tour log.</summary>

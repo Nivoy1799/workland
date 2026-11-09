@@ -44,6 +44,17 @@ namespace Worktown.Game.Art
         public static readonly Color FoodApple = Rgb(0xB8483E);
         public static readonly Color FoodTomato = Rgb(0xD0563F);
         public static readonly Color FoodOnion = Rgb(0xD9CCDA);
+        // Spec 028: the street-food stock (muted, saturation at most 70 %).
+        public static readonly Color FoodFlatbread = Rgb(0xE0C294);
+        public static readonly Color FoodWrap = Rgb(0xE6D3AE);
+        public static readonly Color FoodSeitan = Rgb(0xB88A5C);
+        public static readonly Color FoodFalafel = Rgb(0x9C8B4F);
+        public static readonly Color FoodLettuce = Rgb(0x9DBB7E);
+        public static readonly Color FoodCucumber = Rgb(0x6F9A58);
+        public static readonly Color FoodRedCabbage = Rgb(0x9A5F86);
+        public static readonly Color FoodLemon = Rgb(0xE6CB5A);
+        public static readonly Color FoodHerbSauce = Rgb(0xE3E0B8);
+        public static readonly Color FoodChiliSauce = Rgb(0xC4513F);
         /// <summary>What fried food shifts towards.</summary>
         public static readonly Color FoodGolden = Rgb(0xE8BE6A);
 
@@ -51,7 +62,10 @@ namespace Worktown.Game.Art
         public static IReadOnlyList<(string Name, Color Color)> FoodColours { get; } = new[]
         {
             ("FoodPotato", FoodPotato), ("FoodApple", FoodApple), ("FoodTomato", FoodTomato), ("FoodOnion", FoodOnion),
-            ("FoodGolden", FoodGolden)
+            ("FoodGolden", FoodGolden),
+            ("FoodFlatbread", FoodFlatbread), ("FoodWrap", FoodWrap), ("FoodSeitan", FoodSeitan), ("FoodFalafel", FoodFalafel),
+            ("FoodLettuce", FoodLettuce), ("FoodCucumber", FoodCucumber), ("FoodRedCabbage", FoodRedCabbage),
+            ("FoodLemon", FoodLemon), ("FoodHerbSauce", FoodHerbSauce), ("FoodChiliSauce", FoodChiliSauce)
         };
 
         /// <summary>Highest HSV saturation a food colour may have.</summary>

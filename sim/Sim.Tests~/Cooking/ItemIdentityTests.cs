@@ -40,7 +40,7 @@ namespace Worktown.Sim.Tests.Cooking
         [Fact]
         public void AC3_MixIdenticalAcrossAll120Permutations()
         {
-            var set = new[] { Base("tomato"), Base("cheese"), Base("basil"), Base("oil"), Base("onion") };
+            var set = new[] { Base("tomato"), Base("cashew"), Base("basil"), Base("oil"), Base("onion") };
             var expected = Ok(Mix(set));
             int count = 0;
             foreach (var p in Permutations(set))
@@ -54,7 +54,7 @@ namespace Worktown.Sim.Tests.Cooking
         [Fact]
         public void MixHash_EqualAcrossAllOrderingsOfThree()
         {
-            var set = new[] { Base("tomato"), Base("cheese"), Base("basil") };
+            var set = new[] { Base("tomato"), Base("cashew"), Base("basil") };
             var expected = Ok(Mix(set)).Hash;
             int count = 0;
             foreach (var p in Permutations(set))
@@ -68,7 +68,7 @@ namespace Worktown.Sim.Tests.Cooking
         [Fact]
         public void AC3_MixIsFlattened()
         {
-            var a = Base("tomato"); var b = Base("cheese"); var c = Base("basil");
+            var a = Base("tomato"); var b = Base("cashew"); var c = Base("basil");
             AssertSameItem(Ok(Mix(a, b, c)), Ok(Mix(Ok(Mix(a, b)), c)));
             AssertSameItem(Ok(Mix(a, b, c)), Ok(Mix(c, Ok(Mix(b, a)))));
         }
@@ -77,7 +77,7 @@ namespace Worktown.Sim.Tests.Cooking
         public void MixHash_DiffersForDifferentSetsAndDuplicates()
         {
             var tomato = Base("tomato");
-            var a = Ok(Mix(tomato, Base("cheese")));
+            var a = Ok(Mix(tomato, Base("cashew")));
             var b = Ok(Mix(tomato, Base("basil")));
             var c = Ok(Mix(tomato, tomato));
             var d = Ok(Mix(tomato, tomato, tomato));

@@ -79,6 +79,7 @@ namespace Worktown.Game.Editor
             public Vector3 PieceReal = Vector3.zero; // spec 026, Piece mode: the piece's real size in m (x, y, z)
             public bool AlongZ; // spec 019, Max mode: turn the model so its longest horizontal side runs along Z
             public string Skin = null; // spec 025, Character mode: texture name of the skin material
+            public bool Flat; // spec 028: a stand-in model drawn with the white piece material (FoodVisual tints it flat)
         }
 
         private static readonly Def[] Defs =
@@ -118,6 +119,19 @@ namespace Worktown.Game.Editor
             FoodDef(ArtKey.FoodOnionHalf, "onion-half.fbx"),
             FoodDef(ArtKey.FoodTomatoSlice, "tomato-slice.fbx"),
             FoodDef(ArtKey.FoodFries, "fries.fbx"),
+            // Spec 028: the street-food stock. The kit has no flatbread, falafel, cucumber or seitan: the nearest shapes stand in
+            // (bread, a round loaf, the eggplant, the patty; the cabbage for lettuce and red cabbage); FoodVisual tints the stand-ins with the ingredient colour.
+            FoodDef(ArtKey.FoodFlatbread, "bread.fbx"),
+            FoodDef(ArtKey.FoodWrap, "taco.fbx"),
+            FlatFoodDef(ArtKey.FoodSeitan, "meat-patty.fbx"),
+            FlatFoodDef(ArtKey.FoodFalafelMix, "loaf-round.fbx"),
+            FlatFoodDef(ArtKey.FoodLettuce, "cabbage.fbx"),
+            FlatFoodDef(ArtKey.FoodCucumber, "eggplant.fbx"),
+            FlatFoodDef(ArtKey.FoodRedCabbage, "cabbage.fbx"),
+            FoodDef(ArtKey.FoodLemon, "lemon.fbx"),
+            FoodDef(ArtKey.FoodLemonHalf, "lemon-half.fbx"),
+            FlatFoodDef(ArtKey.FoodSauceGarlicHerb, "bottle-musterd.fbx"),
+            FoodDef(ArtKey.FoodSauceChili, "bottle-ketchup.fbx"),
             // Generic pieces at their real size (m): a half fruit, a 1 cm slice, a fry-sized stick, a 3 cm cube.
             Piece(ArtKey.FoodPieceHalf, PrimitiveType.Sphere, new Vector3(0.08f, 0.04f, 0.08f)),
             Piece(ArtKey.FoodPieceSlice, PrimitiveType.Cylinder, new Vector3(0.07f, 0.01f, 0.07f)),
@@ -162,6 +176,10 @@ namespace Worktown.Game.Editor
 
         private static Def Character(ArtKey key, string skin) =>
             new Def { Key = key, Model = CharacterBody, Mode = Fit.Character, Skin = skin };
+
+        /// <summary>Spec 028: a stand-in whose own colours would fight the tint (eggplant for cucumber): one flat colour.</summary>
+        private static Def FlatFoodDef(ArtKey key, string model) =>
+            new Def { Key = key, Model = FoodKit + model, Mode = Fit.Max, Flat = true };
 
         private static Def FoodDef(ArtKey key, string model) =>
             new Def { Key = key, Model = FoodKit + model, Mode = Fit.Max };
@@ -212,6 +230,9 @@ namespace Worktown.Game.Editor
                 : InstantiateModel(def.Model, root.transform, "Model");
             model.transform.localRotation = Quaternion.Euler(0f, def.Yaw, 0f);
             if (def.Model.StartsWith(Furniture)) Recolour(model);
+            if (def.Flat)
+                foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
+                    r.sharedMaterial = FoodPieceMaterial();
             ArtSize size = ArtSizeTable.Of(def.Key);
             float target = size.Target;
 

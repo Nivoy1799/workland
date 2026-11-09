@@ -15,9 +15,9 @@ namespace Worktown.Sim.Tests.Economy
         {
             var potato = T.Base("potato");
             var tomato = T.Base("tomato");
-            var cheese = T.Base("cheese");
+            var cashew = T.Base("cashew");
             var sticks = T.Ok(T.Cut(potato, "sticks"));
-            var mixed = T.Ok(T.Mix(tomato, cheese));
+            var mixed = T.Ok(T.Mix(tomato, cashew));
             var fries = T.Fries();
             foreach (var x in new[] { potato, tomato, sticks, mixed, fries })
             {

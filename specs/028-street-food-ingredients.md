@@ -78,7 +78,32 @@ flow.
 Prices (comparable to today's grocer: 40–120 each), stats, the fridge vs. crates choice, "cashew cheese".
 
 ## Implementation notes
-(Builder fills this in.)
+Builder (Sonnet), spec 028.
+
+**Sim** (`sim/Runtime/Cooking`): `StreetFoodItems` (ten `BaseItemDef`s, ids flatbread, wrap, seitan, falafel_mix, lettuce, cucumber, red_cabbage, lemon,
+garlic_herb_sauce, chili_sauce; `CutShape(id)`) and `ContentRules` (`ForbiddenWords`, whole-word `FindForbidden`, plurals; "eggplant" is fine).
+Grocer prices in `EconomyCatalog.CreateDefault`: lettuce 45, cucumber 50, red cabbage 55, flatbread 60, lemon 60, wrap 70, garlic-herb sauce 80,
+chili sauce 80, falafel mix 90, seitan 110.
+
+**Deviations and decisions**
+- **`cheese`** is removed, not renamed: the spec's own forbidden list contains "cheese", so "vegan_cheese" / "cashew cheese" would fail the new check.
+  The grocer entry (150) is now `cashew`, and the sim test fixture `cheese` is now `cashew` (same stats; sort order unchanged). `TestEconomy.PlatedTomatoCheese`
+  stays as an alias of `PlatedTomatoCashew` because `DeterminismTests` must stay unchanged and calls it.
+- **Cuts.** The sim cut op has halves, slices, sticks, dice only. "Shredded" (lettuce, red cabbage) = slices, "strips" (seitan) = sticks;
+  `StreetFoodItems.CutShape` says which. A real shred bucket would change the op catalog (follow-up with the assembly/slicing specs).
+- **Sizes.** Items over 15 cm (flatbread, wrap, lettuce, cucumber, red cabbage, sauce bottles) are class World (real size, no x1.5), because
+  `FoodArtCatalogTests` limits a held item to a 0.25 m footprint; seitan block 0.12, falafel mix 0.10, lemon 0.07 are Small (x1.5).
+- **Crates: a bank, not a fridge.** Ten narrow crates (0.52 m wide, 0.56 m apart) between the landing worktop and the four old crates. The kitchen is
+  5.6 m longer at the left (KitchenMinX -7.6); the four crates, board, stoves, counter and everything right of them keep their positions.
+  FloorPlanTests pass with the crate count generalised from 4 to `DemoIngredients.All.Count` (14). Cost: the walk from the first bank crate to the
+  board is about 8 m (dish-flow limit only measures the last crate). A fridge with selectable contents would need new netcode; left out.
+- **Tour points moved** (the wall moved): `TourRules.ParkX` -10.8, observer exit x -8.9; the look tour has two new shots (`stock-third`, `stock-first`).
+- Every crate now shows two or three of its food models sticking out of the box (`CreateCrateSample`), so the items read at a glance.
+- Stand-in models (patty for seitan, round loaf for falafel mix, eggplant for cucumber, cabbage for red cabbage, mustard bottle for garlic-herb sauce)
+  use the flat white piece material, so the ingredient colour tints them cleanly (`ArtCatalogBuilder.FlatFoodDef`).
+- Test updates besides new tests: `FloorPlanTests` (crate count), `ArtCatalogTests` (crate x and width, bank), `TourRulesTests` (look shots),
+  `WhatsNewTests` (spec 027d no longer the newest), sim `EconomyCatalogTests` (18 grocer entries).
+- Cook tour (`CookSequence.CutCucumber`): buys a cucumber from the bank, puts it on the board, takes the knife, two strokes, ends with "cucumber slices".
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

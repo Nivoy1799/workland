@@ -68,6 +68,19 @@ namespace Worktown.Game.Art
         CharacterCustomerMale2,
         CharacterCustomerFemale2,
         CharacterCustomerMale3,
-        CharacterCustomerFemale3
+        CharacterCustomerFemale3,
+
+        // Spec 028: the street-food stock (Kenney Food Kit models, tinted where the kit has no exact one).
+        FoodFlatbread,
+        FoodWrap,
+        FoodSeitan,
+        FoodFalafelMix,
+        FoodLettuce,
+        FoodCucumber,
+        FoodRedCabbage,
+        FoodLemon,
+        FoodLemonHalf,
+        FoodSauceGarlicHerb,
+        FoodSauceChili
     }
 }

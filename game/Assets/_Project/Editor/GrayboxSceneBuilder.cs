@@ -71,10 +71,17 @@ namespace Worktown.Game.Editor
         // Then the cook aisle (AisleWidth between the bodies) and the front counter (1.05 m) with the serving counter
         // opposite the plate shelf, turned so its cook side faces the aisle. Guests queue on the street side of the front
         // counter. A back wall closes the back line; low side walls close both ends, with the staff gap at the left end.
-        private const float KitchenMinX = -2f;
+        // Spec 028: the street-food stock is a bank of ten narrow crates (0.52 m wide, 0.56 m apart) between the landing worktop
+        // and the four crates, so the four crates, the stoves and everything right of them keep their places.
+        private const int BankCrates = 10;
+        private const float BankCrateWidth = 0.52f;
+        private const float BankPitch = 0.56f;
+        private const float BankWidth = BankCrates * BankPitch;
+        private const float KitchenMinX = -2f - BankWidth;
         private const float LandingWidth = 1.26f;
+        private const float BankStartX = KitchenMinX + LandingWidth;
         private const float CratePitch = StationWidth + 2f * WorktopGapMargin;
-        private const float FirstCrateX = KitchenMinX + LandingWidth + StationWidth * 0.5f + WorktopGapMargin;
+        private const float FirstCrateX = BankStartX + BankWidth + StationWidth * 0.5f + WorktopGapMargin;
         private const float PrepStartX = FirstCrateX + 3f * CratePitch + StationWidth * 0.5f + WorktopGapMargin;
         private const float PrepWidth = 1.8f;
         private const float BetweenWidth = 1.26f;
@@ -966,9 +973,15 @@ namespace Worktown.Game.Editor
             for (int i = 0; i < DemoIngredients.All.Count; i++)
             {
                 string id = DemoIngredients.All[i].Id;
+                string name = DemoIngredients.All[i].DisplayName;
                 Material mat = CreateMaterial(Root + "/Settings/Crate_" + id + ".mat", FoodArtRules.IngredientColor((byte)i)); // spec 026: palette
-                stations.Add(CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
-                    char.ToUpperInvariant(id[0]) + id.Substring(1) + " crate", FirstCrateX + i * CratePitch, KitchenZ, 0f, mat, i));
+                // Spec 028: the first four are the full-size crates; the street-food items stand in the narrow bank left of them.
+                bool bank = i >= DemoIngredients.FirstStreetFood;
+                float x = bank ? BankStartX + (i - DemoIngredients.FirstStreetFood + 0.5f) * BankPitch : FirstCrateX + i * CratePitch;
+                Station crate = CreateStation(catalog, parent.transform, stations.Count, StationKind.Crate,
+                    char.ToUpperInvariant(name[0]) + name.Substring(1) + " crate", x, KitchenZ, 0f, mat, i, bank ? BankCrateWidth : StationWidth);
+                stations.Add(crate);
+                CreateCrateSample(catalog, crate, i, bank ? 2 : 3);
             }
             Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Steel);
             Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, KitchenZ, 0f, stoveMat, 0);
@@ -1161,6 +1174,34 @@ namespace Worktown.Game.Editor
             wall.isStatic = true;
         }
 
+        /// <summary>
+        /// Spec 028: a few of the crate's food models sticking out of the open box, so a crate reads at a glance (no collider,
+        /// static). Stand-ins (see <see cref="FoodArtRules.WholeIsTinted"/>) get a flat material in the ingredient colour.
+        /// </summary>
+        private static void CreateCrateSample(ArtCatalog catalog, Station crate, int ingredient, int count)
+        {
+            if (catalog == null) return;
+            var look = new FoodLook((byte)ingredient, FoodLook.ShapeWhole, 0, 0, 0, 0);
+            if (!FoodArtRules.TryGetPiece(look, out FoodPiece piece) || !catalog.TryGet(piece.Key, out GameObject prefab)) return;
+            Material tint = piece.Tinted
+                ? CreateMaterial(Root + "/Settings/Sample_" + DemoIngredients.All[ingredient].Id + ".mat", FoodArtRules.IngredientColor((byte)ingredient))
+                : null;
+            var samples = new GameObject("Sample");
+            samples.transform.SetParent(crate.transform, false);
+            samples.transform.localPosition = new Vector3(0f, StationTop(crate) - CrateSampleSink, 0f);
+            for (int n = 0; n < count; n++)
+            {
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, samples.transform);
+                instance.transform.localPosition = new Vector3((n - (count - 1) * 0.5f) * CrateSampleSpacing, 0f, (n % 2 == 0 ? 0.04f : -0.04f));
+                instance.transform.localRotation = Quaternion.Euler(0f, 37f * n, 0f);
+                if (tint != null) foreach (Renderer r in instance.GetComponentsInChildren<Renderer>()) r.sharedMaterial = tint;
+            }
+            SetStaticRecursive(samples);
+        }
+
+        private const float CrateSampleSink = 0.08f;     // how far the samples sit down in the box (m)
+        private const float CrateSampleSpacing = 0.22f;  // between neighbouring samples (m)
+
         /// <summary>Spec 021: a static stack of plate models on the plate shelf (the shelf gives the real plates).</summary>
         private static void CreatePlateStack(ArtCatalog catalog, Station shelf)
         {
@@ -1180,7 +1221,7 @@ namespace Worktown.Game.Editor
 
         /// <summary>Spec 027a: <paramref name="yaw"/> turns the station; its front (controls, label) faces local -z.</summary>
         private static Station CreateStation(ArtCatalog catalog, Transform parent, int index, StationKind kind, string displayName,
-            float x, float z, float yaw, Material material, int ingredientIndex)
+            float x, float z, float yaw, Material material, int ingredientIndex, float width = StationWidth)
         {
             float height = StationHeightOf(kind); // spec 026: 0.90 m, the counter 1.05 m
             float depth = kind == StationKind.Counter ? CounterDepth : StationWidth; // spec 027a
@@ -1191,7 +1232,7 @@ namespace Worktown.Game.Editor
             GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.name = "Body";
             body.transform.SetParent(root.transform, false);
-            body.transform.localScale = new Vector3(StationWidth, height, depth);
+            body.transform.localScale = new Vector3(width, height, depth); // spec 028: the street-food crates are narrow
             body.GetComponent<MeshRenderer>().sharedMaterial = material;
             body.isStatic = true;
 
@@ -1204,7 +1245,7 @@ namespace Worktown.Game.Editor
                 visual.transform.localPosition = new Vector3(0f, -height * 0.5f, 0f);
                 visual.transform.localRotation = ArtFrontRotation; // spec 027a: the model's front (knobs, oven door) on the controls' side
                 // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules.
-                visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(1f, 1f, depth / StationWidth));
+                visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(width / StationWidth, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
                 foreach (Renderer r in visual.GetComponentsInChildren<Renderer>())
                 {
