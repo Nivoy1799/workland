@@ -49,6 +49,10 @@ namespace Worktown.Game.Cooking
         private int _initAttempts;
         private bool _labelsDirty = true;
         private uint _lastLabelTick;
+        // Spec 027c: the heat bytes' rate gate per pan and pot, and the tick they were last looked at.
+        private readonly Dictionary<Vessel, HeatSync> _heatSync = new Dictionary<Vessel, HeatSync>();
+        private uint _lastHeatTick;
+        private bool _heatChecked;
 
         private sealed class HomeSlot
         {
@@ -87,6 +91,8 @@ namespace Worktown.Game.Cooking
                 _initialized = false;
                 _initAttempts = 0;
                 _burnerSurface.Clear();
+                _heatSync.Clear();
+                _heatChecked = false;
             }
         }
 
@@ -107,7 +113,7 @@ namespace Worktown.Game.Cooking
             switch (station.Kind)
             {
                 case StationKind.Crate: return TakeIngredient(player, station);
-                case StationKind.Counter: return Serve(player);
+                case StationKind.Counter: return Serve(player, station);
                 case StationKind.Stove: return UseBurner(station, option);
                 case StationKind.PlateShelf: return TakePlate(player);
                 default: return CookOutcome.UnknownStation;
@@ -332,6 +338,7 @@ namespace Worktown.Game.Cooking
                 if (vessel == null || !vessel.IsSpawned)
                 {
                     _vessels.RemoveAt(i); // its id may be reused; KitchenState entries were removed when it went
+                    if (vessel != null) _heatSync.Remove(vessel);
                     continue;
                 }
                 if (vessel.Kind == VesselKind.Plate && VesselRules.IsLost(true, vessel.transform.position.y))
@@ -378,6 +385,7 @@ namespace Worktown.Game.Cooking
         {
             _kitchen.RemoveVessel(vessel.ObjectId);
             _vessels.Remove(vessel);
+            _heatSync.Remove(vessel); // a pooled object that comes back starts fresh
             if (vessel.IsSpawned) _networkManager.ServerManager.Despawn(vessel.NetworkObject);
         }
 
@@ -396,7 +404,33 @@ namespace Worktown.Game.Cooking
                 foreach (Vessel vessel in _vessels)
                     if (vessel != null && VesselRules.IsHeat(vessel.Kind) && _kitchen.HeatCount(vessel.ObjectId) > 0) RefreshVessel(vessel);
             }
+            if (!_heatChecked || tick != _lastHeatTick)
+            {
+                _heatChecked = true;
+                _lastHeatTick = tick;
+                PublishHeat(tick, tickRate);
+            }
             WatchHomes();
+        }
+
+        /// <summary>
+        /// Spec 027c: the pan's and pot's heat bytes (zone with the warning bit, progress) from the sim's doneness window
+        /// and the time on the heat. Each vessel's <see cref="HeatSync"/> sends only changes, at most 4 per second.
+        /// </summary>
+        private void PublishHeat(uint tick, double tickRate)
+        {
+            foreach (Vessel vessel in _vessels)
+            {
+                if (vessel == null || !vessel.IsServerInitialized || !VesselRules.IsHeat(vessel.Kind)) continue;
+                if (!_heatSync.TryGetValue(vessel, out HeatSync sync))
+                {
+                    sync = new HeatSync();
+                    _heatSync[vessel] = sync;
+                }
+                HeatReading reading = _kitchen.HeatReadingOf(vessel.ObjectId, tick, tickRate);
+                byte zone = HeatZoneRules.Encode(reading);
+                if (sync.ShouldSend(tick, tickRate, reading.Progress, zone)) vessel.ServerSetHeat(reading.Progress, zone);
+            }
         }
 
         // ---- crates and the counter (spec 007/009) ----
@@ -458,7 +492,7 @@ namespace Worktown.Game.Cooking
         /// everything in the hands. Spec 022: a sale to NPC demand goes to a waiting customer (first exact order match,
         /// else the first in line) and pays the match's share of the sim price.
         /// </summary>
-        private CookOutcome Serve(PickupInteractor player)
+        private CookOutcome Serve(PickupInteractor player, Station counter)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return CookOutcome.NothingHeld;
             Vessel plate = null;
@@ -484,6 +518,7 @@ namespace Worktown.Game.Cooking
             int customerId = 0;
             Worktown.Game.Npc.OrderMatch match = Worktown.Game.Npc.OrderMatch.Wrong;
             long soldPayout = 0;
+            int paidPermille = EconomyRules.FullPayPermille;
 
             if (_economy != null)
             {
@@ -509,6 +544,7 @@ namespace Worktown.Game.Cooking
                 string where = sale.Channel == SaleChannel.NpcDemand ? sale.MarketId : "wholesaler";
                 served = forCustomer && sale.Channel == SaleChannel.NpcDemand;
                 soldPayout = sale.Payout;
+                if (served) paidPermille = payPermille;
                 entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
                     + EconomyRules.Money(sale.Payout) + " (" + where + ")";
                 if (served)
@@ -530,7 +566,12 @@ namespace Worktown.Game.Cooking
                 _kitchen.TryRemove(held.ObjectId, out _);
                 _networkManager.ServerManager.Despawn(held);
             }
-            if (_feed != null) _feed.ServerAdd(entry);
+            if (_feed != null)
+            {
+                _feed.ServerAdd(entry);
+                // Spec 027c: the reward moment over the counter for everyone (stars, coin, tip), through the feed's SyncVar.
+                _feed.ServerReward(counter.Index, starCount, soldPayout, Worktown.Game.Npc.OrderRules.TipOf(soldPayout, paidPermille));
+            }
 
             // Spec 014, after the sale is complete: customers must never be able to break the money transaction
             // (review blocker). Spec 022: the picked customer leaves with what they paid.

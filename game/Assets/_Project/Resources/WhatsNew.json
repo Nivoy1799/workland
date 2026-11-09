@@ -376,6 +376,24 @@
         "Third person (V): is the cook readable and the kitchen still visible?",
         "Watch the other player stand and turn at the stove: legs together, no frozen stride"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-027c",
+      "date": "2026-11-09",
+      "title": "Feel pass 2: cooking reads at a glance",
+      "items": [
+        "A small ring next to a pan or pot on the heat fills up; the green and yellow rim marks the good window (yellow is perfect)",
+        "The food changes colour as it cooks: raw, golden, brown, and charcoal when it burns, also in the pot",
+        "The sizzle and bubbling grow with the heat and get a little higher when the food is overdone",
+        "A chime at perfect, three beeps 3 s before it overcooks, a hiss and dark smoke when it burns",
+        "Serving at the counter: stars pop over it, a coin sounds and the money and tip float up, for everyone near the counter"
+      ],
+      "test": [
+        "Fry a whole potato and watch the ring and the colour: can you take it out at perfect without reading any label?",
+        "Leave it on: do the beeps come early enough, and do the smoke and hiss read as burnt?",
+        "Serve a dish while the other player watches from the street: do both of you see the stars and the money?",
+        "First person: does the ring ever get in the way when you look at the pan?"
+      ]
     }
   ]
 }

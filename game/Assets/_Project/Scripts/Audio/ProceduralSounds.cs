@@ -160,6 +160,85 @@ namespace Worktown.Game.Audio
         /// <summary>Spec 027b: a stove button or knob, a crisp short click.</summary>
         public static float[] Button() => Tock(2706, 0.05f, 0.3f, 0.0015f, 2400f, 0.12f, 0.006f, 650f, 0.2f, 0.008f);
 
+        /// <summary>Spec 027c: "perfect", a bright rising two-note chime (a fifth, then the octave), soft attack.</summary>
+        public static float[] Perfect()
+        {
+            var s = new float[(int)(SampleRate * 0.5f)];
+            int second = (int)(SampleRate * 0.12f);
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                s[i] = Bell(t, 784f, 0.22f, 0.25f);
+                if (i >= second) s[i] += Bell((i - second) / (float)SampleRate, 1175f, 0.22f, 0.3f);
+            }
+            return s;
+        }
+
+        /// <summary>Spec 027c: the warning 3 s before overdone, three short soft beeps on one mid tone.</summary>
+        public static float[] Warning()
+        {
+            var s = new float[(int)(SampleRate * 0.5f)];
+            int beep = (int)(SampleRate * 0.09f), gap = (int)(SampleRate * 0.16f);
+            for (int n = 0; n < 3; n++)
+            {
+                int start = n * gap;
+                for (int i = 0; i < beep && start + i < s.Length; i++)
+                {
+                    float t = i / (float)SampleRate;
+                    float env = (float)Math.Sin(Math.PI * i / beep);
+                    s[start + i] += ((float)Math.Sin(2.0 * Math.PI * 660.0 * t) + 0.3f * (float)Math.Sin(2.0 * Math.PI * 1320.0 * t)) * 0.25f * env;
+                }
+            }
+            return s;
+        }
+
+        /// <summary>Spec 027c: burnt, a hiss of smoke over a low falling tone ("pfff" with a sag).</summary>
+        public static float[] Burnt()
+        {
+            var rng = new System.Random(2801);
+            var s = new float[(int)(SampleRate * 0.8f)];
+            double phase = 0.0;
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float u = t / 0.8f;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous * 0.6f;
+                previous = noise;
+                float hiss = high * 0.16f * (float)Math.Sin(Math.PI * Math.Min(1.0, u * 1.4)) * (1f - u);
+                phase += 2.0 * Math.PI * (220.0 - 120.0 * u) / SampleRate;
+                float sag = (float)Math.Sin(phase) * 0.3f * (float)Math.Exp(-t / 0.35f) * Math.Min(1f, t / 0.01f);
+                s[i] = hiss + sag;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 027c: a sale, a coin "ka-ching": two quick bright metal pings.</summary>
+        public static float[] Coin()
+        {
+            var s = new float[(int)(SampleRate * 0.45f)];
+            int second = (int)(SampleRate * 0.07f);
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float v = Bell(t, 1976f, 0.18f, 0.12f) + Bell(t, 2960f, 0.08f, 0.08f);
+                if (i >= second)
+                {
+                    float t2 = (i - second) / (float)SampleRate;
+                    v += Bell(t2, 2637f, 0.2f, 0.2f) + Bell(t2, 3951f, 0.08f, 0.12f);
+                }
+                s[i] = v;
+            }
+            return s;
+        }
+
+        /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
+        private static float Bell(float t, float freq, float amp, float decay)
+        {
+            return (float)Math.Sin(2.0 * Math.PI * freq * t) * amp * (float)Math.Exp(-t / decay) * Math.Min(1f, t / 0.003f);
+        }
+
         public static float[] Samples(SoundKey key)
         {
             switch (key)
@@ -175,6 +254,10 @@ namespace Worktown.Game.Audio
                 case SoundKey.PlaceFood: return PlaceFood();
                 case SoundKey.Nope: return Nope();
                 case SoundKey.Button: return Button();
+                case SoundKey.Perfect: return Perfect();
+                case SoundKey.Warning: return Warning();
+                case SoundKey.Burnt: return Burnt();
+                case SoundKey.Coin: return Coin();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }

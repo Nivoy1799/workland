@@ -12,6 +12,9 @@ namespace Worktown.Game.Cooking
     /// object's id. Synced: the content names and looks, the name of what you would get out of it, and the pan's mode
     /// byte (fry / sauté). Never a quality, a time or a temperature (D21). Carried with the spec 003 Pickup on the
     /// same object; no RPCs here (the player's PickupInteractor sends RequestUse).
+    /// Spec 027c: two presentation bytes for the pan and pot on the heat, computed by the server from the sim's doneness
+    /// window (<see cref="HeatZoneRules"/>): <see cref="HeatProgress"/> and <see cref="HeatZone"/> (zone plus a warning bit).
+    /// They reveal no stats or times (D21 amendment pending in docs/human-inbox.md); sent only on change, at most 4 Hz.
     /// </summary>
     public sealed class Vessel : NetworkBehaviour
     {
@@ -24,6 +27,12 @@ namespace Worktown.Game.Cooking
         public readonly SyncVar<string> Title = new SyncVar<string>(string.Empty);
         /// <summary>Pan only: <see cref="ModeFry"/> or <see cref="ModeSaute"/>.</summary>
         public readonly SyncVar<byte> Mode = new SyncVar<byte>(ModeFry);
+        /// <summary>Spec 027c: 0-255, the share of the way to the end of the good window (the good window starts at
+        /// <see cref="HeatZoneRules.GoodShare"/>).</summary>
+        public readonly SyncVar<byte> HeatProgress = new SyncVar<byte>(0);
+        /// <summary>Spec 027c: the <see cref="Cooking.HeatZone"/> in the low bits, <see cref="HeatZoneRules.WarnBit"/> from
+        /// 3 s before Overdone.</summary>
+        public readonly SyncVar<byte> HeatZone = new SyncVar<byte>(0);
 
         [SerializeField] private VesselKind _kind;
         [SerializeField] private TextMesh _label;
@@ -32,8 +41,16 @@ namespace Worktown.Game.Cooking
 
         private bool _visualDirty;
         private bool _labelDirty;
+        private bool _heatDirty;
 
         public VesselKind Kind => _kind;
+
+        /// <summary>Spec 027c: the zone clients see (None when nothing is on the heat).</summary>
+        public HeatZone Zone => HeatZoneRules.ZoneOf(HeatZone.Value);
+        /// <summary>Spec 027c: Overdone comes within 3 s.</summary>
+        public bool Warning => HeatZoneRules.WarnOf(HeatZone.Value);
+        /// <summary>Spec 027c: the progress byte as 0..1.</summary>
+        public float Progress01 => HeatProgress.Value / 255f;
 
         /// <summary>How many things lie in it, as clients see it.</summary>
         public int ContentCount => Mathf.Max(Names.Count, Looks.Count);
@@ -43,12 +60,22 @@ namespace Worktown.Game.Cooking
             Names.OnChange += (_, _, _, _, _) => _labelDirty = true;
             Looks.OnChange += (_, _, _, _, _) => _visualDirty = true;
             Mode.OnChange += (_, _, _) => _labelDirty = true;
+            HeatProgress.OnChange += (_, _, _) => _heatDirty = true;
+            HeatZone.OnChange += (_, _, _) => _heatDirty = true;
         }
 
         public override void OnStartClient()
         {
             _labelDirty = true;
             _visualDirty = true;
+            _heatDirty = true;
+        }
+
+        /// <summary>Server: publish the heat bytes (KitchenService's <see cref="HeatSync"/> limits the rate); only changes go out.</summary>
+        internal void ServerSetHeat(byte progress, byte zone)
+        {
+            if (HeatProgress.Value != progress) HeatProgress.Value = progress;
+            if (HeatZone.Value != zone) HeatZone.Value = zone;
         }
 
         /// <summary>Server: publish the contents; only what changed is sent.</summary>
@@ -94,7 +121,14 @@ namespace Worktown.Game.Cooking
             if (_visualDirty)
             {
                 _visualDirty = false;
+                _heatDirty = true;
                 if (_visual != null) _visual.ShowParts(Looks);
+            }
+            if (_heatDirty)
+            {
+                _heatDirty = false;
+                // Spec 027c: the food in the pan or pot shifts colour with the heat, for every viewer.
+                if (_visual != null) _visual.SetHeat(Zone, Progress01, _kind == VesselKind.Pot);
             }
             if (_labelDirty)
             {

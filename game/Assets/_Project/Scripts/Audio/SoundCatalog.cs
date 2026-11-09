@@ -39,6 +39,9 @@ namespace Worktown.Game.Audio
                 case SoundKey.Pick: return 0.7f;
                 case SoundKey.Nope: return 0.8f;
                 case SoundKey.Button: return 0.8f;
+                case SoundKey.Perfect: return 0.8f;
+                case SoundKey.Warning: return 0.7f;
+                case SoundKey.Coin: return 0.8f;
                 default: return 1f;
             }
         }

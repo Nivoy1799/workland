@@ -40,6 +40,33 @@ namespace Worktown.Game.Art
         private readonly List<Transform> _dropping = new List<Transform>();
         private readonly List<Vector3> _dropRest = new List<Vector3>();
         private float _dropStart;
+        // Spec 027c: what each active instance shows (for the colour shift on the heat) and the current heat.
+        private readonly List<PieceTint> _tints = new List<PieceTint>();
+        private HeatZone _heatZone = HeatZone.None;
+        private float _heatProgress;
+        private bool _heatBoiled;
+
+        private struct PieceTint
+        {
+            public FoodLook Look;
+            public bool Tinted;
+            public bool Food;
+        }
+
+        /// <summary>
+        /// Spec 027c: the food shown here is on the heat (a pan's or pot's contents): every piece shifts colour with
+        /// <paramref name="progress01"/> and <paramref name="zone"/> (<see cref="FoodArtRules.HeatTint"/>); None returns to
+        /// the bucket colours. Only re-tints, nothing is rebuilt.
+        /// </summary>
+        public void SetHeat(HeatZone zone, float progress01, bool boiled)
+        {
+            if (zone == _heatZone && Mathf.Approximately(progress01, _heatProgress) && boiled == _heatBoiled) return;
+            _heatZone = zone;
+            _heatProgress = progress01;
+            _heatBoiled = boiled;
+            for (int i = 0; i < _active.Count; i++)
+                if (_active[i] != null && _tints[i].Food) ApplyTint(_active[i], _tints[i]);
+        }
 
         /// <summary>A food object: a single pile, or a plate / bowl with up to four parts.</summary>
         public void ShowFood(FoodLook look, IReadOnlyList<FoodLook> parts)
@@ -53,7 +80,7 @@ namespace Worktown.Game.Art
             else
             {
                 bool plated = look.Kind == FoodLook.KindPlated;
-                shown = Add(plated ? ArtKey.FoodPlate : ArtKey.FoodBowl, Vector3.zero, 0f, 1f, Color.white, false);
+                shown = Add(plated ? ArtKey.FoodPlate : ArtKey.FoodBowl, Vector3.zero, 0f, 1f, default, false, false);
                 float height = plated ? _plateContentHeight : _bowlContentHeight;
                 float scale = plated ? _partScale : _bowlPartScale;
                 float radius = plated ? _partRadius : _bowlPartRadius;
@@ -129,17 +156,15 @@ namespace Worktown.Game.Art
         {
             if (!FoodArtRules.TryGetPiece(look, out FoodPiece piece)) return false;
             if (!TryGetPrefab(piece.Key, out _)) return false;
-            Color tint = FoodArtRules.Tint(look, piece.Tinted);
-            bool custom = piece.Tinted || tint != Color.white;
             for (int i = 0; i < piece.Count; i++)
             {
                 Vector3 position = offset + FoodArtRules.PilePosition(i, piece.Count) * scale;
-                Add(piece.Key, position, FoodArtRules.PileYaw(i, piece.Count), scale, tint, custom);
+                Add(piece.Key, position, FoodArtRules.PileYaw(i, piece.Count), scale, look, piece.Tinted, true);
             }
             return true;
         }
 
-        private bool Add(ArtKey key, Vector3 position, float yaw, float scale, Color tint, bool custom)
+        private bool Add(ArtKey key, Vector3 position, float yaw, float scale, FoodLook look, bool tinted, bool food)
         {
             if (!TryGetPrefab(key, out GameObject prefab)) return false;
             GameObject instance = Take(prefab);
@@ -147,8 +172,22 @@ namespace Worktown.Game.Art
             t.localPosition = position;
             t.localRotation = Quaternion.Euler(0f, yaw, 0f);
             t.localScale = Vector3.one * scale;
-            Tint(instance, tint, custom);
+            var info = new PieceTint { Look = look, Tinted = tinted, Food = food };
+            _tints.Add(info);
+            ApplyTint(instance, info);
             return true;
+        }
+
+        /// <summary>A food piece: the bucket colour, or (spec 027c) the heat colour; anything else its own colours.</summary>
+        private void ApplyTint(GameObject instance, PieceTint info)
+        {
+            if (!info.Food)
+            {
+                Tint(instance, Color.white, false);
+                return;
+            }
+            Color tint = FoodArtRules.HeatTint(info.Look, info.Tinted, _heatZone, _heatProgress, _heatBoiled);
+            Tint(instance, tint, info.Tinted || tint != Color.white);
         }
 
         private void Tint(GameObject instance, Color tint, bool custom)
@@ -223,6 +262,7 @@ namespace Worktown.Game.Art
             }
             _active.Clear();
             _activePrefabs.Clear();
+            _tints.Clear();
         }
     }
 }

@@ -55,7 +55,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(typeof(byte), SyncedArgument(typeof(StationContents), "StoveFlags"));
         }
 
-        /// <summary>Spec 021 AC7: a Vessel syncs only bytes (the pan mode), strings (names) and FoodLook (the contents).</summary>
+        /// <summary>Spec 021 AC7: a Vessel syncs only bytes (the pan mode), strings (names) and FoodLook (the contents).
+        /// Spec 027c: plus exactly two presentation bytes, the heat progress and zone (D21 amendment pending).</summary>
         [Test]
         public void Vessel_SyncsOnlyBytesStringsAndLooks()
         {
@@ -70,10 +71,12 @@ namespace Worktown.Game.Tests
                 synced++;
                 Assert.Contains(argument, allowed, "Vessel." + field.Name);
             }
-            Assert.AreEqual(4, synced, "names, looks, title, mode");
+            Assert.AreEqual(6, synced, "names, looks, title, mode, heat progress, heat zone");
             Assert.AreEqual(typeof(FoodLook), SyncedArgument(vessel, "Looks"));
             Assert.AreEqual(typeof(string), SyncedArgument(vessel, "Names"));
             Assert.AreEqual(typeof(byte), SyncedArgument(vessel, "Mode"));
+            Assert.AreEqual(typeof(byte), SyncedArgument(vessel, "HeatProgress"));
+            Assert.AreEqual(typeof(byte), SyncedArgument(vessel, "HeatZone"));
         }
 
         private static Type SyncArgument(FieldInfo field)

@@ -469,7 +469,9 @@ namespace Worktown.Game.Cooking
                 if (!_factory.Apply("mix", inputs, NoParams).Ok) return CookOutcome.SimRefused;
             }
 
-            sessions.Add(new HeatSession(item, opId, tempC, IsCooking(vesselId), tick));
+            var session = new HeatSession(item, opId, tempC, IsCooking(vesselId), tick);
+            session.Timeline = TimelineOf(item, opId, tempC, time);
+            sessions.Add(session);
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
         }
@@ -568,6 +570,32 @@ namespace Worktown.Game.Cooking
             foreach (HeatSession session in sessions)
                 looks.Add(FoodLookRules.Cooking(session.Food, session.OperationId, CurrentBucket(session, tick, tickRate)));
             return looks;
+        }
+
+        /// <summary>
+        /// Spec 027c: what the pan or pot shows on the heat at <paramref name="tick"/> (zone, progress, warning), from each
+        /// food's time on the heat and its timeline; <see cref="HeatReading.Empty"/> when it is empty. A pure read.
+        /// </summary>
+        public HeatReading HeatReadingOf(int vesselId, uint tick, double tickRate)
+        {
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions)) return HeatReading.Empty;
+            HeatReading reading = HeatReading.Empty;
+            foreach (HeatSession session in sessions)
+            {
+                double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
+                reading = HeatZoneRules.Combine(reading, HeatZoneRules.Read(seconds, session.Timeline));
+            }
+            return reading;
+        }
+
+        /// <summary>Spec 027c: the zone timeline of <paramref name="food"/> in the heat op, from the sim op itself.</summary>
+        private HeatTimeline TimelineOf(Item food, string opId, int? tempC, ParamDef time)
+        {
+            return HeatZoneRules.Build(time, seconds =>
+            {
+                OperationResult cooked = _factory.Apply(opId, new[] { food }, HeatParams(tempC, seconds));
+                return cooked.Ok && cooked.Item != null ? cooked.Item.Components : null;
+            });
         }
 
         /// <summary>The look of the first ingredient in the pan or pot; null if it is empty.</summary>

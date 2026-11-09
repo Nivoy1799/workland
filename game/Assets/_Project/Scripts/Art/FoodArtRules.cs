@@ -119,6 +119,44 @@ namespace Worktown.Game.Art
             return Palette.Shade(c, keep);
         }
 
+        // ---- Spec 027c: the colour shift on the heat ----
+
+        /// <summary>Key 2 of the shift (brown): a mix of WoodLight and WoodDark, mostly dark (a potato is already tan raw,
+        /// so a lighter brown did not read as a change in the visual check).</summary>
+        public static readonly Color HeatBrown = Color.Lerp(Palette.WoodLight, Palette.WoodDark, 0.75f);
+        /// <summary>How far the golden key pulls the raw colour towards Mustard.</summary>
+        public const float HeatGoldenMix = 0.85f;
+        /// <summary>Overdone sits this far from brown towards Charcoal.</summary>
+        public const float HeatOverdoneMix = 0.45f;
+        /// <summary>Boiled food shifts only this much of the way (it softens rather than browns), Burnt included.</summary>
+        public const float HeatBoiledStrength = 0.5f;
+
+        /// <summary>
+        /// Spec 027c: the colour of a piece on the heat, through four palette-anchored keys by <paramref name="progress01"/>
+        /// (0 raw: the piece's own colour, <see cref="HeatZoneRules.GoodShare"/> golden: towards Mustard, 1 brown:
+        /// <see cref="HeatBrown"/>); Overdone goes on towards Charcoal, Burnt is Charcoal. Food in the pot
+        /// (<paramref name="boiled"/>) shifts <see cref="HeatBoiledStrength"/> of the way. <see cref="HeatZone.None"/> gives
+        /// the bucket colour (<see cref="Tint"/>) as before.
+        /// </summary>
+        public static Color HeatTint(FoodLook look, bool tinted, HeatZone zone, float progress01, bool boiled)
+        {
+            if (zone == HeatZone.None) return Tint(look, tinted);
+            Color raw = tinted ? IngredientColor(look.Ingredient) : Color.white;
+            Color golden = Color.Lerp(raw, Palette.Mustard, HeatGoldenMix);
+            Color shifted;
+            if (zone == HeatZone.Burnt) shifted = Palette.Charcoal;
+            else if (zone == HeatZone.Overdone) shifted = Color.Lerp(HeatBrown, Palette.Charcoal, HeatOverdoneMix);
+            else
+            {
+                float p = Mathf.Clamp01(float.IsNaN(progress01) ? 0f : progress01);
+                const float g = HeatZoneRules.GoodShare;
+                shifted = p <= g ? Color.Lerp(raw, golden, p / g) : Color.Lerp(golden, HeatBrown, (p - g) / (1f - g));
+            }
+            Color c = boiled ? Color.Lerp(raw, shifted, HeatBoiledStrength) : shifted;
+            c.a = 1f;
+            return c;
+        }
+
         /// <summary>Position and yaw of piece <paramref name="index"/> of <paramref name="count"/> in a small pile.</summary>
         public static Vector3 PilePosition(int index, int count)
         {

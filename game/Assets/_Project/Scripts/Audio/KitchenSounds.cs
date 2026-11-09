@@ -12,6 +12,8 @@ namespace Worktown.Game.Audio
     /// or mode changes (spec 027b: the local player's pick, place, nope and button sounds come through <see cref="Play"/>), a sizzle loop on a hot pan and
     /// a bubble loop on a hot pot (<see cref="VesselSteam.IsHot"/>). Sounds are synthesised by
     /// <see cref="ProceduralSounds"/>; the headless server removes itself in Awake.
+    /// Spec 027c: the loops follow the heat (level and pitch from the vessel's synced zone, <see cref="SoundRules.LoopLevel"/>)
+    /// and the Perfect, Warning and Burnt cues play once per zone entry (<see cref="SoundRules.CueFor"/>, with a cooldown).
     /// </summary>
     public sealed class KitchenSounds : MonoBehaviour
     {
@@ -26,6 +28,15 @@ namespace Worktown.Game.Audio
         {
             public AudioSource Source;
             public float Level;
+        }
+
+        private sealed class HeatState
+        {
+            public HeatZone Zone;
+            public bool Warn;
+            public float LastPerfect = float.NegativeInfinity;
+            public float LastWarning = float.NegativeInfinity;
+            public float LastBurnt = float.NegativeInfinity;
         }
 
         private sealed class BoardState
@@ -48,6 +59,7 @@ namespace Worktown.Game.Audio
         private readonly Dictionary<VesselSteam, LoopState> _loops = new Dictionary<VesselSteam, LoopState>();
         private readonly Dictionary<Vessel, BoardState> _boardStates = new Dictionary<Vessel, BoardState>();
         private readonly Dictionary<StationContents, byte> _stoveFlags = new Dictionary<StationContents, byte>();
+        private readonly Dictionary<VesselSteam, HeatState> _heatStates = new Dictionary<VesselSteam, HeatState>();
 
         private void Awake()
         {
@@ -135,9 +147,50 @@ namespace Worktown.Game.Audio
                 _stoveFlags[stove] = flags;
             }
 
+            // Spec 027c: the cooking cues, once per zone entry. A vessel seen for the first time only records its state.
+            for (int i = 0; i < _hotCandidates.Length; i++)
+            {
+                VesselSteam steam = _hotCandidates[i];
+                if (steam == null || steam.Vessel == null) continue;
+                HeatZone zone = steam.Vessel.Zone;
+                bool warn = steam.Vessel.Warning;
+                if (!_heatStates.TryGetValue(steam, out HeatState heat))
+                {
+                    _heatStates[steam] = new HeatState { Zone = zone, Warn = warn };
+                    continue;
+                }
+                SoundKey? cue = SoundRules.CueFor(heat.Zone, heat.Warn, zone, warn);
+                heat.Zone = zone;
+                heat.Warn = warn;
+                if (cue.HasValue && play && TakeCue(heat, cue.Value)) PlayAt(cue.Value, steam.transform.position);
+            }
+
             // Spec 027b: the local player's pick and place sounds are played at the click (PickupInteractor), so the old
             // polled tick on a change of hands is gone (it came up to 0.1 s late and would double them).
             _initialised = true;
+        }
+
+        /// <summary>True when the cue may play now (not within <see cref="SoundRules.CueCooldown"/> of the last one).</summary>
+        private static bool TakeCue(HeatState heat, SoundKey cue)
+        {
+            float now = Time.unscaledTime;
+            switch (cue)
+            {
+                case SoundKey.Perfect:
+                    if (now - heat.LastPerfect < SoundRules.CueCooldown) return false;
+                    heat.LastPerfect = now;
+                    return true;
+                case SoundKey.Warning:
+                    if (now - heat.LastWarning < SoundRules.CueCooldown) return false;
+                    heat.LastWarning = now;
+                    return true;
+                case SoundKey.Burnt:
+                    if (now - heat.LastBurnt < SoundRules.CueCooldown) return false;
+                    heat.LastBurnt = now;
+                    return true;
+                default:
+                    return true;
+            }
         }
 
         private static int HashOf(Vessel vessel)
@@ -162,9 +215,12 @@ namespace Worktown.Game.Audio
                     if (_catalog.TryGet(key, out AudioClip clip)) loop.Source.clip = clip;
                     _loops[steam] = loop;
                 }
-                float target = steam.IsHot ? 1f : 0f;
+                // Spec 027c: the level follows the heat and the zone; the pitch rises a little when overdone.
+                HeatZone zone = steam.Vessel.Zone;
+                float target = SoundRules.LoopLevel(steam.IsHot, zone);
                 loop.Level = Mathf.MoveTowards(loop.Level, target, LoopFadePerSecond * dt);
                 loop.Source.volume = loop.Level * SoundCatalog.MasterVolume * SoundCatalog.GainOf(key);
+                loop.Source.pitch = Mathf.MoveTowards(loop.Source.pitch, SoundRules.LoopPitch(zone), dt);
                 if (loop.Level > 0f && !loop.Source.isPlaying && loop.Source.clip != null) loop.Source.Play();
                 else if (loop.Level <= 0f && loop.Source.isPlaying) loop.Source.Pause();
             }

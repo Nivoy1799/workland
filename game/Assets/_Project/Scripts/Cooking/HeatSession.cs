@@ -27,6 +27,8 @@ namespace Worktown.Game.Cooking
         /// <summary>Pan temperature in Celsius; null for the pot (boil has a fixed temperature).</summary>
         public int? TempC { get; }
         public bool IsRunning => _running;
+        /// <summary>Spec 027c: when this food reaches each heat zone (built once from the sim when it goes in). Server only.</summary>
+        public HeatTimeline Timeline { get; internal set; }
 
         /// <summary>The stove was switched on at <paramref name="tick"/>.</summary>
         public void Start(uint tick)
