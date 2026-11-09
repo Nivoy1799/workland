@@ -39,6 +39,20 @@ namespace Worktown.Game.Tutorial
             return !done;
         }
 
+        /// <summary>
+        /// Spec 038b: whether finishing or skipping stores the done flag. Never in a scripted dev run (<c>-tour</c>, <c>-observe</c>): the
+        /// visual check must not hide the tutorial from the human on the same machine.
+        /// </summary>
+        public static bool SavesDone(IReadOnlyList<string> args) => !Has(args, "-tour") && !Has(args, "-observe");
+
+        /// <summary>
+        /// Spec 038b: what the host's server half takes as its local tutorial when the server starts (or the runner finds its player):
+        /// the runner's own state once it decided (a tutorial finished as a remote client is over; a replay from the menu runs), else the
+        /// launch rule (<see cref="StartsOnLaunch"/>) it will decide by.
+        /// </summary>
+        public static bool RunsForHost(bool runnerDecided, bool runnerRunning, bool startsOnLaunch) =>
+            runnerDecided ? runnerRunning : startsOnLaunch;
+
         /// <summary>AC4: the guests a server spawns now are calm only on a host whose local tutorial runs; never on a server build.</summary>
         public static bool HostCalms(bool serverBuild, bool serverStarted, bool localClientStarted, bool tutorialRunning) =>
             !serverBuild && serverStarted && localClientStarted && tutorialRunning;

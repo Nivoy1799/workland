@@ -84,7 +84,8 @@ namespace Worktown.Game.Cooking
         /// <summary>
         /// The pour of <paramref name="owner"/> ends at <paramref name="tick"/> (capped at the stop): the cup is previewed, the pour charged
         /// once, then committed (and a spill marked). The pour record is gone whatever happens; a refusal (the preview's or the wallet's)
-        /// leaves the cup as it was.
+        /// leaves the cup as it was. 038b: a stock wallet (<see cref="IDrinkStock"/>) with less left than the pour gives what is left: the
+        /// cup gets only that, charged that much.
         /// </summary>
         public CookOutcome End(int station, int tap, int owner, uint tick, double tickRate, int heldCupId, IDrinkWallet wallet,
             out PourResult result)
@@ -93,6 +94,19 @@ namespace Worktown.Game.Cooking
             CookOutcome made = _kitchen.TryEndPour(station, tap, owner, tick, tickRate, heldCupId, out Item cup, out float total,
                 out float poured, out bool wasEmpty, out int cupId);
             if (made != CookOutcome.Ok) return made;
+            // 038b: a keg with less left than the pour draws what is left and fills only that much (the bucket from the drawn ml).
+            if (wallet is IDrinkStock stock)
+            {
+                long left = stock.AvailablePercent(DrinkRules.DrinkOf(tap));
+                float drawable = PourableMl(poured, left);
+                if (drawable < poured)
+                {
+                    total = total - poured + drawable;
+                    poured = drawable;
+                    CookOutcome shorter = _kitchen.TryPreviewFill(tap, total, out cup);
+                    if (shorter != CookOutcome.Ok) return shorter;
+                }
+            }
             long cost = 0;
             if (wallet != null)
             {
@@ -108,6 +122,18 @@ namespace Worktown.Game.Cooking
             if (spilled) _kitchen.MarkSpill(station);
             result = new PourResult(poured, total, cost, cup, cupId, spilled);
             return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 038b, pure: the ml of a pour of <paramref name="poured"/> ml that a keg with <paramref name="leftPercent"/> % of a cup left
+        /// can give: all of it when enough is left, else the ml that <paramref name="leftPercent"/> % of a cup is
+        /// (<see cref="PriceRules.FillPercent"/> of it is exactly what is left). Nothing left gives the pour unchanged: the charge refuses
+        /// it whole (OutOfStock).
+        /// </summary>
+        public static float PourableMl(float poured, long leftPercent)
+        {
+            if (leftPercent <= 0 || leftPercent >= PriceRules.FillPercent(poured)) return poured;
+            return System.Math.Min(poured, leftPercent * Drinks.CupMl / 100f);
         }
 
         /// <summary>Drops the pour without a result or a charge (its player left, or is gone).</summary>

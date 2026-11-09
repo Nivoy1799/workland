@@ -324,6 +324,54 @@ namespace Worktown.Game.Tests
             Assert.AreEqual((2, 80), (room.LineOf(Line("chili_sauce")).Count, room.LineOf(Line("chili_sauce")).OpenPercent), "1 s = 20 % of a bottle");
         }
 
+        [Test]
+        public void APourLargerThanTheKegsRest_DrawsWhatIsLeft_AndFillsOnlyThat_TheBucketFromTheDrawnMl()
+        {
+            const int dispenser = 10, cupId = 50, tap = 0; // tap 0: lemonade
+            var kitchen = KitchenState.CreateDemo();
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateCup(out Item empty));
+            kitchen.Register(cupId, empty);
+            var room = new StockRoom();
+            int lemonade = Line("lemonade");
+            while (room.LineOf(lemonade).AvailablePercent > 30) room.Draw(lemonade, 10, 1, out _);
+            Assert.AreEqual(30, room.LineOf(lemonade).AvailablePercent, "a third of a cup left (120 ml)");
+            var desk = new DrinkDesk(kitchen);
+
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(dispenser, tap, Owner, cupId, Start, new StockWallet(room)));
+            var wallet = new StockWallet(room);
+            Assert.AreEqual(CookOutcome.Ok, desk.Release(dispenser, tap, Owner, Real(1.8), Rate, cupId, wallet, out DrinkDesk.PourResult r),
+                "held for 360 ml (90 %): not refused whole");
+            Assert.AreEqual(120f, r.Poured, 0.01f, "only the keg's rest");
+            Assert.AreEqual(120f, r.Total, 0.01f);
+            Assert.AreEqual(30, wallet.Drawn, "drew exactly what was left");
+            Assert.AreEqual(0, room.LineOf(lemonade).AvailablePercent, "the kegs are empty now");
+            Assert.IsTrue(kitchen.TryGet(cupId, out Item cup));
+            Assert.AreEqual(Drinks.Low, Drinks.LevelOf(cup), "the bucket comes from the 120 ml drawn, not the 360 held");
+            Assert.AreEqual(120f, kitchen.CupMl(cupId), 0.01f);
+            Assert.IsFalse(r.Spilled);
+
+            // Empty now: the next press is refused before the tap is taken, nothing changes.
+            Assert.AreEqual(CookOutcome.OutOfStock, desk.Press(dispenser, tap, Owner, cupId, Real(3), new StockWallet(room)));
+            Assert.AreSame(cup, kitchen.TryGet(cupId, out Item same) ? same : null);
+
+            // A top-up that would run over the brim, with 50 % left: 200 ml more, 320 ml in the cup, no spill (the drawn ml decides).
+            room.ReturnPercent(lemonade, 50);
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(dispenser, tap, Owner, cupId, Real(4), new StockWallet(room)));
+            Assert.AreEqual(CookOutcome.Ok, desk.Release(dispenser, tap, Owner, Real(6.4), Rate, cupId, new StockWallet(room), out r));
+            Assert.AreEqual(200f, r.Poured, 0.01f);
+            Assert.AreEqual(320f, r.Total, 0.01f);
+            Assert.IsFalse(r.Spilled, "480 ml held would have spilled; 320 ml do not");
+            Assert.AreEqual(0, kitchen.DrinkFlags(dispenser), "no spill mark");
+            Assert.AreEqual(0, room.LineOf(lemonade).AvailablePercent);
+
+            // Pure: enough left changes nothing; nothing left leaves the refusal to the charge.
+            Assert.AreEqual(360f, DrinkDesk.PourableMl(360f, 90));
+            Assert.AreEqual(360f, DrinkDesk.PourableMl(360f, 2000));
+            Assert.AreEqual(360f, DrinkDesk.PourableMl(360f, 0));
+            Assert.AreEqual(4f, DrinkDesk.PourableMl(360f, 1));
+            Assert.AreEqual(1, PriceRules.FillPercent(DrinkDesk.PourableMl(360f, 1)));
+        }
+
         // ---- the refund backstop ----
 
         private sealed class FakeTake : IStockTakeSteps

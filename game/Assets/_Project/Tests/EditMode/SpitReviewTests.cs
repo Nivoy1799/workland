@@ -110,7 +110,7 @@ namespace Worktown.Game.Tests
             int line = StockCatalog.ConeLine;
             int before = stock.LineOf(line).Count;
             SpitDesk again = Loaded(out _);
-            stock.Return(line, again.ClearReturningUntouched()); // what KitchenService does on the stop
+            Assert.AreEqual(0, stock.ReturnUpToCapacity(line, again.ClearReturningUntouched()), "it fits"); // what KitchenService does on the stop
             Assert.AreEqual(before + 1, stock.LineOf(line).Count);
 
             SpitDesk shaved = Loaded(out _);
@@ -118,6 +118,43 @@ namespace Worktown.Game.Tests
             shaved.Release(SpitIndex, Cook, true, At(57), Rate, out _);
             Assert.AreEqual(0, shaved.ClearReturningUntouched(), "a shaved cone is lost, like food in a pan");
             Assert.IsFalse(shaved.HasCone(SpitIndex));
+        }
+
+        [Test]
+        public void AReturnedCone_NeverPassesTheLinesCapacity_TheRestWaitsInADeliveryBox()
+        {
+            var stock = new StockRoom();
+            int line = StockCatalog.ConeLine;
+            StockLine start = stock.LineOf(line);
+            stock.ReturnUpToCapacity(line, start.Room); // the line is full now (2 of 2)
+            Assert.AreEqual(start.Capacity, stock.LineOf(line).Count);
+            Assert.AreEqual(0, stock.WaitingBoxes);
+            int version = stock.Version;
+
+            SpitDesk loaded = Loaded(out _);
+            int boxed = stock.ReturnUpToCapacity(line, loaded.ClearReturningUntouched()); // the server stops with an untouched cone loaded
+            Assert.AreEqual(1, boxed, "no room: the cone goes into a box");
+            Assert.AreEqual(start.Capacity, stock.LineOf(line).Count, "never more than the capacity");
+            Assert.Greater(stock.Version, version, "the counts are published again");
+            Assert.IsTrue(stock.TryPeekWaiting(out BoxContents box), "the box waits for the back door (the 034 mechanism)");
+            Assert.AreEqual((line, 1), (box.Line, box.Units));
+
+            // It comes to the back door; with a cone taken it unpacks into the line again: nothing lost, nothing doubled.
+            stock.ConfirmSpawned(400);
+            Assert.AreEqual(CookOutcome.StockFull, stock.Unpack(400, line, out _, out _), "still full: the box stays");
+            Assert.AreEqual(CookOutcome.Ok, stock.Take(line));
+            Assert.AreEqual(CookOutcome.Ok, stock.Unpack(400, line, out int accepted, out int left));
+            Assert.AreEqual((1, 0), (accepted, left));
+            Assert.AreEqual(start.Capacity, stock.LineOf(line).Count);
+            Assert.AreEqual(0, stock.BoxesInShop + stock.WaitingBoxes);
+
+            // Part fits, part is boxed; nothing for no units.
+            stock.Take(line);
+            Assert.AreEqual(1, stock.ReturnUpToCapacity(line, 2), "one fits, one is boxed");
+            Assert.AreEqual(start.Capacity, stock.LineOf(line).Count);
+            Assert.AreEqual(0, stock.ReturnUpToCapacity(line, 0));
+            Assert.AreEqual(0, stock.ReturnUpToCapacity(-1, 1), "no such line");
+            Assert.AreEqual(1, stock.WaitingBoxes);
         }
 
         [Test]

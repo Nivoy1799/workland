@@ -203,6 +203,14 @@ slot pulsing while in view but not aimed at (`tutorial-02-pulse-*`, 10 frames) a
   "missed 4".
 - Clicking the card's buttons needs a free mouse (Esc); F4 and F5 are the reliable way.
 
+**Scope beyond the listed folders** (recorded in the 038b round, as in 029-036): besides `Scripts/Tutorial`, this round touched
+`Scripts/Npc` (CustomerService's calm guests, `TutorialOrders`), `Scripts/Net` (`PickupInteractor.HandsNow`; InteractionRules lost
+`AlmostEmptyText`, 036 review 5), `Scripts/Player` (`InteractionHighlight.MarkerMaterial`), `Scripts/UI` (the What's-new and F1 buttons), `Scripts/Dev` (the
+tutorial tour, `CookSequence` parts made `internal`), `Resources/WhatsNew.json`, `scripts/visual-check.sh` (the tutorial tour), and for
+the 036 review fixes `sim/Runtime/Economy` (`SupplierOffer.PriceGoodId`, `EconomyEngine.TryBuySupply`), `Scripts/Shop` (`StockCatalog`,
+`CleaningRoom`, `DishRoom`), `Scripts/Cooking` (`SpitDesk`, `KitchenService`) and their tests (`CleaningReviewTests`, `StockSupplyTests`,
+`TourRulesTests`, `WhatsNewTests`, sim `DrinkTests`).
+
 **Not mine in the tree:** `docs/cooking-roadmap.md` shows a 2-line change I did not make (left as it is).
 
 ## Blockers

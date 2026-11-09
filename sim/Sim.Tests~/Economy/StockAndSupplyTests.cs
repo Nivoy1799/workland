@@ -218,6 +218,50 @@ namespace Worktown.Sim.Tests.Economy
         }
 
         [Fact]
+        public void PriceGoodId_IsTheGoodItself_UnlessAnotherIsGiven()
+        {
+            var plain = new SupplierOffer("lettuce", 30, 1, Supplier.DefaultPackSize, Supplier.DelayMinutes);
+            Assert.Null(plain.PriceGood);
+            Assert.Equal("lettuce", plain.PriceGoodId);
+            Assert.Equal("lettuce", (plain with { PriceGood = "lettuce" }).PriceGoodId);
+            var cone = new SupplierOffer("seitan_cone", 110, 30, 1, Supplier.DelayMinutes, "seitan");
+            Assert.Equal("seitan", cone.PriceGoodId);
+            Assert.Equal("seitan_cone", cone.GoodId);
+        }
+
+        [Fact]
+        public void BuyingSupply_TiesThePriceGoodToTheGood_OnlyAGoodWithoutAGrocerPriceBorrowsOne()
+        {
+            EconomyState s = TestEconomy.Open(E, E.Initial(), "alice", 100_000);
+            Assert.True(C.TryGetGrocerPrice("seitan", out long seitan));
+            Assert.False(C.TryGetGrocerPrice("seitan_cone", out _));
+
+            // A cone has no grocer price of its own: it is priced as 30 seitan blocks, and the supplier gets exactly that.
+            var cone = new SupplierOffer("seitan_cone", seitan, 30, 1, Supplier.DelayMinutes, "seitan");
+            PurchaseResult bought = E.TryBuySupply(s, "alice", cone, 1);
+            Assert.True(bought.Ok);
+            Assert.Equal(Supplier.OrderCost(C, cone, 1), bought.Cost);
+            Assert.Equal(100_000 - bought.Cost, TestEconomy.Acct(bought.State, "alice").Balance);
+            Assert.Equal(bought.Cost, TestEconomy.Acct(bought.State, "alice").GrocerPaid);
+            Assert.Equal(bought.Cost, bought.State.Totals.GrocerRevenue);
+
+            // Lettuce has its own price: it cannot be bought at the seitan's (nothing changes).
+            var cheap = new SupplierOffer("lettuce", seitan, 1, Supplier.DefaultPackSize, Supplier.DelayMinutes, "seitan");
+            PurchaseResult refused = E.TryBuySupply(s, "alice", cheap, 1);
+            Assert.Equal(EconomyError.UnknownBaseItem, refused.Error);
+            Assert.Same(s, refused.State);
+            Assert.Equal(0, refused.Cost);
+
+            // The good itself as the price good, or none, is the plain offer.
+            Assert.True(Supplier.TryOffer(C, "lettuce", 1, out SupplierOffer lettuce));
+            Assert.True(E.TryBuySupply(s, "alice", lettuce with { PriceGood = "lettuce" }, 1).Ok);
+            Assert.Equal(E.TryBuySupply(s, "alice", lettuce, 1).Cost, E.TryBuySupply(s, "alice", lettuce with { PriceGood = "lettuce" }, 1).Cost);
+            // A price good the grocer does not price at all, or at another price, is refused too.
+            Assert.Equal(EconomyError.UnknownBaseItem, E.TryBuySupply(s, "alice", cone with { PriceGood = "moon_cheese" }, 1).Error);
+            Assert.Equal(EconomyError.UnknownBaseItem, E.TryBuySupply(s, "alice", cone with { GrocerPrice = seitan - 1 }, 1).Error);
+        }
+
+        [Fact]
         public void TheWholesalersCap_CountsTheBulkUnitPrice_SoNothingSellsForMoreThanItsStockCost()
         {
             // Plated fries: one potato, $48 in bulk (not $60): the cap is 48 - 1 - 31 = 16.

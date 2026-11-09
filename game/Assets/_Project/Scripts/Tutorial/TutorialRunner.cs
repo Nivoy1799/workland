@@ -19,7 +19,9 @@ namespace Worktown.Game.Tutorial
     /// the sink, the spit) for the pure <see cref="TutorialProgress"/>. The card (<see cref="TutorialPanelView"/>) shows the step, the target
     /// pulses in Mustard (<see cref="TutorialHighlight"/>) and an edge arrow points to it when it is off the screen. It sends nothing:
     /// guidance only (AGENTS rule 6). On a host it tells the server half of the same process that the tutorial runs, so the guests it
-    /// spawns are calm (<see cref="CustomerService.SetLocalTutorial"/>); a remote client's tutorial changes nothing on its server.
+    /// spawns are calm (<see cref="CustomerService.SetLocalTutorial"/>); a remote client's tutorial changes nothing on its server. 038b: it
+    /// tells the host again whenever it finds a (new) player, and the host reads <see cref="Decided"/> and <see cref="Running"/> when its
+    /// server starts, so the flag never goes stale; a scripted dev run (<c>-tour</c>, <c>-observe</c>) never stores the done flag.
     /// F4 skips the tutorial (or closes the done card), F5 skips an optional step; the buttons do the same with a free mouse (Esc).
     /// </summary>
     public sealed class TutorialRunner : MonoBehaviour
@@ -39,6 +41,8 @@ namespace Worktown.Game.Tutorial
         private bool _decided;
         private bool _disabled;
         private float _nextPlayerLookup;
+        private float _nextInputLookup;
+        private string _shownText;
         private float _nextSnapshot;
         private float _nextTarget;
         private float _doneAt = -1f;
@@ -55,6 +59,9 @@ namespace Worktown.Game.Tutorial
         public event Action<int> StepChanged;
 
         public bool Running => _progress.Running;
+        /// <summary>038b: the runner chose on its own (the launch rule once it found its player) or by a replay; until then the host
+        /// takes the launch rule (<see cref="StartsOnLaunchNow"/>).</summary>
+        public bool Decided => _decided;
         public int StepIndex => _progress.Running ? _progress.Current : -1;
         public int StepCount => _progress.Count;
         public TutorialStepId StepId => _progress.Running ? _progress.CurrentStep.Id : TutorialStepId.Done;
@@ -65,6 +72,15 @@ namespace Worktown.Game.Tutorial
 
         /// <summary>The runner of this client, or null (a server build, batch mode).</summary>
         public static TutorialRunner Find() => FindFirstObjectByType<TutorialRunner>();
+
+        /// <summary>The launch rule now (<see cref="TutorialRules.StartsOnLaunch"/> of this process's arguments and the done flag).</summary>
+        public static bool StartsOnLaunchNow()
+        {
+            bool done = false;
+            try { done = PlayerPrefs.GetInt(TutorialRules.DoneKey, 0) == 1; }
+            catch (PlayerPrefsException) { }
+            return TutorialRules.StartsOnLaunch(Environment.GetCommandLineArgs(), done, Debug.isDebugBuild);
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Boot()
@@ -159,6 +175,12 @@ namespace Worktown.Game.Tutorial
 
         private static void SaveDone()
         {
+            // 038b: a scripted dev run (-tour, -observe: the visual check) never marks the tutorial done on this machine.
+            if (!TutorialRules.SavesDone(Environment.GetCommandLineArgs()))
+            {
+                Debug.Log("[Tutorial] scripted run: the done flag is not stored");
+                return;
+            }
             try
             {
                 PlayerPrefs.SetInt(TutorialRules.DoneKey, 1);
@@ -189,10 +211,7 @@ namespace Worktown.Game.Tutorial
             if (!_decided)
             {
                 _decided = true;
-                bool done = false;
-                try { done = PlayerPrefs.GetInt(TutorialRules.DoneKey, 0) == 1; }
-                catch (PlayerPrefsException) { }
-                if (TutorialRules.StartsOnLaunch(Environment.GetCommandLineArgs(), done, Debug.isDebugBuild)) Begin();
+                if (StartsOnLaunchNow()) Begin();
                 else TellHost(false);
             }
             if (!_progress.Running) return;
@@ -221,7 +240,11 @@ namespace Worktown.Game.Tutorial
                 Finish();
                 return;
             }
-            if (_input == null) _input = FindFirstObjectByType<PlayerInputReader>();
+            if (_input == null && now >= _nextInputLookup)
+            {
+                _nextInputLookup = now + 0.5f; // 038b: at most twice a second while there is none
+                _input = FindFirstObjectByType<PlayerInputReader>();
+            }
             _panel.SetCard(TutorialRules.ShowsCard(true, _input != null && _input.IsUiOpen));
             UpdateGuidance(now);
         }
@@ -239,6 +262,8 @@ namespace Worktown.Game.Tutorial
             _lastYaw = CameraYaw();
             if (_highlight == null && _player.TryGetComponent(out InteractionHighlight interact))
                 _highlight = new TutorialHighlight(interact.MarkerMaterial);
+            // 038b: a new player is a new session (hosting after a remote game, a server restart): the host hears the state again.
+            if (_decided) TellHost(_progress.Running);
             return true;
         }
 
@@ -268,6 +293,7 @@ namespace Worktown.Game.Tutorial
             TutorialSnapshot s = Snapshot(now);
             if (_progress.Observe(in s)) OnStepChanged();
             _events = TutorialEvents.None;
+            ShowTextFor(in s);
             if (now >= _nextTarget || _target == TutorialTarget.None)
             {
                 _nextTarget = now + TargetSeconds;
@@ -275,6 +301,18 @@ namespace Worktown.Game.Tutorial
                 _target = step != null ? step.TargetFor(in s) : TutorialTarget.None;
                 _highlight?.Show(_targets.Resolve(_target, _basket, _player.transform.position));
             }
+        }
+
+        /// <summary>038b: the step's instruction for what the player has now (step 4 with the knife in the hands); set only on a change.</summary>
+        private void ShowTextFor(in TutorialSnapshot s)
+        {
+            if (_preview >= 0) return;
+            TutorialStep step = _progress.CurrentStep;
+            if (step == null) return;
+            string text = step.TextFor(in s);
+            if (ReferenceEquals(text, _shownText)) return;
+            _shownText = text;
+            _panel.SetText(text);
         }
 
         private TutorialSnapshot Snapshot(float now)
@@ -339,6 +377,7 @@ namespace Worktown.Game.Tutorial
             if (step == null) return;
             bool done = _progress.AtEnd;
             _panel.ShowStep(_progress.Current, _progress.Count, step.Text, step.Optional, done);
+            _shownText = step.Text;
             if (done && _doneAt < 0f) _doneAt = Time.unscaledTime;
             _nextTarget = 0f;
             Debug.Log("[Tutorial] step " + TutorialRules.ProgressText(_progress.Current, _progress.Count) + " " + step.Id
@@ -368,6 +407,7 @@ namespace Worktown.Game.Tutorial
             _preview = -1;
             TutorialStep step = _progress.CurrentStep;
             if (step != null) _panel.ShowStep(_progress.Current, _progress.Count, step.Text, step.Optional, _progress.AtEnd);
+            _shownText = step != null ? step.Text : null;
             if (_progress.AtEnd) _doneAt = Time.unscaledTime; // the done card's time starts again
             _target = TutorialTarget.None;
             _nextTarget = 0f;

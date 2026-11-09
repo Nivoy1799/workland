@@ -30,7 +30,7 @@ namespace Worktown.Game.Tutorial
                 false, HasSticks, CutTarget),
             new TutorialStep(TutorialStepId.FrySticks,
                 "Take the sticks to the fryer: switch it on, put them in the basket and lower it. Shake it once, raise it at perfect.",
-                false, HasFries, FryTarget),
+                false, HasFries, FryTarget, FryText),
             new TutorialStep(TutorialStepId.PlateFries, "Pick up a plate and click the raised basket: the fries tip onto it.", false,
                 HasPlatedFries, PlateTarget),
             new TutorialStep(TutorialStepId.BuildWrap,
@@ -126,6 +126,17 @@ namespace Worktown.Game.Tutorial
             if (HeldFood(in s, "stick")) return s.FryerOn ? TutorialTarget.FryerBasket : TutorialTarget.FryerPower;
             return TutorialTarget.CuttingBoard; // the knife back down, the sticks taken
         }
+
+        /// <summary>
+        /// 038b: step 4 while the knife is still in the hands (the target is the board with the sticks): put the knife down first. Q drops
+        /// what is held (the HUD's "Q · drop").
+        /// </summary>
+        public const string FryKnifeText =
+            "Put the knife down first (Q drops it). Then take the sticks from the board to the fryer: switch it on, basket in, lower it.";
+
+        /// <summary>038b: <see cref="FryKnifeText"/> while the knife is held and the sticks are not in the basket yet, else null.</summary>
+        public static string FryText(in TutorialSnapshot s) =>
+            s.Held.IsKnife && FryTarget(in s) == TutorialTarget.CuttingBoard ? FryKnifeText : null;
 
         public static TutorialTarget PlateTarget(in TutorialSnapshot s) =>
             s.Held.IsVessel && s.Held.Vessel == VesselKind.Plate ? TutorialTarget.FryerBasket : TutorialTarget.Plate;

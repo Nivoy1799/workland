@@ -99,16 +99,15 @@ namespace Worktown.Game.Npc
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         private TourOrders _tourOrders;
 #endif
-        // Spec 038: the host's own tutorial (every build): its guests are calm and the first ones scripted. Never on a server build.
-        private bool _tutorialRunning;
-        private TutorialOrders _tutorialOrders;
-        private float _serverStartedAt = -1f;
-        private bool _lastTutorialScripted;
 #if UNITY_SERVER
         private static readonly bool ServerBuild = true;
 #else
         private static readonly bool ServerBuild = false;
 #endif
+        // Spec 038: the host's own tutorial (every build): its guests are calm and the first ones scripted. Never on a server build.
+        private readonly HostTutorial _tutorial = new HostTutorial(ServerBuild);
+        private float _serverStartedAt = -1f;
+        private bool _lastTutorialScripted;
 
         /// <summary>
         /// Spec 038, called by the local TutorialRunner (same process, so only on a host; no RPC): the tutorial started (or was replayed)
@@ -117,16 +116,30 @@ namespace Worktown.Game.Npc
         /// </summary>
         public void SetLocalTutorial(bool running)
         {
-            if (ServerBuild) return;
-            if (running && !_tutorialRunning) _tutorialOrders = new TutorialOrders();
-            if (running != _tutorialRunning)
-                Debug.Log("[Customers] the host's tutorial " + (running ? "runs: calm guests, patience x" + Worktown.Game.Tutorial.TutorialRules.CalmPatienceScale : "ended: guests as usual"));
-            _tutorialRunning = running;
+            if (_tutorial.Set(running)) LogTutorial();
+        }
+
+        private void LogTutorial() =>
+            Debug.Log("[Customers] the host's tutorial " + (_tutorial.Running
+                ? "runs: calm guests, patience x" + Worktown.Game.Tutorial.TutorialRules.CalmPatienceScale
+                : "ended: guests as usual"));
+
+        /// <summary>
+        /// 038b: the server starts: the local runner's state is taken (HostTutorial.OnServerStarted), so a tutorial that ended while this
+        /// process was a remote client, or one replayed before hosting, is not stale here. Without a runner (batch mode) nothing changes.
+        /// </summary>
+        private void SyncLocalTutorial()
+        {
+            if (ServerBuild || Application.isBatchMode) return;
+            Worktown.Game.Tutorial.TutorialRunner runner = Worktown.Game.Tutorial.TutorialRunner.Find();
+            bool launch = Worktown.Game.Tutorial.TutorialRunner.StartsOnLaunchNow();
+            if (_tutorial.OnServerStarted(runner != null, runner != null && runner.Decided, runner != null && runner.Running, launch))
+                LogTutorial();
         }
 
         /// <summary>Spec 038 (AC4): guests spawned now are calm (a host whose own tutorial runs; never a dedicated server).</summary>
         public bool CalmGuests => Worktown.Game.Tutorial.TutorialRules.HostCalms(ServerBuild, _networkManager.IsServerStarted,
-            _networkManager.IsClientStarted, _tutorialRunning);
+            _networkManager.IsClientStarted, _tutorial.Running);
 
         /// <summary>Spec 032, tests and the tour log: the register's line.</summary>
         public RegisterDesk Desk => Flow.Desk;
@@ -147,14 +160,10 @@ namespace Worktown.Game.Npc
 #endif
             // Spec 038: a tutorial that will start by itself (or -tutorial) counts as running from the start, so the very first guests of a
             // host are already calm and scripted; the local TutorialRunner confirms or ends it (SetLocalTutorial).
-            if (!ServerBuild && !Application.isBatchMode)
-            {
-                bool done = false;
-                try { done = PlayerPrefs.GetInt(Worktown.Game.Tutorial.TutorialRules.DoneKey, 0) == 1; }
-                catch (PlayerPrefsException) { }
-                if (Worktown.Game.Tutorial.TutorialRules.StartsOnLaunch(System.Environment.GetCommandLineArgs(), done, Debug.isDebugBuild))
-                    SetLocalTutorial(true);
-            }
+            if (!ServerBuild && !Application.isBatchMode && Worktown.Game.Tutorial.TutorialRunner.StartsOnLaunchNow()) SetLocalTutorial(true);
+            // 038b: a server already running (started before this Start) gets the runner's state now; later starts get it in
+            // OnServerConnectionState.
+            if (_networkManager.IsServerStarted) SyncLocalTutorial();
         }
 
         private void OnDestroy()
@@ -166,6 +175,11 @@ namespace Worktown.Game.Npc
 
         private void OnServerConnectionState(ServerConnectionStateArgs args)
         {
+            if (args.ConnectionState == LocalConnectionState.Started)
+            {
+                SyncLocalTutorial(); // 038b
+                return;
+            }
             if (args.ConnectionState != LocalConnectionState.Stopped || _networkManager.ServerManager.IsAnyServerStarted()) return;
             // FishNet despawns everything on stop; forget our references.
             _queue.Clear();
@@ -184,7 +198,7 @@ namespace Worktown.Game.Npc
             _linePayees.Clear();
             _synced = false;
             _serverStartedAt = -1f;
-            if (_tutorialRunning) _tutorialOrders = new TutorialOrders(); // spec 038: a new game scripts its first guests again
+            _tutorial.NewGame(); // spec 038: a new game scripts its first guests again
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
             if (_tourOrders != null) _tourOrders = new TourOrders();
 #endif
@@ -197,7 +211,7 @@ namespace Worktown.Game.Npc
             if (!_synced)
             {
                 // Spec 038: a host with a pending tutorial waits for its local client (a few frames), so the first guests are calm.
-                if (Worktown.Game.Tutorial.TutorialRules.WaitsForLocalClient(ServerBuild, _tutorialRunning, _networkManager.IsClientStarted,
+                if (Worktown.Game.Tutorial.TutorialRules.WaitsForLocalClient(ServerBuild, _tutorial.Running, _networkManager.IsClientStarted,
                         Time.time - _serverStartedAt))
                     return;
                 _synced = true;
@@ -556,7 +570,7 @@ namespace Worktown.Game.Npc
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
                 if (_tourOrders != null && _tourOrders.LastScripted) eatIn = _tourOrders.LastEatIn; // the tour's scripted guests
 #endif
-                if (_lastTutorialScripted) eatIn = _tutorialOrders.LastEatIn; // spec 038
+                if (_lastTutorialScripted) eatIn = _tutorial.Orders.LastEatIn; // spec 038
                 customer.ServerInit(wish, dish.Id, modifiers, drinkByte, eatIn, _entry.position); // before Spawn: values go out with the spawn
                 _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;
@@ -594,7 +608,7 @@ namespace Worktown.Game.Npc
             if (calm)
             {
                 patienceScale = Worktown.Game.Tutorial.TutorialRules.PatienceScale(true, _patienceScale);
-                if (_tutorialOrders != null && _tutorialOrders.TryNext(wish, out MenuDish taught, out order, out drink))
+                if (_tutorial.Orders != null && _tutorial.Orders.TryNext(wish, out MenuDish taught, out order, out drink))
                 {
                     _lastTutorialScripted = true;
                     return taught;

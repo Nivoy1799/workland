@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Worktown.Game.Cooking;
 using Worktown.Game.Shop;
@@ -7,7 +8,8 @@ namespace Worktown.Game.Tutorial
     /// <summary>
     /// Spec 038, client: the scene objects behind each <see cref="TutorialTarget"/> (a stock slot, a station, a button, a piece of cookware,
     /// the knife). Looked up once and again only when one is gone (FishNet respawns scene objects on a restart); the plate is the free plate
-    /// nearest the player, else the plate shelf.
+    /// nearest the player, else the plate shelf. 038b: the plates are looked up at most every <see cref="PlateLookupSeconds"/> (plates
+    /// come and go: the shelf spawns them, a sale or a restart despawns them), not on every target refresh.
     /// </summary>
     public sealed class TutorialTargets
     {
@@ -20,6 +22,11 @@ namespace Worktown.Game.Tutorial
         private readonly Vessel[] _baskets = new Vessel[FryerRules.BasketsPerFryer];
         private float _nextLookup;
         private bool _found;
+        private readonly List<Vessel> _plates = new List<Vessel>();
+        private float _nextPlateLookup = float.NegativeInfinity;
+
+        /// <summary>038b: how often the list of plates is found again.</summary>
+        public const float PlateLookupSeconds = 1f;
 
         public Vessel Board => _board;
         public Vessel Assembly => _assembly;
@@ -98,7 +105,7 @@ namespace Worktown.Game.Tutorial
                 case TutorialTarget.FryerPower: return _fryerPower;
                 case TutorialTarget.FryerBasket: return Basket(basket) ?? Basket(0);
                 case TutorialTarget.FryerButton: return basket >= 0 && basket < _fryerButtons.Length && _fryerButtons[basket] != null ? _fryerButtons[basket] : _fryerButtons[0];
-                case TutorialTarget.Plate: return NearestPlate(player);
+                case TutorialTarget.Plate: return NearestPlate(player, Time.unscaledTime);
                 case TutorialTarget.WrapSlot: return _wrap;
                 case TutorialTarget.FalafelSlot: return _falafel;
                 case TutorialTarget.LettuceSlot: return _lettuce;
@@ -126,13 +133,21 @@ namespace Worktown.Game.Tutorial
         }
 
         /// <summary>The free plate (not held, nothing in it) nearest <paramref name="player"/>, else the plate shelf.</summary>
-        private Component NearestPlate(Vector3 player)
+        private Component NearestPlate(Vector3 player, float now)
         {
+            if (now >= _nextPlateLookup)
+            {
+                _nextPlateLookup = now + PlateLookupSeconds;
+                _plates.Clear();
+                foreach (Vessel v in Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+                    if (v.Kind == VesselKind.Plate) _plates.Add(v);
+            }
             Vessel best = null;
             float bestDistance = float.MaxValue;
-            foreach (Vessel v in Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+            foreach (Vessel v in _plates)
             {
-                if (v.Kind != VesselKind.Plate || v.ContentCount > 0) continue;
+                // Destroyed or pooled (inactive) since the lookup, or not free.
+                if (v == null || !v.isActiveAndEnabled || v.ContentCount > 0) continue;
                 if (v.TryGetComponent(out Worktown.Game.Net.Pickup p) && p.IsHeld) continue;
                 float d = (v.transform.position - player).sqrMagnitude;
                 if (d < bestDistance)
