@@ -18,6 +18,9 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 028b: cold stock, two shelves of slots behind an open door; the station option is the slot.</summary>
         Fridge,
         /// <summary>Spec 028b: dry stock on open boards; the station option is the slot.</summary>
-        Shelf
+        Shelf,
+        /// <summary>Spec 029: a deep fryer with two baskets (<see cref="VesselKind.Basket"/>): a power knob and a lower/raise button
+        /// per basket on its front (<see cref="FryerRules"/>).</summary>
+        Fryer
     }
 }

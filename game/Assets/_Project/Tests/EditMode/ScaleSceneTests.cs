@@ -61,7 +61,9 @@ namespace Worktown.Game.Tests
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");
                     Bounds body = station.transform.Find("Body").GetComponent<BoxCollider>().bounds;
-                    Assert.AreEqual(expected, body.max.y, HeightTolerance, station.name + " collider top");
+                    // Spec 029: the fryer's collider stops under its oil wells (a lowered basket is aimed at above it).
+                    float colliderTop = station.Kind == StationKind.Fryer ? FryerArt.BodyColliderTop : expected;
+                    Assert.AreEqual(colliderTop, body.max.y, HeightTolerance, station.name + " collider top");
                     Assert.AreEqual(0f, body.min.y, 0.001f, station.name + " stands on the floor");
                     if (station.Kind == StationKind.Counter) counters++;
                     if (station.Kind == StationKind.Stove) stoves++;
@@ -147,6 +149,8 @@ namespace Worktown.Game.Tests
             try
             {
                 List<Component> vessels = VesselTestKit.AllOf(scene, VesselTestKit.VesselType);
+                // Spec 029: the two fryer baskets hang in the oil, not on a worktop.
+                Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Basket));
                 Assert.AreEqual(6, vessels.Count);
                 foreach (Component vessel in vessels)
                 {

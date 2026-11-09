@@ -42,6 +42,9 @@ namespace Worktown.Game.Audio
                 case SoundKey.Perfect: return 0.8f;
                 case SoundKey.Warning: return 0.7f;
                 case SoundKey.Coin: return 0.8f;
+                case SoundKey.Fryer: return 0.75f; // spec 029
+                case SoundKey.Rattle: return 0.7f;
+                case SoundKey.Drip: return 0.6f;
                 default: return 1f;
             }
         }

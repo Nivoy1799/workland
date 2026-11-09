@@ -8,6 +8,8 @@ namespace Worktown.Game.Player
         Drop,
         PutInto,
         /// <summary>Spec 028b: take an ingredient from a stock slot; the snapshot is your hands (an item appears in them).</summary>
-        Take
+        Take,
+        /// <summary>Spec 029: a fryer basket goes into or out of the oil; the snapshot's VesselCount is 1 while it is lowered.</summary>
+        Basket
     }
 }

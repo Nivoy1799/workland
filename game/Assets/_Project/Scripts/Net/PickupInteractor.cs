@@ -83,9 +83,14 @@ namespace Worktown.Game.Net
         private StationButton[] _allButtons;
         private PlaceSurface[] _allSurfaces;
         private StockSlot[] _allSlots;
+        // Spec 029: the fryer baskets (scene objects; fixed vessels without a Pickup) and their looks.
+        private FryerBasket[] _allBaskets;
+        private Vessel[] _basketVessels = new Vessel[0];
         // Spec 028b: the copy of a taken ingredient flying into the hand until the server's food is there (owner only).
         private Worktown.Game.Art.StockTakeLook _pendingTake;
         private string _pendingTakeName;
+        // Spec 029b: an item whose predicted pick-up has not been confirmed yet (it counts as held for the rules).
+        private Pickup _pendingPickUp;
         // Spec 028b: how far a food's model stands below its pivot (the food prefab's collider half height, 0.2 m); learnt from
         // the first food held.
         private float _foodBottom = 0.2f;
@@ -126,6 +131,8 @@ namespace Worktown.Game.Net
             public Vessel Vessel;
             /// <summary>Spec 028b: a take from a stock slot (no item yet; the snapshot is the hands).</summary>
             public Worktown.Game.Art.StockTakeLook Take;
+            /// <summary>Spec 029: a fryer basket's predicted arc into or out of the oil.</summary>
+            public Worktown.Game.Art.BasketView Basket;
             public int ClickFrame;
             public bool VisualLogged;
         }
@@ -201,9 +208,11 @@ namespace Worktown.Game.Net
             {
                 if (look.Item != null) look.Item.EndPrediction(false);
                 if (look.Take != null) look.Take.Confirm(); // spec 028b: the copy just goes
+                if (look.Basket != null) look.Basket.EndPrediction(); // spec 029: back to the synced pose
             }
             _ending.Clear();
             _pendingTake = null;
+            _pendingPickUp = null;
             ClearQueuedClick();
         }
 
@@ -273,6 +282,13 @@ namespace Worktown.Game.Net
             CurrentHeld = Hands(held);
             CurrentAim = TargetTooFar ? Describe(Target).TooFar() : Describe(Target);
             CurrentAction = InteractionRules.ActionFor(CurrentHeld, CurrentAim);
+            // Spec 029b: while a take is on its way and nothing is really held, a click offers nothing (no Place, PutInto or
+            // Sell of food that is not there yet), and the prompt stays empty.
+            if (InteractionRules.WaitsForTake(_pendingTake != null, held != null))
+            {
+                CurrentAction = InteractionAction.None;
+                CurrentAim = AimTarget.Nothing;
+            }
         }
 
         /// <summary>
@@ -384,7 +400,21 @@ namespace Worktown.Game.Net
                     if (Target is StationButton button && button.Station != null)
                     {
                         PlaySound(SoundKey.Button, button.transform.position);
-                        SendStation(button.Station.Index, button.Option);
+                        if (button.Station.Kind == StationKind.Fryer && FryerRules.TryParseBasketOption(button.Option, out _))
+                            PressBasketButton(button); // spec 029b: the intent (lower or raise), then the arc at the click
+                        else
+                            SendStation(button.Station.Index, button.Option);
+                    }
+                    break;
+                case InteractionAction.Shake:
+                    if (Target is Vessel shaken)
+                    {
+                        // Spec 029: the rattle and the jolt in the click's frame; the server counts the shake.
+                        PlaySound(SoundKey.Rattle, shaken.transform.position);
+                        SendUse(shaken.NetworkObject, VesselRules.ActionShake);
+                        if (shaken.TryGetComponent(out Worktown.Game.Art.BasketView view))
+                            view.PredictShake(FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+                                TimeManager != null ? (float)TimeManager.TickDelta : 0f));
                     }
                     break;
                 case InteractionAction.PutInto:
@@ -393,7 +423,9 @@ namespace Worktown.Game.Net
                     if (Target is Vessel vessel)
                     {
                         Pickup held = FindHeldPickup();
-                        PlaySound(CurrentAction == InteractionAction.Take ? SoundKey.Pick : SoundKey.PlaceFood, vessel.transform.position);
+                        // Spec 029b: holding a plate, a Take tips the basket's food onto it (the food sound, not the pick).
+                        bool pick = CurrentAction == InteractionAction.Take && held == null;
+                        PlaySound(pick ? SoundKey.Pick : SoundKey.PlaceFood, vessel.transform.position);
                         SendUse(vessel.NetworkObject, VesselRules.ActionUse);
                         if (CurrentAction == InteractionAction.PutInto && held != null)
                         {
@@ -448,6 +480,7 @@ namespace Worktown.Game.Net
             {
                 Predict(PredictionKind.PickUp, pickup, null);
                 pickup.PredictHeld(OwnerId);
+                _pendingPickUp = pickup; // spec 029b: counts as held until the server answers
             }
         }
 
@@ -462,9 +495,8 @@ namespace Worktown.Game.Net
             SendStation(slot.Station.Index, slot.Option);
             if (_snapshotOf == null) _snapshotOf = Snapshot;
             float now = Time.unscaledTime;
-            Worktown.Game.Art.StockTakeLook look = Worktown.Game.Art.StockTakeLook.Begin(slot.transform, HandPose, now, FeelSettings.Current);
+            Worktown.Game.Art.StockTakeLook look = Worktown.Game.Art.StockTakeLook.Begin(slot.transform, HandPose, now, FeelSettings.Current, this);
             if (look == null) return;
-            Debug.Log("[Feel] click to visual: same frame (Take from the " + slot.Station.DisplayName + ")");
             _pendingTake = look;
             string id = slot.IngredientId;
             _pendingTakeName = id != null ? DemoIngredients.All[slot.IngredientIndex].DisplayName : "food";
@@ -493,6 +525,8 @@ namespace Worktown.Game.Net
         private Held Hands(Pickup held)
         {
             if (held == null && _pendingTake != null) return Held.Food(_pendingTakeName ?? "food", false);
+            // Spec 029b: an item on its predicted way into the hands counts as held (no stock take while the knife flies in).
+            if (held == null && _pendingPickUp != null && _pendingPickUp.IsSpawned && _pendingPickUp.HasPrediction) return Describe(_pendingPickUp);
             return Describe(held);
         }
 
@@ -564,16 +598,56 @@ namespace Worktown.Game.Net
             _looks.Add(look, item, new FeelPrediction(kind, OwnerId, Snapshot(look), now, timeout), _lastRequest);
         }
 
+        /// <summary>
+        /// Spec 029: a fryer basket button was clicked: the basket swings into (or out of) the oil now, judged like any predicted
+        /// look (confirmed when its synced state crosses the oil line; a refusal or the timeout sends it back with "nope").
+        /// Raising always works; lowering is only predicted when the client sees the fryer on and food in the basket (the server
+        /// would refuse otherwise, so nothing moves). Spec 029b: the request is the intent (FryerRules.IntentOption) from where
+        /// this client sees the basket (its own pending prediction first), so two players never cancel each other.
+        /// </summary>
+        private void PressBasketButton(StationButton button)
+        {
+            FryerRules.TryParseBasketOption(button.Option, out int index);
+            RefreshInteractables();
+            Vessel basket = null;
+            for (int i = 0; i < _allBaskets.Length; i++)
+                if (_allBaskets[i] != null && _allBaskets[i].Fryer == button.Station && _allBaskets[i].Basket == index) basket = _basketVessels[i];
+            Worktown.Game.Art.BasketView view = basket != null && basket.TryGetComponent(out Worktown.Game.Art.BasketView v) ? v : null;
+            byte flags = button.Station.TryGetComponent(out StationContents fryer) ? fryer.StoveFlags.Value : (byte)0;
+            bool seenLowered = view != null ? view.SeenLowered : FryerRules.IsLowered(flags, index);
+            SendStation(button.Station.Index, FryerRules.IntentOption(index, seenLowered));
+            if (view == null) return;
+            bool lowering = !seenLowered;
+            if (lowering && (!FryerRules.IsOn(flags) || basket.ContentCount == 0)) return;
+            view.Predict(lowering);
+            if (_snapshotOf == null) _snapshotOf = Snapshot;
+            var pending = new PendingLook { Basket = view, ClickFrame = Time.frameCount };
+            float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+                TimeManager != null ? (float)TimeManager.TickDelta : 0f);
+            _looks.Add(pending, view, new FeelPrediction(PredictionKind.Basket, OwnerId, Snapshot(pending), Time.unscaledTime, timeout),
+                _lastRequest);
+        }
+
         /// <summary>The measured round trip in s, or FeelRules.AssumedRoundTrip before the first ping.</summary>
         private float RoundTripSeconds()
         {
             return FeelRules.RoundTrip(TimeManager != null ? TimeManager.RoundTripTime / 1000f : 0f);
         }
 
+        private ItemSnapshot TakeSnapshot(Pickup held)
+        {
+            if (held == null) return ItemSnapshot.Gone;
+            return FeelRules.HandsSnapshot(OwnerId, held.NetworkObject.ObjectId, held.TryGetComponent(out Food _));
+        }
+
         private ItemSnapshot Snapshot(PendingLook look)
         {
             // Spec 028b: a take from stock is about the hands: does anything stand in them now?
-            if (look.Take != null) return FindHeldPickup() != null ? new ItemSnapshot(true, OwnerId, Vector3.zero, 0) : ItemSnapshot.Gone;
+            // Spec 029b: with the held object's id, so only a new held food confirms (a knife arriving from a pending pick-up
+            // never does).
+            if (look.Take != null) return TakeSnapshot(FindHeldPickup());
+            // Spec 029: a basket is about its synced state: 1 while it is in the oil.
+            if (look.Basket != null) return new ItemSnapshot(true, -1, Vector3.zero, look.Basket.SyncedLowered ? 1 : 0);
             Pickup item = look.Item;
             if (item == null || !item.IsSpawned) return ItemSnapshot.Gone;
             Vessel vessel = look.Vessel;
@@ -594,10 +668,12 @@ namespace Worktown.Game.Net
                 LogVisual(look, p.Kind);
                 float ms = (p.ResolvedTime - p.StartTime) * 1000f;
                 if (look.Take != null && look.Take == _pendingTake) _pendingTake = null; // spec 028b: the hands are free again
+                if (look.Item != null && look.Item == _pendingPickUp && p.Kind == PredictionKind.PickUp) _pendingPickUp = null;
                 if (p.Phase == PredictionPhase.Confirmed)
                 {
                     Debug.Log("[Feel] click to confirm: " + ms.ToString("0") + " ms (" + p.Kind + ")");
                     if (look.Item != null) look.Item.EndPrediction(true);
+                    if (look.Basket != null) look.Basket.EndPrediction();
                     if (look.Take != null)
                     {
                         Pickup taken = FindHeldPickup();
@@ -610,6 +686,11 @@ namespace Worktown.Game.Net
                           + " ms: the look goes back, nope");
                 if (look.Item != null) look.Item.EndPrediction(false);
                 Vector3 nopeAt = look.Item != null ? look.Item.transform.position : transform.position;
+                if (look.Basket != null)
+                {
+                    look.Basket.EndPrediction(); // spec 029: it swings back to where the server keeps it
+                    nopeAt = look.Basket.transform.position;
+                }
                 if (look.Take != null)
                 {
                     nopeAt = look.Take.transform.position;
@@ -622,9 +703,15 @@ namespace Worktown.Game.Net
 
         private static void LogVisual(PendingLook look, PredictionKind kind)
         {
-            if (look.VisualLogged || look.Item == null || look.Item.PredictionDrawnFrame < 0) return;
+            if (look.VisualLogged) return;
+            // Spec 029b: measured for every look: the frame its prediction was first drawn (an item, a take's copy, a basket).
+            int drawn = -1;
+            if (look.Item != null) drawn = look.Item.PredictionDrawnFrame;
+            else if ((object)look.Take != null) drawn = look.Take.DrawnFrame; // the copy may be gone already; its number stays
+            else if (look.Basket != null) drawn = look.Basket.PredictionDrawnFrame;
+            if (drawn < 0) return;
             look.VisualLogged = true;
-            int frames = look.Item.PredictionDrawnFrame - look.ClickFrame;
+            int frames = drawn - look.ClickFrame;
             Debug.Log("[Feel] click to visual: " + (frames <= 0 ? "same frame" : frames + " frame(s) later") + " (" + kind + ")");
         }
 
@@ -672,11 +759,12 @@ namespace Worktown.Game.Net
             {
                 case StationButton button:
                     byte flags = button.Station != null && button.Station.TryGetComponent(out StationContents stove) ? stove.StoveFlags.Value : (byte)0;
-                    return AimTarget.Button(button.Option, flags);
+                    // Spec 029: the fryer's knob and basket buttons say what they do from the fryer's flags.
+                    return AimTarget.Button(button.Station != null ? button.Station.Kind : StationKind.Stove, button.Option, flags);
                 case PlaceSurface surface:
                     return AimTarget.Spot(TargetSpot, surface.IsBurner);
                 case Vessel vessel:
-                    return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value);
+                    return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value, vessel.Mode.Value);
                 case StockSlot slot:
                     return DescribeStock(slot.IngredientIndex); // spec 028b: a slot takes like a crate
                 case Station station:
@@ -819,6 +907,15 @@ namespace Worktown.Game.Net
                     _aimPoints.Add(point);
                     continue;
                 }
+                // Spec 029: a fryer basket (a fixed vessel, no Pickup); its collider moves with its arc.
+                Vessel fixedVessel = hitCollider.GetComponentInParent<Vessel>();
+                if (fixedVessel != null && fixedVessel.Kind == VesselKind.Basket)
+                {
+                    if (fixedVessel.IsSpawned) AddAimHit(distance, AimKind.Vessel, fixedVessel);
+                    else AddAimHit(distance, AimKind.Other, null);
+                    _aimPoints.Add(_rayHits[i].point);
+                    continue;
+                }
                 Station station = hitCollider.GetComponentInParent<Station>();
                 Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
                 StockSlot slot = station != null && station.SlotCount > 0 ? station.NearestSlot(_rayHits[i].point) : null;
@@ -904,6 +1001,13 @@ namespace Worktown.Game.Net
             if (_allButtons == null || HasMissing(_allButtons)) _allButtons = FindObjectsByType<StationButton>(FindObjectsSortMode.None);
             if (_allSurfaces == null || HasMissing(_allSurfaces)) _allSurfaces = FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None);
             if (_allSlots == null || HasMissing(_allSlots)) _allSlots = FindObjectsByType<StockSlot>(FindObjectsSortMode.None); // spec 028b
+            if (_allBaskets == null || HasMissing(_allBaskets))
+            {
+                // Spec 029: looked up once like the buttons; their vessels cached alongside.
+                _allBaskets = FindObjectsByType<FryerBasket>(FindObjectsSortMode.None);
+                _basketVessels = new Vessel[_allBaskets.Length];
+                for (int i = 0; i < _allBaskets.Length; i++) _basketVessels[i] = _allBaskets[i].GetComponent<Vessel>();
+            }
         }
 
         private static bool HasMissing<TItem>(TItem[] items) where TItem : UnityEngine.Object
@@ -951,6 +1055,13 @@ namespace Worktown.Game.Net
                 if (button == null || button.Station == null) continue;
                 AddCone(ray, button, PlaceSpots.None, button.transform.position, hands, Describe(button), range, feel.AimCone,
                     button.Station.transform.position);
+            }
+            for (int i = 0; i < _basketVessels.Length; i++)
+            {
+                // Spec 029: a basket competes at its contents, reach measured to its pivot (as the server does).
+                Vessel basket = _basketVessels[i];
+                if (basket == null || !basket.IsSpawned) continue;
+                AddCone(ray, basket, PlaceSpots.None, basket.ContentPoint, hands, Describe(basket), range, feel.AimCone, basket.transform.position);
             }
             if (!hands.IsHolding)
                 foreach (StockSlot slot in _allSlots) // spec 028b: reach to the slot's anchor, as the server measures it
@@ -1034,12 +1145,16 @@ namespace Worktown.Game.Net
             if (distance <= 0f) return true;
             Station own = candidate != null ? candidate.GetComponentInParent<Station>() : null;
             if (candidate is StationButton button) own = button.Station;
+            // Spec 029: a basket hangs in its fryer; neither the fryer nor the basket's own collider hides it.
+            Transform self = candidate is Vessel fixedBasket && fixedBasket.Kind == VesselKind.Basket ? fixedBasket.transform : null;
+            if (self != null && self.TryGetComponent(out FryerBasket fb)) own = fb.Fryer;
             int count = Physics.RaycastNonAlloc(new Ray(eye, to.normalized), _sightHits, distance, Physics.DefaultRaycastLayers,
                 QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
                 Collider c = _sightHits[i].collider;
                 if (c == null || c.transform.IsChildOf(transform)) continue;
+                if (self != null && c.transform.IsChildOf(self)) continue;
                 if (c.GetComponentInParent<Pickup>() != null || c.TryGetComponent(out PlaceSurface _) || c.TryGetComponent(out StationButton _)) continue;
                 if (own != null && c.GetComponentInParent<Station>() == own) continue;
                 return false;
@@ -1319,6 +1434,13 @@ namespace Worktown.Game.Net
 
         /// <summary>Spec 027: does what a left click does now (<see cref="CurrentAction"/> on <see cref="Target"/>).</summary>
         public void DevClick() => ExecuteAction();
+        /// <summary>Spec 029b, tours: a stock take with its predicted look, sent whatever the rules offer now.</summary>
+        public void DevTake(StockSlot slot)
+        {
+            if (slot != null && slot.Station != null) TakeWithLook(slot);
+        }
+        /// <summary>Spec 029b, tours: the hands as the rules see them now (a pending pick-up counts as held).</summary>
+        public Held DevHands() => Hands(FindHeldPickup());
         public void DevSendPickup(NetworkObject target) => SendPickup(target);
         public void DevSendPlace(int surfaceIndex, int spotIndex) => SendPlace(surfaceIndex, spotIndex);
         public void DevSendStation(int stationIndex, int option) => SendStation(stationIndex, option);

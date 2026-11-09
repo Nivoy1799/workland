@@ -114,7 +114,8 @@ namespace Worktown.Game.Tests
             HeatTestKit.SwitchOn(kitchen, Pot, Burner);
             kitchen.TryPutInto(1, Pot, VesselKind.Pot, Start);
             kitchen.TryPutInto(2, Pot, VesselKind.Pot, Start + 1400);
-            CollectionAssert.AreEqual(new[] { "potato · medium", "onion · warming up" }, kitchen.HeatNames(Pot, Start + 1500, Rate));
+            // Spec 029b: player words from each food's zone (the potato is still cooking, the onion just went in).
+            CollectionAssert.AreEqual(new[] { "potato · warm", "onion · raw" }, kitchen.HeatNames(Pot, Start + 1500, Rate));
             IReadOnlyList<FoodLook> looks = kitchen.HeatLooks(Pot, Start + 1500, Rate);
             Assert.AreEqual(2, looks.Count);
             Assert.AreEqual(FoodLook.HeatBoiled, looks[0].Heat);

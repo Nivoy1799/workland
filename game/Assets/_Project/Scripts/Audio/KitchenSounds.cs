@@ -54,6 +54,8 @@ namespace Worktown.Game.Audio
         private VesselSteam[] _hotCandidates = new VesselSteam[0];
         private Vessel[] _boards = new Vessel[0];
         private StationContents[] _stoves = new StationContents[0];
+        private StationContents[] _fryers = new StationContents[0]; // spec 029b: the idle oil hum
+        private readonly Dictionary<StationContents, LoopState> _hums = new Dictionary<StationContents, LoopState>();
         private bool _initialised;
 
         private readonly Dictionary<VesselSteam, LoopState> _loops = new Dictionary<VesselSteam, LoopState>();
@@ -108,6 +110,10 @@ namespace Worktown.Game.Audio
         {
             _hotCandidates = FindObjectsByType<VesselSteam>(FindObjectsSortMode.None);
             _stoves = FindObjectsByType<StationContents>(FindObjectsSortMode.None);
+            var fryers = new List<StationContents>();
+            foreach (StationContents contents in _stoves)
+                if (contents != null && contents.TryGetComponent(out Station station) && station.Kind == StationKind.Fryer) fryers.Add(contents);
+            _fryers = fryers.ToArray();
             var boards = new List<Vessel>();
             foreach (Vessel vessel in FindObjectsByType<Vessel>(FindObjectsSortMode.None))
                 if (vessel.Kind == VesselKind.Board) boards.Add(vessel);
@@ -206,7 +212,7 @@ namespace Worktown.Game.Audio
             {
                 VesselSteam steam = _hotCandidates[i];
                 if (steam == null || steam.Vessel == null) continue;
-                SoundKey key = steam.Vessel.Kind == VesselKind.Pot ? SoundKey.Bubble : SoundKey.Sizzle;
+                SoundKey key = SoundRules.LoopOf(steam.Vessel.Kind); // spec 029: the fryer basket fries
                 if (!_loops.TryGetValue(steam, out LoopState loop))
                 {
                     if (!steam.IsHot) continue;
@@ -220,9 +226,35 @@ namespace Worktown.Game.Audio
                 float target = SoundRules.LoopLevel(steam.IsHot, zone);
                 loop.Level = Mathf.MoveTowards(loop.Level, target, LoopFadePerSecond * dt);
                 loop.Source.volume = loop.Level * SoundCatalog.MasterVolume * SoundCatalog.GainOf(key);
-                loop.Source.pitch = Mathf.MoveTowards(loop.Source.pitch, SoundRules.LoopPitch(zone), dt);
+                loop.Source.pitch = Mathf.MoveTowards(loop.Source.pitch, SoundRules.LoopPitchOf(steam.Vessel.Kind, zone), dt);
                 if (loop.Level > 0f && !loop.Source.isPlaying && loop.Source.clip != null) loop.Source.Play();
                 else if (loop.Level <= 0f && loop.Source.isPlaying) loop.Source.Pause();
+            }
+            UpdateFryerHums(dt);
+        }
+
+        /// <summary>Spec 029b: a quiet oil hum from each fryer that is on with both baskets up (SoundRules.FryerIdleHum).</summary>
+        private void UpdateFryerHums(float dt)
+        {
+            for (int i = 0; i < _fryers.Length; i++)
+            {
+                StationContents fryer = _fryers[i];
+                if (fryer == null) continue;
+                float target = SoundRules.FryerIdleHum(fryer.StoveFlags.Value);
+                if (!_hums.TryGetValue(fryer, out LoopState hum))
+                {
+                    if (target <= 0f) continue;
+                    hum = new LoopState { Source = CreateSource("Loop fryer hum", loop: true) };
+                    hum.Source.transform.SetParent(fryer.transform, false);
+                    hum.Source.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+                    hum.Source.pitch = SoundRules.FryerIdlePitch;
+                    if (_catalog.TryGet(SoundKey.Fryer, out AudioClip clip)) hum.Source.clip = clip;
+                    _hums[fryer] = hum;
+                }
+                hum.Level = Mathf.MoveTowards(hum.Level, target, LoopFadePerSecond * dt);
+                hum.Source.volume = hum.Level * SoundCatalog.MasterVolume * SoundCatalog.GainOf(SoundKey.Fryer);
+                if (hum.Level > 0f && !hum.Source.isPlaying && hum.Source.clip != null) hum.Source.Play();
+                else if (hum.Level <= 0f && hum.Source.isPlaying) hum.Source.Pause();
             }
         }
 

@@ -42,11 +42,31 @@ namespace Worktown.Game.Art
         /// least medium; only then do they become the fries model. False for an unknown ingredient or shape
         /// (the caller shows the cube).
         /// </summary>
-        public static bool TryGetPiece(FoodLook look, out FoodPiece piece)
+        public static bool TryGetPiece(FoodLook look, out FoodPiece piece) => TryGetPiece(look, false, out piece);
+
+        /// <summary>Spec 029: fries drawn loose (in the fryer basket) are a pile of golden sticks, not the box.</summary>
+        public const int LooseFries = 7;
+
+        /// <summary>
+        /// Spec 029: as <see cref="TryGetPiece(FoodLook, out FoodPiece)"/>; deep-fried falafel mix is four small brown balls
+        /// (<see cref="FalafelBalls"/>), and with <paramref name="loose"/> (the basket's contents) fries are a pile of sticks
+        /// instead of the fries box.
+        /// </summary>
+        public static bool TryGetPiece(FoodLook look, bool loose, out FoodPiece piece)
         {
             piece = default;
             byte ingredient = look.Ingredient;
             if (ingredient >= IngredientColors.Length) return false;
+            if (ingredient == FalafelMix && look.Heat == FoodLook.HeatDeepFried)
+            {
+                piece = new FoodPiece(ArtKey.FoodFalafelBall, FalafelBalls, true);
+                return true;
+            }
+            if (loose && ingredient == Potato && look.Shape == FoodLook.ShapeSticks)
+            {
+                piece = Generic(look.Shape, LooseFries);
+                return true;
+            }
             switch (look.Shape)
             {
                 case FoodLook.ShapeWhole:
@@ -72,11 +92,23 @@ namespace Worktown.Game.Art
             }
         }
 
-        /// <summary>Fried (fry or saute) to the medium bucket or longer: the sticks are finished fries.</summary>
+        /// <summary>Fried (fry or saute; spec 029: or deep-fried) to the medium bucket or longer: the sticks are finished fries.</summary>
         public static bool IsFries(FoodLook look)
         {
-            return look.Heat == FoodLook.HeatFried && look.Doneness >= FoodLook.DonenessMedium;
+            return IsFried(look.Heat) && look.Doneness >= FoodLook.DonenessMedium;
         }
+
+        /// <summary>
+        /// Spec 029: how much bigger a part is drawn on a plate than the plate's part scale says (capped at full size by the
+        /// caller): the fries box stands on the plate at nearly its own size; everything else 1.
+        /// </summary>
+        public static float PartBoost(ArtKey key) => key == ArtKey.FoodFries ? 1.6f : 1f;
+
+        /// <summary>Spec 029: one portion of falafel mix becomes this many balls in the fryer (the sim's DeepFry shape).</summary>
+        public const int FalafelBalls = 4;
+
+        /// <summary>Fried in the pan or (spec 029) in the fryer: both shift golden.</summary>
+        public static bool IsFried(byte heat) => heat == FoodLook.HeatFried || heat == FoodLook.HeatDeepFried;
 
         private static FoodPiece Generic(byte shape, int count) => new FoodPiece(GenericPiece(shape), count, true);
 
@@ -140,7 +172,7 @@ namespace Worktown.Game.Art
         public static Color Tint(FoodLook look, bool tinted)
         {
             Color c = tinted ? IngredientColor(look.Ingredient) : Color.white;
-            if (look.Heat == FoodLook.HeatFried && look.Doneness > FoodLook.DonenessRaw)
+            if (IsFried(look.Heat) && look.Doneness > FoodLook.DonenessRaw)
                 c = Color.Lerp(c, c * Golden, GoldenShift);
             float keep = 1f - DarkeningOf(look.Doneness);
             return Palette.Shade(c, keep);
@@ -188,7 +220,7 @@ namespace Worktown.Game.Art
         public static Vector3 PilePosition(int index, int count)
         {
             if (count <= 1) return Vector3.zero;
-            float radius = count == 2 ? 0.045f : 0.05f;
+            float radius = count == 2 ? 0.045f : count >= FoodArtRules.LooseFries ? 0.035f : 0.05f;
             float angle = (index * 360f / count + 20f) * Mathf.Deg2Rad;
             float lift = count > 3 && index % 2 == 1 ? 0.012f : 0f;
             return new Vector3(Mathf.Cos(angle) * radius, lift, Mathf.Sin(angle) * radius);

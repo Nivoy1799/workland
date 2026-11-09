@@ -54,6 +54,36 @@ namespace Worktown.Game.Audio
             return null;
         }
 
+        /// <summary>Spec 029: the loop a hot vessel plays: the pot bubbles, a fryer basket fries (deep oil), the pan sizzles.</summary>
+        public static SoundKey LoopOf(VesselKind kind)
+        {
+            switch (kind)
+            {
+                case VesselKind.Pot: return SoundKey.Bubble;
+                case VesselKind.Basket: return SoundKey.Fryer;
+                default: return SoundKey.Sizzle;
+            }
+        }
+
+        /// <summary>Spec 029b: the idle oil hum's level (the fryer loop, quiet) and pitch (lower than a basket frying).</summary>
+        public const float FryerIdleLevel = 0.22f;
+        public const float FryerIdlePitch = 0.7f;
+
+        /// <summary>
+        /// Spec 029b: the idle oil hum (0..1) from the fryer's synced byte: quiet while the fryer is on and both baskets are up
+        /// (a lowered basket plays its own fryer loop instead), silent when it is off.
+        /// </summary>
+        public static float FryerIdleHum(byte fryerFlags)
+        {
+            if (!FryerRules.IsOn(fryerFlags)) return 0f;
+            for (int b = 0; b < FryerRules.BasketsPerFryer; b++)
+                if (FryerRules.IsLowered(fryerFlags, b)) return 0f;
+            return FryerIdleLevel;
+        }
+
+        /// <summary>Spec 029: the fryer loop sits lower than the pan's sizzle (deep oil), and rises with the zone like it.</summary>
+        public static float LoopPitchOf(VesselKind kind, HeatZone zone) => (kind == VesselKind.Basket ? 0.85f : 1f) * LoopPitch(zone);
+
         /// <summary>The material of cookware: pan, pot and knife metal; plate and bowl ceramic; board wood.</summary>
         public static SoundMaterial MaterialOf(VesselKind kind)
         {
@@ -61,6 +91,7 @@ namespace Worktown.Game.Audio
             {
                 case VesselKind.Pan:
                 case VesselKind.Pot:
+                case VesselKind.Basket: // spec 029: a wire basket
                     return SoundMaterial.Metal;
                 case VesselKind.Plate:
                 case VesselKind.Bowl:

@@ -29,6 +29,21 @@ namespace Worktown.Game.Cooking
         // Spec 019/021: food lying on a cutting board and how far it is cut, per board vessel id.
         private readonly Dictionary<int, Item> _boardFood = new Dictionary<int, Item>();
         private readonly Dictionary<int, CutProgress> _boardCut = new Dictionary<int, CutProgress>();
+        // Spec 029: each fryer's switch (per fryer station index) and each basket (per basket vessel id). The basket's food is a
+        // heat session in _heat like the pan's; it runs while the basket is lowered and its fryer is on.
+        private readonly Dictionary<int, bool> _fryerOn = new Dictionary<int, bool>();
+        private readonly Dictionary<int, BasketRecord> _baskets = new Dictionary<int, BasketRecord>();
+
+        private sealed class BasketRecord
+        {
+            public int Fryer;
+            public int Index;
+            public BasketState State;
+            public uint DrainStart;
+            public uint DrainTicks;
+            public bool Shaken;
+            public int Shakes;
+        }
 
         public KitchenState(ItemFactory factory, OperationCatalog operations)
         {
@@ -103,6 +118,8 @@ namespace Worktown.Game.Cooking
             _burnerOf.Clear();
             _boardFood.Clear();
             _boardCut.Clear();
+            _fryerOn.Clear();
+            _baskets.Clear();
         }
 
         /// <summary>Spec 021: a vessel left the world (sold plate, lost cookware): its contents and position go with it.</summary>
@@ -111,6 +128,7 @@ namespace Worktown.Game.Cooking
             _heat.Remove(vesselId);
             _burnerOf.Remove(vesselId);
             _assembly.Remove(vesselId);
+            _baskets.Remove(vesselId);
             ClearBoard(vesselId);
         }
 
@@ -123,6 +141,7 @@ namespace Worktown.Game.Cooking
             {
                 case VesselKind.Board: return _boardFood.ContainsKey(vesselId) ? 1 : 0;
                 case VesselKind.Pan:
+                case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: return HeatCount(vesselId);
                 default: return CountIn(vesselId);
             }
@@ -140,6 +159,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Board: return TryPutOnBoard(foodObjectId, vesselId);
                 case VesselKind.Pan:
                 case VesselKind.Pot: return TryPutOnHeat(foodObjectId, vesselId, kind, tick);
+                case VesselKind.Basket: return TryPutInBasket(foodObjectId, vesselId, tick);
                 default: return TryAddToVessel(foodObjectId, vesselId, kind);
             }
         }
@@ -156,6 +176,10 @@ namespace Worktown.Game.Cooking
             {
                 case VesselKind.Board: return TryPreviewBoardTake(vesselId, out result);
                 case VesselKind.Pan: return TryPreviewHeatTake(vesselId, tick, tickRate, out result);
+                case VesselKind.Basket:
+                    // Spec 029: only from a raised (or draining) basket.
+                    if (BasketStateOf(vesselId, tick) == BasketState.Lowered) return CookOutcome.BasketLowered;
+                    return TryPreviewHeatTake(vesselId, tick, tickRate, out result);
                 case VesselKind.Bowl: return TryPreviewTake(vesselId, kind, out result);
                 case VesselKind.Pot: return HeatCount(vesselId) > 0 ? CookOutcome.PourInstead : CookOutcome.StationEmpty;
                 default: return CookOutcome.InvalidOption;
@@ -169,6 +193,10 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Board: ClearBoard(vesselId); break;
                 case VesselKind.Pan:
                 case VesselKind.Pot: ClearHeat(vesselId); break;
+                case VesselKind.Basket:
+                    ClearHeat(vesselId);
+                    if (_baskets.TryGetValue(vesselId, out BasketRecord basket)) basket.Shaken = false; // the next fry starts fresh
+                    break;
                 default: ClearVessel(vesselId); break;
             }
         }
@@ -199,6 +227,19 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
+        /// Spec 029b: tips a raised (or draining) basket's food onto the plate or into the bowl <paramref name="targetId"/>
+        /// that the player holds: the basket's take (shake bonus, greasy while it drains) poured like a pan. BasketLowered
+        /// while it is in the oil; otherwise as <see cref="TryPour"/>.
+        /// </summary>
+        public CookOutcome TryTipBasket(int basketId, int targetId, VesselKind targetKind, uint tick, double tickRate, out Item poured)
+        {
+            poured = null;
+            if (!_baskets.ContainsKey(basketId)) return CookOutcome.NotAVessel;
+            if (BasketStateOf(basketId, tick) == BasketState.Lowered) return CookOutcome.BasketLowered;
+            return TryPour(basketId, VesselKind.Basket, targetId, targetKind, tick, tickRate, out poured);
+        }
+
+        /// <summary>
         /// Name of what taking, pouring or selling the contents gives now ("crispy fried potato sticks", the plated
         /// dish's name); null when empty or when the sim would refuse.
         /// </summary>
@@ -210,6 +251,7 @@ namespace Worktown.Game.Cooking
             {
                 case VesselKind.Board: return BoardName(vesselId);
                 case VesselKind.Pan:
+                case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: outcome = TryPreviewHeatTake(vesselId, tick, tickRate, out result); break;
                 default: outcome = TryPreviewTake(vesselId, kind, out result); break;
             }
@@ -225,6 +267,7 @@ namespace Worktown.Game.Cooking
                     string name = BoardName(vesselId);
                     return name == null ? new string[0] : new[] { name };
                 case VesselKind.Pan:
+                case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: return HeatNames(vesselId, tick, tickRate);
                 default: return NamesIn(vesselId);
             }
@@ -239,6 +282,7 @@ namespace Worktown.Game.Cooking
                     FoodLook? look = BoardLook(vesselId);
                     return look.HasValue ? new[] { look.Value } : new FoodLook[0];
                 case VesselKind.Pan:
+                case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: return HeatLooks(vesselId, tick, tickRate);
                 default: return LooksIn(vesselId);
             }
@@ -453,7 +497,7 @@ namespace Worktown.Game.Cooking
             string opId = burner == NoBurner ? new StoveSettings().OperationIdFor(kind) : BurnerOf(burner).OperationIdFor(kind);
             int? tempC = kind == VesselKind.Pan ? StoveSettings.PanTempC : (int?)null;
             if (!TryGetTimeParam(opId, out ParamDef time)) return CookOutcome.SimRefused;
-            OperationResult dry = _factory.Apply(opId, new[] { item }, HeatParams(tempC, time.Max));
+            OperationResult dry = _factory.Apply(opId, new[] { item }, HeatParams(opId, tempC, time.Max));
             if (!dry.Ok || dry.Item == null) return CookOutcome.SimRefused;
             if (sessions.Count > 0)
             {
@@ -462,7 +506,7 @@ namespace Worktown.Game.Cooking
                 foreach (HeatSession s in sessions)
                 {
                     if (!TryGetTimeParam(s.OperationId, out ParamDef t)) return CookOutcome.SimRefused;
-                    OperationResult longest = _factory.Apply(s.OperationId, new[] { s.Food }, HeatParams(s.TempC, t.Max));
+                    OperationResult longest = _factory.Apply(s.OperationId, new[] { s.Food }, HeatParams(s.OperationId, s.TempC, t.Max));
                     if (!longest.Ok || longest.Item == null) return CookOutcome.SimRefused;
                     inputs.Add(longest.Item);
                 }
@@ -502,12 +546,19 @@ namespace Worktown.Game.Cooking
         {
             result = null;
             if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions) || sessions.Count == 0) return CookOutcome.StationEmpty;
-            if (sessions.Count == 1) return CookOne(sessions[0], tick, tickRate, out result);
+            // Spec 029: a basket's fry carries the shake bonus and, while it still drains, the greasy penalty.
+            bool shaken = false, greasy = false;
+            if (_baskets.TryGetValue(vesselId, out BasketRecord basket))
+            {
+                shaken = basket.Shaken;
+                greasy = BasketStateOf(vesselId, tick) == BasketState.Draining;
+            }
+            if (sessions.Count == 1) return CookOne(sessions[0], tick, tickRate, shaken, greasy, out result);
 
             var cooked = new List<Item>(sessions.Count);
             foreach (HeatSession session in sessions)
             {
-                CookOutcome one = CookOne(session, tick, tickRate, out Item item);
+                CookOutcome one = CookOne(session, tick, tickRate, shaken, greasy, out Item item);
                 if (one != CookOutcome.Ok && one != CookOutcome.TooShort) return one;
                 cooked.Add(item);
             }
@@ -517,7 +568,7 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
-        private CookOutcome CookOne(HeatSession session, uint tick, double tickRate, out Item result)
+        private CookOutcome CookOne(HeatSession session, uint tick, double tickRate, bool shaken, bool greasy, out Item result)
         {
             result = null;
             if (!TryGetTimeParam(session.OperationId, out ParamDef time)) return CookOutcome.SimRefused;
@@ -528,7 +579,7 @@ namespace Worktown.Game.Cooking
                 return CookOutcome.TooShort;
             }
             OperationResult cooked = _factory.Apply(session.OperationId, new[] { session.Food },
-                HeatParams(session.TempC, CookingTime.Clamp(time, seconds)));
+                HeatParams(session.OperationId, session.TempC, CookingTime.Clamp(time, seconds), shaken, greasy));
             if (!cooked.Ok || cooked.Item == null) return CookOutcome.SimRefused;
             result = cooked.Item;
             return CookOutcome.Ok;
@@ -540,8 +591,8 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
-        /// Label lines for what is in the pan or pot, e.g. "potato sticks · medium". Before the first doneness bucket:
-        /// "warming up" while it cooks, "raw" while it does not.
+        /// Label lines for what is in the pan, pot or basket. Spec 029b: in player words from each food's 027c zone
+        /// (<see cref="HeatLabelRules"/>): "potato sticks · cooked", "golden fries".
         /// </summary>
         public IReadOnlyList<string> HeatNames(int vesselId, uint tick, double tickRate)
         {
@@ -549,9 +600,9 @@ namespace Worktown.Game.Cooking
             var names = new List<string>(sessions.Count);
             foreach (HeatSession session in sessions)
             {
-                string bucket = CurrentBucket(session, tick, tickRate);
-                if (bucket.Length == 0) bucket = session.IsRunning ? "warming up" : "raw";
-                names.Add(NameOf(session.Food) + " · " + bucket);
+                double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
+                HeatZone zone = HeatZoneRules.Zone(seconds, session.Timeline);
+                names.Add(HeatLabelRules.Label(session.Food, NameOf(session.Food), session.OperationId, zone));
             }
             return names;
         }
@@ -610,7 +661,7 @@ namespace Worktown.Game.Cooking
         {
             return HeatZoneRules.Build(time, seconds =>
             {
-                OperationResult cooked = _factory.Apply(opId, new[] { food }, HeatParams(tempC, seconds));
+                OperationResult cooked = _factory.Apply(opId, new[] { food }, HeatParams(opId, tempC, seconds));
                 return cooked.Ok && cooked.Item != null ? cooked.Item.Components : null;
             });
         }
@@ -673,12 +724,156 @@ namespace Worktown.Game.Cooking
             return _operations.TryGet(opId, out OperationDef op) && CookingTime.TryGetTimeParam(op, out time);
         }
 
-        /// <summary>Heat op parameters; no temperature for the pot (boil has a fixed one).</summary>
-        private static IReadOnlyDictionary<string, ParamValue> HeatParams(int? tempC, float seconds)
+        /// <summary>Heat op parameters; no temperature for the pot (boil has a fixed one). Spec 029: deep fry also takes the shake and
+        /// drain choices.</summary>
+        private static IReadOnlyDictionary<string, ParamValue> HeatParams(string opId, int? tempC, float seconds, bool shaken = false,
+            bool greasy = false)
         {
             var parameters = new Dictionary<string, ParamValue> { ["time"] = ParamValue.Number(seconds) };
             if (tempC.HasValue) parameters["temp"] = ParamValue.Number(tempC.Value);
+            if (opId == DeepFry.OperationId)
+            {
+                parameters[DeepFry.ShakeParam] = ParamValue.Choice(shaken ? DeepFry.Shaken : DeepFry.NotShaken);
+                parameters[DeepFry.DrainParam] = ParamValue.Choice(greasy ? DeepFry.Greasy : DeepFry.Drained);
+            }
             return parameters;
+        }
+
+        // ---- Spec 029: the deep fryer and its baskets ----
+
+        /// <summary>
+        /// The basket vessel <paramref name="vesselId"/> is basket <paramref name="basket"/> of fryer station <paramref name="fryer"/>
+        /// (raised, empty). Registering it again with the same fryer and basket keeps its state.
+        /// </summary>
+        public void RegisterBasket(int vesselId, int fryer, int basket)
+        {
+            if (_baskets.TryGetValue(vesselId, out BasketRecord known) && known.Fryer == fryer && known.Index == basket) return;
+            _baskets[vesselId] = new BasketRecord { Fryer = fryer, Index = basket, State = BasketState.Raised };
+        }
+
+        /// <summary>The fryer's switch (fryers start off).</summary>
+        public bool FryerIsOn(int fryer) => _fryerOn.TryGetValue(fryer, out bool on) && on;
+
+        /// <summary>Switches the fryer on or off; its lowered baskets cook only while it is on (off pauses them).</summary>
+        public CookOutcome TryToggleFryer(int fryer, uint tick)
+        {
+            bool on = !FryerIsOn(fryer);
+            _fryerOn[fryer] = on;
+            foreach (KeyValuePair<int, BasketRecord> b in _baskets)
+                if (b.Value.Fryer == fryer && b.Value.State == BasketState.Lowered) SetRunning(b.Key, on, tick);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 029b: "lower the basket" (an intent, not a toggle): only with food in it (StationEmpty) and the fryer on
+        /// (FryerOff); a basket already in the oil refuses it (BasketLowered), so two players clicking at once never cancel each
+        /// other. A draining basket may go back in. Its food fries while it is lowered and the fryer is on.
+        /// </summary>
+        public CookOutcome TryLowerBasket(int vesselId, uint tick)
+        {
+            if (!_baskets.TryGetValue(vesselId, out BasketRecord basket)) return CookOutcome.NotAVessel;
+            if (basket.State == BasketState.Lowered) return CookOutcome.BasketLowered;
+            if (HeatCount(vesselId) == 0) return CookOutcome.StationEmpty;
+            if (!FryerIsOn(basket.Fryer)) return CookOutcome.FryerOff;
+            basket.State = BasketState.Lowered;
+            SetRunning(vesselId, true, tick);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 029b: "raise the basket": always allowed for a basket in the oil; it then drains for
+        /// <see cref="FryerRules.DrainSeconds"/>. A basket that is not in the oil refuses it (NotLowered).
+        /// </summary>
+        public CookOutcome TryRaiseBasket(int vesselId, uint tick, double tickRate)
+        {
+            if (!_baskets.TryGetValue(vesselId, out BasketRecord basket)) return CookOutcome.NotAVessel;
+            if (basket.State != BasketState.Lowered) return CookOutcome.NotLowered;
+            basket.State = BasketState.Draining;
+            basket.DrainStart = tick;
+            basket.DrainTicks = FryerRules.DrainTicks(tickRate);
+            SetRunning(vesselId, false, tick);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// A shake of a lowered basket with food (NotLowered otherwise). Every shake rattles (the counter in the mode byte); the
+        /// even-fry bonus counts once per fry, for a shake inside the good window (<see cref="FryerRules.ShakeCounts"/>) while the
+        /// fryer is on.
+        /// </summary>
+        public CookOutcome TryShake(int vesselId, uint tick, double tickRate)
+        {
+            if (!_baskets.TryGetValue(vesselId, out BasketRecord basket)) return CookOutcome.NotAVessel;
+            if (basket.State != BasketState.Lowered || HeatCount(vesselId) == 0) return CookOutcome.NotLowered;
+            basket.Shakes++;
+            if (!basket.Shaken && FryerIsOn(basket.Fryer) && FryerRules.ShakeCounts(HeatReadingOf(vesselId, tick, tickRate).Zone))
+                basket.Shaken = true;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>True once this fry earned the shake bonus (for tests and the log).</summary>
+        public bool BasketShaken(int vesselId) => _baskets.TryGetValue(vesselId, out BasketRecord b) && b.Shaken;
+
+        /// <summary>Where the basket is at <paramref name="tick"/> (a drain that has run its time reads Raised).</summary>
+        public BasketState BasketStateOf(int vesselId, uint tick)
+        {
+            if (!_baskets.TryGetValue(vesselId, out BasketRecord b)) return BasketState.Raised;
+            if (b.State == BasketState.Draining && CookingTime.ElapsedTicks(b.DrainStart, tick) >= b.DrainTicks) return BasketState.Raised;
+            return b.State;
+        }
+
+        /// <summary>Ends a finished drain; true when the basket's state changed (the caller republishes it).</summary>
+        public bool SettleDrain(int vesselId, uint tick)
+        {
+            if (!_baskets.TryGetValue(vesselId, out BasketRecord b) || b.State != BasketState.Draining) return false;
+            if (BasketStateOf(vesselId, tick) != BasketState.Raised) return false;
+            b.State = BasketState.Raised;
+            return true;
+        }
+
+        /// <summary>The basket's synced mode byte (state and shake counter, <see cref="FryerRules.Mode"/>).</summary>
+        public byte BasketMode(int vesselId, uint tick)
+        {
+            int shakes = _baskets.TryGetValue(vesselId, out BasketRecord b) ? b.Shakes : 0;
+            return FryerRules.Mode(BasketStateOf(vesselId, tick), shakes);
+        }
+
+        /// <summary>The fryer's synced byte: on, and which of its baskets are lowered.</summary>
+        public byte FryerFlags(int fryer, uint tick)
+        {
+            bool l0 = false, l1 = false;
+            foreach (KeyValuePair<int, BasketRecord> b in _baskets)
+            {
+                if (b.Value.Fryer != fryer || BasketStateOf(b.Key, tick) != BasketState.Lowered) continue;
+                if (b.Value.Index == 0) l0 = true;
+                else if (b.Value.Index == 1) l1 = true;
+            }
+            return FryerRules.FryerFlags(FryerIsOn(fryer), l0, l1);
+        }
+
+        /// <summary>
+        /// Puts the held food into a raised basket (BasketLowered while it is in the oil): one portion, any food the sim would deep
+        /// fry. It starts frying when the basket is lowered.
+        /// </summary>
+        public CookOutcome TryPutInBasket(int foodObjectId, int vesselId, uint tick)
+        {
+            if (!_baskets.TryGetValue(vesselId, out BasketRecord basket)) return CookOutcome.NotAVessel;
+            if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
+            if (BasketStateOf(vesselId, tick) == BasketState.Lowered) return CookOutcome.BasketLowered;
+            List<HeatSession> sessions = HeatOf(vesselId);
+            CookOutcome fits = VesselRules.CanPutIn(VesselKind.Basket, sessions.Count, AssemblyRules.IsPlated(item));
+            if (fits != CookOutcome.Ok) return fits;
+            const string opId = DeepFry.OperationId;
+            int tempC = FryerRules.OilTempC;
+            if (!TryGetTimeParam(opId, out ParamDef time)) return CookOutcome.SimRefused;
+            OperationResult dry = _factory.Apply(opId, new[] { item }, HeatParams(opId, tempC, time.Max, true, true));
+            if (!dry.Ok || dry.Item == null) return CookOutcome.SimRefused;
+
+            var session = new HeatSession(item, opId, tempC, false, tick);
+            session.Timeline = TimelineOf(item, opId, tempC, time);
+            sessions.Add(session);
+            basket.Shaken = false;
+            _items.Remove(foodObjectId);
+            return CookOutcome.Ok;
         }
 
         private List<HeatSession> HeatOf(int vesselId)

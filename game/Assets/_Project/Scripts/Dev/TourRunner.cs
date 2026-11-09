@@ -336,6 +336,8 @@ namespace Worktown.Game.Dev
             List<TourStep> sequences = TourRules.FrameSteps(_tour);
             int segment = 0;
             bool armed = false, capturing = false, seen = false;
+            // Spec 029: the fryer close-up (the basket arcs and bubbles), between the other captures.
+            StartCoroutine(WatchFryer(() => capturing));
             float stillFor = 0f, goneSince = -1f;
             float nextShot = _tour.ObserverShotEvery > 0f ? Time.unscaledTime + _tour.ObserverShotEvery : float.PositiveInfinity;
             int shots = 0;
@@ -372,7 +374,7 @@ namespace Worktown.Game.Dev
                     {
                         stillFor = speed < 0.1f ? stillFor + dt : 0f;
                         if (stillFor >= 0.5f) armed = true;
-                        if (armed && speed > 0.4f)
+                        if (armed && speed > 0.4f && !_fryerCapturing)
                         {
                             TourStep step = sequences[segment];
                             Debug.Log("[Tour] observer: the tour player moves, frames '" + step.Name + "'");
@@ -381,7 +383,7 @@ namespace Worktown.Game.Dev
                         }
                     }
                 }
-                if (!capturing && shots < MaxObserverShots && Time.unscaledTime >= nextShot)
+                if (!capturing && !_fryerCapturing && shots < MaxObserverShots && Time.unscaledTime >= nextShot)
                 {
                     shots++;
                     nextShot += _tour.ObserverShotEvery;
@@ -436,6 +438,58 @@ namespace Worktown.Game.Dev
             Debug.Log("[Tour] observer anim: state " + _watched.State + ", speed " + _watched.Speed.ToString("0.00") + " m/s (frame-to-frame "
                       + _legacySpeed.ToString("0.00") + "), yaw " + _watched.Yaw.ToString("0") + ", stride while still " + _strideWhileStill
                       + " of " + _stillFrames + " frames");
+        }
+
+        private bool _fryerCapturing;
+
+        /// <summary>
+        /// Spec 029, observer of a tour with a fryer: when basket 0 first goes into the oil the fixed camera moves to a close-up of
+        /// the fryer from the aisle's far side (pose from the scene: the fryer's position), takes 1.2 s of frames of every lower
+        /// and raise (the remote arc), keeps the close-up for the regular shots while the basket holds food (bubbles, ring), and
+        /// goes back to the tour's camera once it is empty and up again.
+        /// </summary>
+        private IEnumerator WatchFryer(Func<bool> busy)
+        {
+            Worktown.Game.Cooking.FryerBasket first = null;
+            foreach (Worktown.Game.Cooking.FryerBasket b in FindObjectsByType<Worktown.Game.Cooking.FryerBasket>(FindObjectsSortMode.None))
+                if (b.Basket == 0 && b.Fryer != null) first = b;
+            if (first == null || !_tour.HasObserverCamera) yield break;
+            var basket = first.GetComponent<Worktown.Game.Cooking.Vessel>();
+            Vector3 fryer = first.Fryer.transform.position;
+            Worktown.Game.Cooking.BasketState last = Worktown.Game.Cooking.FryerRules.StateOf(basket.Mode.Value);
+            bool close = false;
+            while (!_finished && basket != null)
+            {
+                Worktown.Game.Cooking.BasketState now = Worktown.Game.Cooking.FryerRules.StateOf(basket.Mode.Value);
+                bool moved = now != last && (now == Worktown.Game.Cooking.BasketState.Lowered || now == Worktown.Game.Cooking.BasketState.Draining);
+                last = now;
+                if (moved)
+                {
+                    if (!close)
+                    {
+                        close = true;
+                        Camera cam = Camera.main;
+                        // From the prep side, above the worktop: the cook at the fryer stands outside the view.
+                        Vector3 eye = new Vector3(fryer.x - 0.9f, 1.75f, fryer.z - 0.95f);
+                        Vector3 look = new Vector3(fryer.x, 0.82f, fryer.z - 0.15f);
+                        if (cam != null) cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(look - eye));
+                        Debug.Log("[Tour] observer: fryer close-up");
+                    }
+                    while (busy()) yield return null;
+                    _fryerCapturing = true;
+                    string name = now == Worktown.Game.Cooking.BasketState.Lowered ? "fryer-lower" : "fryer-raise";
+                    Debug.Log("[Tour] observer: frames '" + name + "'");
+                    yield return _capture.Frames(name, 12, TourRules.FrameInterval);
+                    _fryerCapturing = false;
+                }
+                if (close && now == Worktown.Game.Cooking.BasketState.Raised && basket.ContentCount == 0)
+                {
+                    close = false;
+                    FixCamera();
+                    Debug.Log("[Tour] observer: back to the tour camera");
+                }
+                yield return null;
+            }
         }
 
         private IEnumerator Capture(TourStep step, Action done)

@@ -36,6 +36,7 @@ namespace Worktown.Game.Art
                 case StationKind.PlateShelf: return ArtKey.StationPlatingTable;
                 case StationKind.Fridge: return ArtKey.StationFridge; // spec 028b
                 case StationKind.Shelf: return ArtKey.StationShelf;
+                case StationKind.Fryer: return ArtKey.StationFryer; // spec 029
                 default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for station kind");
             }
         }
@@ -50,6 +51,7 @@ namespace Worktown.Game.Art
                 case VesselKind.Pot: return ArtKey.FoodPot;
                 case VesselKind.Plate: return ArtKey.FoodPlate;
                 case VesselKind.Bowl: return ArtKey.FoodBowl;
+                case VesselKind.Basket: return ArtKey.ToolFryerBasket; // spec 029
                 default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for cookware");
             }
         }

@@ -233,6 +233,98 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>
+        /// Spec 029: the fryer loop (3 s): a dense low rumble of oil bubbles (short low blips that glide up, much denser and lower
+        /// than the pot) over a soft hiss; it starts and ends quiet so the loop has no click.
+        /// </summary>
+        public static float[] Fryer()
+        {
+            var rng = new System.Random(2901);
+            var s = new float[SampleRate * 3];
+            int fade = (int)(SampleRate * 0.05f);
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                s[i] = high * 0.035f;
+            }
+            int blipLength = (int)(SampleRate * 0.045f);
+            int next = fade;
+            while (next < s.Length - blipLength - fade)
+            {
+                float freq = 90f + (float)rng.NextDouble() * 160f;
+                float amp = 0.06f + (float)rng.NextDouble() * 0.08f;
+                for (int i = 0; i < blipLength; i++)
+                {
+                    float t = i / (float)SampleRate;
+                    float env = (float)Math.Sin(Math.PI * i / blipLength);
+                    s[next + i] += (float)Math.Sin(2.0 * Math.PI * freq * (1f + 5f * t) * t) * amp * env * env;
+                }
+                next += (int)(SampleRate * (0.012f + rng.NextDouble() * 0.05f));
+            }
+            for (int i = 0; i < fade; i++)
+            {
+                float g = i / (float)fade;
+                s[i] *= g;
+                s[s.Length - 1 - i] *= g;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 029: a basket shake, a quick metallic wire rattle (four short ringing ticks with a scrape of noise).</summary>
+        public static float[] Rattle()
+        {
+            var rng = new System.Random(2902);
+            var s = new float[(int)(SampleRate * 0.32f)];
+            for (int n = 0; n < 4; n++)
+            {
+                int start = (int)(SampleRate * (0.015f + 0.07f * n + rng.NextDouble() * 0.012f));
+                float amp = 0.75f - 0.12f * n;
+                float previous = 0f;
+                for (int i = start; i < s.Length; i++)
+                {
+                    float t = (i - start) / (float)SampleRate;
+                    if (t > 0.09f) break;
+                    float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                    float high = noise - previous;
+                    previous = noise;
+                    float ring = (float)Math.Sin(2.0 * Math.PI * 2850.0 * t) * 0.12f + (float)Math.Sin(2.0 * Math.PI * 4170.0 * t) * 0.07f;
+                    s[i] += (ring + high * 0.18f) * amp * (float)Math.Exp(-t / 0.012f) * Math.Min(1f, t / 0.0006f);
+                }
+            }
+            return s;
+        }
+
+        /// <summary>Spec 029: oil dripping back into the fryer, a few soft high plinks with small sizzles, slowing down.</summary>
+        public static float[] Drip()
+        {
+            var rng = new System.Random(2903);
+            var s = new float[(int)(SampleRate * 1.2f)];
+            float at = 0.02f;
+            for (int n = 0; n < 6 && at < 1.05f; n++)
+            {
+                int start = (int)(SampleRate * at);
+                float freq = 1300f + (float)rng.NextDouble() * 900f;
+                float amp = 0.3f - 0.03f * n;
+                float previous = 0f;
+                for (int i = start; i < s.Length; i++)
+                {
+                    float t = (i - start) / (float)SampleRate;
+                    if (t > 0.12f) break;
+                    float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                    float high = noise - previous;
+                    previous = noise;
+                    float plink = (float)Math.Sin(2.0 * Math.PI * freq * (1f + 2.5f * t) * t) * (float)Math.Exp(-t / 0.025f);
+                    float fizz = high * 0.12f * (float)Math.Exp(-t / 0.04f);
+                    s[i] += (plink + fizz) * amp * Math.Min(1f, t / 0.0008f);
+                }
+                at += 0.1f + 0.06f * n + (float)rng.NextDouble() * 0.05f;
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -258,11 +350,14 @@ namespace Worktown.Game.Audio
                 case SoundKey.Warning: return Warning();
                 case SoundKey.Burnt: return Burnt();
                 case SoundKey.Coin: return Coin();
+                case SoundKey.Fryer: return Fryer();
+                case SoundKey.Rattle: return Rattle();
+                case SoundKey.Drip: return Drip();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }
 
-        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble;
+        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer;
 
         public static AudioClip CreateClip(SoundKey key)
         {

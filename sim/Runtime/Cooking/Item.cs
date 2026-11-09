@@ -11,7 +11,7 @@ namespace Worktown.Sim.Cooking
             ItemStats stats, float surface, IReadOnlyList<ItemComponent> components,
             IReadOnlyList<string> tags, int depth,
             OperationKind? kind, string displayName, string nameTemplate,
-            IReadOnlyDictionary<string, string> bucketLabels)
+            IReadOnlyDictionary<string, string> bucketLabels, float qualityFactor = 1f)
         {
             Hash = hash;
             CanonicalTree = canonicalTree;
@@ -28,6 +28,7 @@ namespace Worktown.Sim.Cooking
             DisplayName = displayName;
             NameTemplate = nameTemplate;
             BucketLabels = bucketLabels;
+            QualityFactor = qualityFactor;
         }
 
         /// <summary>Identity: 64 lowercase hex chars (SHA-256 of the canonical preimage).</summary>
@@ -57,5 +58,12 @@ namespace Worktown.Sim.Cooking
         internal string NameTemplate { get; }
         /// <summary>Param name to bucket label.</summary>
         internal IReadOnlyDictionary<string, string> BucketLabels { get; }
+        /// <summary>
+        /// Spec 029: multiplies the rated quality (1 for everything but deep-fried food: the shake bonus, the greasy penalty).
+        /// Cut and heat keep it, mix and plate take the weight-weighted mean of their inputs'. Re-frying caps it at
+        /// 1 - GreasyPenalty .. 1 + ShakeBonus (<see cref="DeepFry.FactorAfter"/>). A plate's or mix's factor already includes
+        /// its inputs' factors: rate an item by its own factor only, never multiply its inputs' factors in again.
+        /// </summary>
+        public float QualityFactor { get; }
     }
 }

@@ -281,7 +281,7 @@ namespace Worktown.Game.Tests
                     Assert.GreaterOrEqual(MinAlong(button.GetComponent<BoxCollider>().bounds, plan.Street), MaxAlong(BodyOf(station), plan.Street) - 0.001f,
                         button.name + " sits on the aisle side of " + station.name);
                 }
-                Assert.AreEqual(8, buttons, "two per burner on two stoves");
+                Assert.AreEqual(11, buttons, "two per burner on two stoves; spec 029: the fryer's knob and a button per basket");
 
                 foreach (Station station in plan.Stations)
                 {
@@ -348,6 +348,28 @@ namespace Worktown.Game.Tests
                 Assert.LessOrEqual(boardV - lastStock, 3f, "stock to board");
                 Assert.LessOrEqual(stoveA - boardV, 3f, "board to stove A");
                 Assert.LessOrEqual(shelf - stoveB, 3f, "stove B to the plate shelf");
+                // Spec 029: the fryer between prep and the stoves (stock, prep, fryer, stoves, plates), a step from each.
+                var fryers = plan.BackStations.FindAll(s => s.Kind == StationKind.Fryer);
+                Assert.AreEqual(1, fryers.Count, "one fryer");
+                float fryer = plan.V(fryers[0].transform.position);
+                Assert.Less(boardV, fryer, "prep before the fryer");
+                Assert.Less(fryer, stoveA, "the fryer before the stoves");
+                Assert.LessOrEqual(fryer - boardV, 3f, "board to the fryer");
+                Assert.LessOrEqual(stoveA - fryer, 1.5f, "the fryer next to stove A");
+                // Spec 029b: the fries path. The plates (their home spots on the plating worktop) at most 3.5 m from the fryer
+                // (029 had 4.5 m), and still after the stoves, so the pan's path keeps its order and limits above.
+                var plates = VesselTestKit.AllOf(plan.Scene, VesselTestKit.VesselType).FindAll(v => VesselTestKit.KindOf(v) == VesselKind.Plate);
+                Assert.Greater(plates.Count, 0, "plates on the plating worktop");
+                Vector3 f = fryers[0].transform.position;
+                float nearestPlate = float.MaxValue;
+                foreach (Component p in plates)
+                {
+                    Assert.Greater(plan.V(p.transform.position), stoveB, p.name + " after the stoves");
+                    Assert.Less(plan.V(p.transform.position), shelf, p.name + " before the plate shelf");
+                    nearestPlate = Mathf.Min(nearestPlate, new Vector2(p.transform.position.x - f.x, p.transform.position.z - f.z).magnitude);
+                }
+                TestContext.WriteLine("fryer to the nearest plate: " + nearestPlate.ToString("0.00") + " m");
+                Assert.LessOrEqual(nearestPlate, 3.5f, "fryer to the plates, centre to centre");
 
                 Vector3 serving = plan.Serving.transform.position;
                 Assert.LessOrEqual(Vector3.Distance(plan.AislePointNear(plan.Shelf.transform.position), plan.AislePointNear(serving)), 2.5f,
@@ -382,6 +404,61 @@ namespace Worktown.Game.Tests
             finally { Close(plan); }
         }
 
+        // ---- Spec 029 AC4: the fryer ----
+
+        [Test]
+        public void Fryer_ControlsFaceTheAisle_BasketsHangInItsWells_AndAreInReach()
+        {
+            Plan plan = Open();
+            try
+            {
+                Station fryer = plan.BackStations.Find(s => s.Kind == StationKind.Fryer);
+                Assert.IsNotNull(fryer, "no fryer");
+                Type contentsType = typeof(StationRules).Assembly.GetType("Worktown.Game.Cooking.StationContents");
+                Type pickupType = typeof(StationRules).Assembly.GetType("Worktown.Game.Net.Pickup");
+                Assert.IsNotNull(fryer.GetComponent(contentsType), "the fryer's light byte");
+                Bounds body = BodyOf(fryer);
+                var options = new HashSet<int>();
+                foreach (StationButton button in fryer.GetComponentsInChildren<StationButton>())
+                {
+                    Assert.AreSame(fryer, button.Station);
+                    Assert.IsTrue(options.Add(button.Option), button.name + ": one button per option");
+                    Assert.Greater(Vector3.Dot(Flat(-button.transform.forward), plan.Street), 0.7f, button.name + " faces the aisle");
+                    Assert.GreaterOrEqual(MinAlong(button.GetComponent<BoxCollider>().bounds, plan.Street), MaxAlong(body, plan.Street) - 0.001f,
+                        button.name + " sits on the fryer's front");
+                }
+                CollectionAssert.AreEquivalent(new[] { FryerRules.PowerOption, FryerRules.BasketOption(0), FryerRules.BasketOption(1) }, options);
+                Assert.Less(body.max.y, Worktown.Game.Art.FryerArt.OilHeight, "the body's collider stays under the oil, so a lowered basket can be aimed at");
+
+                var baskets = All<FryerBasket>(plan.Scene);
+                Assert.AreEqual(FryerRules.BasketsPerFryer, baskets.Count);
+                var seen = new HashSet<int>();
+                foreach (FryerBasket basket in baskets)
+                {
+                    Assert.AreSame(fryer, basket.Fryer, basket.name);
+                    Assert.IsTrue(seen.Add(basket.Basket), basket.name + ": one basket per index");
+                    Assert.AreEqual(VesselKind.Basket, VesselTestKit.KindOf(basket.GetComponent(VesselTestKit.VesselType)), basket.name);
+                    Assert.IsNull(basket.GetComponent(pickupType), basket.name + " is never carried");
+                    Assert.IsTrue(Array.Exists(basket.GetComponents<Component>(), c => c != null && c.GetType().Name == "NetworkObject"), basket.name + " is networked");
+                    Vector3 p = basket.transform.position;
+                    Assert.IsTrue(p.x > body.min.x && p.x < body.max.x && p.z > body.min.z && p.z < body.max.z, basket.name + " hangs in the fryer");
+                    Transform rig = basket.transform.Find("Rig");
+                    Assert.IsNotNull(rig, basket.name + " has a rig");
+                    Assert.IsNotNull(rig.GetComponent<BoxCollider>(), basket.name + ": the collider moves with the basket");
+                    Assert.IsNotNull(rig.Find("Contents"), basket.name + " draws its contents in the rig");
+                    Transform grip = Array.Find(rig.GetComponentsInChildren<Transform>(true), t => t.name == "Grip");
+                    Assert.IsNotNull(grip, basket.name + " has a handle");
+                    Assert.Greater(plan.U(grip.position), plan.U(p) + 0.2f, basket.name + ": the handle points to the aisle");
+                    Vector3 cook = plan.AislePointNear(p);
+                    Assert.IsTrue(Worktown.Game.Net.Rules.PickupRules.IsInReach(cook, p), basket.name + " is out of reach from the aisle");
+                }
+                // Basket 0 on the cook's left, the way its button is.
+                FryerBasket left = baskets.Find(b => b.Basket == 0), right = baskets.Find(b => b.Basket == 1);
+                Assert.Less(plan.V(left.transform.position), plan.V(right.transform.position));
+            }
+            finally { Close(plan); }
+        }
+
         [Test]
         public void StockSlots_OneIngredientEach_FaceTheAisle_AndAreInReach()
         {
@@ -405,6 +482,13 @@ namespace Worktown.Game.Tests
                         Assert.Greater(slot.transform.childCount, 0, slot.name + " shows its item");
                         Assert.IsEmpty(slot.GetComponentsInChildren<Collider>(true), slot.name + ": the items never block a ray");
                         Assert.AreSame(slot, station.NearestSlot(slot.Anchor), slot.name + ": a ray on it means it");
+                        // Spec 029b (028b nit): a hit between this slot and the next one means the nearer of the two.
+                        if (option + 1 < station.SlotCount && station.TryGetSlot(option + 1, out StockSlot next)
+                            && Mathf.Abs(next.Anchor.y - slot.Anchor.y) < 0.01f) // its neighbour on the same board
+                        {
+                            Assert.AreSame(slot, station.NearestSlot(Vector3.Lerp(slot.Anchor, next.Anchor, 0.4f)), slot.name + ": nearer than " + next.name);
+                            Assert.AreSame(next, station.NearestSlot(Vector3.Lerp(slot.Anchor, next.Anchor, 0.6f)), next.name + ": nearer than " + slot.name);
+                        }
                         // The open side faces the aisle: the items stand just inside the body's aisle-side face.
                         Vector3 a = slot.Anchor;
                         Assert.IsTrue(body.Contains(a), slot.name + " stands inside " + station.name);

@@ -17,6 +17,8 @@ namespace Worktown.Game.Art
         public const float ServingCounterHeight = 1.05f;
         /// <summary>Spec 028b: the fridge and the dry shelf (m; the guide's fridge row).</summary>
         public const float StockHeight = 1.80f;
+        /// <summary>Spec 029: a fryer basket's real length with its handle (m; x1.15 in the game).</summary>
+        public const float BasketReal = 0.45f;
         /// <summary>Width of one worktop cabinet module along the run (m).</summary>
         public const float WorktopModuleWidth = 0.60f;
         /// <summary>
@@ -46,6 +48,8 @@ namespace Worktown.Game.Art
             // Spec 028b: the stock stations, fridge high (the guide's fridge row); the dry shelf has no row in the guide.
             World(ArtKey.StationFridge, StockHeight, SizeAxis.Height, "Fridge"),
             World(ArtKey.StationShelf, StockHeight, SizeAxis.Height),
+            // Spec 029: the deep fryer, worktop high (its oil wells are at the top; the basket hooks stand a little above).
+            World(ArtKey.StationFryer, WorktopHeight, SizeAxis.Height, Worktop),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).
@@ -78,6 +82,9 @@ namespace Worktown.Game.Art
             Small(ArtKey.FoodPieceSlice, 0.07f),
             Small(ArtKey.FoodPieceStick, 0.09f),
             Small(ArtKey.FoodPieceCube, 0.03f),
+            // Spec 029: a falafel ball (3.5 cm) and the empty fries box (the same box as the fries portion).
+            Small(ArtKey.FoodFalafelBall, 0.035f, "Falafel ball"), // spec 029b: the guide row
+            Small(ArtKey.PropFriesBox, 0.14f, "Fries (portion)"),
 
             // Spec 028: the street-food stock. Small things are x1.5; the bigger ones (over 15 cm) stay at their real size, because
             // a held item must fit the 0.25 m hand footprint (FoodArtCatalogTests).
@@ -100,6 +107,8 @@ namespace Worktown.Game.Art
             Cookware(ArtKey.FoodPot, 0.30f, "Pot"),
             Cookware(ArtKey.ToolCuttingBoard, 0.40f, "Cutting board"),
             Cookware(ArtKey.ToolKnife, 0.30f, "Chef's knife"),
+            // Spec 029: a fryer basket with its handle (no guide row yet).
+            Cookware(ArtKey.ToolFryerBasket, BasketReal, "Fryer basket (with handle)"), // spec 029b: the guide row
 
             // People.
             World(ArtKey.CharacterPlayerMale, 1.75f, SizeAxis.Height, Person),

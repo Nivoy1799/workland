@@ -22,6 +22,10 @@ namespace Worktown.Game.Art
         private const float SideOffset = 0.16f;
         private const float UpOffset = 0.05f;
         private const float WarnPulseHz = 4f;
+        /// <summary>Spec 029: how far above a fryer basket's contents its ring stands (m).</summary>
+        public const float BasketLift = 0.2f;
+        private float _lift;
+        private float _side = 1f;
 
         private Vessel _vessel;
         private VesselSteam _steam;
@@ -61,6 +65,10 @@ namespace Worktown.Game.Art
             _pickup = vessel.GetComponent<Pickup>();
             _anchor = vessel.ContentsAnchor;
             if (_anchor == null) _anchor = vessel.transform;
+            // Spec 029: a basket's contents sit under the oil; its ring stands above the oil and the basket's rim.
+            _lift = vessel.Kind == VesselKind.Basket ? BasketLift : 0f;
+            // Spec 029: the left basket's ring stands on its left, so the other basket never hides it.
+            _side = vessel.TryGetComponent(out FryerBasket basket) && basket.Basket == 0 ? -1f : 1f;
 
             _ring = new GameObject("HeatRing (" + vessel.name + ")");
             _mesh = new Mesh { name = "HeatRing" };
@@ -102,7 +110,7 @@ namespace Worktown.Game.Art
             }
 
             Transform view = cam.transform;
-            Vector3 anchor = _anchor.position;
+            Vector3 anchor = _anchor.position + Vector3.up * _lift;
             float distance = Vector3.Dot(anchor - view.position, view.forward);
             float perPixel = HeatRingRules.WorldPerPixel(distance, cam.fieldOfView, cam.pixelHeight);
             if (perPixel <= 0f)
@@ -111,7 +119,7 @@ namespace Worktown.Game.Art
                 return;
             }
             float radius = HeatRingRules.RingPixels * 0.5f * perPixel;
-            Vector3 centre = anchor + view.right * (SideOffset + radius + HeatRingRules.GapPixels * perPixel)
+            Vector3 centre = anchor + view.right * (_side * (SideOffset + radius + HeatRingRules.GapPixels * perPixel))
                 + view.up * (UpOffset + radius * 0.3f);
 
             if (_rig == null && now >= _nextRigLookup)

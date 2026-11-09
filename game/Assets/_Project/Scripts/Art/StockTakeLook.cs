@@ -35,6 +35,11 @@ namespace Worktown.Game.Art
         private bool _confirmed;
         private GameObject _real;
         private bool _hooked;
+        private UnityEngine.Object _owner;
+        private bool _hasOwner;
+
+        /// <summary>Spec 029b: the frame the copy was first drawn (Time.frameCount), for the click-to-visual log; -1 before.</summary>
+        public int DrawnFrame { get; private set; } = -1;
 
         /// <summary>True after <see cref="Deny"/>, while it settles back into the slot.</summary>
         public bool IsReturning => _returning;
@@ -42,8 +47,11 @@ namespace Worktown.Game.Art
         /// <summary>
         /// Starts the look for the slot <paramref name="slot"/> (its first child is the item model that is copied) towards
         /// <paramref name="hand"/> (asked again every frame: the hand moves with the view). Null when the slot shows no model.
+        /// Spec 029b: with an <paramref name="owner"/> (the interactor whose hand it flies to), the copy goes as soon as the
+        /// owner is destroyed, before it would ask a destroyed hand where to fly.
         /// </summary>
-        public static StockTakeLook Begin(Transform slot, Func<Pose> hand, float now, FeelSettings feel = null)
+        public static StockTakeLook Begin(Transform slot, Func<Pose> hand, float now, FeelSettings feel = null,
+            UnityEngine.Object owner = null)
         {
             if (slot == null || hand == null || slot.childCount == 0) return null;
             feel ??= FeelSettings.Current ?? FeelSettings.PresetA();
@@ -64,9 +72,14 @@ namespace Worktown.Game.Art
             look._lift = feel.PickupLift;
             look._returnSeconds = Mathf.Max(0.01f, feel.PlaceSeconds);
             look._settle = feel.PlaceSettle;
+            look._owner = owner;
+            look._hasOwner = owner != null;
             look.Place(now);
             return look;
         }
+
+        /// <summary>Spec 029b: false once the interactor it flies to is gone (the copy then goes on its next step).</summary>
+        public bool OwnerAlive => !_hasOwner || _owner != null;
 
         /// <summary>Where the copy is drawn at <paramref name="now"/>: on the arc to the hand, at the hand, or settling back.</summary>
         public Pose Evaluate(float now)
@@ -77,7 +90,7 @@ namespace Worktown.Game.Art
                 return new Pose(FeelRules.TweenPosition(TweenStyle.Settle, _returnFrom.position, _slot.position, r, _settle),
                     FeelRules.TweenRotation(TweenStyle.Settle, _returnFrom.rotation, _slot.rotation, r));
             }
-            Pose hand = _hand != null ? _hand() : _slot;
+            Pose hand = _hand != null && OwnerAlive ? _hand() : _slot;
             float t = FeelRules.Clamp01((now - _start) / _seconds);
             return new Pose(FeelRules.TweenPosition(TweenStyle.Arc, _slot.position, hand.position, t, _lift),
                 FeelRules.TweenRotation(TweenStyle.Arc, _slot.rotation, hand.rotation, t));
@@ -170,21 +183,35 @@ namespace Worktown.Game.Art
             _hooked = false;
         }
 
-        private void LateUpdate()
+        private void LateUpdate() => Step(Time.unscaledTime);
+
+        /// <summary>
+        /// One frame at <paramref name="now"/> (what LateUpdate runs; tests call it): the copy goes once it is back in the slot,
+        /// once it landed after a confirm (the real item shows), or when its interactor is gone; else it is placed.
+        /// </summary>
+        public void Step(float now)
         {
-            float now = Time.unscaledTime;
-            if ((_returning && now - _returnStart >= _returnSeconds) || (_confirmed && HasLanded(now)))
+            if (!OwnerAlive || (_returning && now - _returnStart >= _returnSeconds) || (_confirmed && HasLanded(now)))
             {
-                Finish(); // back in the slot, or landed in the hand where the real item now shows
+                Finish(); // back in the slot, landed in the hand where the real item now shows, or nobody to fly to
                 return;
             }
             Place(now);
         }
 
-        private void OnBeginCameraRendering(ScriptableRenderContext context, Camera cam) => Place(Time.unscaledTime);
+        private void OnBeginCameraRendering(ScriptableRenderContext context, Camera cam)
+        {
+            if (!OwnerAlive)
+            {
+                Finish();
+                return;
+            }
+            Place(Time.unscaledTime);
+        }
 
         private void Place(float now)
         {
+            if (DrawnFrame < 0) DrawnFrame = Time.frameCount;
             if (_confirmed) Hide(_real);
             Pose pose = Evaluate(now);
             transform.SetPositionAndRotation(pose.position, pose.rotation);

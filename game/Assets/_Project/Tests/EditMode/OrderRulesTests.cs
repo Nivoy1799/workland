@@ -69,7 +69,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void TheMenuCoversEveryDish_WithUniqueIds()
         {
-            Assert.AreEqual(6, Menu.All.Count);
+            Assert.AreEqual(7, Menu.All.Count); // spec 029: Falafel (4)
             var ids = new HashSet<byte>();
             foreach (MenuDish dish in Menu.All)
             {

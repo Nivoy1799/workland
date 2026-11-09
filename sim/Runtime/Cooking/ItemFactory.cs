@@ -67,6 +67,8 @@ namespace Worktown.Sim.Cooking
             ItemStats stats;
             float surface;
             List<ItemComponent> components;
+            float factor;
+            string template = op.NameTemplate;
             switch (op.Kind)
             {
                 case OperationKind.Cut:
@@ -78,13 +80,17 @@ namespace Worktown.Sim.Cooking
                     stats = src.Stats;
                     surface = s;
                     components = new List<ItemComponent>(src.Components);
+                    factor = src.QualityFactor;
                     break;
                 }
                 case OperationKind.Heat:
-                    Heat(op, flat[0], resolved, out stats, out surface, out components);
+                    Heat(op, flat[0], resolved, out stats, out surface, out components, out factor);
+                    // Spec 029: the basket shapes the input ("{drain} {time} fries", "... falafel balls").
+                    if (op.Heat!.Fry != null && DeepFry.TryGetShape(flat[0], out DeepFryShape shaped))
+                        template = "{" + DeepFry.DrainParam + "} {time} " + shaped.Name;
                     break;
                 default:
-                    Combine(flat, out stats, out surface, out components);
+                    Combine(flat, out stats, out surface, out components, out factor);
                     break;
             }
 
@@ -114,7 +120,7 @@ namespace Worktown.Sim.Cooking
                 ItemCanonical.OpHash(op.Id, buckets, flat), ItemCanonical.OpTree(op.Id, buckets, flat),
                 null, op.Id, new ReadOnlyDictionary<string, string>(bucketMap), Array.AsReadOnly(flat.ToArray()),
                 stats, surface, Array.AsReadOnly(components.ToArray()), DistinctSorted(tags), depth,
-                op.Kind, string.Empty, op.NameTemplate, new ReadOnlyDictionary<string, string>(labels));
+                op.Kind, string.Empty, template, new ReadOnlyDictionary<string, string>(labels), factor);
             return new OperationResult(item, OperationError.None);
         }
 
@@ -154,28 +160,51 @@ namespace Worktown.Sim.Cooking
         }
 
         private static void Heat(OperationDef op, Item src, List<Resolved> resolved,
-                                 out ItemStats stats, out float surface, out List<ItemComponent> components)
+                                 out ItemStats stats, out float surface, out List<ItemComponent> components, out float factor)
         {
             var profile = op.Heat!;
             float temp = profile.FixedTemperatureC ?? 0f;
             float time = 0f;
+            bool shaken = false, greasy = false;
             foreach (var r in resolved)
             {
                 if (r.Name == "temp") temp = r.Number;
                 else if (r.Name == "time") time = r.Number;
+                else if (r.Name == DeepFry.ShakeParam) shaken = r.Bucket.Id == DeepFry.Shaken;
+                else if (r.Name == DeepFry.DrainParam) greasy = r.Bucket.Id == DeepFry.Greasy;
             }
 
-            float dose = Math.Max(0f, (temp - 60f) / 120f) * (time / 180f) * (0.5f + src.Surface);
-            float g = Math.Min(1f, dose);
             var s = src.Stats;
-
+            float g;
             components = new List<ItemComponent>(src.Components.Count);
             float doneSum = 0f;
-            foreach (var c in src.Components)
+            if (profile.Fry != null)
             {
-                float d = ItemCanonical.Clamp01(c.Doneness + dose * (1f - 0.5f * s.HeatTolerance));
-                doneSum += d;
-                components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
+                // Spec 029: each component along its fry curve; the stat changes saturate at the end of its window.
+                float seconds = DeepFry.EffectiveSeconds(time, temp);
+                g = 0f;
+                foreach (var c in src.Components)
+                {
+                    FryCurve curve = profile.Fry.CurveFor(c.BaseId);
+                    float d = DeepFry.Doneness(curve, c.Ideal, c.Doneness, seconds);
+                    doneSum += d;
+                    components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
+                    g += Math.Min(1f, seconds / curve.WindowMaxAt);
+                }
+                g /= Math.Max(1, src.Components.Count);
+                factor = DeepFry.FactorAfter(src.QualityFactor, shaken, greasy); // capped: re-frying never stacks the bonus (029b)
+            }
+            else
+            {
+                float dose = Math.Max(0f, (temp - 60f) / 120f) * (time / 180f) * (0.5f + src.Surface);
+                g = Math.Min(1f, dose);
+                foreach (var c in src.Components)
+                {
+                    float d = ItemCanonical.Clamp01(c.Doneness + dose * (1f - 0.5f * s.HeatTolerance));
+                    doneSum += d;
+                    components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
+                }
+                factor = src.QualityFactor;
             }
             components.Sort(ItemCanonical.CompareComponents);
             float doneness = ItemCanonical.Clamp01(doneSum / components.Count);
@@ -200,16 +229,19 @@ namespace Worktown.Sim.Cooking
             surface = src.Surface;
         }
 
-        private static void Combine(List<Item> ordered, out ItemStats stats, out float surface, out List<ItemComponent> components)
+        private static void Combine(List<Item> ordered, out ItemStats stats, out float surface, out List<ItemComponent> components,
+                                    out float factor)
         {
             float total = 0f;
             float sweet = 0, salty = 0, sour = 0, bitter = 0, umami = 0, fat = 0, crunch = 0, heat = 0, moist = 0, surf = 0;
+            float quality = 0f;
             components = new List<ItemComponent>();
             foreach (var item in ordered)
             {
                 float w = item.Weight;
                 var s = item.Stats;
                 total += w;
+                quality += item.QualityFactor * w;
                 sweet += s.Sweet * w; salty += s.Salty * w; sour += s.Sour * w; bitter += s.Bitter * w;
                 umami += s.Umami * w; fat += s.Fat * w; crunch += s.Crunch * w; heat += s.HeatTolerance * w;
                 moist += s.Moisture * w; surf += item.Surface * w;
@@ -226,6 +258,7 @@ namespace Worktown.Sim.Cooking
                 ItemCanonical.Clamp01(crunch / total), ItemCanonical.Clamp01(heat / total),
                 ItemCanonical.Clamp01(doneSum / components.Count), ItemCanonical.Clamp01(moist / total));
             surface = ItemCanonical.Clamp01(surf / total);
+            factor = quality / total; // spec 029: exactly 1 when every input's is 1
         }
 
         private static IReadOnlyList<string> DistinctSorted(List<string> sorted)

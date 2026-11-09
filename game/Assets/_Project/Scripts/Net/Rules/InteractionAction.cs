@@ -19,6 +19,8 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Take an ingredient from a crate (it costs money).</summary>
         Buy,
         /// <summary>Take the food from a board, pan or bowl; take a plate from the shelf.</summary>
-        Take
+        Take,
+        /// <summary>Spec 029: shake a lowered fryer basket (empty hands).</summary>
+        Shake
     }
 }

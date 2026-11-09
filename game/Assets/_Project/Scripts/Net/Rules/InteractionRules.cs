@@ -40,6 +40,7 @@ namespace Worktown.Game.Net.Rules
         private static InteractionAction VesselAction(Held held, AimTarget target)
         {
             bool hasFood = target.ContentCount > 0;
+            if (target.Vessel == VesselKind.Basket) return BasketAction(held, target, hasFood);
             if (held.IsKnife)
                 return target.Vessel == VesselKind.Board && hasFood ? InteractionAction.Cut : InteractionAction.None;
             if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
@@ -47,6 +48,35 @@ namespace Worktown.Game.Net.Rules
             if (held.IsHolding) return InteractionAction.None; // a box goes into nothing
             return hasFood && VesselRules.TakesOutByHand(target.Vessel) ? InteractionAction.Take : InteractionAction.PickUp;
         }
+
+        /// <summary>
+        /// Spec 029, a fryer basket (fixed to its fryer, never picked up): lowered, empty hands shake it; raised (or draining),
+        /// food that fits goes in and empty hands take the food out. Anything else does nothing.
+        /// </summary>
+        private static InteractionAction BasketAction(Held held, AimTarget target, bool hasFood)
+        {
+            if (FryerRules.StateOf(target.Mode) == BasketState.Lowered)
+                return !held.IsHolding && hasFood ? InteractionAction.Shake : InteractionAction.None;
+            if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
+            if (held.IsVessel) return TipsInto(held, hasFood) ? InteractionAction.Take : InteractionAction.None;
+            return !held.IsHolding && hasFood ? InteractionAction.Take : InteractionAction.None;
+        }
+
+        /// <summary>
+        /// Spec 029b: holding a plate or bowl with room, a click on a raised basket with food tips the food onto it (the
+        /// basket's Take, sent as the same RequestUse action; the server pours the basket into what you hold).
+        /// </summary>
+        public static bool TipsInto(Held held, bool basketHasFood)
+        {
+            return basketHasFood && held.IsVessel && VesselRules.IsAssembly(held.Vessel)
+                && held.ContentCount < VesselRules.Capacity(held.Vessel);
+        }
+
+        /// <summary>
+        /// Spec 029b: while a take from stock is on its way and nothing is really in the hands yet, no click does anything
+        /// (no Place, PutInto or Sell of food that is not there).
+        /// </summary>
+        public static bool WaitsForTake(bool takePending, bool reallyHolding) => takePending && !reallyHolding;
 
         private static InteractionAction StationAction(Held held, AimTarget target)
         {
@@ -115,6 +145,8 @@ namespace Worktown.Game.Net.Rules
 
         private static string VesselReason(Held held, AimTarget target)
         {
+            if (target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Lowered)
+                return held.IsHolding ? "Raise the basket first" : null; // spec 029
             if (held.IsKnife) return target.Vessel == VesselKind.Board ? "Put food on the board to cut" : null;
             if (held.IsFood)
             {
@@ -130,7 +162,11 @@ namespace Worktown.Game.Net.Rules
         {
             switch (ActionFor(held, target))
             {
-                case InteractionAction.Press: return ButtonPrompt(target.Option, target.StoveFlags);
+                case InteractionAction.Press:
+                    return target.Station == StationKind.Fryer
+                        ? FryerButtonPrompt(target.Option, target.StoveFlags)
+                        : ButtonPrompt(target.Option, target.StoveFlags);
+                case InteractionAction.Shake: return Click("shake the basket");
                 case InteractionAction.Cut: return "Drag down · cut   Right click · turn";
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));
                 case InteractionAction.Pour: return Click("pour into the " + VesselRules.Name(target.Vessel));
@@ -141,7 +177,12 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Buy:
                     string what = string.IsNullOrEmpty(target.Name) ? "one" : target.Name;
                     return Click("take " + what + (target.Price >= 0 ? " (" + EconomyRules.Money(target.Price) + ")" : string.Empty));
-                case InteractionAction.Take: return Click("take " + TakeWhat(target));
+                case InteractionAction.Take:
+                    // Spec 029: a basket that still drips gives greasy food; the prompt says so.
+                    bool dripping = target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Draining;
+                    string drip = dripping ? " (still dripping)" : string.Empty;
+                    if (held.IsVessel) return Click("tip " + TakeWhat(target) + " " + IntoWhat(held.Vessel) + drip); // spec 029b
+                    return Click("take " + TakeWhat(target) + drip);
                 default: return Reason(held, target);
             }
         }
@@ -153,6 +194,14 @@ namespace Worktown.Game.Net.Rules
             if (button == StationRules.StoveSwitch)
                 return Click(StationRules.IsBurnerOn(stoveFlags, burner) ? "burner off" : "burner on");
             return Click(StationRules.IsBurnerSaute(stoveFlags, burner) ? "sauté → fry" : "fry → sauté");
+        }
+
+        /// <summary>Spec 029: "Click · fryer on", "Click · lower the basket", ... for the fryer's knob and basket buttons.</summary>
+        public static string FryerButtonPrompt(int option, byte fryerFlags)
+        {
+            if (option == FryerRules.PowerOption) return Click(FryerRules.IsOn(fryerFlags) ? "fryer off" : "fryer on");
+            if (!FryerRules.TryParseBasketOption(option, out int basket)) return Click("press");
+            return Click(FryerRules.BasketButtonText(FryerRules.IsLowered(fryerFlags, basket)));
         }
 
         /// <summary>

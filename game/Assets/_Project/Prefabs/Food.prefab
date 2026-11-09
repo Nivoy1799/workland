@@ -352,6 +352,7 @@ MonoBehaviour:
   _bowlPartRadius: 0.041
   _plateContentHeight: 0.012070324
   _bowlContentHeight: 0.022900455
+  _loose: 0
 --- !u!1 &7908056985291405050
 GameObject:
   m_ObjectHideFlags: 0

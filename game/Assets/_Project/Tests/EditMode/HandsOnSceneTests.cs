@@ -107,6 +107,7 @@ namespace Worktown.Game.Tests
                     Station station = button.Station;
                     Assert.IsNotNull(station, button.name + " has no station");
                     Assert.IsTrue(button.transform.IsChildOf(station.transform));
+                    if (station.Kind == StationKind.Fryer) continue; // spec 029: the fryer's knob and basket buttons (FloorPlanTests)
                     Assert.AreEqual(StationKind.Stove, station.Kind, button.name + " on " + station.Kind);
                     var box = button.GetComponent<BoxCollider>();
                     Assert.IsNotNull(box, button.name + " has no collider to aim at");

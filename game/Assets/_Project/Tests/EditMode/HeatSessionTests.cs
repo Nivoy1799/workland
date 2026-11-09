@@ -189,8 +189,10 @@ namespace Worktown.Game.Tests
             KitchenState kitchen = KitchenWithSticks(out _);
             HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
             kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
-            Assert.AreEqual("potato sticks · warming up", kitchen.DescribeHeat(Pan, Start + 10, Rate));
-            Assert.AreEqual("potato sticks · medium", kitchen.DescribeHeat(Pan, Start + 750, Rate));
+            // Spec 029b: player words from the zone, not the bucket ids.
+            Assert.AreEqual("potato sticks · raw", kitchen.DescribeHeat(Pan, Start + 10, Rate));
+            Assert.AreEqual("potato sticks · cooked", kitchen.DescribeHeat(Pan, Start + 750, Rate));
+            Assert.AreEqual(HeatZone.Good, kitchen.HeatReadingOf(Pan, Start + 750, Rate).Zone, "cooked: the ring says good");
         }
 
         [Test]

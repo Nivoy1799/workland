@@ -11,7 +11,8 @@ namespace Worktown.Sim.Cooking
         ///   umamiScore = 1 - |Umami - 0.4| / 0.6, clamped 0..1
         ///   fatScore = 1 - |Fat - 0.4| / 0.6, clamped 0..1
         /// DonenessFactor = mean over components of clamp01(1 - dist / 0.2), dist = distance from the ideal window.
-        /// Quality = Taste * (0.2 + 0.8 * DonenessFactor). A plate is the Weight-weighted mean of its inputs' ratings.
+        /// Quality = Taste * (0.2 + 0.8 * DonenessFactor) * QualityFactor (spec 029: 1 unless deep-fried), clamped 0..1. A plate
+        /// is the Weight-weighted mean of its inputs' ratings.
         /// </summary>
         public static ItemRating Rate(Item item)
         {
@@ -38,7 +39,7 @@ namespace Worktown.Sim.Cooking
                 sum += Clamp01(1f - dist / 0.2f);
             }
             float f = sum / item.Components.Count;
-            return new ItemRating(t * (0.2f + 0.8f * f), t, f);
+            return new ItemRating(Clamp01(t * (0.2f + 0.8f * f) * item.QualityFactor), t, f);
         }
 
         public static float Taste(ItemStats p)

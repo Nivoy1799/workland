@@ -51,6 +51,9 @@ namespace Worktown.Game.Cooking
         private uint _lastLabelTick;
         // Spec 027c: the heat bytes' rate gate per pan and pot, and the tick they were last looked at.
         private readonly Dictionary<Vessel, HeatSync> _heatSync = new Dictionary<Vessel, HeatSync>();
+        // Spec 029: the fryer baskets (key: fryer station index and basket), found on the first server frame.
+        private readonly Dictionary<long, Vessel> _baskets = new Dictionary<long, Vessel>();
+        private readonly List<Vessel> _basketList = new List<Vessel>();
         private uint _lastHeatTick;
         private bool _heatChecked;
 
@@ -93,6 +96,8 @@ namespace Worktown.Game.Cooking
                 _burnerSurface.Clear();
                 _heatSync.Clear();
                 _heatChecked = false;
+                _baskets.Clear();
+                _basketList.Clear();
             }
         }
 
@@ -116,6 +121,7 @@ namespace Worktown.Game.Cooking
             {
                 case StationKind.Counter: return Serve(player, station);
                 case StationKind.Stove: return UseBurner(station, option);
+                case StationKind.Fryer: return UseFryer(station, option);
                 case StationKind.PlateShelf: return TakePlate(player);
                 default: return CookOutcome.UnknownStation;
             }
@@ -137,6 +143,54 @@ namespace Worktown.Game.Cooking
             return changed;
         }
 
+        /// <summary>
+        /// Spec 029: the fryer's front: the power knob (FryerRules.PowerOption) or a basket's button, sent as the intent
+        /// FryerRules.LowerOption / RaiseOption (spec 029b). Lowering needs food in the basket and the fryer on; raising works
+        /// for any basket in the oil.
+        /// </summary>
+        private CookOutcome UseFryer(Station fryer, int option)
+        {
+            uint tick = Tick;
+            if (option == FryerRules.PowerOption)
+            {
+                _kitchen.TryToggleFryer(fryer.Index, tick);
+                RefreshFryer(fryer);
+                for (int b = 0; b < FryerRules.BasketsPerFryer; b++)
+                    if (_baskets.TryGetValue(BurnerKey(fryer.Index, b), out Vessel v)) RefreshVessel(v);
+                Debug.Log("[Kitchen] " + fryer.DisplayName + " " + (_kitchen.FryerIsOn(fryer.Index) ? "on" : "off"));
+                return CookOutcome.Ok;
+            }
+            if (!FryerRules.TryParseBasketOption(option, out int basket, out bool lower)
+                || !_baskets.TryGetValue(BurnerKey(fryer.Index, basket), out Vessel vessel) || vessel == null)
+                return CookOutcome.InvalidOption;
+            // Spec 029b: the option says lower or raise; a request for where the basket already is is refused.
+            CookOutcome moved = lower ? _kitchen.TryLowerBasket(vessel.ObjectId, tick) : _kitchen.TryRaiseBasket(vessel.ObjectId, tick, TickRate);
+            if (moved != CookOutcome.Ok) return moved;
+            RefreshVessel(vessel);
+            RefreshFryer(fryer);
+            Debug.Log("[Kitchen] " + fryer.DisplayName + " basket " + basket + ": " + _kitchen.BasketStateOf(vessel.ObjectId, tick));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 029: the fryer's light byte (on, lowered baskets).</summary>
+        private void RefreshFryer(Station fryer)
+        {
+            if (fryer == null || !fryer.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            contents.ServerSetStoveFlags(_kitchen.FryerFlags(fryer.Index, Tick));
+        }
+
+        /// <summary>Spec 029: a shake of a lowered basket, with empty hands.</summary>
+        private CookOutcome Shake(PickupInteractor player, Vessel basket)
+        {
+            CookOutcome can = VesselRules.CheckShake(basket.Kind, _pickups.TryGetHeld(player, out _));
+            if (can != CookOutcome.Ok) return can;
+            CookOutcome shaken = _kitchen.TryShake(basket.ObjectId, Tick, TickRate);
+            if (shaken != CookOutcome.Ok) return shaken;
+            RefreshVessel(basket);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " shook the basket" + (_kitchen.BasketShaken(basket.ObjectId) ? " (even fry)" : string.Empty));
+            return CookOutcome.Ok;
+        }
+
         // ---- cookware (RequestUse) ----
 
         /// <summary>
@@ -147,17 +201,25 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public CookOutcome TryUseVessel(PickupInteractor player, NetworkObject target, int action)
         {
-            if (target == null || !target.IsSpawned || !target.TryGetComponent(out Vessel vessel)
-                || !target.TryGetComponent(out Pickup pickup) || pickup.IsHeld)
-                return CookOutcome.NotAVessel;
-            if (!StationRules.IsInReach(player.transform.position, target.transform.position)) return CookOutcome.TooFar;
+            if (target == null || !target.IsSpawned || !target.TryGetComponent(out Vessel vessel)) return CookOutcome.NotAVessel;
+            // Spec 029: a fryer basket has no Pickup (it never leaves its fryer); all other cookware must lie free.
+            bool hasPickup = target.TryGetComponent(out Pickup pickup);
+            CookOutcome reach = VesselRules.CheckUseTarget(vessel.Kind, hasPickup, hasPickup && pickup.IsHeld,
+                player.transform.position, target.transform.position);
+            if (reach != CookOutcome.Ok) return reach;
             EnsureInitialized();
 
             if (action == VesselRules.ActionStroke || action == VesselRules.ActionTurn) return Cut(player, vessel, action);
+            if (action == VesselRules.ActionShake) return Shake(player, vessel);
             if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
 
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
-            if (held.TryGetComponent(out Vessel source)) return Pour(player, source, vessel);
+            if (held.TryGetComponent(out Vessel source))
+            {
+                // Spec 029b: holding a plate or bowl, a click on a raised basket tips its food onto it (no new RPC).
+                if (vessel.Kind == VesselKind.Basket && VesselRules.TipsFromBasket(source.Kind)) return TipBasket(player, vessel, source);
+                return Pour(player, source, vessel);
+            }
             if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
 
             CookOutcome put = _kitchen.TryPutInto(held.ObjectId, vessel.ObjectId, vessel.Kind, Tick);
@@ -194,6 +256,18 @@ namespace Worktown.Game.Cooking
             Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " from the "
                 + VesselRules.Name(vessel.Kind) + (taken == CookOutcome.TooShort ? " (too short, unchanged)" : " q=" + KitchenState.QualityOf(result).ToString("0.00")));
             return taken;
+        }
+
+        /// <summary>Spec 029b: the raised basket's food goes onto the plate (or into the bowl) the player holds.</summary>
+        private CookOutcome TipBasket(PickupInteractor player, Vessel basket, Vessel plate)
+        {
+            CookOutcome tipped = _kitchen.TryTipBasket(basket.ObjectId, plate.ObjectId, plate.Kind, Tick, TickRate, out Item result);
+            if (tipped != CookOutcome.Ok && tipped != CookOutcome.TooShort) return tipped;
+            RefreshVessel(basket);
+            RefreshVessel(plate);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " tipped " + KitchenState.NameOf(result) + " from the basket onto the "
+                + VesselRules.Name(plate.Kind) + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
+            return tipped;
         }
 
         /// <summary>Holding a pan, pot or bowl: pour its finished food onto the plate or into the bowl.</summary>
@@ -237,7 +311,7 @@ namespace Worktown.Game.Cooking
         private void OnItemMoved(NetworkObject item, PlaceSurface surface)
         {
             if (item == null || !_networkManager.IsServerStarted || !item.TryGetComponent(out Vessel vessel)) return;
-            if (!VesselRules.IsHeat(vessel.Kind)) return;
+            if (!VesselRules.StandsOnBurner(vessel.Kind)) return;
             int burner = surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner;
             _kitchen.SetVesselBurner(vessel.ObjectId, burner, Tick);
             RefreshVessel(vessel);
@@ -250,8 +324,11 @@ namespace Worktown.Game.Cooking
             uint tick = Tick;
             double rate = TickRate;
             int id = vessel.ObjectId;
+            byte mode = 0;
+            if (vessel.Kind == VesselKind.Pan) mode = _kitchen.PanIsSaute(id) ? Vessel.ModeSaute : Vessel.ModeFry;
+            else if (vessel.Kind == VesselKind.Basket) mode = _kitchen.BasketMode(id, tick); // spec 029
             vessel.ServerSet(_kitchen.ContentNames(id, vessel.Kind, tick, rate), _kitchen.ContentLooks(id, vessel.Kind, tick, rate),
-                _kitchen.ResultName(id, vessel.Kind, tick, rate), vessel.Kind == VesselKind.Pan && _kitchen.PanIsSaute(id));
+                _kitchen.ResultName(id, vessel.Kind, tick, rate), mode);
         }
 
         /// <summary>Server: the stove's knob and button lights (two bits per burner).</summary>
@@ -298,8 +375,22 @@ namespace Worktown.Game.Cooking
             }
             foreach (Knife knife in FindObjectsByType<Knife>(FindObjectsSortMode.None))
                 if (knife.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _knifePrefab));
+            // Spec 029: the fryer baskets (scene objects next to their fryer).
+            _baskets.Clear();
+            _basketList.Clear();
+            foreach (FryerBasket fb in FindObjectsByType<FryerBasket>(FindObjectsSortMode.None))
+            {
+                if (fb.Fryer == null || !fb.TryGetComponent(out Vessel basket) || !basket.IsSpawned) continue;
+                _kitchen.RegisterBasket(basket.ObjectId, fb.Fryer.Index, fb.Basket);
+                _baskets[BurnerKey(fb.Fryer.Index, fb.Basket)] = basket;
+                _basketList.Add(basket);
+                RefreshVessel(basket);
+            }
             foreach (Station station in _stations)
+            {
                 if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
+                else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
+            }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
         }
 
@@ -310,7 +401,7 @@ namespace Worktown.Game.Cooking
 
         private void PlaceOnBurnerIfThere(Vessel vessel)
         {
-            if (!VesselRules.IsHeat(vessel.Kind)) return;
+            if (!VesselRules.StandsOnBurner(vessel.Kind)) return;
             PlaceSurface surface = _pickups.SurfaceUnder(vessel.transform.position);
             _kitchen.SetVesselBurner(vessel.ObjectId, surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner, Tick);
         }
@@ -409,6 +500,12 @@ namespace Worktown.Game.Cooking
             {
                 _heatChecked = true;
                 _lastHeatTick = tick;
+                // Spec 029: a raised basket that has drained is raised again (the server timer).
+                for (int i = 0; i < _basketList.Count; i++)
+                {
+                    Vessel basket = _basketList[i];
+                    if (basket != null && _kitchen.SettleDrain(basket.ObjectId, tick)) RefreshVessel(basket);
+                }
                 PublishHeat(tick, tickRate);
             }
             WatchHomes();
@@ -430,7 +527,11 @@ namespace Worktown.Game.Cooking
                 }
                 HeatReading reading = _kitchen.HeatReadingOf(vessel.ObjectId, tick, tickRate);
                 byte zone = HeatZoneRules.Encode(reading);
-                if (sync.ShouldSend(tick, tickRate, reading.Progress, zone)) vessel.ServerSetHeat(reading.Progress, zone);
+                byte zoneBefore = sync.Zone;
+                if (!sync.ShouldSend(tick, tickRate, reading.Progress, zone)) continue;
+                vessel.ServerSetHeat(reading.Progress, zone);
+                // Spec 029b: the label's words follow the zone, so they change with the ring, not up to a second later.
+                if (HeatZoneRules.ZoneOf(zone) != HeatZoneRules.ZoneOf(zoneBefore)) RefreshVessel(vessel);
             }
         }
 
@@ -443,25 +544,64 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome TakeIngredient(PickupInteractor player, Station stock, int option)
         {
-            CookOutcome check = StockRules.CheckTake(stock, option, player.transform.position, _pickups.TryGetHeld(player, out _),
-                out string baseId);
-            if (check != CookOutcome.Ok) return check;
-            EnsureInitialized();
+            var take = new StockTake(this, player, stock, option);
+            CookOutcome outcome = StockTakeSequence.Run(take); // spec 029b: never paid without the item
+            if (outcome == CookOutcome.Ok)
+                Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(take.Item) + " from the "
+                    + stock.DisplayName + " (option " + option + ") for " + EconomyRules.Money(take.Cost));
+            else if (take.Paid)
+                Debug.LogError("[Kitchen] paid but could not hand " + KitchenState.NameOf(take.Item) + " to player " + player.OwnerId);
+            return outcome;
+        }
 
-            CookOutcome created = _kitchen.TryCreateIngredient(baseId, out Item item);
-            if (created != CookOutcome.Ok) return created;
+        /// <summary>Spec 029b: the server's steps of one stock take (<see cref="StockTakeSequence"/>).</summary>
+        private sealed class StockTake : IStockTakeSteps
+        {
+            private readonly KitchenService _service;
+            private readonly PickupInteractor _player;
+            private readonly Station _stock;
+            private readonly int _option;
+            private string _baseId;
 
-            long cost = 0;
-            if (_economy != null)
+            public StockTake(KitchenService service, PickupInteractor player, Station stock, int option)
             {
-                CookOutcome paid = StockRules.PaidOutcome(_economy.TryBuy(player.NetworkObject, baseId, out cost));
-                if (paid != CookOutcome.Ok) return paid;
+                _service = service;
+                _player = player;
+                _stock = stock;
+                _option = option;
             }
 
-            if (!SpawnFoodInHands(player, item)) return CookOutcome.SimRefused;
-            Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item) + " from the "
-                + stock.DisplayName + " (option " + option + ") for " + EconomyRules.Money(cost));
-            return CookOutcome.Ok;
+            public Item Item { get; private set; }
+            public long Cost { get; private set; }
+            public bool Paid { get; private set; }
+
+            public CookOutcome Check()
+            {
+                CookOutcome check = StockRules.CheckTake(_stock, _option, _player.transform.position,
+                    _service._pickups.TryGetHeld(_player, out _), out _baseId);
+                if (check == CookOutcome.Ok) _service.EnsureInitialized();
+                return check;
+            }
+
+            public CookOutcome Create()
+            {
+                CookOutcome created = _service._kitchen.TryCreateIngredient(_baseId, out Item item);
+                Item = item;
+                return created;
+            }
+
+            public bool CanHandOver() => _service._foodPrefab != null && _service._pickups.CanHandTo(_player, _service._foodPrefab);
+
+            public CookOutcome Pay()
+            {
+                if (_service._economy == null) return CookOutcome.Ok;
+                CookOutcome paid = StockRules.PaidOutcome(_service._economy.TryBuy(_player.NetworkObject, _baseId, out long cost));
+                Cost = cost;
+                Paid = paid == CookOutcome.Ok;
+                return paid;
+            }
+
+            public bool HandOver() => _service.SpawnFoodInHands(_player, Item);
         }
 
         /// <summary>Spawns a food object for a sim item directly in the player's hands.</summary>

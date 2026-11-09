@@ -156,9 +156,12 @@ namespace Worktown.Game.Dev
         public const float AisleOffset = 1.35f;
         private const float StandZ = 13f;    // standing at a back line station (1.3 m in front of its centre)
         private const float BackLineZ = 14.3f;
-        private const float StoveAX = 6.64f;
-        private const float StoveBX = 9.14f;
-        private const float WorktopBetweenX = 7.89f; // the worktop between the stoves
+        // Spec 029: the fryer (x 6.44) moved the stoves 0.84 m to the right. Spec 029b: the stoves stand side by side, the
+        // plating worktop (x 9.34 to 10.60) and the plate shelf (11.22) follow stove B.
+        private const float FryerX = 6.44f;
+        private const float StoveAX = 7.48f;
+        private const float StoveBX = 8.72f;
+        private const float WorktopBetweenX = 9.97f; // spec 029b: the plating worktop after stove B (no worktop between the stoves)
         /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
         public const float ParkX = -2.5f; // spec 028b: 2.8 m west of the side wall, as in 027a
         private const float ObserverExitX = -0.7f; // the observers' way south from the staff gap, west of the side wall
@@ -217,6 +220,8 @@ namespace Worktown.Game.Dev
                 TourStep.Wait(0.6f), TourStep.Shot("stock-first"),
                 LookAtSlot(StationKind.Fridge, "cucumber"), TourStep.Wait(0.6f), TourStep.Shot("fridge-slot"),
                 LookAtSlot(StationKind.Shelf, "potato"), TourStep.Wait(0.6f), TourStep.Shot("shelf-slot"),
+                // Spec 029: the fryer from the aisle (first person): the knob, the basket buttons, both baskets on the hook.
+                TourStep.WalkTo(FryerX, StandZ), TourStep.LookAt(FryerX, 0.85f, BackLineZ - 0.2f), TourStep.Wait(0.6f), TourStep.Shot("fryer-first"),
                 TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
                 TourStep.Wait(0.6f), TourStep.Shot("stove-first"),
                 // Spec 027b: the pick-up with its frames (highlight and prompt, the arc into the hand), the put-back (ghost, settle),

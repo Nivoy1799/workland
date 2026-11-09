@@ -10,6 +10,9 @@ namespace Worktown.Game.Cooking
         Pan,
         Pot,
         Plate,
-        Bowl
+        Bowl,
+        /// <summary>Spec 029: a fryer basket. Fixed to its fryer (no Pickup): lowered into the oil and raised by the fryer's button,
+        /// shaken with a click, holds one portion (<see cref="FryerBasket"/>, <see cref="FryerRules"/>).</summary>
+        Basket
     }
 }

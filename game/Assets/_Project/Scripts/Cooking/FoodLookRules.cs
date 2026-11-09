@@ -12,6 +12,7 @@ namespace Worktown.Game.Cooking
         private const string PlatedTag = "plated";
         private const string MixOp = "mix";
         private const string BoilOp = "boil";
+        private const string DeepFryOp = DeepFry.OperationId;
         private const string ShapeParam = "shape";
         private const string TimeParam = "time";
 
@@ -87,10 +88,19 @@ namespace Worktown.Game.Cooking
         {
             FoodLook look = From(food);
             byte doneness = DonenessOf(bucketId);
+            // Spec 029: food in the fryer's basket is shaped at once (falafel mix shows as balls), raw until it browns.
+            if (operationId == DeepFryOp) look.Heat = FoodLook.HeatDeepFried;
             if (doneness == FoodLook.DonenessRaw) return look;
             look.Doneness = doneness;
-            look.Heat = operationId == BoilOp ? FoodLook.HeatBoiled : FoodLook.HeatFried;
+            look.Heat = HeatOf(operationId);
             return look;
+        }
+
+        /// <summary>The heat byte of a heat op: boiled, deep-fried (spec 029), else fried.</summary>
+        public static byte HeatOf(string operationId)
+        {
+            if (operationId == BoilOp) return FoodLook.HeatBoiled;
+            return operationId == DeepFryOp ? FoodLook.HeatDeepFried : FoodLook.HeatFried;
         }
 
         /// <summary>
@@ -145,7 +155,7 @@ namespace Worktown.Game.Cooking
                 if (!hasHeat && current.Buckets.TryGetValue(TimeParam, out string time))
                 {
                     look.Doneness = DonenessOf(time);
-                    look.Heat = current.OperationId == BoilOp ? FoodLook.HeatBoiled : FoodLook.HeatFried;
+                    look.Heat = HeatOf(current.OperationId);
                     hasHeat = true;
                 }
                 if (IsAssembly(current))
