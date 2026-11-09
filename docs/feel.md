@@ -45,9 +45,10 @@ judgement stays with the human, through A/B choices in the tuning panel (no voca
   counter). Aisles at least 1.2 m wide. Worktops at 0.90 m (D29).
 
 ## 7. Cooking reads at a glance
-- Every item that changes over time shows progress: colour change on the food, plus a small ring or bar over
-  it while it is on heat or being cut.
-- Sound follows state: the sizzle grows with heat; a clear cue at "perfect"; a warning 3 s before burning;
+- Every item that changes over time shows progress: colour change on the food, plus a ring over it while it is on
+  heat. To keep the view calm (spec 031b), rings show only for the aimed item and for items in Warning or worse
+  (third person: at most the 4 nearest).
+- Sound follows state: the sizzle grows with heat; a clear cue at "perfect"; a warning before overdone, lead = clamp(0.4 x good window, 1 s, 3 s) (spec 031b);
   a distinct sound and a puff of smoke when it burns.
 - Serving gives a reward moment: stars pop up, a coin sound, the tip shown.
 

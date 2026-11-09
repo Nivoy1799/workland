@@ -46,6 +46,12 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+7. **Price scale.** Bills now come from the economy's market values: a wrap costs about **$1,525**, ingredients
+   $45–110 each, the player starts with $500, and a cash guest hands over a $1,900 note. That reads like a luxury
+   restaurant, not street food. Option A: rescale the whole economy to street-food money (wrap about $9, fries $4,
+   ingredients $0.30–2, start with $200), with prices in cents internally so change stays exact. Option B: keep the
+   numbers and just call the currency something else. Option C: you set the targets. **Default: A**, done in the
+   pricing spec (037), where you also get a menu board to set your own prices. Blocks nothing until then.
 6. **FYI, scope note (no answer needed unless you object):** the griddle spec (030) needed grill vegetables that spec
    028 had not added. The builder added paprika, eggplant and mushroom as ingredients (shelf slots, grocer prices
    60 / 70 / 80). Claude approved it under the 24 h grant; say so if you'd rather review such additions yourself.

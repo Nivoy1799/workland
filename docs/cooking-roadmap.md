@@ -103,3 +103,9 @@ tuned later by the human.
 - 030 review (approved after the CombineSides fix, which went into the 031 round): tuning for the human - the "grilled"
   name and the menu's medium bucket start at 9 s per side, before the good window (12 s seitan, 10 s veg), so an
   undercooked plate can be an exact order; GriddleSides is sim-model only (the server keeps its own sessions).
+- 031b review (approved with nits): third-person E squeeze on tap (fixed in 032 round: 0.2 s hold), free busy
+  dispenser, tests and nits (in 032 round). Follow-up: no third-person tour shot with food on the heat.
+- 032 (feels off): bills from market values are huge (inbox question 7, spec 037 rescale); "changed their mind"
+  (spec 014 demand reconcile) is now the top miss reason and may be redundant with patience; order bubbles behind the
+  ticket rail from the kitchen; rail cards dim from below; third person can only take card payments; one look-tour
+  run exited 139 during FishNet shutdown after its sheet (flaky, watch).
