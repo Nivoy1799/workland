@@ -120,6 +120,48 @@ namespace Worktown.Game.Economy
             return result with { State = _state, Payout = pay };
         }
 
+        /// <summary>
+        /// Spec 032: a dish handed to a waiting guest. The sim sells it as always (demand, price, byproducts); a sale to NPC demand
+        /// credits nothing now (the guest pays at the register, <see cref="TryPayGuest"/>) and the result's <c>Payout</c> is the
+        /// sim's own payout, the base of the bill. A wholesaler sale is paid at once as before. On failure nothing changes.
+        /// </summary>
+        public SaleResult TrySellForGuest(string accountId, Item platedItem)
+        {
+            SaleResult result = TrySell(accountId, platedItem);
+            if (!result.Ok || result.Channel != SaleChannel.NpcDemand) return result;
+            AdjustBalance(accountId, -result.Payout);
+            return result with { State = _state };
+        }
+
+        /// <summary>
+        /// Spec 032: the register pays <paramref name="amount"/> to the account (what the guest paid: the bill, the tip, less a wrong
+        /// change). Capped at the balance limit; returns what was paid; false (nothing paid) for an unknown account.
+        /// </summary>
+        public bool TryPayGuest(string accountId, long amount, out long paid)
+        {
+            paid = 0;
+            if (BalanceOf(accountId) < 0) return false;
+            paid = AdjustBalance(accountId, System.Math.Max(0L, amount));
+            return true;
+        }
+
+        /// <summary>Adds <paramref name="delta"/> to the account (clamped to 0..MaxBalance) and to the paid-to-players total; the change made.</summary>
+        private long AdjustBalance(string accountId, long delta)
+        {
+            long made = 0;
+            var accounts = new List<Account>(_state.Accounts.Count);
+            foreach (Account account in _state.Accounts)
+            {
+                if (account.Id != accountId) { accounts.Add(account); continue; }
+                long balance = System.Math.Max(0L, System.Math.Min(EconomyLimits.MaxBalance, account.Balance + delta));
+                made = balance - account.Balance;
+                accounts.Add(account with { Balance = balance });
+            }
+            long paidToPlayers = System.Math.Max(0L, _state.Totals.PaidToPlayers + made);
+            _state = _state with { Accounts = accounts, Totals = _state.Totals with { PaidToPlayers = paidToPlayers } };
+            return made;
+        }
+
         /// <summary>One in-game hour: demand refills, prices move (spec 008 tick).</summary>
         public void TickHour()
         {

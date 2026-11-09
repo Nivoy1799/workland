@@ -128,7 +128,7 @@ namespace Worktown.Sim.Cooking
                 }
                 taken[pick] = true;
                 if (!ok) wrong++;
-                if (tl.Role == LayerRole.Sauce && Assembly.SauceAmountOf(layers[pick]) != Assembly.Right) sauceOff++;
+                if (tl.Role == LayerRole.Sauce && !AmountFits(tl, Assembly.SauceAmountOf(layers[pick]))) sauceOff++;
                 claimedAt.Add(pick);
                 claimedRole.Add(tl.Role);
                 claimedRaw.Add(tl.Ops == null);
@@ -234,5 +234,9 @@ namespace Worktown.Sim.Cooking
         }
 
         private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
+
+        /// <summary>Spec 032: the sauce amount fits the layer (031: only the right amount; an "extra" order accepts lots too).</summary>
+        private static bool AmountFits(TemplateLayer tl, string amount) =>
+            tl.SauceAmounts == null ? amount == Assembly.Right : Assembly.Contains(tl.SauceAmounts, amount);
     }
 }

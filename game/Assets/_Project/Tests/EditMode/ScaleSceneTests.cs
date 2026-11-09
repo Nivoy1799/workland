@@ -57,14 +57,18 @@ namespace Worktown.Game.Tests
                 foreach (Station station in All<Station>(scene))
                 {
                     // Spec 028b: the fridge and the dry shelf are 1.80 m high (the guide's fridge).
+                    // Spec 032: the register stands on the serving counter's run: its own height above the counter top.
+                    bool register = station.Kind == StationKind.Register;
+                    float floor = register ? ArtSizeTable.ServingCounterHeight : 0f;
                     float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
+                        : register ? floor + RegisterArtRules.Height
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");
                     Bounds body = station.transform.Find("Body").GetComponent<BoxCollider>().bounds;
                     // Spec 029: the fryer's collider stops under its oil wells (a lowered basket is aimed at above it).
                     float colliderTop = station.Kind == StationKind.Fryer ? FryerArt.BodyColliderTop : expected;
                     Assert.AreEqual(colliderTop, body.max.y, HeightTolerance, station.name + " collider top");
-                    Assert.AreEqual(0f, body.min.y, 0.001f, station.name + " stands on the floor");
+                    Assert.AreEqual(floor, body.min.y, 0.001f, station.name + (register ? " stands on the counter top" : " stands on the floor"));
                     if (station.Kind == StationKind.Counter) counters++;
                     if (station.Kind == StationKind.Stove) stoves++;
                 }

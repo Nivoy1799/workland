@@ -54,6 +54,8 @@ namespace Worktown.Game.Art
             World(ArtKey.StationGriddle, WorktopHeight, SizeAxis.Height, Worktop),
             // Spec 031: the assembly board, worktop high.
             World(ArtKey.StationAssembly, WorktopHeight, SizeAxis.Height, Worktop),
+            // Spec 032: the register stands on the serving counter's run (its own height above the counter top).
+            World(ArtKey.StationRegister, RegisterArtRules.Height, SizeAxis.Height, "Register"),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).

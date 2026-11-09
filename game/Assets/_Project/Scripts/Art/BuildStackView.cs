@@ -89,14 +89,15 @@ namespace Worktown.Game.Art
             return _prediction.Predict(mode, Time.unscaledTime + Mathf.Max(0.1f, confirmTimeout) + 0.5f);
         }
 
-        /// <summary>The prediction <paramref name="token"/> is over: confirmed (the synced mode caught up) or denied (it turns back to
-        /// the synced mode). 031b: only the newest prediction ends the look; an older one that resolves changes nothing.</summary>
-        public void EndPrediction(int token, bool confirmed) => _prediction.End(token);
+        /// <summary>The prediction <paramref name="token"/> is over, confirmed (the synced mode caught up) or denied (it turns back to
+        /// the synced mode): either way the look follows the synced mode again. 031b: only the newest prediction ends the look; an older one that resolves changes nothing.</summary>
+        public void EndPrediction(int token) => _prediction.End(token);
 
         private void LateUpdate()
         {
             if (_vessel == null || _contents == null) return;
             float now = Time.unscaledTime;
+            _prediction.Expire(now); // 031b review: the expiry runs here, not in the SeenMode getter
             UpdateLayers(now);
             UpdateMode(now);
             if (_prediction.Predicting && PredictionDrawnFrame < 0) PredictionDrawnFrame = Time.frameCount;

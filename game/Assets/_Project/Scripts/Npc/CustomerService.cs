@@ -3,10 +3,14 @@ using FishNet.Managing;
 using FishNet.Object;
 using FishNet.Transporting;
 using UnityEngine;
+using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
+using Worktown.Game.Net;
+using Worktown.Game.Shop;
 using Worktown.Game.UI;
 using Worktown.Sim.Cooking;
 using Worktown.Sim.Core;
+using Worktown.Sim.Economy;
 
 namespace Worktown.Game.Npc
 {
@@ -18,6 +22,11 @@ namespace Worktown.Game.Npc
     /// in-game) opens and closes the queue; the summary is shown for 15 s, then the clock moves to the next 08:00.
     /// Orders, shift and numbers are published on the ticket rail. Lives next to the NetworkManager; does nothing on
     /// pure clients.
+    /// Spec 032: orders 2.0. Each guest draws its modifiers, its patience base and its way of paying from the same seeded RNG
+    /// (GuestOrders). Patience drains while it stands in the queue; when it runs out the guest leaves (missed). A guest handed its
+    /// dish (<see cref="OnHandedOver"/>) takes it, walks to the register and waits there (no patience drain) until its payee takes
+    /// the payment (<see cref="UseRegister"/>, the pure <see cref="RegisterDesk"/>): then it pays, leaves a review and goes. The
+    /// kitchen closing (or the payee leaving) settles a waiting payment by itself.
     /// </summary>
     public sealed class CustomerService : MonoBehaviour
     {
@@ -35,6 +44,16 @@ namespace Worktown.Game.Npc
         [SerializeField] private Vector3 _queueFacing = Vector3.zero;
         [Tooltip("Spec 022: the ticket rail above the counter (orders and shift numbers for every client).")]
         [SerializeField] private TicketRailView _rail;
+        [Tooltip("Spec 032: the register's synced state (the head payer and the change tray).")]
+        [SerializeField] private Register _register;
+        [Tooltip("Spec 032: the register's station (its index for the reward moment over it).")]
+        [SerializeField] private Station _registerStation;
+        [Tooltip("Spec 032: where the first paying guest stands, in front of the register.")]
+        [SerializeField] private Transform _payHead;
+        [Tooltip("Spec 032: the line of paying guests runs this way from the pay spot.")]
+        [SerializeField] private Vector3 _payDirection = Vector3.right;
+        [Tooltip("Spec 032: the serve feed (the reward moment when a guest pays).")]
+        [SerializeField] private ServeFeed _feed;
 
         private readonly CustomerQueue _queue = new CustomerQueue();
         private readonly Dictionary<int, Customer> _customers = new Dictionary<int, Customer>();
@@ -47,10 +66,43 @@ namespace Worktown.Game.Npc
         private bool _synced;
         private float _nextRailRefresh;
 
+        // Spec 032: each guest's order details and patience, the register's line and who handed each paying guest its food.
+        private sealed class Guest
+        {
+            public GuestOrder Order;
+            public byte Modifiers;
+        }
+
+        private readonly Dictionary<int, Guest> _guests = new Dictionary<int, Guest>();
+        private readonly PatienceBook _patience = new PatienceBook();
+        private readonly List<KeyValuePair<int, byte>> _patienceBytes = new List<KeyValuePair<int, byte>>();
+        private System.Func<int, bool> _atSlot;
+        private readonly RegisterDesk _desk = new RegisterDesk();
+        private readonly Dictionary<int, PickupInteractor> _payees = new Dictionary<int, PickupInteractor>();
+        private readonly List<int> _outOfPatience = new List<int>();
+        private readonly List<int> _payeeGone = new List<int>();
+        private float _patienceScale = 1f;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        private TourOrders _tourOrders;
+#endif
+
+        /// <summary>Spec 032, tests and the tour log: the register's line.</summary>
+        public RegisterDesk Desk => _desk;
+
         private void Start()
         {
             if (_economy != null) _economy.HourTicked += OnHour;
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            // Spec 032, dev builds only: the cook tour's host scripts its first orders and gives guests more patience (the tour is
+            // long); release builds never read the flag.
+            if (TourOrders.Requested(System.Environment.GetCommandLineArgs()))
+            {
+                _tourOrders = new TourOrders();
+                _patienceScale = TourOrders.PatienceScale;
+                Debug.Log("[Customers] tour orders on (-tour-orders): scripted first orders, patience x" + _patienceScale);
+            }
+#endif
         }
 
         private void OnDestroy()
@@ -67,9 +119,16 @@ namespace Worktown.Game.Npc
             _queue.Clear();
             _customers.Clear();
             _arrivedAt.Clear();
+            _guests.Clear();
+            _patience.Clear();
+            _desk.Clear();
+            _payees.Clear();
             _shift.Reset();
             _orders = new SeededRandom(CustomerRules.OrderSeed);
             _synced = false;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (_tourOrders != null) _tourOrders = new TourOrders();
+#endif
         }
 
         private void Update()
@@ -86,11 +145,14 @@ namespace Worktown.Game.Npc
                 PublishShift();
                 _economy.SkipHours(Shift.HoursToNextOpen(_economy.Tick));
             }
+            UpdatePatience(Time.deltaTime, Time.time);
+            SettleForPayeesWhoLeft();
             if (Time.time >= _nextRailRefresh)
             {
                 _nextRailRefresh = Time.time + RailRefreshSeconds;
                 PublishTickets();
                 PublishShift(); // only changed values are sent; also covers a rail spawned after the first frame
+                PublishRegister();
             }
         }
 
@@ -113,17 +175,31 @@ namespace Worktown.Game.Npc
             PublishShift();
         }
 
-        /// <summary>14:00: everyone still waiting leaves (they were counted as missed by the shift).</summary>
+        /// <summary>14:00: everyone still waiting leaves (they were counted as missed by the shift); spec 032: those at the register pay.</summary>
         private void CloseQueue()
         {
             foreach (QueuedCustomer waiting in _queue.Entries)
+            {
+                _guests.Remove(waiting.Id);
+                _patience.Remove(waiting.Id);
                 if (_customers.TryGetValue(waiting.Id, out Customer customer))
-                    customer.ServerLeave("Kitchen closed...", CustomerRules.MoodMissed, _entry.position, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Closed), CustomerRules.MoodMissed, _entry.position, OnExited);
+            }
             _queue.Clear();
             _arrivedAt.Clear();
-            ShiftSummary s = _shift.Last;
-            Debug.Log("[Customers] shift of day " + _shift.LastDay + " closed: served " + s.Served + ", earned "
-                + EconomyRules.Money(s.Earned) + ", stars " + ShiftSummary.StarsText(s.AverageStarsTenths) + ", missed " + s.Missed);
+            // Spec 032: the register settles every waiting payment by itself (the guests paid; the summary counts them).
+            while (_desk.Head != null)
+            {
+                RegisterPayment p = _desk.Head;
+                if (_desk.SettleAutomatically(p.GuestId, WalletFor(p.GuestId), out RegisterSettlement s)) Finish(s);
+                else _desk.Remove(p.GuestId);
+            }
+            ShiftSummary sum = _shift.Last;
+            Debug.Log("[Customers] shift of day " + _shift.LastDay + " closed: served " + sum.Served + ", earned "
+                + EconomyRules.Money(sum.Earned) + " (tips " + EconomyRules.Money(sum.Tips) + "), stars "
+                + ShiftSummary.StarsText(sum.AverageStarsTenths) + ", reviews " + sum.Reviews + " (" + ShiftSummary.StarsText(sum.AverageReviewTenths)
+                + "), missed " + sum.Missed + " (patience " + sum.MissedPatience + ", gone " + sum.MissedGone + ", closed " + sum.MissedClosed + ")");
+            PublishRegister();
         }
 
         private static bool HasDishes(string market) => Menu.HasDishes(market, Menu.CrateIngredients);
@@ -135,30 +211,187 @@ namespace Worktown.Game.Npc
         /// </summary>
         public bool TryPick(Item plated, int stars, out int customerId, out byte dish, out OrderMatch match, out int payPermille)
         {
-            customerId = 0;
-            dish = Menu.None;
-            match = OrderMatch.Wrong;
-            payPermille = EconomyRules.FullPayPermille;
+            bool picked = TryPick(plated, out GuestPick pick);
+            customerId = pick.CustomerId;
+            dish = picked ? pick.Dish : Menu.None;
+            match = picked ? pick.Fit.Match : OrderMatch.Wrong;
+            payPermille = picked ? OrderRules.PayPermille(match, stars) : EconomyRules.FullPayPermille;
+            return picked;
+        }
+
+        /// <summary>
+        /// Spec 032, server, a pure read: the guest that gets <paramref name="plated"/> (the first in queue order whose order, with
+        /// its modifiers, it matches exactly, else the first in line), how it fits, the bill's share and the wait. False when nobody
+        /// waits or the shift is closed.
+        /// </summary>
+        public bool TryPick(Item plated, out GuestPick pick)
+        {
+            pick = default;
             if (!_networkManager.IsServerStarted || !_shift.IsOpen) return false;
-            if (!_queue.TryPick(d => OrderRules.Match(plated, Menu.ById(d)), out QueuedCustomer customer, out match)) return false;
-            customerId = customer.Id;
-            dish = customer.Dish;
-            payPermille = OrderRules.PayPermille(match, stars);
+            if (!_queue.TryPick(e => OrderRules.Match(plated, Menu.ById(e.Dish), e.Modifiers), out QueuedCustomer customer, out _))
+                return false;
+            OrderFit fit = OrderRules.Fit(plated, Menu.ById(customer.Dish), customer.Modifiers);
+            float itemQuality = ItemRater.Rate(plated).Quality;
+            _patience.Get(customer.Id, out float waitedSeconds, out float patienceSeconds);
+            int waited = Tenths(waitedSeconds);
+            int patience = Tenths(patienceSeconds);
+            pick = new GuestPick(customer.Id, customer.Dish, fit, OrderRules.BillPermille(fit.Match, itemQuality, fit.Quality), waited, patience);
             return true;
         }
 
-        /// <summary>Server, after the sale is complete: the picked customer got their dish and paid <paramref name="pay"/>.</summary>
-        public void OnServed(int customerId, OrderMatch match, long pay, int stars)
+        private static int Tenths(float seconds) => seconds <= 0f ? 0 : (int)System.Math.Min(int.MaxValue, System.Math.Round(seconds * 10f));
+
+        /// <summary>
+        /// Spec 032, server, after the sim sold the dish (credited nothing yet: TrySellForGuest): guest <paramref name="pick"/> takes it
+        /// from <paramref name="payee"/>, walks to the register and waits to pay its bill (<paramref name="simPayout"/> at the pick's
+        /// share) and its tip (speed, accuracy, quality). False when the guest is gone.
+        /// </summary>
+        public bool OnHandedOver(GuestPick pick, PickupInteractor payee, long simPayout, out RegisterPayment payment)
         {
-            if (!_queue.Remove(customerId)) return;
-            _arrivedAt.Remove(customerId);
-            _shift.RecordServed(stars, pay);
-            if (_customers.TryGetValue(customerId, out Customer customer))
+            payment = null;
+            if (payee == null || !_queue.Remove(pick.CustomerId)) return false;
+            _arrivedAt.Remove(pick.CustomerId);
+            _guests.TryGetValue(pick.CustomerId, out Guest g);
+            _guests.Remove(pick.CustomerId);
+            _patience.Remove(pick.CustomerId); // spec 032: no patience at the register
+            long bill = EconomyRules.ApplyPermille(simPayout, pick.BillPermille);
+            long tip = TipRules.Tip(bill, pick.WaitedTenths, pick.PatienceTenths, pick.Fit.Misses, pick.Fit.Stars);
+            GuestOrder order = g != null ? g.Order : new GuestOrder(new OrderModifier[0], GuestPatience.BaseSeconds, true, CashRules.GuestNotes[0]);
+            payment = new RegisterPayment
             {
-                Debug.Log("[Customers] served " + Menu.NameOf(customer.Dish.Value) + " order: " + OrderRules.Describe(match)
-                    + ", paid " + EconomyRules.Money(pay));
-                customer.ServerLeave(CustomerRules.LeaveText(match, pay), CustomerRules.MoodOf(match), _entry.position, OnExited);
+                GuestId = pick.CustomerId,
+                Payee = payee.OwnerId,
+                Dish = pick.Dish,
+                Bill = bill,
+                Tip = tip,
+                Card = order.PaysByCard,
+                OrderStars = pick.Fit.Stars,
+                Misses = pick.Fit.Misses,
+                WaitedTenths = pick.WaitedTenths,
+                PatienceTenths = pick.PatienceTenths,
+            };
+            payment.Handed = payment.Card ? payment.Due : CashRules.Handed(payment.Due, order.Note);
+            _desk.Open(payment);
+            _payees[pick.CustomerId] = payee;
+            if (_customers.TryGetValue(pick.CustomerId, out Customer customer))
+            {
+                customer.ServerPay(CustomerRules.PayText(payment.Card, payment.Handed), PaySlot(_desk.Line.Count - 1), _queueFacing);
+                Debug.Log("[Customers] handed " + Menu.NameOf(pick.Dish) + " over: " + OrderRules.Describe(pick.Fit.Match) + " (" + pick.Fit.Misses
+                    + " short, " + pick.Fit.Stars + " stars), bill " + EconomyRules.Money(bill) + " + tip " + EconomyRules.Money(tip) + ", "
+                    + (payment.Card ? "card" : "cash " + EconomyRules.Money(payment.Handed) + ", change " + EconomyRules.Money(payment.ChangeDue))
+                    + "; waited " + (pick.WaitedTenths / 10f).ToString("0.0") + " of " + (pick.PatienceTenths / 10f).ToString("0.0") + " s");
             }
+            Sync();
+            PublishShift();
+            PublishRegister();
+            return true;
+        }
+
+        /// <summary>
+        /// Spec 032, server: one click on the register (RequestStation; reach was checked): a coin or note into the change, take it
+        /// back, hand it over, or the card terminal. The pure desk decides and pays once; a refusal changes and pays nothing.
+        /// </summary>
+        public CookOutcome UseRegister(PickupInteractor player, int option)
+        {
+            if (player == null) return CookOutcome.NoPayment;
+            RegisterPayment head = _desk.Head;
+            CookOutcome outcome = _desk.Use(player.OwnerId, option, head != null ? WalletFor(head.GuestId) : null, out RegisterSettlement settled);
+            PublishRegister();
+            if (outcome == CookOutcome.Ok && settled.Payment != null) Finish(settled);
+            return outcome;
+        }
+
+        /// <summary>Spec 032: a payment went through: the review, the shift's numbers, the reward over the register, the guest leaves.</summary>
+        private void Finish(RegisterSettlement s)
+        {
+            RegisterPayment p = s.Payment;
+            _payees.Remove(p.GuestId);
+            GuestReview review = ReviewRules.Review(p.OrderStars, p.WaitedTenths, p.PatienceTenths, p.Misses, s.WrongChange);
+            _shift.RecordSale(p.OrderStars, s.Paid, p.Tip, review);
+            if (_feed != null)
+            {
+                string how = p.Card ? "card" : s.WrongChange ? "cash, wrong change (" + EconomyRules.Money(s.ChangeGiven) + " for "
+                    + EconomyRules.Money(p.ChangeDue) + ")" : "cash";
+                _feed.ServerAdd("Guest paid " + EconomyRules.Money(s.Paid) + " (tip " + EconomyRules.Money(p.Tip) + ", " + how + ") · "
+                    + Menu.NameOf(p.Dish) + " · " + review.Stars + "★ \"" + review.Text + "\"");
+                _feed.ServerReward(_registerStation != null ? _registerStation.Index : 0, review.Stars, s.Paid, p.Tip);
+            }
+            Debug.Log("[Register] guest " + p.GuestId + " paid " + EconomyRules.Money(s.Paid) + " of " + EconomyRules.Money(p.Due) + " (tip "
+                + EconomyRules.Money(p.Tip) + ", " + (p.Card ? "card" : "change " + EconomyRules.Money(s.ChangeGiven) + " of " + EconomyRules.Money(p.ChangeDue))
+                + (s.Automatic ? ", settled by the register" : string.Empty) + "); review " + review.Stars + " stars, " + ReviewRules.KeyId(review.Key));
+            if (_customers.TryGetValue(p.GuestId, out Customer customer))
+                customer.ServerLeave(CustomerRules.ReviewText(review), CustomerRules.MoodOf(review), _entry.position, OnExited);
+            MovePayers();
+            PublishShift();
+            PublishRegister();
+        }
+
+        /// <summary>Spec 032: the payee of a waiting payment left the server: the guest pays by itself (the money is still theirs).</summary>
+        private void SettleForPayeesWhoLeft()
+        {
+            if (_payees.Count == 0) return;
+            _payeeGone.Clear();
+            foreach (KeyValuePair<int, PickupInteractor> kv in _payees)
+                if (kv.Value == null || !kv.Value.IsSpawned) _payeeGone.Add(kv.Key);
+            foreach (int guest in _payeeGone)
+            {
+                _payees.Remove(guest);
+                if (_desk.SettleAutomatically(guest, WalletFor(guest), out RegisterSettlement s)) Finish(s);
+            }
+        }
+
+        /// <summary>The wallet of the payee of guest <paramref name="guestId"/> (null without an economy).</summary>
+        private IRegisterWallet WalletFor(int guestId)
+        {
+            if (_economy == null) return null;
+            _payees.TryGetValue(guestId, out PickupInteractor payee);
+            return new GuestWallet(_economy, payee);
+        }
+
+        /// <summary>Spec 032: <see cref="IRegisterWallet"/> through the economy service (the payee may have left; its account stays).</summary>
+        private sealed class GuestWallet : IRegisterWallet
+        {
+            private readonly EconomyService _economy;
+            private readonly PickupInteractor _payee;
+
+            public GuestWallet(EconomyService economy, PickupInteractor payee)
+            {
+                _economy = economy;
+                _payee = payee;
+            }
+
+            public CookOutcome Pay(int payee, long amount, out long paid)
+            {
+                NetworkObject nob = _payee != null && _payee.IsSpawned && _payee.OwnerId == payee ? _payee.NetworkObject : null;
+                return _economy.TryPayGuest(payee, nob, amount, out paid) ? CookOutcome.Ok : CookOutcome.SimRefused;
+            }
+        }
+
+        /// <summary>
+        /// Spec 032: patience drains for every guest standing at its queue slot (the pure <see cref="PatienceBook"/>); one whose
+        /// patience ran out leaves (missed, reason Patience). The ring's byte goes out at most every <see cref="PatienceBook.SyncSeconds"/>.
+        /// </summary>
+        private void UpdatePatience(float dt, float now)
+        {
+            if (!_shift.IsOpen || _patience.Count == 0) return;
+            _atSlot ??= id => _customers.TryGetValue(id, out Customer c) && c != null && c.ServerAtTarget;
+            _patience.Tick(dt, now, _queue.Entries, _atSlot, _outOfPatience, _patienceBytes);
+            foreach (KeyValuePair<int, byte> kv in _patienceBytes)
+                if (_customers.TryGetValue(kv.Key, out Customer c)) c.ServerSetPatience(kv.Value);
+            if (_outOfPatience.Count == 0) return;
+            foreach (int id in _outOfPatience)
+            {
+                _queue.Remove(id);
+                _arrivedAt.Remove(id);
+                _guests.Remove(id);
+                if (_customers.TryGetValue(id, out Customer customer))
+                {
+                    customer.ServerSetPatience(0);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Patience), CustomerRules.MoodMissed, _entry.position, OnExited);
+                    Debug.Log("[Customers] a guest ran out of patience (" + Menu.NameOf(customer.Dish.Value) + ")");
+                }
+            }
+            _shift.RecordMissed(_outOfPatience.Count, MissReason.Patience);
             Sync();
             PublishShift();
         }
@@ -173,28 +406,34 @@ namespace Worktown.Game.Npc
             foreach (QueuedCustomer gone in _leaving)
             {
                 _arrivedAt.Remove(gone.Id);
+                _guests.Remove(gone.Id);
+                _patience.Remove(gone.Id);
                 if (_customers.TryGetValue(gone.Id, out Customer customer))
-                    customer.ServerLeave("Too slow...", CustomerRules.MoodMissed, _entry.position, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Gone), CustomerRules.MoodMissed, _entry.position, OnExited);
             }
-            _shift.RecordMissed(_leaving.Count);
+            _shift.RecordMissed(_leaving.Count, MissReason.Gone);
 
-            // At most MaxVisible customer objects exist at once, including those still walking out;
+            // At most MaxVisible customer objects exist at once, including those still walking out and (spec 032) those paying;
             // the rest join when someone has left (OnExited syncs again). Review finding.
             int free = CustomerRules.MaxVisible - _customers.Count;
             int spawned = 0;
             foreach (string wish in _joining)
             {
                 if (spawned >= free) break;
-                MenuDish dish = Menu.Draw(_orders, wish, Menu.CrateIngredients);
+                MenuDish dish = DrawDish(wish, out GuestOrder order, out float patienceScale);
                 if (dish == null) continue; // cannot happen: only markets with dishes are desired
+                RecipeTemplate template = dish.Template != null ? RecipeTemplates.ById(dish.Template) : null;
+                byte modifiers = OrderModifiers.Pack(template, order.Modifiers);
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_customerPrefab, true);
                 nob.transform.SetPositionAndRotation(_entry.position, _entry.rotation);
                 var customer = nob.GetComponent<Customer>();
-                customer.ServerInit(wish, dish.Id, _entry.position); // before Spawn: values go out with the spawn
+                customer.ServerInit(wish, dish.Id, modifiers, _entry.position); // before Spawn: values go out with the spawn
                 _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;
-                _queue.Add(nob.ObjectId, wish, dish.Id);
+                _queue.Add(nob.ObjectId, wish, dish.Id, modifiers);
                 _arrivedAt[nob.ObjectId] = Time.time;
+                _guests[nob.ObjectId] = new Guest { Order = order, Modifiers = modifiers };
+                _patience.Add(nob.ObjectId, GuestOrders.PatienceSeconds(order, CustomerRules.LayersOf(dish, modifiers)) * patienceScale);
                 spawned++;
             }
 
@@ -209,14 +448,44 @@ namespace Worktown.Game.Npc
             PublishTickets();
         }
 
+        /// <summary>Spec 032: the next guest's dish (022's seeded draw) and its order details (the same RNG, GuestOrders).</summary>
+        private MenuDish DrawDish(string wish, out GuestOrder order, out float patienceScale)
+        {
+            patienceScale = _patienceScale;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (_tourOrders != null && _tourOrders.TryNext(wish, out MenuDish scripted, out order, out patienceScale)) return scripted;
+#endif
+            MenuDish dish = Menu.Draw(_orders, wish, Menu.CrateIngredients);
+            order = GuestOrders.Draw(_orders, dish != null && dish.Template != null ? RecipeTemplates.ById(dish.Template) : null);
+            return dish;
+        }
+
+        /// <summary>Spec 032: the paying guests stand in line at the register, the first in front of it.</summary>
+        private void MovePayers()
+        {
+            IReadOnlyList<RegisterPayment> line = _desk.Line;
+            for (int i = 0; i < line.Count; i++)
+                if (_customers.TryGetValue(line[i].GuestId, out Customer customer))
+                    customer.ServerSetTarget(PaySlot(i), _queueFacing);
+        }
+
+        private Vector3 PaySlot(int index)
+        {
+            Vector3 head = _payHead != null ? _payHead.position : _queueHead.position;
+            return CustomerRules.QueueSlot(head, _payDirection, index);
+        }
+
         private void OnExited(Customer customer)
         {
             _customers.Remove(customer.ObjectId);
+            _guests.Remove(customer.ObjectId);
+            _patience.Remove(customer.ObjectId);
+            if (_desk.Remove(customer.ObjectId)) _payees.Remove(customer.ObjectId); // gone before paying (cannot happen: it waits)
             if (customer.IsSpawned) _networkManager.ServerManager.Despawn(customer.NetworkObject);
             Sync(); // room for a waiting customer
         }
 
-        /// <summary>The rail cards: every queued order with the in-game minutes it has waited.</summary>
+        /// <summary>The rail cards: every queued order with the in-game minutes it has waited and (spec 032) its modifiers.</summary>
         private void PublishTickets()
         {
             if (_rail == null || !_rail.IsSpawned) return;
@@ -225,7 +494,7 @@ namespace Worktown.Game.Npc
             foreach (QueuedCustomer entry in _queue.Entries)
             {
                 float since = _arrivedAt.TryGetValue(entry.Id, out float at) ? at : now;
-                _tickets.Add(CustomerRules.PackTicket(entry.Dish, CustomerRules.WaitMinutes(now - since)));
+                _tickets.Add(CustomerRules.PackTicket(entry.Dish, CustomerRules.WaitMinutes(now - since), entry.Modifiers));
             }
             _rail.ServerSetTickets(_tickets);
         }
@@ -233,6 +502,15 @@ namespace Worktown.Game.Npc
         private void PublishShift()
         {
             if (_rail != null && _rail.IsSpawned) _rail.ServerSetShift(_shift);
+        }
+
+        /// <summary>Spec 032: the register's head payer and tray for every client.</summary>
+        private void PublishRegister()
+        {
+            if (_register == null || !_register.IsSpawned) return;
+            RegisterPayment head = _desk.Head;
+            _register.ServerSet(RegisterRules.PackPayment(head != null, head != null && head.Card, head != null ? head.ChangeDue : 0),
+                head != null ? head.Tray : 0);
         }
     }
 }

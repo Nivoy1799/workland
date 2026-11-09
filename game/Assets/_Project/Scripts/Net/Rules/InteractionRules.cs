@@ -104,9 +104,14 @@ namespace Worktown.Game.Net.Rules
             return BuildRules.FoldsByHand(layers, target.Mode) ? InteractionAction.Fold : InteractionAction.Take;
         }
 
-        /// <summary>Spec 031, a tool on the board: a dispenser squeezes onto an open build, a packaging fits as <see cref="BuildRules.CanPackage"/> says.</summary>
-        private static InteractionAction ToolAction(AimTarget target)
+        /// <summary>
+        /// Spec 031, a tool on the board: a dispenser squeezes onto an open build, a packaging fits as <see cref="BuildRules.CanPackage"/>
+        /// says. 031b review: the hands count: a carried build gets no tool (the tools work on the board's build, and the carried one
+        /// is what a click would seem to mean), and a pick-up in flight none either.
+        /// </summary>
+        private static InteractionAction ToolAction(Held held, AimTarget target)
         {
+            if (held.IsBuild || held.IsPending) return InteractionAction.None;
             int tool = target.Option;
             if (BuildRules.IsDispenser(tool))
                 return SqueezeCheck(target) == CookOutcome.Ok ? InteractionAction.Squeeze : InteractionAction.None;
@@ -124,6 +129,9 @@ namespace Worktown.Game.Net.Rules
         {
             CookOutcome can = BuildRules.CanSqueeze(target.ContentCount, target.Mode);
             if (can != CookOutcome.Ok) return can;
+            // 031b review: a full build takes no new layer (the server refuses the press; a merge onto the same sauce on top is the
+            // one case the client cannot see, so it is not offered either).
+            if (target.ContentCount >= VesselRules.Capacity(VesselKind.Assembly)) return CookOutcome.VesselFull;
             return BuildRules.IsSqueezing(target.StoveFlags, target.Option) ? CookOutcome.DispenserBusy : CookOutcome.Ok;
         }
 
@@ -136,6 +144,7 @@ namespace Worktown.Game.Net.Rules
             switch (why)
             {
                 case CookOutcome.DispenserBusy: return "Someone is using that sauce";
+                case CookOutcome.VesselFull: return "The build is full";
                 case CookOutcome.StationEmpty: return "Start with a wrap or flatbread on the board";
                 case CookOutcome.BuildClosed: return BuildRules.IsDispenser(tool) ? "It is closed" : "It is packed already";
                 case CookOutcome.FoldFirst: return "Fold it first";
@@ -143,6 +152,10 @@ namespace Worktown.Game.Net.Rules
                 default: return null;
             }
         }
+
+        /// <summary>Spec 032: why a register slot does nothing now (RegisterRules.Reason), or null when it acts.</summary>
+        private static string RegisterReason(AimTarget target) =>
+            Worktown.Game.Shop.RegisterRules.Reason(target.Option, (ushort)(target.Price < 0 ? 0 : target.Price), target.ContentCount);
 
         /// <summary>Spec 031: "Click · wrap in paper ($35)", "Click · into a box ($40)", "Click · into a bag ($35)".</summary>
         public static string PackPrompt(int packaging, long price)
@@ -204,7 +217,10 @@ namespace Worktown.Game.Net.Rules
                 case StationKind.PlateShelf: return held.IsHolding ? InteractionAction.None : InteractionAction.Take;
                 case StationKind.Counter: return SellsAtCounter(held) ? InteractionAction.Sell : InteractionAction.None;
                 case StationKind.Assembly: // spec 031: a dispenser or the packaging rack; the board's body itself does nothing
-                    return target.Vessel == VesselKind.Assembly ? ToolAction(target) : InteractionAction.None;
+                    return target.Vessel == VesselKind.Assembly ? ToolAction(held, target) : InteractionAction.None;
+                case StationKind.Register: // spec 032: a slot of the register (any hands: the food is already handed over)
+                    return target.Option >= 0 && target.Option < Worktown.Game.Shop.RegisterRules.SlotCount && RegisterReason(target) == null
+                        ? InteractionAction.Pay : InteractionAction.None;
                 default: return InteractionAction.None; // the stove's body: its knobs, buttons and burners do the work
             }
         }
@@ -229,6 +245,9 @@ namespace Worktown.Game.Net.Rules
             if (!held.IsFood) return false;
             if (target.Kind == AimKind.Station) return target.Station == StationKind.Counter;
             if (target.Kind != AimKind.Vessel) return false;
+            // 031b review: a build goes into no pan, pot, basket, griddle, cutting board or bowl (the sim's ops forbid builds); only
+            // an empty plate takes a lone build, as the server allows.
+            if (held.IsBuild && (target.Vessel != VesselKind.Plate || target.ContentCount > 0)) return false;
             return VesselRules.CanPutIn(target.Vessel, target.ContentCount, held.IsPlated) == CookOutcome.Ok;
         }
 
@@ -257,6 +276,7 @@ namespace Worktown.Game.Net.Rules
                 case AimKind.Vessel: return VesselReason(held, target);
                 case AimKind.Station:
                     if (target.Station == StationKind.Assembly) return target.Vessel == VesselKind.Assembly ? ToolReason(target) : null; // spec 031
+                    if (target.Station == StationKind.Register) return RegisterReason(target); // spec 032
                     if (target.Station != StationKind.Counter || !held.IsVessel) return null;
                     if (held.Vessel == VesselKind.Plate) return "Put food on the plate first";
                     return held.HasContents ? "Pour it onto a plate first" : null;
@@ -300,6 +320,7 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Squeeze: return HoldKey + " · squeeze " + (string.IsNullOrEmpty(target.Name) ? "sauce" : target.Name); // spec 031
                 case InteractionAction.Fold: return Click("fold " + TakeWhat(target));
                 case InteractionAction.Pack: return PackPrompt(BuildRules.PackagingOf(target.Option), target.Price);
+                case InteractionAction.Pay: return Click(Worktown.Game.Shop.RegisterRules.ActionWords(target.Option, target.ContentCount)); // spec 032
                 case InteractionAction.Flip: return Click("flip " + TakeWhat(target)); // spec 030
                 case InteractionAction.Cut: return "Drag down · cut   Right click · turn";
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));

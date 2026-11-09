@@ -107,6 +107,8 @@ namespace Worktown.Game.Art
         FoodWrapFolded,
         FoodWrapPaper,
         PropTakeawayBox,
-        PropPaperBag
+        PropPaperBag,
+        /// <summary>Spec 032: the register on the counter (graybox, RegisterArtRules).</summary>
+        StationRegister
     }
 }

@@ -29,6 +29,8 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 031: empty hands fold the open build on a wrap or flatbread.</summary>
         Fold,
         /// <summary>Spec 031: wrap the build in paper, or put it in a box or a bag, from the board's rack.</summary>
-        Pack
+        Pack,
+        /// <summary>Spec 032: a slot of the register: a coin or note into the change, take it back, hand it over, the card terminal.</summary>
+        Pay
     }
 }

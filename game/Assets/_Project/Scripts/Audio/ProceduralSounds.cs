@@ -423,6 +423,42 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>Spec 032: a coin dropped in the tray: one short bright metal tick with a second, quieter bounce.</summary>
+        public static float[] Clink()
+        {
+            var s = new float[(int)(SampleRate * 0.22f)];
+            int bounce = (int)(SampleRate * 0.045f);
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float v = Bell(t, 3520f, 0.16f, 0.05f) + Bell(t, 5274f, 0.07f, 0.03f);
+                if (i >= bounce)
+                {
+                    float t2 = (i - bounce) / (float)SampleRate;
+                    v += Bell(t2, 3729f, 0.07f, 0.035f);
+                }
+                s[i] = v;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 032: the card terminal: a clean electronic double beep (square-ish, soft edges).</summary>
+        public static float[] Beep()
+        {
+            var s = new float[(int)(SampleRate * 0.32f)];
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                bool on = t < 0.11f || (t > 0.16f && t < 0.27f);
+                float local = t < 0.13f ? t : t - 0.16f;
+                float edge = Math.Min(1f, Math.Min(local / 0.004f, Math.Max(0f, 0.11f - local) / 0.01f));
+                float tone = (float)Math.Sin(2.0 * Math.PI * 1760.0 * t);
+                tone = tone + 0.25f * (float)Math.Sin(2.0 * Math.PI * 5280.0 * t);
+                s[i] = on ? tone * 0.14f * edge : 0f;
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -456,6 +492,8 @@ namespace Worktown.Game.Audio
                 case SoundKey.Squeeze: return Squeeze();
                 case SoundKey.Fold: return Fold();
                 case SoundKey.Paper: return Paper();
+                case SoundKey.Clink: return Clink(); // spec 032
+                case SoundKey.Beep: return Beep();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }

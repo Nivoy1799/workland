@@ -74,6 +74,69 @@ namespace Worktown.Game.Npc
             return misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
         }
 
+        /// <summary>
+        /// Spec 032: the served item against a guest's order: the dish and its packed modifiers (<see cref="OrderModifiers.Pack"/>).
+        /// A dish built on the board is checked per layer with the modifiers (<see cref="OrderModifiers.Check"/>, the 031 template
+        /// match extended): Exact with no step short, Close with one, Wrong with more, no build or no main ingredient; its quality is
+        /// the order's (scored against the order's template). Other dishes match as in 022 (no modifiers exist for them) with the
+        /// item's own rating. Misses: 0 Exact, 1 Close, at least 2 Wrong.
+        /// </summary>
+        public static OrderFit Fit(Item served, MenuDish ordered, byte modifiers)
+        {
+            if (served == null || ordered == null) return new OrderFit(OrderMatch.Wrong, 2, 0f, 1);
+            float itemQuality = Worktown.Sim.Cooking.ItemRater.Rate(served).Quality;
+            RecipeTemplate template = ordered.Template != null ? RecipeTemplates.ById(ordered.Template) : null;
+            if (template == null)
+            {
+                OrderMatch plain = Match(served, ordered);
+                int m = plain == OrderMatch.Exact ? 0 : plain == OrderMatch.Close ? 1 : 2;
+                return new OrderFit(plain, m, itemQuality, Worktown.Game.Cooking.StarRating.Stars(itemQuality));
+            }
+            if (!Assembly.IsBuild(served) || !HasMainLayer(served, ordered))
+                return new OrderFit(OrderMatch.Wrong, 2, itemQuality, Worktown.Game.Cooking.StarRating.Stars(itemQuality));
+            ModifierCheck check = OrderModifiers.Check(served, template, OrderModifiers.Unpack(template, modifiers));
+            int misses = check.Misses;
+            OrderMatch match = misses == 0 ? OrderMatch.Exact : misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
+            float quality = check.Score.Quality;
+            return new OrderFit(match, misses, quality, Worktown.Game.Cooking.StarRating.Stars(quality));
+        }
+
+        /// <summary>Spec 032: <see cref="Fit"/>'s match only.</summary>
+        public static OrderMatch Match(Item served, MenuDish ordered, byte modifiers) => Fit(served, ordered, modifiers).Match;
+
+        private static bool HasMainLayer(Item served, MenuDish ordered)
+        {
+            if (ordered.Main == null) return true;
+            foreach (Item layer in Assembly.LayersOf(served))
+                if (Assembly.BaseOf(layer) == ordered.Main) return true;
+            return false;
+        }
+
+        /// <summary>Spec 032: the guest's share of the sale price in permille by the match (no star tip any more: the tip is
+        /// <see cref="Worktown.Sim.Economy.TipRules"/>): exact 100 %, close 60 %, wrong 25 %.</summary>
+        public static int GuestSharePermille(OrderMatch match)
+        {
+            switch (match)
+            {
+                case OrderMatch.Exact: return ExactPermille;
+                case OrderMatch.Close: return ClosePermille;
+                default: return WrongPermille;
+            }
+        }
+
+        /// <summary>
+        /// Spec 032: the bill's share of the sim's sale payout in permille: the match's share, times the order's quality over the
+        /// item's in the sim's demand formula (price × (500 + q) / 1000), so a build the guest asked to be without a layer is paid
+        /// as the order, not as an incomplete recipe. Deterministic; at most 1.5 × the share (q 0 to 1000).
+        /// </summary>
+        public static int BillPermille(OrderMatch match, float itemQuality, float orderQuality)
+        {
+            long share = GuestSharePermille(match);
+            long qi = 500 + Worktown.Sim.Economy.PriceRules.QualityPermille(itemQuality);
+            long qo = 500 + Worktown.Sim.Economy.PriceRules.QualityPermille(orderQuality);
+            return (int)(share * qo / qi);
+        }
+
         /// <summary>Share of the sale price in permille: exact 100 % + 10 % per star above 2, close 60 %, wrong 25 %.</summary>
         public static int PayPermille(OrderMatch match, int stars)
         {

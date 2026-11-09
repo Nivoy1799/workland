@@ -36,6 +36,11 @@ namespace Worktown.Game.Npc
         public readonly SyncVar<byte> Dish = new SyncVar<byte>(Menu.None);
         /// <summary>Spec 022: <see cref="CustomerRules.MoodWaiting"/> and the others.</summary>
         public readonly SyncVar<byte> Mood = new SyncVar<byte>(CustomerRules.MoodWaiting);
+        /// <summary>
+        /// Spec 032: the patience left (255 full, 0 gone; GuestPatience.ToByte), for the ring over the guest. One byte, sent only
+        /// when it changes (a few times a second while waiting, never while it pays): the server owns the clock, the client only draws.
+        /// </summary>
+        public readonly SyncVar<byte> Patience = new SyncVar<byte>(255);
 
         [SerializeField] private TextMesh _label;
         [Tooltip("Spec 024: every renderer of every character variant; tinted with the wish colour.")]
@@ -49,6 +54,21 @@ namespace Worktown.Game.Npc
         public string FullText => Bubble.Value;
         /// <summary>Spec 027d: still waiting for its order (not leaving with a remark).</summary>
         public bool Waiting => Mood.Value == CustomerRules.MoodWaiting && !string.IsNullOrEmpty(Bubble.Value);
+
+        /// <summary>Spec 032: served and waiting at the register to pay.</summary>
+        public bool Paying => Mood.Value == CustomerRules.MoodPaying;
+
+        /// <summary>Spec 032, server: standing at its slot (not walking, not leaving): its patience drains only then.</summary>
+        public bool ServerAtTarget
+        {
+            get
+            {
+                if (_leaving) return false;
+                Vector3 d = transform.position - _target;
+                d.y = 0f;
+                return d.sqrMagnitude < 0.0025f;
+            }
+        }
 
         // Server only.
         private Vector3 _target;
@@ -68,12 +88,16 @@ namespace Worktown.Game.Npc
             Refresh();
         }
 
-        internal void ServerInit(string wish, byte dish, Vector3 target)
+        internal void ServerInit(string wish, byte dish, Vector3 target) => ServerInit(wish, dish, 0, target);
+
+        /// <summary>Spec 032: with the order's packed modifiers: the bubble says them in plain words; patience starts full.</summary>
+        internal void ServerInit(string wish, byte dish, byte modifiers, Vector3 target)
         {
             Wish.Value = wish;
             Dish.Value = dish;
             Mood.Value = CustomerRules.MoodWaiting;
-            Bubble.Value = dish == Menu.None ? CustomerRules.WishText(wish) : CustomerRules.OrderText(dish);
+            Patience.Value = 255;
+            Bubble.Value = dish == Menu.None ? CustomerRules.WishText(wish) : CustomerRules.OrderText(dish, modifiers);
             _target = target;
             _facing = Vector3.zero;
             _leaving = false;
@@ -87,6 +111,24 @@ namespace Worktown.Game.Npc
             _target = target;
             facing.y = 0f;
             _facing = facing;
+        }
+
+        /// <summary>Spec 032, server: the patience byte (only a change is sent).</summary>
+        internal void ServerSetPatience(byte left)
+        {
+            if (Patience.Value != left) Patience.Value = left;
+        }
+
+        /// <summary>Spec 032, server: the guest took its food and walks to the register (<paramref name="target"/>) to pay.</summary>
+        internal void ServerPay(string bubble, Vector3 target, Vector3 facing)
+        {
+            Bubble.Value = bubble;
+            Mood.Value = CustomerRules.MoodPaying;
+            _target = target;
+            facing.y = 0f;
+            _facing = facing;
+            _leaving = false;
+            Refresh();
         }
 
         internal void ServerLeave(string bubble, byte mood, Vector3 exit, Action<Customer> onExit)

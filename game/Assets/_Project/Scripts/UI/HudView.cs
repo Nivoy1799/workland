@@ -312,6 +312,12 @@ namespace Worktown.Game.UI
                 case CookOutcome.FoldFirst: return "Fold it first";
                 case CookOutcome.DispenserBusy: return "Someone is using that sauce";
                 case CookOutcome.NothingToFold: return "Only a wrap or a flatbread folds";
+                case CookOutcome.NoPayment: return "Nobody is paying"; // spec 032
+                case CookOutcome.NotYourGuest: return "Another cook takes that payment";
+                case CookOutcome.PaysByCard: return "They pay by card";
+                case CookOutcome.PaysCash: return "They pay cash";
+                case CookOutcome.TrayFull: return "The tray is full";
+                case CookOutcome.TrayEmpty: return "The tray is empty";
                 default: return outcome.ToString();
             }
         }

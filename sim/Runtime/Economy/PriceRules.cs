@@ -52,8 +52,11 @@ namespace Worktown.Sim.Economy
 
         /// <summary>
         /// Sum of grocer prices of the item's components; null if any component is unpriced. Spec 031b: a squeezed portion of
-        /// sauce counts at the least its portion was charged (<see cref="PortionPercentOf"/>), not at the bottle's price, so the
-        /// wholesaler's cap (<see cref="SurplusCap"/>) never pays more than was spent. Items without a squeeze are unchanged.
+        /// sauce counts at the least share any squeeze of its amount bucket was charged (<see cref="PortionPercentOf"/>), not at
+        /// the bottle's price. This is a ceiling, not the exact amount paid: rounding can put it $1 above what several merged
+        /// squeezes cost (three 10 % taps of a $14 bottle cost 3 x $1, a "lots" portion counts $4); the -1 in
+        /// <see cref="SurplusCap"/> absorbs that, so the wholesaler's cap stays below what was spent. Items without a squeeze
+        /// are unchanged.
         /// </summary>
         public static long? ItemCost(EconomyCatalog c, Item item)
         {

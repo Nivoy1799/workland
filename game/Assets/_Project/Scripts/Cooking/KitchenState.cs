@@ -1399,6 +1399,16 @@ namespace Worktown.Game.Cooking
             CookOutcome can = BuildRules.CanSqueeze(LayerCount(spot), BuildMode(spot));
             if (can != CookOutcome.Ok) return can;
             long key = SqueezeKey(board, dispenser);
+            // 031b review: a press that could never become a layer (a full build) is refused now, so nobody holds a dispenser busy
+            // for free. The preview merges with the same sauce on top, as the release would.
+            if (!_squeezes.ContainsKey(key))
+            {
+                string sauce = BuildRules.SauceOf(dispenser);
+                OperationResult probe = _factory.Apply(Assembly.SqueezeOperationId, new[] { SauceBase(sauce) }, Assembly.SqueezeParams(0f));
+                if (!probe.Ok || probe.Item == null) return CookOutcome.SimRefused;
+                CookOutcome fits = TryPreviewLayer(spot, probe.Item, out _, 0f, sauce);
+                if (fits != CookOutcome.Ok) return fits;
+            }
             if (_squeezes.TryGetValue(key, out SqueezeRecord running))
             {
                 // Spec 031b 10.0: a repeated press by the same player keeps the original start (Ok, nothing changes), so pressing

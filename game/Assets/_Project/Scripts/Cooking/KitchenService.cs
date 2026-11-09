@@ -147,6 +147,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Griddle: return UseGriddle(station, option); // spec 030
                 case StationKind.Assembly: return UseAssembly(player, station, option); // spec 031
                 case StationKind.PlateShelf: return TakePlate(player);
+                // Spec 032: the register's slots (the change tray, take back, hand over, the card terminal); the guests' service decides.
+                case StationKind.Register: return _customers != null ? _customers.UseRegister(player, option) : CookOutcome.NoPayment;
                 default: return CookOutcome.UnknownStation;
             }
         }
@@ -286,7 +288,7 @@ namespace Worktown.Game.Cooking
 
         private CookOutcome StartSqueeze(PickupInteractor player, Station board, int d)
         {
-            CookOutcome started = Desk.Press(board.Index, d, player.OwnerId, Tick);
+            CookOutcome started = Desk.Press(board.Index, d, player.OwnerId, Tick, WalletOf(player));
             if (started != CookOutcome.Ok) return started;
             _squeezers[BurnerKey(board.Index, d)] = player;
             RefreshAssembly(board);
@@ -363,7 +365,12 @@ namespace Worktown.Game.Cooking
                     : _economy.TryBuyPortion(_player.NetworkObject, grocerId, percent, out cost);
                 return StockRules.PaidOutcome(paid);
             }
+
+            public bool CanAfford(int owner, string grocerId, int percent) =>
+                _player != null && _player.OwnerId == owner && _economy.CanAffordPortion(_player.NetworkObject, grocerId, percent);
         }
+
+        private static readonly System.Func<PickupInteractor, bool> IsPresent = p => p != null && p.IsSpawned;
 
         /// <summary>Spec 031: the board's light byte (who squeezes).</summary>
         private void RefreshAssembly(Station board)
@@ -380,14 +387,11 @@ namespace Worktown.Game.Cooking
         {
             if (_squeezers.Count > 0)
             {
-                _leftSqueezes.Clear();
-                foreach (KeyValuePair<long, PickupInteractor> kv in _squeezers)
-                    if (kv.Value == null || !kv.Value.IsSpawned) _leftSqueezes.Add(kv.Key);
+                // 031b review: the selection and the cancel are the desk's pure helper (tested); here only the refresh and the log.
+                Desk.DropLeftSqueezes(_squeezers, IsPresent, _leftSqueezes);
                 foreach (long key in _leftSqueezes)
                 {
-                    int board = (int)(key >> 8), d = (int)(key & 0xFF);
-                    _squeezers.Remove(key);
-                    Desk.Cancel(board, d);
+                    int board = AssemblyDesk.BoardOfKey(key), d = AssemblyDesk.DispenserOfKey(key);
                     RefreshAssembly(board >= 0 && board < _stations.Length ? _stations[board] : null);
                     Debug.Log("[Kitchen] the squeeze of a player who left was dropped (board " + board + ", dispenser " + d + ")");
                 }
@@ -926,27 +930,23 @@ namespace Worktown.Game.Cooking
             string stars = StarRating.Format(starCount);
             string entry;
             bool served = false;
-            int customerId = 0;
-            Worktown.Game.Npc.OrderMatch match = Worktown.Game.Npc.OrderMatch.Wrong;
+            Worktown.Game.Npc.GuestPick pick = default;
             long soldPayout = 0;
-            int paidPermille = EconomyRules.FullPayPermille;
 
             if (_economy != null)
             {
                 Item plated = item;
                 if (plate == null && _kitchen.TryPlate(held.ObjectId, out plated) != CookOutcome.Ok) return CookOutcome.CannotSell;
-                // Spec 022: which waiting customer gets it and the share of the price they pay (a pure read; a failure
-                // here only means "no customer", the sale then pays the full sim price as before).
+                // Spec 022: which waiting customer gets it (a pure read; a failure here only means "no customer", the sale then
+                // pays the full sim price as before). Spec 032: with its modifiers; the guest pays later at the register, so a sale
+                // to it credits nothing now (TrySellForGuest) and the guest's bill comes from the sim's payout.
                 bool forCustomer = false;
-                byte dish = Worktown.Game.Npc.Menu.None;
-                int payPermille = EconomyRules.FullPayPermille;
                 if (_customers != null)
                 {
-                    try { forCustomer = _customers.TryPick(plated, starCount, out customerId, out dish, out match, out payPermille); }
+                    try { forCustomer = _customers.TryPick(plated, out pick); }
                     catch (System.Exception e) { Debug.LogException(e); forCustomer = false; }
-                    if (!forCustomer) payPermille = EconomyRules.FullPayPermille;
                 }
-                SaleResult sale = _economy.TrySell(player.NetworkObject, plated, payPermille);
+                SaleResult sale = forCustomer ? _economy.TrySellForGuest(player.NetworkObject, plated) : _economy.TrySell(player.NetworkObject, plated);
                 if (!sale.Ok)
                 {
                     Debug.Log("[Economy] player " + player.OwnerId + " could not sell " + name + ": " + sale.Error);
@@ -955,14 +955,16 @@ namespace Worktown.Game.Cooking
                 string where = sale.Channel == SaleChannel.NpcDemand ? sale.MarketId : "wholesaler";
                 served = forCustomer && sale.Channel == SaleChannel.NpcDemand;
                 soldPayout = sale.Payout;
-                if (served) paidPermille = payPermille;
-                entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
-                    + EconomyRules.Money(sale.Payout) + " (" + where + ")";
                 if (served)
-                    entry += " · " + Worktown.Game.Npc.Menu.NameOf(dish) + " order: " + Worktown.Game.Npc.OrderRules.Describe(match);
-                Debug.Log("[Economy] player " + player.OwnerId + " sold " + name + " for " + EconomyRules.Money(sale.Payout)
-                    + " to " + where + " q=" + quality.ToString("0.00")
-                    + (served ? " (" + Worktown.Game.Npc.OrderRules.Describe(match) + ", " + payPermille + " permille)" : string.Empty));
+                    entry = "Player " + player.OwnerId + " handed " + name + " " + stars + " to a guest · "
+                        + Worktown.Game.Npc.Menu.NameOf(pick.Dish) + " order: " + Worktown.Game.Npc.OrderRules.Describe(pick.Fit.Match)
+                        + " · pays at the register";
+                else
+                    entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
+                        + EconomyRules.Money(sale.Payout) + " (" + where + ")";
+                Debug.Log("[Economy] player " + player.OwnerId + (served ? " handed " : " sold ") + name + " (sim payout "
+                    + EconomyRules.Money(sale.Payout) + ") to " + where + " q=" + quality.ToString("0.00")
+                    + (served ? " (" + Worktown.Game.Npc.OrderRules.Describe(pick.Fit.Match) + ", bill " + pick.BillPermille + " permille)" : string.Empty));
             }
             else
             {
@@ -980,16 +982,20 @@ namespace Worktown.Game.Cooking
             if (_feed != null)
             {
                 _feed.ServerAdd(entry);
-                // Spec 027c: the reward moment over the counter for everyone (stars, coin, tip), through the feed's SyncVar.
-                _feed.ServerReward(counter.Index, starCount, soldPayout, Worktown.Game.Npc.OrderRules.TipOf(soldPayout, paidPermille));
+                // Spec 027c: the reward moment over the counter for everyone (stars, coin), through the feed's SyncVar. Spec 032: a
+                // guest's reward comes when it pays at the register (its tip is known then); a plain sale has no tip.
+                if (!served) _feed.ServerReward(counter.Index, starCount, soldPayout, 0);
             }
 
             // Spec 014, after the sale is complete: customers must never be able to break the money transaction
-            // (review blocker). Spec 022: the picked customer leaves with what they paid.
-            if (served && _customers != null)
+            // (review blocker). Spec 032: the guest takes the dish and pays at the register; should that fail, the bill is paid now.
+            if (served)
             {
-                try { _customers.OnServed(customerId, match, soldPayout, starCount); }
+                bool handed = false;
+                try { handed = _customers.OnHandedOver(pick, player, soldPayout, out _); }
                 catch (System.Exception e) { Debug.LogException(e); }
+                if (!handed)
+                    _economy.TryPayGuest(player.OwnerId, player.NetworkObject, EconomyRules.ApplyPermille(soldPayout, pick.BillPermille), out _);
             }
             return CookOutcome.Ok;
         }

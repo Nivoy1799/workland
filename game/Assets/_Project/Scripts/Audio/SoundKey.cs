@@ -31,6 +31,10 @@ namespace Worktown.Game.Audio
         Plop,
         Squeeze,
         Fold,
-        Paper
+        Paper,
+        /// <summary>Spec 032: a coin or note into the register's change tray.</summary>
+        Clink,
+        /// <summary>Spec 032: the card terminal.</summary>
+        Beep
     }
 }

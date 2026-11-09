@@ -96,6 +96,17 @@ namespace Worktown.Game.Net.Rules
                 boardFlags, name, price, PlaceSpots.None, false, false, buildMode);
         }
 
+        /// <summary>
+        /// Spec 032: a slot of the register (Shop.RegisterRules: <see cref="Option"/> the slot), with what clients see of the payment:
+        /// the head payer's packed short in <see cref="Price"/> (RegisterRules.PackPayment) and the change tray's sum in
+        /// <see cref="ContentCount"/> (as this player sees it, its own clicks first).
+        /// </summary>
+        public static AimTarget RegisterSlot(int option, ushort payment, int tray)
+        {
+            return new AimTarget(AimKind.Station, StationKind.Register, default, tray, null, option, 0, "the register", payment,
+                PlaceSpots.None, false, false);
+        }
+
         /// <summary>A free item that is no cookware (food, the knife, a box).</summary>
         public static AimTarget Item(string name)
         {

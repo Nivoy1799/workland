@@ -63,6 +63,16 @@ namespace Worktown.Game.Tests
                 cost = PriceRules.PortionCost(80, percent);
                 return CookOutcome.Ok;
             }
+
+            /// <summary>031b review: the press's affordability check.</summary>
+            public bool Broke;
+            public int AffordChecks;
+
+            public bool CanAfford(int owner, string grocerId, int percent)
+            {
+                AffordChecks++;
+                return !Broke;
+            }
         }
 
         // ---- 10.0: a repeated press never restarts the squeeze ----
@@ -535,6 +545,158 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CookOutcome.VesselFull, kitchen.TryPutOnBuild(50, Spot), "the board is not empty");
             kitchen.CommitBuild(Spot, null);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnBuild(50, Spot));
+        }
+
+        // ---- 031b review fixes (listed in spec 032) ----
+
+        /// <summary>Review 1: third person, a tap of E never squeezes (and so never charges); a hold of 0.2 s or more does,
+        /// measured from that point on.</summary>
+        [Test]
+        public void ThirdPerson_ATapNeverSqueezes_AHoldOfAFifthSecondDoes()
+        {
+            var gate = new SqueezeHoldGate();
+            KitchenState kitchen = BoardWithWrap();
+            var desk = new AssemblyDesk(kitchen);
+            var wallet = new CountingWallet();
+            int presses = 0;
+            void Frame(bool down, bool pressed, double t)
+            {
+                if (gate.Update(true, down, pressed, t) == SqueezeHoldGate.Step.Start)
+                {
+                    presses++;
+                    Assert.AreEqual(CookOutcome.Ok, desk.Press(Board, 0, Owner, Real(t), wallet));
+                }
+            }
+
+            // A tap (0.15 s): the normal E action, no press, no charge.
+            Assert.AreEqual(SqueezeHoldGate.Step.Waiting, gate.Update(true, true, true, 0.0));
+            Assert.IsTrue(gate.OwnsInput);
+            Assert.AreEqual(SqueezeHoldGate.Step.Waiting, gate.Update(true, true, false, 0.1));
+            Assert.AreEqual(SqueezeHoldGate.Step.Tap, gate.Update(true, false, false, 0.15), "let go early: a tap");
+            Assert.IsFalse(gate.Squeezing);
+            Assert.IsFalse(kitchen.IsSqueezing(Board, 0, out _, out _));
+            Assert.AreEqual(0, wallet.Calls + wallet.AffordChecks);
+
+            // The aim leaves the dispenser before the hold time: a tap as well.
+            gate.Update(true, true, true, 1.0);
+            Assert.AreEqual(SqueezeHoldGate.Step.Tap, gate.Update(false, true, false, 1.1));
+
+            // A hold: the press goes out at 0.2 s, the squeeze is measured from there.
+            Frame(true, true, 2.0);
+            Frame(true, false, 2.1);
+            Assert.AreEqual(0, presses, "not yet at 0.1 s");
+            Frame(true, false, 2.2);
+            Assert.AreEqual(1, presses, "pressed at 0.2 s");
+            Assert.IsTrue(gate.Squeezing);
+            Assert.AreEqual(SqueezeHoldGate.Step.Holding, gate.Update(true, true, false, 2.6));
+            Assert.AreEqual(SqueezeHoldGate.Step.None, gate.Update(true, false, false, 3.0));
+            Assert.AreEqual(CookOutcome.Ok, desk.Release(Board, 0, Owner, Real(3.0), Rate, wallet, out AssemblyDesk.SqueezeResult r));
+            Assert.AreEqual(0.8f, r.Seconds, 0.05f, "from the 0.2 s point, not from the key press");
+            Assert.AreEqual(1, wallet.Calls);
+        }
+
+        /// <summary>Review 1: a carried build gets no tool (no squeeze, no packaging); other hands as in 031.</summary>
+        [Test]
+        public void TheTools_ConsiderWhatIsHeld()
+        {
+            byte open = BuildRules.Mode(BuildRules.CloseOpen, BuildRules.PackNone, true);
+            AimTarget sauce = AimTarget.AssemblyTool(0, 0, "garlic-herb sauce", 80, 2, open);
+            Held build = Held.Food("wrap with lettuce slices", false, build: true);
+            Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(build, sauce));
+            Assert.AreEqual(InteractionAction.Squeeze, InteractionRules.ActionFor(Held.Food("lettuce slices", false), sauce), "031: other hands");
+            Assert.AreEqual(InteractionAction.Squeeze, InteractionRules.ActionFor(Held.Nothing, sauce));
+        }
+
+        /// <summary>Review 2: a dispenser cannot be held busy for free: a full build and a player who cannot pay 10 % are refused at
+        /// the press, and the client does not offer a full build.</summary>
+        [Test]
+        public void APress_IsRefused_OnAFullBuild_OrWithoutTheMoneyForAPortion()
+        {
+            KitchenState kitchen = BoardWithWrap();
+            var desk = new AssemblyDesk(kitchen);
+            for (int i = 0; i < CookingLimits.MaxBuildLayers - 2; i++)
+            {
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateIngredient("lettuce", out Item lettuce));
+                kitchen.Register(60 + i, lettuce);
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(60 + i, Spot, VesselKind.Assembly, Start), "layer " + i);
+            }
+            var wallet = new CountingWallet();
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(Board, 0, Owner, Start, wallet));
+            Assert.AreEqual(CookOutcome.Ok, desk.Release(Board, 0, Owner, Real(1), Rate, wallet, out _));
+            Assert.AreEqual(CookingLimits.MaxBuildLayers, kitchen.LayerCount(Spot));
+            Assert.AreEqual(CookOutcome.VesselFull, desk.Press(Board, 1, Owner, Real(2), wallet), "no room for a chili layer");
+            Assert.IsFalse(kitchen.IsSqueezing(Board, 1, out _, out _), "the dispenser stays free");
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(Board, 0, Owner, Real(3), wallet), "the same sauce on top still merges");
+            desk.Cancel(Board, 0);
+
+            var broke = new CountingWallet { Broke = true };
+            KitchenState other = BoardWithWrap();
+            var desk2 = new AssemblyDesk(other);
+            Assert.AreEqual(CookOutcome.NotEnoughMoney, desk2.Press(Board, 0, Owner, Start, broke));
+            Assert.IsFalse(other.IsSqueezing(Board, 0, out _, out _));
+            Assert.AreEqual(0, broke.Calls, "nothing charged");
+
+            byte open = BuildRules.Mode(BuildRules.CloseOpen, BuildRules.PackNone, true);
+            AimTarget full = AimTarget.AssemblyTool(1, 0, "chili sauce", 80, CookingLimits.MaxBuildLayers, open);
+            Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, full));
+            Assert.AreEqual("The build is full", InteractionRules.PromptFor(Held.Nothing, full));
+        }
+
+        /// <summary>Review 3: the service's "player who left" selection: only the squeezes of absent players are dropped, without a
+        /// charge; the others keep squeezing.</summary>
+        [Test]
+        public void TheSqueezesOfPlayersWhoLeft_AreDropped_AndTheOthersStay()
+        {
+            KitchenState kitchen = BoardWithWrap();
+            var desk = new AssemblyDesk(kitchen);
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(Board, 0, Owner, Start));
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(Board, 1, Owner + 1, Start));
+            var here = new object();
+            var squeezers = new Dictionary<long, object>
+            {
+                [AssemblyDesk.KeyOf(Board, 0)] = null, // the player object is gone
+                [AssemblyDesk.KeyOf(Board, 1)] = here,
+            };
+            var dropped = new List<long> { 99 };
+            desk.DropLeftSqueezes(squeezers, p => p != null, dropped);
+            CollectionAssert.AreEqual(new[] { AssemblyDesk.KeyOf(Board, 0) }, dropped);
+            Assert.AreEqual(Board, AssemblyDesk.BoardOfKey(dropped[0]));
+            Assert.AreEqual(0, AssemblyDesk.DispenserOfKey(dropped[0]));
+            Assert.IsFalse(squeezers.ContainsKey(AssemblyDesk.KeyOf(Board, 0)));
+            Assert.IsFalse(kitchen.IsSqueezing(Board, 0, out _, out _), "dropped");
+            Assert.IsTrue(kitchen.IsSqueezing(Board, 1, out int who, out _), "the present player keeps squeezing");
+            Assert.AreEqual(Owner + 1, who);
+            Assert.AreEqual(1, kitchen.LayerCount(Spot), "no sauce, nothing charged");
+            desk.DropLeftSqueezes(squeezers, p => p != null, dropped);
+            Assert.IsEmpty(dropped);
+        }
+
+        /// <summary>Review 5: a held build gets no PutInto prompt on a pan, pot, basket, griddle, cutting board or bowl; an empty plate
+        /// still takes a lone build.</summary>
+        [Test]
+        public void AHeldBuild_GoesIntoNoCookware_ButAnEmptyPlate()
+        {
+            Held build = Held.Food("falafel wrap in paper", true, build: true);
+            foreach (VesselKind kind in new[] { VesselKind.Pan, VesselKind.Pot, VesselKind.Board, VesselKind.Bowl, VesselKind.Griddle })
+                Assert.IsFalse(InteractionRules.Fits(build, AimTarget.Cookware(kind, 0, null)), kind.ToString());
+            Assert.IsFalse(InteractionRules.Fits(build, AimTarget.Cookware(VesselKind.Basket, 0, null)), "basket");
+            Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(build, AimTarget.Cookware(VesselKind.Pan, 0, null)));
+            Assert.IsFalse(InteractionRules.Fits(build, AimTarget.Cookware(VesselKind.Plate, 1, "fries")));
+            Assert.IsTrue(InteractionRules.Fits(Held.Food("potato", false), AimTarget.Cookware(VesselKind.Pan, 0, null)), "other food as before");
+        }
+
+        /// <summary>Review 7: the step look's expiry is no longer a side effect of reading it.</summary>
+        [Test]
+        public void TheStepLook_ExpiresInItsUpdate_NotWhenRead()
+        {
+            var look = new BuildStepLook();
+            look.Predict(5, 1f);
+            Assert.AreEqual((byte)0, look.Seen(2f, 0), "past its time it shows the synced mode");
+            Assert.IsTrue(look.Predicting, "reading did not end it");
+            look.Expire(0.5f);
+            Assert.IsTrue(look.Predicting);
+            look.Expire(2f);
+            Assert.IsFalse(look.Predicting);
         }
     }
 }

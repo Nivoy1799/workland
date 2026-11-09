@@ -107,7 +107,7 @@ namespace Worktown.Game.UI
         private static Station CounterOf(int index)
         {
             foreach (Station s in FindObjectsByType<Station>(FindObjectsSortMode.None))
-                if (s.Index == index && s.Kind == StationKind.Counter) return s;
+                if (s.Index == index && (s.Kind == StationKind.Counter || s.Kind == StationKind.Register)) return s; // spec 032: a guest pays at the register
             return null;
         }
 

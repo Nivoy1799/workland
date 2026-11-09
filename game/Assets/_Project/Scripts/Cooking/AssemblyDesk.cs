@@ -48,7 +48,21 @@ namespace Worktown.Game.Cooking
             !(kind == StationKind.Assembly && BuildRules.TryParseSqueeze(option, out _, out bool press) && !press);
 
         /// <summary>The press: the squeeze starts at <paramref name="tick"/> (KitchenState.TryStartSqueeze). Nothing is charged.</summary>
-        public CookOutcome Press(int board, int dispenser, int owner, uint tick) => _kitchen.TryStartSqueeze(board, dispenser, owner, tick);
+        public CookOutcome Press(int board, int dispenser, int owner, uint tick) => Press(board, dispenser, owner, tick, null);
+
+        /// <summary>
+        /// 031b review: the press with the player's wallet: a player who cannot pay the smallest portion
+        /// (<see cref="PriceRules.PortionStepPercent"/>) is refused (NotEnoughMoney) before the dispenser is taken, so a dispenser can
+        /// never be held busy for free. A repeated press of the same player is checked like the first. Nothing is charged here.
+        /// </summary>
+        public CookOutcome Press(int board, int dispenser, int owner, uint tick, IAssemblyWallet wallet)
+        {
+            string sauce = BuildRules.SauceOf(dispenser);
+            if (sauce != null && wallet != null && !_kitchen.IsSqueezing(board, dispenser, out _, out _)
+                && !wallet.CanAfford(owner, sauce, PriceRules.PortionStepPercent))
+                return CookOutcome.NotEnoughMoney;
+            return _kitchen.TryStartSqueeze(board, dispenser, owner, tick);
+        }
 
         /// <summary>
         /// The release by <paramref name="owner"/> at <paramref name="tick"/>: Ok and nothing happens when this player is not
@@ -88,6 +102,30 @@ namespace Worktown.Game.Cooking
 
         /// <summary>Drops the squeeze without a result or a charge (its player left, or is gone).</summary>
         public void Cancel(int board, int dispenser) => _kitchen.CancelSqueeze(board, dispenser);
+
+        /// <summary>The key of a running squeeze in the server's squeezer table: the board's index and the dispenser (as KitchenService keys it).</summary>
+        public static long KeyOf(int board, int dispenser) => ((long)board << 8) | (uint)(dispenser & 0xFF);
+        public static int BoardOfKey(long key) => (int)(key >> 8);
+        public static int DispenserOfKey(long key) => (int)(key & 0xFF);
+
+        /// <summary>
+        /// 031b review, pure: the squeezes whose player is gone (<paramref name="present"/> says no: left, despawned, destroyed) are
+        /// removed from <paramref name="squeezers"/> and cancelled without a charge; their keys end up in <paramref name="dropped"/>
+        /// (cleared first). The others stay as they are.
+        /// </summary>
+        public void DropLeftSqueezes<T>(System.Collections.Generic.Dictionary<long, T> squeezers, System.Func<T, bool> present,
+            System.Collections.Generic.List<long> dropped)
+        {
+            dropped.Clear();
+            if (squeezers == null || present == null) return;
+            foreach (System.Collections.Generic.KeyValuePair<long, T> kv in squeezers)
+                if (!present(kv.Value)) dropped.Add(kv.Key);
+            foreach (long key in dropped)
+            {
+                squeezers.Remove(key);
+                Cancel(BoardOfKey(key), DispenserOfKey(key));
+            }
+        }
 
         /// <summary>
         /// Wrap paper, a box or a bag (<paramref name="packaging"/>) onto the build on spot <paramref name="spot"/>: checked in the

@@ -27,6 +27,9 @@ namespace Worktown.Game.Cooking
         Griddle,
         /// <summary>Spec 031: the assembly board: one build spot (<see cref="VesselKind.Assembly"/>), two sauce dispensers held to
         /// squeeze and a packaging rack (wrap paper, box, bag) on its top (<see cref="BuildRules"/>; the tools are its slots).</summary>
-        Assembly
+        Assembly,
+        /// <summary>Spec 032: the register on the counter: the change tray's coins and notes, take back, hand over and the card
+        /// terminal are its slots (Shop.RegisterRules).</summary>
+        Register
     }
 }

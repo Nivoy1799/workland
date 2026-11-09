@@ -61,6 +61,12 @@ namespace Worktown.Game.Npc
             _entries.Add(new QueuedCustomer(id, wish, dish));
         }
 
+        /// <summary>Spec 032: a customer with its ordered dish and the order's packed modifiers joins at the end.</summary>
+        public void Add(int id, string wish, byte dish, byte modifiers)
+        {
+            _entries.Add(new QueuedCustomer(id, wish, dish, modifiers));
+        }
+
         /// <summary>
         /// Spec 022: who gets a served dish, without changing the queue. <paramref name="match"/> rates the dish
         /// against an ordered dish id. The first customer (in queue order) whose order matches exactly, else the
@@ -68,18 +74,33 @@ namespace Worktown.Game.Npc
         /// </summary>
         public bool TryPick(Func<byte, OrderMatch> match, out QueuedCustomer customer, out OrderMatch result)
         {
+            if (match == null)
+            {
+                customer = default;
+                result = OrderMatch.Wrong;
+                return false;
+            }
+            return TryPick(entry => match(entry.Dish), out customer, out result);
+        }
+
+        /// <summary>
+        /// Spec 032: as <see cref="TryPick(Func{byte, OrderMatch}, out QueuedCustomer, out OrderMatch)"/>, with the whole entry (the
+        /// dish and its modifiers) given to <paramref name="match"/>.
+        /// </summary>
+        public bool TryPick(Func<QueuedCustomer, OrderMatch> match, out QueuedCustomer customer, out OrderMatch result)
+        {
             customer = default;
             result = OrderMatch.Wrong;
             if (match == null || _entries.Count == 0) return false;
             foreach (QueuedCustomer entry in _entries)
             {
-                if (match(entry.Dish) != OrderMatch.Exact) continue;
+                if (match(entry) != OrderMatch.Exact) continue;
                 customer = entry;
                 result = OrderMatch.Exact;
                 return true;
             }
             customer = _entries[0];
-            result = match(customer.Dish);
+            result = match(customer);
             return true;
         }
 

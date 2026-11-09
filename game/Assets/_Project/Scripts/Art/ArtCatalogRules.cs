@@ -39,6 +39,7 @@ namespace Worktown.Game.Art
                 case StationKind.Fryer: return ArtKey.StationFryer; // spec 029
                 case StationKind.Griddle: return ArtKey.StationGriddle; // spec 030
                 case StationKind.Assembly: return ArtKey.StationAssembly; // spec 031
+                case StationKind.Register: return ArtKey.StationRegister; // spec 032
                 default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for station kind");
             }
         }

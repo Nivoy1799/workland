@@ -212,15 +212,7 @@ namespace Worktown.Sim.Economy
             if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
             if (!_catalog.TryGetGrocerPrice(baseId, out var price)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
             if (units < 1 || units > EconomyLimits.MaxLot) return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
-            long cost = price * units;
-            var acc = s.Accounts[ai];
-            if (cost > acc.Balance) return new PurchaseResult(s, EconomyError.InsufficientFunds, 0);
-            var next = s with
-            {
-                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance - cost }),
-                Totals = s.Totals with { GrocerRevenue = Sat(s.Totals.GrocerRevenue, cost) },
-            };
-            return new PurchaseResult(next, EconomyError.None, cost);
+            return Debit(s, ai, price * units);
         }
 
         /// <summary>
@@ -235,7 +227,13 @@ namespace Worktown.Sim.Economy
             if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
             if (!_catalog.TryGetGrocerPrice(baseId, out var price)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
             if (percent < 1 || percent > 100) return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
-            long cost = PriceRules.PortionCost(price, percent);
+            return Debit(s, ai, PriceRules.PortionCost(price, percent));
+        }
+
+        /// <summary>031b review: the grocer debit shared by <see cref="TryBuyBase"/> and <see cref="TryBuyPortion"/>: account
+        /// <paramref name="ai"/> pays <paramref name="cost"/> to the grocer, or InsufficientFunds and nothing changes.</summary>
+        private static PurchaseResult Debit(EconomyState s, int ai, long cost)
+        {
             var acc = s.Accounts[ai];
             if (cost > acc.Balance) return new PurchaseResult(s, EconomyError.InsufficientFunds, 0);
             var next = s with

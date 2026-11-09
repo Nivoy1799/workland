@@ -105,6 +105,13 @@ namespace Worktown.Game.Economy
             return error;
         }
 
+        /// <summary>031b review, server: whether the player could pay <paramref name="percent"/> % of one base item now (no charge).</summary>
+        public bool CanAffordPortion(NetworkObject player, string baseId, int percent)
+        {
+            if (player == null || !_economy.TryGetGrocerPrice(baseId, out long price)) return false;
+            return _economy.BalanceOf(EconomyRules.AccountId(player.OwnerId)) >= PriceRules.PortionCost(price, percent);
+        }
+
         /// <summary>Server: sell a plated dish to NPC demand or the wholesaler.</summary>
         public SaleResult TrySell(NetworkObject player, Item plated)
         {
@@ -118,6 +125,26 @@ namespace Worktown.Game.Economy
             PublishWallet(player);
             if (result.Ok) PublishBoard();
             return result;
+        }
+
+        /// <summary>Spec 032, server: a dish handed to a waiting guest (paid later at the register; see TownEconomy.TrySellForGuest).</summary>
+        public SaleResult TrySellForGuest(NetworkObject player, Item plated)
+        {
+            SaleResult result = _economy.TrySellForGuest(EconomyRules.AccountId(player.OwnerId), plated);
+            PublishWallet(player);
+            if (result.Ok) PublishBoard();
+            return result;
+        }
+
+        /// <summary>
+        /// Spec 032, server: the register pays player <paramref name="ownerId"/> (its wallet is published when its object is given).
+        /// False for an unknown account.
+        /// </summary>
+        public bool TryPayGuest(int ownerId, NetworkObject player, long amount, out long paid)
+        {
+            bool ok = _economy.TryPayGuest(EconomyRules.AccountId(ownerId), amount, out paid);
+            if (ok && player != null) PublishWallet(player);
+            return ok;
         }
 
         private void PublishWallet(NetworkObject player)

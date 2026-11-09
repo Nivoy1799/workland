@@ -209,8 +209,155 @@ namespace Worktown.Game.Dev
             yield return actor.Use("serve it at the counter", counterTop, InteractionAction.Sell,
                 () => me.DevSendStation(counter.Index, 0), capture.Before("serve-aim", "serve-reward", RewardFramesSeconds));
             yield return shot("served");
+            yield return PayAtRegister(actor, capture, laneZ, "potato"); // spec 032: whoever got it pays
 
             yield return CutCucumber(actor, capture, laneZ);
+            yield return ShowSummary(actor, capture); // spec 032: tips, reviews, missed by reason
+        }
+
+        // ---- Spec 032: orders 2.0 in the tour ----
+
+        /// <summary>
+        /// Spec 032 AC4: the guest who got the dish pays at the register. Card: one click on the terminal (the beep). Cash: the change
+        /// the register shows is counted out coin by coin (CashRules.Coins), a shot before each click and frames of the first coin
+        /// landing, then handed over (frames of the reward over the register). Nothing to do when nobody pays (a wholesaler sale).
+        /// </summary>
+        private static IEnumerator PayAtRegister(TourActor actor, CookCapture capture, float laneZ, string prefix)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            Worktown.Game.Shop.Register register = UnityEngine.Object.FindFirstObjectByType<Worktown.Game.Shop.Register>();
+            Station till = register != null ? register.GetComponent<Station>() : null;
+            if (till == null)
+            {
+                actor.CountTimeout("cook: no register");
+                yield break;
+            }
+            float wait = Time.unscaledTime + 3f;
+            while (!Worktown.Game.Shop.RegisterRules.HasPayer(register.Payment.Value) && Time.unscaledTime < wait) yield return null;
+            ushort payment = register.Payment.Value;
+            if (!Worktown.Game.Shop.RegisterRules.HasPayer(payment))
+            {
+                Debug.Log("[Demo] " + prefix + ": nobody pays at the register (" + Time.time.ToString("0.0") + " s)");
+                yield break;
+            }
+            var view = till.GetComponent<Worktown.Game.Shop.RegisterView>();
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(till.transform.position.x, 0f, laneZ), false, false);
+            Debug.Log("[Demo] " + prefix + ": at the register (" + Time.time.ToString("0.0") + " s): "
+                + (Worktown.Game.Shop.RegisterRules.IsCard(payment) ? "card" : "cash, change " + Worktown.Game.Shop.RegisterRules.ChangeDue(payment)));
+            yield return actor.AimAt(till.transform.position + Vector3.up * 0.15f, 0.8f);
+            yield return capture.Shot(prefix + "-register");
+            if (Worktown.Game.Shop.RegisterRules.IsCard(payment))
+            {
+                till.TryGetSlot(Worktown.Game.Shop.RegisterRules.CardOption, out StockSlot terminal);
+                yield return actor.Use("pay by card", terminal.Anchor, InteractionAction.Pay,
+                    () => me.DevSendStation(till.Index, Worktown.Game.Shop.RegisterRules.CardOption),
+                    capture.Before(prefix + "-card-aim", prefix + "-card-paid", RewardFramesSeconds));
+            }
+            else
+            {
+                int change = Worktown.Game.Shop.RegisterRules.ChangeDue(payment);
+                bool first = true;
+                foreach (int coin in Worktown.Sim.Economy.CashRules.Coins(change))
+                {
+                    int option = IndexOfCoin(coin);
+                    till.TryGetSlot(option, out StockSlot slot);
+                    yield return actor.Use("give $" + coin, slot.Anchor, InteractionAction.Pay, () => me.DevSendStation(till.Index, option),
+                        capture.Before(prefix + "-give-" + coin + "-aim", first ? prefix + "-coin-" + coin : null, frames));
+                    first = false;
+                }
+                Debug.Log("[Demo] " + prefix + ": the tray holds $" + register.Tray.Value + ", the display says '"
+                    + (view != null ? view.DisplayText : "?") + "'");
+                till.TryGetSlot(Worktown.Game.Shop.RegisterRules.GiveChangeOption, out StockSlot give);
+                yield return actor.Use("hand over the change", give.Anchor, InteractionAction.Pay,
+                    () => me.DevSendStation(till.Index, Worktown.Game.Shop.RegisterRules.GiveChangeOption),
+                    capture.Before(prefix + "-handover-aim", prefix + "-paid", RewardFramesSeconds));
+            }
+            yield return capture.Shot(prefix + "-after-paying");
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
+            Debug.Log("[Demo] " + prefix + ": paid (" + Time.time.ToString("0.0") + " s); feed: " + latest);
+            if (!latest.StartsWith("Guest paid")) actor.CountTimeout("cook: the " + prefix + " guest did not pay");
+            if (latest.Contains("wrong change")) Debug.LogWarning("[Demo] " + prefix + ": wrong change");
+            // The guest takes its review and leaves: a look at it on its way.
+            yield return actor.AimAt(new Vector3(till.transform.position.x + 0.8f, 1.7f, till.transform.position.z - 1.4f), 0.8f);
+            yield return capture.Shot(prefix + "-review-bubble");
+            yield return actor.LevelView();
+        }
+
+        private static int IndexOfCoin(int value)
+        {
+            for (int i = 0; i < Worktown.Sim.Economy.CashRules.Tray.Count; i++)
+                if (Worktown.Sim.Economy.CashRules.Tray[i] == value) return i;
+            return 0;
+        }
+
+        /// <summary>
+        /// Spec 032 AC4: the ticket rail (the modifiers in plain words, "no X" struck through) and the guests' patience rings, a shot
+        /// of each and their state in the log.
+        /// </summary>
+        private static IEnumerator LookAtOrders(TourActor actor, CookCapture capture, float laneZ, string name)
+        {
+            Worktown.Game.UI.TicketRailView rail = UnityEngine.Object.FindFirstObjectByType<Worktown.Game.UI.TicketRailView>();
+            if (rail == null) yield break;
+            yield return actor.LevelView();
+            // A little back from the aisle's middle (towards the back line), so the rail is read less steeply from below.
+            yield return actor.WalkTo(new Vector3(rail.transform.position.x, 0f, laneZ + 0.4f), false, false);
+            // The view's centre just under the board: first person hides labels right at the centre (027d), the cards stay above it.
+            yield return actor.AimAt(rail.transform.position + Vector3.down * 0.75f, 1.0f);
+            var lines = new List<string>();
+            for (int card = 0; card < rail.Tickets.Count; card++)
+            {
+                string mods = string.Empty;
+                for (int line = 0; line < Worktown.Game.UI.TicketRailView.ModLines; line++)
+                {
+                    string text = rail.ModText(card, line, out bool struck);
+                    if (text.Length > 0) mods += " [" + text + (struck ? ", struck" : string.Empty) + "]";
+                }
+                lines.Add(Worktown.Game.Npc.Menu.NameOf(Worktown.Game.Npc.CustomerRules.TicketDish(rail.Tickets[card])) + mods);
+            }
+            Debug.Log("[Orders] " + name + ": rail " + string.Join("; ", lines));
+            yield return capture.Shot(name + "-rail");
+            // The guests across the counter: their bubbles and patience rings.
+            var rings = new List<string>();
+            Vector3 middle = Vector3.zero;
+            int n = 0;
+            foreach (Worktown.Game.Npc.Customer c in UnityEngine.Object.FindObjectsByType<Worktown.Game.Npc.Customer>(FindObjectsSortMode.None))
+            {
+                var ring = c.GetComponent<Worktown.Game.Npc.PatienceRingView>();
+                rings.Add(Worktown.Game.Npc.Menu.NameOf(c.Dish.Value) + " " + Mathf.RoundToInt(100f * c.Patience.Value / 255f) + " %"
+                    + (ring != null && ring.IsShown ? " (ring)" : string.Empty) + (c.Paying ? " paying" : string.Empty));
+                if (!c.Waiting) continue;
+                middle += c.transform.position;
+                n++;
+            }
+            Debug.Log("[Orders] " + name + ": guests " + string.Join(", ", rings));
+            if (n > 0)
+            {
+                // From beside the register, looking along the queue: the rail is not in front of the rings.
+                yield return actor.LevelView();
+                yield return actor.WalkTo(new Vector3(rail.transform.position.x + 1.6f, 0f, laneZ), false, false);
+                yield return actor.AimAt(middle / n + Vector3.up * 1.75f, 1.0f);
+                yield return capture.Shot(name + "-patience");
+            }
+            yield return actor.LevelView();
+        }
+
+        /// <summary>Spec 032 AC4: the shift summary panel (F3) with the tips, the reviews and the missed guests; a shot and its lines in the log.</summary>
+        private static IEnumerator ShowSummary(TourActor actor, CookCapture capture)
+        {
+            Worktown.Game.UI.ShiftSummaryView summary = UnityEngine.Object.FindFirstObjectByType<Worktown.Game.UI.ShiftSummaryView>();
+            if (summary == null)
+            {
+                actor.CountTimeout("cook: no shift summary panel");
+                yield break;
+            }
+            summary.DevPin(true);
+            yield return new WaitForSecondsRealtime(0.6f);
+            Debug.Log("[Summary] " + summary.DevText());
+            yield return capture.Shot("shift-summary");
+            summary.DevPin(false);
         }
 
         /// <summary>
@@ -458,10 +605,12 @@ namespace Worktown.Game.Dev
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
             Debug.Log("[Demo] fries: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("Fries order: exact order")) Debug.LogWarning("[Demo] fries: no exact Fries order was served");
+            yield return PayAtRegister(actor, capture, laneZ, "fries"); // spec 032
         }
 
-        /// <summary>Spec 031: how long the tour holds the garlic-herb dispenser (the right amount is 0.5 to 1.5 s).</summary>
-        public const float SqueezeSeconds = 1.0f;
+        /// <summary>Spec 031: how long the tour holds the garlic-herb dispenser (the right amount is 0.5 to 1.5 s). Spec 032: the
+        /// tour's guest asks for "extra garlic" (lots, 1.5 s or more), so it holds 1.8 s.</summary>
+        public const float SqueezeSeconds = 1.8f;
 
         /// <summary>
         /// Spec 031 AC5: one falafel wrap from stock to the counter on the assembly board, layer by layer. A wrap from the dry shelf
@@ -514,6 +663,7 @@ namespace Worktown.Game.Dev
             Vector3 atFryer = new Vector3(fryer.transform.position.x, 0f, laneZ);
             Debug.Log("[Demo] wrap: start (" + Time.time.ToString("0.0") + " s); plates to the board "
                 + TourActor.FlatDistance(spot.transform.position, NearestPlate(board.transform.position)).ToString("0.00") + " m");
+            yield return LookAtOrders(actor, capture, laneZ, "orders"); // spec 032: the ticket with "+ extra garlic", the rings
 
             // 1. The wrap: the base.
             yield return TakeFrom(actor, wrapSlot, laneZ);
@@ -633,6 +783,9 @@ namespace Worktown.Game.Dev
             Debug.Log("[Demo] wrap: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("falafel wrap")) actor.CountTimeout("cook: the falafel wrap was not sold");
             if (!latest.Contains("Falafel wrap order: exact order")) Debug.LogWarning("[Demo] wrap: no exact Falafel wrap order was served");
+            // Spec 032: the guest takes the wrap (frames of the hand-off), then pays cash with change.
+            if (capture.Frames != null) yield return capture.Frames("wrap-handoff", 0.8f);
+            yield return PayAtRegister(actor, capture, laneZ, "wrap");
 
             // 7. Spec 031b item 5: box packing: a lettuce on the empty board (no bread: a box needs no fold), into a box, served.
             yield return PackABox(actor, capture, laneZ, board, spot, lettuceSlot);
@@ -908,6 +1061,8 @@ namespace Worktown.Game.Dev
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
             Debug.Log("[Demo] griddle: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("Grilled veggies order: exact order")) Debug.LogWarning("[Demo] griddle: no exact Grilled veggies order was served");
+            yield return PayAtRegister(actor, capture, laneZ, "veggies"); // spec 032
+            yield return LookAtOrders(actor, capture, laneZ, "orders-later"); // spec 032: the rings have drained since
         }
 
         /// <summary>

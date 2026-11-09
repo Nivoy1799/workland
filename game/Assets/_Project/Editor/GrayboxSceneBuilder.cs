@@ -31,6 +31,7 @@ using Worktown.Game.Player;
 using Worktown.Game.UI;
 using Worktown.Game.Social;
 using Worktown.Game.Npc;
+using Worktown.Game.Shop;
 using UnityEngine.UIElements;
 using Unity.Cinemachine;
 using UnityEngine.InputSystem;
@@ -326,6 +327,8 @@ namespace Worktown.Game.Editor
             SetField(customer, "_label", label);
             SetField(customer, "_tinted", character.Renderers);
             AddCharacterVisual(root, root.transform, false, character, null, null);
+            root.AddComponent<PatienceRingView>(); // spec 032
+            SetField(root.AddComponent<GuestHandoffView>(), "_catalog", catalog);
 
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, CustomerPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
@@ -459,6 +462,19 @@ namespace Worktown.Game.Editor
             SetField(service, "_queueFacing", Vector3.forward); // spec 027a: waiting guests face the cook across the counter
             SetField(service, "_rail", CreateTicketRail()); // spec 022
             SetField(networkManager.GetComponent<KitchenService>(), "_customers", service);
+            // Spec 032: paying guests stand in front of the register, a line towards the street; the register and the feed.
+            var pay = new GameObject("PayHead");
+            pay.transform.SetParent(parent.transform, false);
+            pay.transform.position = new Vector3(RegisterX, 0f, QueueZ);
+            SetField(service, "_payHead", pay.transform);
+            SetField(service, "_payDirection", Vector3.right);
+            Register register = UnityEngine.Object.FindFirstObjectByType<Register>();
+            if (register == null) throw new InvalidOperationException("the register is missing");
+            SetField(service, "_register", register);
+            SetField(service, "_registerStation", register.GetComponent<Station>());
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            if (feed == null) throw new InvalidOperationException("the serve feed is missing");
+            SetField(service, "_feed", feed);
         }
 
         // Spec 022: the ticket rail board above the counter. Two rows of three cards. Spec 027a: above the front counter's
@@ -496,8 +512,10 @@ namespace Worktown.Game.Editor
             title.text = "ORDERS";
 
             Material cardMat = CreateMaterial(Root + "/Settings/TicketCard.mat", Palette.Cream);
+            Material strikeMat = CreateMaterial(Root + "/Settings/TicketStrike.mat", Palette.Ink); // spec 032
             var cards = new List<TextMesh>(TicketCards);
             var backs = new List<Renderer>(TicketCards);
+            var strikes = new List<Renderer>(TicketCards * TicketRailView.ModLines);
             for (int i = 0; i < TicketCards; i++)
             {
                 int column = i % 3;
@@ -514,18 +532,36 @@ namespace Worktown.Game.Editor
                 backRenderer.sharedMaterial = cardMat;
                 backs.Add(backRenderer);
 
-                TextMesh text = CreateLabel(root.transform, centre + new Vector3(0f, 0f, -0.04f), 48, 0.018f);
+                // Spec 032: one text per card (the dish, its modifier lines, the minutes), a little smaller for up to four lines.
+                TextMesh text = CreateLabel(root.transform, centre + new Vector3(0f, 0f, -0.04f), 48, 0.0145f);
                 text.name = "Card text " + (i + 1);
                 text.anchor = TextAnchor.MiddleCenter;
+                text.lineSpacing = 0.92f;
                 text.color = Palette.Ink;
                 text.text = string.Empty;
                 cards.Add(text);
+                for (int line = 0; line < TicketRailView.ModLines; line++)
+                {
+                    float y = 0f; // placed over its line by the view (TicketRailView.PlaceStrike)
+                    GameObject strike = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                    strike.name = "Card strike " + (i + 1) + "." + (line + 1);
+                    UnityEngine.Object.DestroyImmediate(strike.GetComponent<Collider>());
+                    strike.transform.SetParent(root.transform, false);
+                    strike.transform.localPosition = centre + new Vector3(0f, y, -0.045f);
+                    strike.transform.localScale = new Vector3(0.3f, 0.0055f, 1f);
+                    Renderer strikeRenderer = strike.GetComponent<MeshRenderer>();
+                    strikeRenderer.sharedMaterial = strikeMat;
+                    strikeRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    strike.SetActive(false);
+                    strikes.Add(strikeRenderer);
+                }
             }
 
             var rail = root.AddComponent<TicketRailView>();
             SetField(rail, "_title", title);
             SetField(rail, "_cards", cards);
             SetField(rail, "_cardBacks", backs);
+            SetField(rail, "_strikes", strikes); // spec 032
             return rail;
         }
 
@@ -1129,6 +1165,134 @@ namespace Worktown.Game.Editor
             SetField(steamView, "_steamHeight", 0.06f);
         }
 
+        // ---- Spec 032: the register ----
+
+        /// <summary>Spec 032: the register's name and its parts' object names.</summary>
+        public const string RegisterName = "Register";
+        public const string RegisterSlotName = "Till";
+        public const string ChangePieceName = "Change piece";
+        /// <summary>Spec 032: on the front counter, right of the serving counter (towards the street entry), 0.62 m clear of it.</summary>
+        public const float RegisterX = CounterX + 1.15f;
+        private const int ChangePieces = 12;
+
+        /// <summary>
+        /// Spec 032: the register on the front counter, turned like the serving counter so its controls face the cook. Built like the
+        /// other stations: the root at the middle of its "Body" (a box collider of RegisterArtRules' size, no renderer, standing on the
+        /// counter top), the catalog's graybox model (Art_StationRegister: body, leaning display, change drawer with a coin or note in
+        /// each compartment, BACK and GIVE, the card terminal, the change mat). The scene adds what is not furniture: the nine slots
+        /// (the station's options, RegisterRules), the display's text and the labels (drawn depth tested by the view), and the pool of
+        /// change pieces on the mat. A scene NetworkObject with the synced <see cref="Register"/> and the client's <see cref="RegisterView"/>.
+        /// </summary>
+        private static Station CreateRegister(ArtCatalog catalog, Transform parent, int index)
+        {
+            float top = ArtSizeTable.ServingCounterHeight;
+            float h = RegisterArtRules.Height;
+            var root = new GameObject(RegisterName);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(new Vector3(RegisterX, top + h * 0.5f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
+            var station = root.AddComponent<Station>();
+            SetField(station, "_index", index);
+            SetField(station, "_kind", (int)StationKind.Register);
+            SetField(station, "_displayName", RegisterName);
+            SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(root.transform, false);
+            body.transform.localScale = new Vector3(RegisterArtRules.Width, h, RegisterArtRules.Depth);
+            body.AddComponent<BoxCollider>(); // size one: the body's scale is the register's box (aim)
+            if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(StationKind.Register), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = ArtFrontRotation; // the model's front (+Z) on the cook side
+            }
+            else Debug.LogError("[Graybox] no register model in the catalog");
+            Vector3 down = new Vector3(0f, -h * 0.5f, 0f); // RegisterArtRules' positions start at the counter top
+            // Spec 027d: the station's sign on its cook side, like every station's.
+            TextMesh sign = CreateLabel(root.transform, StationSign.LocalPosition(h, -RegisterArtRules.Depth * 0.5f), 60, 0.05f);
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = RegisterName;
+
+            Material piece = CreateMaterial(Root + "/Settings/Register_Piece.mat", Palette.Cream);
+            var texts = new List<TextMesh>();
+            TextMesh display = CreateLabel(root.transform, RegisterArtRules.DisplayTextPosition + down, 64, 0.0085f);
+            display.name = "RegisterDisplay";
+            display.transform.localRotation = RegisterArtRules.DisplayLean;
+            display.anchor = TextAnchor.MiddleCenter;
+            display.color = Palette.Mustard;
+            display.text = "-";
+            texts.Add(display);
+            var changeMat = new GameObject("Change mat");
+            changeMat.transform.SetParent(root.transform, false);
+            changeMat.transform.localPosition = RegisterArtRules.MatCentre + down + new Vector3(0f, RegisterArtRules.MatSize.y * 0.5f, 0f);
+
+            var slots = new List<StockSlot>(RegisterRules.SlotCount);
+            for (int option = 0; option < RegisterRules.SlotCount; option++)
+            {
+                var slotObject = new GameObject(RegisterSlotName + " " + option);
+                slotObject.transform.SetParent(root.transform, false);
+                var slot = slotObject.AddComponent<StockSlot>();
+                SetField(slot, "_station", station);
+                SetField(slot, "_option", option);
+                SetField(slot, "_ingredientIndex", -1);
+                slots.Add(slot);
+                if (RegisterRules.TryParseTray(option, out int value))
+                {
+                    Vector3 at = RegisterArtRules.TrayCentre(option);
+                    slotObject.transform.localPosition = at + down;
+                    TextMesh lip = CreateLabel(root.transform, new Vector3(at.x, 0.006f, RegisterArtRules.DrawerCentre.z
+                        - RegisterArtRules.DrawerSize.z * 0.5f - 0.002f) + down, 48, 0.0075f);
+                    lip.name = "TrayLabel " + value;
+                    lip.text = "$" + value;
+                    texts.Add(lip);
+                    continue;
+                }
+                Vector3 centre, size;
+                string label;
+                switch (option)
+                {
+                    case RegisterRules.TakeBackOption: centre = RegisterArtRules.BackCentre; size = RegisterArtRules.ButtonSize; label = "BACK"; break;
+                    case RegisterRules.GiveChangeOption: centre = RegisterArtRules.GiveCentre; size = RegisterArtRules.ButtonSize; label = "GIVE"; break;
+                    default: centre = RegisterArtRules.TerminalCentre; size = RegisterArtRules.TerminalSize; label = "CARD"; break;
+                }
+                slotObject.transform.localPosition = centre + new Vector3(0f, size.y * 0.5f, 0f) + down;
+                TextMesh tag = CreateLabel(root.transform, centre + new Vector3(0f, size.y * 0.5f + 0.004f, -size.z * 0.5f - 0.002f) + down, 48, 0.0075f);
+                tag.name = "RegisterLabel " + label;
+                tag.text = label;
+                texts.Add(tag);
+            }
+            SetField(station, "_slots", slots);
+
+            var pieces = new List<Renderer>(ChangePieces);
+            for (int i = 0; i < ChangePieces; i++)
+            {
+                GameObject p = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                p.name = ChangePieceName + " " + (i + 1);
+                UnityEngine.Object.DestroyImmediate(p.GetComponent<Collider>());
+                p.transform.SetParent(root.transform, false);
+                p.transform.localPosition = changeMat.transform.localPosition;
+                p.transform.localScale = new Vector3(0.026f, 0.006f, 0.026f);
+                var r = p.GetComponent<MeshRenderer>();
+                r.sharedMaterial = piece;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                pieces.Add(r);
+            }
+
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (!t.name.StartsWith(ChangePieceName) && t != root.transform) t.gameObject.isStatic = true; // the change pieces move
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            var register = root.AddComponent<Register>();
+            var view = root.AddComponent<RegisterView>();
+            SetField(view, "_register", register);
+            SetField(view, "_display", display);
+            SetField(view, "_pieces", pieces);
+            SetField(view, "_mat", changeMat.transform);
+            SetField(view, "_texts", texts);
+            return station;
+        }
+
         /// <summary>Spec 031: the assembly board's name (its sign and the server log) and its parts' object names.</summary>
         public const string AssemblyName = "Assembly";
         public const string AssemblySpotName = "Build spot";
@@ -1390,6 +1554,8 @@ namespace Worktown.Game.Editor
             Station assembly = CreateStation(catalog, parent.transform, stations.Count, StationKind.Assembly, AssemblyName, AssemblyX, KitchenZ, 0f,
                 CreateMaterial(Root + "/Settings/Station_Assembly.mat", Palette.WoodLight), 0, AssemblyArtRules.Width);
             stations.Add(assembly);
+            // Spec 032: the register on the front counter next to the serving counter (appended last, so the earlier indices stay).
+            stations.Add(CreateRegister(catalog, parent.transform, stations.Count));
 
             // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, the pass at the
             // right end (spec 029b: it stood between the stoves; created in the same order, so the surface indices stay),

@@ -60,6 +60,7 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Wrapped wrap (paper) | 0.25 | same | over 15 cm: real size; the folded wrap in wrap paper; added in spec 031 |
 | Takeaway box | 0.20 | same | over 15 cm: real size; the Kenney styrofoam box; added in spec 031 |
 | Paper bag | 0.28 | same | over 15 cm: real size; the Kenney bag; added in spec 031 |
+| Register | 0.24 | same | height above the counter top (the display); 1.0 x 0.5 m with its change mat and card terminal; graybox; added in spec 032 |
 | Small house (2 storeys, to the ridge) | 7–8 | same | |
 | Shop (ground floor 4 m + 1 storey) | 7–8 | same | |
 | Tree small / large | 4 / 8 | same | |

@@ -71,7 +71,115 @@ Patience 60 s + 15 s per layer; 2 modifiers maximum; a 30 % tip cap; a 50/50 cas
 (5, 10, 20, 50 notes; 1, 2 coins).
 
 ## Implementation notes
-(Builder fills this in.)
+Builder (Opus), spec 032 (and the 031b review fixes the orchestrator added). No new RPC and no new RPC parameter: `RpcSurfaceTests`
+unchanged. New synced fields, each small and presentation only (pinned in `OrdersTwoTests.TheSyncedSurface_...`):
+- `Customer.Patience` (byte): the patience ring; the server owns the clock, sent only on change, at most 4/s per guest, never while paying.
+- `Register.Payment` (ushort: nobody / card / cash + change due) and `Register.Tray` (byte: the change built so far, at most $255): the
+  register's display, its coins and the prompts must show the payment to the cook and to onlookers; nothing else carries it.
+- `TicketRailView.LiveReport` / `LastReport` (`ShiftReport`: ints, shorts, bytes): the summary's tips, reviews, missed by reason (one
+  struct SyncVar each, like 027c's `ServeReward`). The ticket's modifiers ride in the unused top byte of the existing ticket int.
+
+**Sim (pure, seeded, deterministic).** `Cooking/OrderModifiers` (+ `OrderModifier`, `ModifierKind`, `ModifierCheck`): the allowed list comes
+only from the recipe template ("no X" for a required salad or sauce layer, "extra X" for a required sauce or filling layer); draw 50 % none,
+30 % one, 20 % two, never "no" and "extra" on one layer; packed as two 4-bit indices in one byte; `ForOrder` (a removed layer is no longer
+required, an extra sauce accepts lots: new optional `TemplateLayer.SauceAmounts`, null for every default template, so every 031 score,
+hash and rating is unchanged; pinned tests pass); `Check` = the 031 template score on the order's template + modifier mistakes ("no X":
+no layer contains X; extra sauce: lots or twice; extra filling: two prepared layers). `Economy/GuestOrders` (+ `GuestOrder`): modifiers,
+patience base (54-66 s), card or cash (50/50), the note size (10/20/50), always in that draw order. `GuestPatience` (60 s + 15 s per
+layer), `TipRules` (≤ 30 % of the bill: speed full to half the patience then linear to 0, accuracy 1 / 0.5 / 0 by steps short, quality
+by stars 0..1; integer permille math), `ReviewRules` (+ `GuestReview`, `ReviewKey`: the order's stars, −1 slow past 75 %, −1 one step
+short, −1 wrong change, a wrong dish at most 2; template line per key, `review.*` keys for the gateway later), `CashRules` (tray 1, 2, 5,
+10, 20, 50; guest hands the due rounded up to its notes; `CashPayout` = due − |given − due change|).
+
+**Order match (game, extends 031).** `OrderRules.Fit(item, dish, modifiers)`: a build is checked per layer with the modifiers (Exact 0
+steps short, Close 1, Wrong more; layer order and amount only cost score), its quality is the order's; other dishes match as in 022 (they
+have no modifiers). `CustomerQueue.TryPick` gets the whole entry (dish + modifiers). The bill = the sim's demand payout × the match share
+(100/60/25 %, the 022 star tip is gone: the tip is `TipRules`) × (500 + q_order)/(500 + q_item), so a wrap the guest wanted without
+lettuce is paid as the order, not as an incomplete recipe (the sim's own rating of the item is unchanged).
+
+**Server flow.** Serving a guest: `TownEconomy.TrySellForGuest` (the sim sells as always; a sale to NPC demand credits nothing yet),
+`CustomerService.OnHandedOver` (bill, tip, the guest's note; it leaves the queue and the patience book, walks to the pay spot in front of
+the register, bubble "Thanks! Here's $400." / "Thanks! Card, please."). The register is `StationKind.Register` (appended, station index 9)
+with nine slots as `RequestStation` options: tray 0-5, take back 6, hand over 7, card terminal 8. The pure `Shop/RegisterDesk` behind
+`IRegisterWallet` (031b pattern): a tray click adds to the server's change, take back empties it, hand over / the terminal settle once
+(the payment leaves the line); refusals (NoPayment, NotYourGuest, PaysByCard, PaysCash, TrayFull, TrayEmpty, the wallet's) change and
+pay nothing. Wrong change either way costs the difference and a review star. Only the payee (who handed the food over) works its
+payment; the kitchen closing or the payee leaving settles it by itself (the due, no mistake). On settling: the review, the shift's
+numbers, a feed line, the reward moment over the register (stars = the review, paid, tip), the guest leaves with its review bubble.
+Patience: the pure `Npc/PatienceBook` drains only for queued guests standing at their slot; out of patience they leave ("I can't wait any
+longer...", missed: Patience). Missed reasons: Patience, Gone (the 014 demand reconcile, "Never mind..."), Closed.
+If the hand-over fails after the sim sale (cannot happen in one frame), the bill is paid at once so no money is lost.
+
+**Client.** `PatienceRingView` (ring beside the head at 1.72 m, under the rail's board: Sage, Mustard below half, Terracotta and a pulse in the last quarter; mesh rebuilt
+only on a byte change). `GuestHandoffView`: on the switch to paying, a parcel (wrap paper / box / bag by dish, catalog models) flies from
+the serving counter into the guest's right hand on a 0.35 s ease-out arc while the hold pose raises the arm; it keeps it out of the shop.
+`RegisterView`: display "CHANGE $8 / $18" (Terracotta when over), "CARD", "PAID"/"APPROVED"; the change lies as coins and notes on the
+mat; the clicking player's coin shows at the click (`TrayPrediction`, refusal → back out with "nope"), others see the byte rise with the
+clink; card beep (procedural `Clink`, `Beep`). Prompts "Click · give $5", "Click · hand over $18", "Click · card payment", grey reasons
+("They pay by card", "Nobody is paying"). Third person: E at the register takes a card payment (counting change is first person).
+Ticket rail cards: the dish on top, two modifier lines ("+ extra garlic" Leaf, "no lettuce" Terracotta with an Ink line through it,
+measured from the text's bounds), the minutes at the bottom. Shift summary (F3): tips, reviews (average, count, the last three lines),
+missed by reason. No per-frame allocations in the new views (texts only change on input changes).
+
+**Scene and art.** `Art_StationRegister` (graybox in the catalog, `RegisterArtRules`, palette only; a guide row added to
+docs/art-direction.md): on the front counter 1.15 m right of the serving counter, turned to the cook; a `Body` collider like every station
+and a sign. The pay spot ("PayHead") in front of it on the guests' line; paying guests queue towards the street. Customer prefab: ring and
+hand-off. Fixtures updated for the new station (CookingRulesTests kinds, ArtCatalogTests positions, ScaleSceneTests and FloorPlanTests: the
+register stands on the front counter, checked explicitly, not skipped), WhatsNewTests (031b is no longer the newest).
+
+**Tour.** `-tour-orders` (dev builds only, set by visual-check.sh on the cook host): scripted first guests (snack: fries, card; meal:
+falafel wrap "extra garlic", cash $50 note; grilled veggies, card; seitan wrap "no lettuce", cash $20, short patience so its ring turns
+Terracotta and it leaves), patience × 8 for the rest (the tour is long). The tour squeezes 1.8 s (lots), looks at the rail and the rings,
+pays every served guest at the register (card or coin by coin), and shows the summary at the end. Cook timeouts 760 → 960 s (tour),
+1080 → 1260 s (script).
+
+**031b review fixes** (orchestrator, merged with 030-032):
+1. Third-person E at the board: `SqueezeHoldGate` (pure): a squeeze starts only after 0.2 s held and is measured from then; a tap is
+   queued as the normal E action. `ToolAction(held, target)`: a carried build (or a pick-up in flight) gets no tool. The board's nearest
+   dispenser, its build spot and view are cached per target (6). Test: a tap never squeezes or charges, a hold squeezes from 0.2 s.
+2. A press previews the layer (VesselFull refused; a merge onto the same sauce on top still works) and checks the player can afford a
+   10 % portion (`IAssemblyWallet.CanAfford`, `EconomyService.CanAffordPortion`); `SqueezeCheck` refuses a full build ("The build is full").
+3. `AssemblyDesk.DropLeftSqueezes` (pure selection + cancel, with `KeyOf` / `BoardOfKey` / `DispenserOfKey`), tested.
+4. `PortionPriceTests`: three merged 10 % taps at a $14 bottle ($3 paid, the lots ceiling $4, SurplusCap = paid); the `ItemCost` comment
+   says it is a ceiling the −1 in SurplusCap absorbs.
+5. `InteractionRules.Fits`: a held build goes into no pan, pot, basket, griddle, cutting board or bowl (an empty plate still takes it).
+7. `BuildStackView.EndPrediction(token)` (no unused flag); `BuildStepLook.Expire` runs in LateUpdate (`Seen` is a pure read);
+   `EconomyEngine.Debit` shared by TryBuyBase and TryBuyPortion.
+
+**Scope beyond the listed folders** (as in 029-031): `sim/Runtime/Economy` (listed), `Scripts/Economy` (the guest sale hold and pay),
+`Scripts/Net` (aim, rules, PickupInteractor), `Scripts/Player` (SqueezeHoldGate, BuildStepLook), `Scripts/Art` (RegisterArtRules,
+ArtKey, catalog rules, size row), `Scripts/Audio` (two sounds), `Scripts/Dev` (tour), `Editor` (catalog model, scene), `docs/art-direction.md`
+(row), `scripts/visual-check.sh` (`-tour-orders`, timeout).
+
+**Tests.** `scripts/verify.sh` PASS: 984 EditMode (baseline 958), 291 sim (baseline 277). New sim: `OrderModifierTests` (allowed list,
+seeded draw, packing, a plain order scores as in 031, no / extra checks, determinism), `GuestOrderTests` (orders from the seed, patience,
+tip, cash rules, review), the merged-portion case in `PortionPriceTests`. New EditMode: `OrdersTwoTests` (the register: change built and
+paid once, take back and the tray limit, wrong change either way, card, refusals pay nothing, only the payee, settling by itself; the tray
+prediction; patience drains only at the slot and never at the register, a guest leaves when it runs out, the ring; the order match with
+modifiers on real builds and the queue pick; the bill and the held guest sale; tickets; the shift's numbers; the synced surface),
+`RegisterSceneTests`, six 031b review tests in `KitchenPolishTwoTests`, the spec 032 What's-new test.
+
+**Visual check (AC4).** `bash scripts/visual-check.sh --tours look,cook`: PASS (cook: 570 images, timeouts 0, aim fallbacks 0).
+- `.verify/visual/cook/sheet.png`: `orders-rail` 135 (every card: dish, "+ extra garlic" in Leaf, "no lettuce" struck through, the
+  minutes), `orders-patience` 136 and `orders-later-patience` 418 (the rings drained; the seitan guest's ring Terracotta at 17 %, then
+  "a guest ran out of patience" in the log); `wrap-served-01..` 229- (the parcel flies from the counter into the guest's hand, the guest walks off with it);
+  `wrap-register` 263, `wrap-give-20-aim` 264, `wrap-coin-20-*` 265- (the note on the mat at the click, "CHANGE $20 / $32"),
+  `wrap-handover-aim` 277 ("Click · hand over $32", $20 + $10 + $2 on the mat), `wrap-paid-*` 278- ("PAID", "+$1,868 · tip $343" over the
+  register), `wrap-review-bubble` 295 ("★★★★☆ Tasty, I'd come back." over the leaving guest); `fries-card-*` and `veggies-card-*` (card
+  payments); `shift-summary` 570 (tips $632, reviews 3.3 (4) with their three lines, missed 11: out of patience 1, changed their mind 5,
+  kitchen closed 5). Log: falafel wrap "exact order", bill $1,525 + tip $343, cash $1,900, change $32 of $32.
+- `.verify/visual/cook-observer/sheet.png`, `.verify/visual/look/sheet.png`.
+
+**Still off / follow-ups.**
+- Bills are large ($1,525 for a wrap: the meal market's price): a cash guest hands "$1,900" in notes. Prices are spec 037.
+- "Changed their mind" (the 014 demand reconcile) is the most common miss now that guests have patience; it may be dropped later.
+- Order bubbles stand at 2.1 m, behind the ticket rail's board for guests near the serving counter (seen from the kitchen); 022/027d
+  layout, not changed here. Guests at the register show their bubble above the view when the cook looks down at the till.
+- The rail's cards read dim from below (the board faces the aisle, lit from behind); the text is Ink on Cream.
+- The tour's burnt potato is served after 14:00 (no guest pays); the guest it went to before closing was settled by the register.
+  Wrong change is not shown in the tour (EditMode covers it).
+- Counting change is first person only; third-person E takes only a card payment.
+- The hand-off parcel is the wrap paper for wraps, the box for the veggie box, a bag for everything else (fries too).
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

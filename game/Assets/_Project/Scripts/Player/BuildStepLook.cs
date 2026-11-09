@@ -35,11 +35,14 @@ namespace Worktown.Game.Player
         /// <summary>Forget the prediction (a respawn).</summary>
         public void Reset() => _current = 0;
 
-        /// <summary>The mode to show at <paramref name="now"/>: the newest pending prediction, else <paramref name="synced"/>.</summary>
-        public byte Seen(float now, byte synced)
+        /// <summary>The mode to show at <paramref name="now"/>: the newest pending prediction, else <paramref name="synced"/>. A read
+        /// only (031b review): a prediction past its time shows the synced mode; <see cref="Expire"/> forgets it.</summary>
+        public byte Seen(float now, byte synced) => _current != 0 && now <= _until ? _mode : synced;
+
+        /// <summary>031b review: forgets a prediction past its time (the view calls this once a frame, not the getter).</summary>
+        public void Expire(float now)
         {
             if (_current != 0 && now > _until) _current = 0;
-            return _current != 0 ? _mode : synced;
         }
     }
 }

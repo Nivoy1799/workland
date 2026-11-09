@@ -47,7 +47,7 @@ timeout_for() {
   case "$1" in
     look) echo 360 ;;
     walk) echo 420 ;;
-    cook) echo 1080 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box
+    cook) echo 1260 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register
     *) echo 420 ;;
   esac
 }
@@ -116,8 +116,11 @@ for tour in "${tour_list[@]}"; do
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
   sleep 3
+  # Spec 032: the cook tour's host scripts its first orders (a wrap with a modifier, cash with change) and longer patience.
+  host_extra=()
+  if [ "$tour" = "cook" ]; then host_extra=(-tour-orders); fi
   if [ "$SERVER" = "local" ]; then
-    "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
+    "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${host_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
   else
     "$GAME" -connect "$ADDRESS" -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
   fi

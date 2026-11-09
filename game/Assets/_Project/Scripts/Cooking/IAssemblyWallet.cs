@@ -9,5 +9,9 @@ namespace Worktown.Game.Cooking
         /// <summary>Charges <paramref name="percent"/> % of <paramref name="grocerId"/>'s grocer price to <paramref name="owner"/>;
         /// Ok, NotEnoughMoney or SimRefused, nothing charged on a refusal.</summary>
         CookOutcome Charge(int owner, string grocerId, int percent, out long cost);
+
+        /// <summary>031b review: whether <paramref name="owner"/> could pay <paramref name="percent"/> % of
+        /// <paramref name="grocerId"/>'s grocer price now (a dispenser press checks the smallest portion). Charges nothing.</summary>
+        bool CanAfford(int owner, string grocerId, int percent);
     }
 }

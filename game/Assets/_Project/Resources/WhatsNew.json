@@ -542,6 +542,29 @@
         "Box a build: does the box look closed?",
         "Grill seitan strips and slide them onto a plate: do the grill marks stay?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-032",
+      "date": "2026-11-09",
+      "title": "Orders 2.0: guests with wishes, patience, the register, tips and reviews",
+      "items": [
+        "Guests say their order with changes in plain words: 'Falafel wrap, extra garlic' or 'no lettuce' (at most two)",
+        "The ticket rail shows them too: '+ extra garlic', and 'no lettuce' with a line through it",
+        "A ring over each waiting guest drains and turns red near the end; when it runs out the guest leaves",
+        "Hand the food over at the counter: the guest takes it, thanks you and waits at the register (no more waiting time there)",
+        "Card: click the terminal. Cash: the guest hands notes; click coins and notes into the tray for the change, then GIVE",
+        "Wrong change costs the difference and a star in the review; the tip (up to 30%) is for speed, the right order and quality",
+        "The shift summary (F3) adds tips, reviews with a short line and missed guests by reason",
+        "Third person: E at the assembly board squeezes only after a short hold; a tap still picks up and drops"
+      ],
+      "test": [
+        "Serve a guest who asked for 'extra garlic': squeeze long (lots). Is it an exact order?",
+        "Read the rail: is 'no lettuce' clearly struck through?",
+        "Let a guest wait: does its ring drain and turn red, and does it leave?",
+        "Take a cash payment: count out the change. Then give one coin too many next time: do you lose it and get a worse review?",
+        "Take a card payment with one click: does it beep?",
+        "Open the summary (F3): do you see tips, reviews and the missed guests?"
+      ]
     }
   ]
 }

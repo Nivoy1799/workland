@@ -37,6 +37,8 @@ namespace Worktown.Game.Tests
             public Scene Scene;
             public List<Station> Stations = new List<Station>();
             public Station Serving, Shelf;
+            /// <summary>Spec 032: the register stands on the front counter (not on the back line).</summary>
+            public Station Register;
             public List<Station> BackStations = new List<Station>();
             public List<PlaceSurface> Worktops = new List<PlaceSurface>();
             public List<BoxCollider> FrontRuns = new List<BoxCollider>();
@@ -91,6 +93,7 @@ namespace Worktown.Game.Tests
             foreach (Station s in plan.Stations)
             {
                 if (s.Kind == StationKind.Counter) plan.Serving = s;
+                else if (s.Kind == StationKind.Register) plan.Register = s; // spec 032: on the front counter
                 else plan.BackStations.Add(s);
                 if (s.Kind == StationKind.PlateShelf) plan.Shelf = s;
             }
@@ -286,7 +289,8 @@ namespace Worktown.Game.Tests
                 foreach (Station station in plan.Stations)
                 {
                     // A station's front (controls, crate opening, the serving counter's cook side) is its local -z.
-                    Vector3 intoAisle = station == plan.Serving ? -plan.Street : plan.Street;
+                    // Spec 032: the register stands on the front counter like the serving counter: its front faces back across it.
+                    Vector3 intoAisle = station == plan.Serving || station == plan.Register ? -plan.Street : plan.Street;
                     Assert.Greater(Vector3.Dot(Flat(-station.transform.forward), intoAisle), 0.7f, station.name + " faces the aisle");
                     // The catalog wrappers show their front (knobs, oven door, crate opening) on their local +z.
                     Transform art = station.transform.Find("Art_" + Worktown.Game.Art.ArtCatalogRules.StationKey(station.Kind));
@@ -723,7 +727,17 @@ namespace Worktown.Game.Tests
             try
             {
                 var boxes = new List<(string Name, Bounds Bounds)>();
-                foreach (Station s in plan.Stations) boxes.Add((s.name, BodyOf(s)));
+                foreach (Station s in plan.Stations)
+                    if (s != plan.Register) boxes.Add((s.name, BodyOf(s))); // spec 032: the register stands on a front run (checked below)
+                Assert.IsNotNull(plan.Register, "spec 032: the register");
+                Bounds till = BodyOf(plan.Register);
+                bool onARun = false;
+                foreach (BoxCollider run in plan.FrontRuns)
+                    onARun |= till.min.x >= run.bounds.min.x - 0.001f && till.max.x <= run.bounds.max.x + 0.001f
+                        && till.min.z >= run.bounds.min.z - 0.001f && till.max.z <= run.bounds.max.z + 0.001f
+                        && Mathf.Abs(till.min.y - run.bounds.max.y) < 0.01f;
+                Assert.IsTrue(onARun, "the register stands within a front counter run, on its top");
+                Assert.IsFalse(till.min.x < BodyOf(plan.Serving).max.x && till.max.x > BodyOf(plan.Serving).min.x, "beside the serving counter, not on it");
                 foreach (PlaceSurface w in plan.Worktops) boxes.Add((w.name, w.GetComponent<BoxCollider>().bounds));
                 foreach (BoxCollider b in plan.FrontRuns) boxes.Add((b.name, b.bounds));
                 foreach (BoxCollider b in plan.Walls) boxes.Add((b.name, b.bounds));

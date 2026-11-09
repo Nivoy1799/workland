@@ -57,6 +57,18 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 031: someone else is squeezing that dispenser.</summary>
         DispenserBusy,
         /// <summary>Spec 031: only a build on a wrap or flatbread folds.</summary>
-        NothingToFold
+        NothingToFold,
+        /// <summary>Spec 032: nobody waits at the register to pay.</summary>
+        NoPayment,
+        /// <summary>Spec 032: the guest at the register was served by another player (only they take its payment).</summary>
+        NotYourGuest,
+        /// <summary>Spec 032: the guest pays by card (no cash, no change).</summary>
+        PaysByCard,
+        /// <summary>Spec 032: the guest pays in cash (the terminal is not for them).</summary>
+        PaysCash,
+        /// <summary>Spec 032: the change tray holds no more (it is synced as a byte).</summary>
+        TrayFull,
+        /// <summary>Spec 032: there is no change in the tray to take back.</summary>
+        TrayEmpty
     }
 }

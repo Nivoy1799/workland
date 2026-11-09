@@ -105,6 +105,29 @@ namespace Worktown.Sim.Tests.Economy
             Assert.Equal(wrap + bottle, PriceRules.ItemCost(c, Build(Base("wrap"), Base("garlic_herb_sauce"))));
         }
 
+        /// <summary>
+        /// 031b review: three 10 % taps of 0.5 s each merge into one "lots" layer (1.5 s). At a bottle price of 14 each tap costs
+        /// PortionCost(14, 10) = 1, so $3 were paid, while ItemCost counts the lots bucket at PortionCost(14, 30) = 4: the ceiling
+        /// is $1 above what was paid (rounding). SurplusCap's -1 absorbs it, so the wholesaler never pays more than was spent.
+        /// </summary>
+        [Fact]
+        public void ThreeMergedTaps_CountAsLots_AndTheCapAbsorbsTheRounding()
+        {
+            var grocer = TestEconomy.Catalog.Grocer.Select(g => g.BaseId == "garlic_herb_sauce" ? new GrocerPrice(g.BaseId, 14) : g).ToList();
+            EconomyCatalog c = TestEconomy.Build(byproducts: new ByproductRule[0], grocer: grocer); // no byproducts: B = 0 is below 14
+            Assert.True(c.TryGetGrocerPrice("wrap", out long wrap));
+            long perTap = PriceRules.PortionCost(14, PriceRules.PortionPercent(0.5f));
+            Assert.Equal(1, perTap);
+            long paid = wrap + 3 * perTap;
+            Item merged = Sauce(1.5f); // what KitchenState makes of three merged 0.5 s taps: one squeeze of their sum
+            Assert.Equal(Assembly.Lots, Assembly.SauceAmountOf(merged));
+            Assert.Equal(PriceRules.PortionCost(14, 30), PriceRules.ItemCost(c, merged));
+            Assert.Equal(4, PriceRules.ItemCost(c, merged));
+            Item build = Build(Base("wrap"), merged);
+            Assert.Equal(paid + 1, PriceRules.ItemCost(c, build)); // the ceiling is one above the paid amount
+            Assert.Equal(paid, PriceRules.SurplusCap(c, build)); // the -1 takes the rounding back: never more than was spent
+        }
+
         [Fact]
         public void TheWholesaleCap_StaysBelowWhatASauceBuildCost()
         {

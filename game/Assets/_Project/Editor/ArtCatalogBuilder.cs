@@ -105,6 +105,8 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationGriddle, Mode = Fit.Graybox },
             // Spec 031: no assembly board in the packs: a graybox worktop cabinet with a wooden cutting board on top.
             new Def { Key = ArtKey.StationAssembly, Mode = Fit.Graybox },
+            // Spec 032: no register in the packs: a graybox till (body, leaning display, change drawer, buttons, card terminal, mat).
+            new Def { Key = ArtKey.StationRegister, Mode = Fit.Graybox },
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -889,6 +891,7 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.ToolFryerBasket) return BuildBasket(parent);
             if (key == ArtKey.StationGriddle) return BuildGriddle(parent); // spec 030
             if (key == ArtKey.StationAssembly) return BuildAssembly(parent); // spec 031
+            if (key == ArtKey.StationRegister) return BuildRegister(parent); // spec 032
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -1062,6 +1065,41 @@ namespace Worktown.Game.Editor
             float rackLength = bags.y - paper.y + 0.26f, rackZ = (paper.y + bags.y) * 0.5f;
             Box(model, "Rack floor", new Vector3(X(paper.x), h + 0.006f, Z(rackZ)), new Vector3(0.26f, 0.012f, rackLength), dark);
             Box(model, "Rack back", new Vector3(X(paper.x + 0.125f), h + 0.0075f, Z(rackZ)), new Vector3(0.012f, 0.015f, rackLength), dark);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 032: the graybox register as the wrapper's "Model" (RegisterArtRules, the base on the counter top at the origin): a
+        /// Charcoal body, a display leaning towards the front with a DeepBlue screen, the WoodDark change drawer with a coin or note in
+        /// each compartment (palette colours by value), the Terracotta BACK and Sage GIVE buttons, the DeepBlue card terminal and the
+        /// WoodLight change mat. Front on +Z like the kit (the scene builder turns it to the cook).
+        /// </summary>
+        private static GameObject BuildRegister(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material body = GrayboxMaterial("RegisterBody", Palette.Charcoal);
+            Material screen = GrayboxMaterial("RegisterScreen", Palette.DeepBlue);
+            Material drawer = GrayboxMaterial("RegisterDrawer", Palette.WoodDark);
+            Material mat = GrayboxMaterial("RegisterMat", Palette.WoodLight);
+            Material back = GrayboxMaterial("RegisterBack", Palette.Terracotta);
+            Material give = GrayboxMaterial("RegisterGive", Palette.Sage);
+            Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
+            Box(model, "Body", F(RegisterArtRules.BodyCentre), RegisterArtRules.BodySize, body);
+            Quaternion lean = Quaternion.Euler(25f, 0f, 0f); // mirrored: leans back from the +Z front
+            Box(model, "Display", F(RegisterArtRules.DisplayCentre), RegisterArtRules.DisplaySize, body).transform.localRotation = lean;
+            Box(model, "Screen", F(RegisterArtRules.ScreenCentre), RegisterArtRules.ScreenSize, screen).transform.localRotation = lean;
+            Box(model, "Drawer", F(RegisterArtRules.DrawerCentre), RegisterArtRules.DrawerSize, drawer);
+            for (int slot = 0; slot < Worktown.Sim.Economy.CashRules.Tray.Count; slot++)
+            {
+                int value = Worktown.Sim.Economy.CashRules.Tray[slot];
+                Box(model, "Money " + value, F(RegisterArtRules.TrayCentre(slot)), RegisterArtRules.TrayMoneySize(value),
+                    GrayboxMaterial("Cash" + value, Worktown.Game.Shop.RegisterView.ColorOf(value)));
+            }
+            Box(model, "Back", F(RegisterArtRules.BackCentre), RegisterArtRules.ButtonSize, back);
+            Box(model, "Give", F(RegisterArtRules.GiveCentre), RegisterArtRules.ButtonSize, give);
+            Box(model, "Terminal", F(RegisterArtRules.TerminalCentre), RegisterArtRules.TerminalSize, screen);
+            Box(model, "Change mat", F(RegisterArtRules.MatCentre), RegisterArtRules.MatSize, mat);
             return model;
         }
 
