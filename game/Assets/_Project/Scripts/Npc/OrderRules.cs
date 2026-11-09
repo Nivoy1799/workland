@@ -11,9 +11,6 @@ namespace Worktown.Game.Npc
     public static class OrderRules
     {
         public const int ExactPermille = 1000;
-        /// <summary>Tip per star above <see cref="TipFromStars"/> on an exact match (10 %).</summary>
-        public const int TipPermillePerStar = 100;
-        public const int TipFromStars = 2;
         public const int ClosePermille = 600;
         public const int WrongPermille = 250;
 
@@ -135,31 +132,6 @@ namespace Worktown.Game.Npc
             long qi = 500 + Worktown.Sim.Economy.PriceRules.QualityPermille(itemQuality);
             long qo = 500 + Worktown.Sim.Economy.PriceRules.QualityPermille(orderQuality);
             return (int)(share * qo / qi);
-        }
-
-        /// <summary>Share of the sale price in permille: exact 100 % + 10 % per star above 2, close 60 %, wrong 25 %.</summary>
-        public static int PayPermille(OrderMatch match, int stars)
-        {
-            switch (match)
-            {
-                case OrderMatch.Exact: return ExactPermille + TipPermillePerStar * Math.Max(0, stars - TipFromStars);
-                case OrderMatch.Close: return ClosePermille;
-                default: return WrongPermille;
-            }
-        }
-
-        /// <summary>
-        /// Spec 027c: the tip inside a customer's payment <paramref name="paid"/> at <paramref name="payPermille"/> (only
-        /// shares above 100 % carry one): <paramref name="paid"/> minus the smallest full price that gives it (the economy
-        /// rounds the share to whole dollars). 0 for no tip or bad input.
-        /// </summary>
-        public static long TipOf(long paid, int payPermille)
-        {
-            if (paid <= 0 || payPermille <= ExactPermille) return 0;
-            long guess = paid * ExactPermille / payPermille;
-            for (long full = Math.Max(1L, guess - 2); full <= guess + 2; full++)
-                if (Worktown.Game.Economy.EconomyRules.ApplyPermille(full, payPermille) == paid) return paid - full;
-            return Math.Max(0L, paid - guess);
         }
 
         /// <summary>Short text for logs and the serve feed.</summary>

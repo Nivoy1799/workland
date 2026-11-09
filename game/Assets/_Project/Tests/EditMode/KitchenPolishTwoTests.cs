@@ -577,9 +577,13 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(kitchen.IsSqueezing(Board, 0, out _, out _));
             Assert.AreEqual(0, wallet.Calls + wallet.AffordChecks);
 
-            // The aim leaves the dispenser before the hold time: a tap as well.
+            // 032 review: the aim leaves the dispenser before the hold time: the press does nothing (no E action on the new target),
+            // and nothing more until E is pressed again.
             gate.Update(true, true, true, 1.0);
-            Assert.AreEqual(SqueezeHoldGate.Step.Tap, gate.Update(false, true, false, 1.1));
+            Assert.AreEqual(SqueezeHoldGate.Step.Cancelled, gate.Update(false, true, false, 1.1));
+            Assert.IsFalse(gate.OwnsInput);
+            Assert.AreEqual(SqueezeHoldGate.Step.None, gate.Update(true, true, false, 1.5), "still held, but no new press");
+            Assert.AreEqual(SqueezeHoldGate.Step.None, gate.Update(true, false, false, 1.6), "and its release is no tap");
 
             // A hold: the press goes out at 0.2 s, the squeeze is measured from there.
             Frame(true, true, 2.0);
@@ -590,9 +594,16 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(gate.Squeezing);
             Assert.AreEqual(SqueezeHoldGate.Step.Holding, gate.Update(true, true, false, 2.6));
             Assert.AreEqual(SqueezeHoldGate.Step.None, gate.Update(true, false, false, 3.0));
+            Assert.IsFalse(gate.Squeezing, "let go: the squeeze ends");
             Assert.AreEqual(CookOutcome.Ok, desk.Release(Board, 0, Owner, Real(3.0), Rate, wallet, out AssemblyDesk.SqueezeResult r));
             Assert.AreEqual(0.8f, r.Seconds, 0.05f, "from the 0.2 s point, not from the key press");
             Assert.AreEqual(1, wallet.Calls);
+
+            // 032 review: after the hold time, the aim leaving the dispenser ends the squeeze.
+            gate.Update(true, true, true, 5.0);
+            Assert.AreEqual(SqueezeHoldGate.Step.Start, gate.Update(true, true, false, 5.2));
+            Assert.AreEqual(SqueezeHoldGate.Step.None, gate.Update(false, true, false, 5.4));
+            Assert.IsFalse(gate.Squeezing, "the aim left: the squeeze ends");
         }
 
         /// <summary>Review 1: a carried build gets no tool (no squeeze, no packaging); other hands as in 031.</summary>

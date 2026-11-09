@@ -19,6 +19,12 @@ namespace Worktown.Game.Shop
         public long ChangeGiven { get; }
         public bool Automatic { get; }
 
+        /// <summary>
+        /// 032 review: the tip actually paid: none when the register settled by itself; else what was paid above the bill (a wrong
+        /// change takes it from the tip first), at most the tip.
+        /// </summary>
+        public long TipPaid => Payment == null || Automatic ? 0 : System.Math.Max(0L, System.Math.Min(Payment.Tip, Paid - Payment.Bill));
+
         /// <summary>Cash with change other than the right one (the review and the pay both notice).</summary>
         public bool WrongChange => Payment != null && !Payment.Card && !Automatic && ChangeGiven != Payment.ChangeDue;
     }

@@ -4,7 +4,8 @@ namespace Worktown.Game.Player
     /// 031b review (orchestrator decision, option a), pure: third person, E (or the use input) at the assembly board. A squeeze
     /// starts only once the input has been held <see cref="HoldSeconds"/> on an offered dispenser, and its time is measured from
     /// that point (the press goes out then). Let go earlier and it was a tap: E keeps its normal meaning (pick up, put, drop).
-    /// If the aim leaves the dispenser before the hold time, the press is a tap too. Time comes in from the caller.
+    /// 032 review: if the aim leaves the dispenser before the hold time the press does nothing (no E action on the new target);
+    /// after it, the squeeze ends. Time comes in from the caller.
     /// </summary>
     public sealed class SqueezeHoldGate
     {
@@ -23,6 +24,8 @@ namespace Worktown.Game.Player
             Start,
             /// <summary>The squeeze goes on.</summary>
             Holding,
+            /// <summary>032 review: the aim left the dispenser before the hold time: this press does nothing at all.</summary>
+            Cancelled,
         }
 
         private bool _armed;
@@ -48,7 +51,12 @@ namespace Worktown.Game.Player
             }
             if (_armed)
             {
-                if (!down || !offered)
+                if (!offered)
+                {
+                    _armed = false;
+                    return Step.Cancelled;
+                }
+                if (!down)
                 {
                     _armed = false;
                     return Step.Tap;

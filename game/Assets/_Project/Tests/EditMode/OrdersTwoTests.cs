@@ -148,14 +148,12 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void ARefusal_PaysNothing_AndChangesNothing_AndOnlyThePayeeWorksItsPayment()
+        public void ARefusal_PaysNothing_AndChangesNothing()
         {
             var desk = new RegisterDesk();
             var refusing = new CountingWallet { Refuse = CookOutcome.SimRefused };
             desk.Open(Cash(1, 352, 30, 400));
             desk.Use(Owner, Slot(10), refusing, out _);
-            Assert.AreEqual(CookOutcome.NotYourGuest, desk.Use(Owner + 1, Slot(5), refusing, out _), "another cook");
-            Assert.AreEqual(CookOutcome.NotYourGuest, desk.Use(Owner + 1, RegisterRules.GiveChangeOption, refusing, out _));
             Assert.AreEqual(10, desk.Head.Tray);
             Assert.AreEqual(CookOutcome.SimRefused, desk.Use(Owner, RegisterRules.GiveChangeOption, refusing, out RegisterSettlement none));
             Assert.IsNull(none.Payment);
@@ -168,8 +166,24 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CookOutcome.NoPayment, new RegisterDesk().Use(Owner, Slot(1), wallet, out _));
         }
 
+        /// <summary>032 review (orchestrator): any cook works the head payment (co-op); the money goes to the payee who served.</summary>
         [Test]
-        public void TheRegister_SettlesByItself_WhenTheKitchenClosesOrThePayeeLeft_Once()
+        public void AnyCook_SettlesAnotherCooksGuest_AndThePayeeGetsTheMoney()
+        {
+            var desk = new RegisterDesk();
+            var wallet = new CountingWallet();
+            desk.Open(Cash(1, 352, 30, 400)); // served by Owner (A)
+            int b = Owner + 1;
+            foreach (int coin in new[] { 10, 5, 2, 1 }) Assert.AreEqual(CookOutcome.Ok, desk.Use(b, Slot(coin), wallet, out _));
+            Assert.AreEqual(CookOutcome.Ok, desk.Use(b, RegisterRules.GiveChangeOption, wallet, out RegisterSettlement s));
+            Assert.AreEqual((Owner, 382L), wallet.Paid.Single(), "paid once, to A");
+            Assert.AreEqual(30, s.TipPaid);
+            desk.Open(Card(2, 100, 10));
+            Assert.AreEqual(CookOutcome.Ok, desk.Use(b, RegisterRules.CardOption, wallet, out _), "B takes A's card payment too");
+        }
+
+        [Test]
+        public void TheRegister_SettlesByItself_TheBillOnly_Once()
         {
             var desk = new RegisterDesk();
             var wallet = new CountingWallet();
@@ -180,7 +194,8 @@ namespace Worktown.Game.Tests
             desk.Use(Owner, Slot(50), wallet, out _); // a wrong tray does not count when the register settles by itself
             Assert.IsTrue(desk.SettleAutomatically(1, wallet, out RegisterSettlement s));
             Assert.IsTrue(s.Automatic);
-            Assert.AreEqual(382, s.Paid);
+            Assert.AreEqual(352, s.Paid, "032 review: the bill only, no tip");
+            Assert.AreEqual(0, s.TipPaid);
             Assert.IsFalse(s.WrongChange);
             Assert.IsFalse(desk.SettleAutomatically(1, wallet, out _), "once");
             Assert.AreEqual(1, wallet.Calls);
@@ -235,6 +250,168 @@ namespace Worktown.Game.Tests
             tray.OnServer(0); // paid or taken back
             Assert.AreEqual(0, tray.Shown);
             Assert.AreEqual(0, tray.PendingCount);
+        }
+
+
+        // ---- 032 review: the register's flow (RegisterFlow, what CustomerService routes) ----
+
+        /// <summary>Records what the flow shows, in order; can throw on a chosen step.</summary>
+        private sealed class RecordingStage : IGuestStage
+        {
+            public readonly List<string> Calls = new List<string>();
+            public string ThrowOn;
+
+            private void Step(string call)
+            {
+                Calls.Add(call);
+                if (ThrowOn != null && call.StartsWith(ThrowOn)) throw new InvalidOperationException("test: " + call);
+            }
+
+            public void Paying(int guestId, string bubble, int lineIndex) => Step("Paying " + guestId);
+            public void Leave(int guestId, string bubble, byte mood) => Step("Leave " + guestId);
+            public void LineMoved() => Step("LineMoved");
+            public void Feed(string line) => Step("Feed " + line);
+            public void Reward(int stars, long paid, long tip) => Step("Reward " + paid + " " + tip);
+            public void Log(string line) => Calls.Add("Log " + line);
+        }
+
+        private static GuestPick Pick(int guest) =>
+            new GuestPick(guest, Menu.FalafelWrap, new OrderFit(OrderMatch.Exact, 0, 1f, 5), 1000, 100, 1200);
+
+        private static GuestOrder CashOrder => new GuestOrder(new OrderModifier[0], 60, false, 50);
+        private static GuestOrder CardOrder => new GuestOrder(new OrderModifier[0], 60, true, 10);
+
+        private static Shift OpenShift()
+        {
+            var shift = new Shift();
+            shift.OnClock(8, 0f, 0);
+            return shift;
+        }
+
+        [Test]
+        public void AHandOverThatThrowsAfterTheLineJoined_PaysExactlyOnce()
+        {
+            var flow = new RegisterFlow(OpenShift());
+            var stage = new RecordingStage { ThrowOn = "Paying" };
+            var wallet = new CountingWallet();
+            RegisterPayment p = flow.HandOver(Pick(1), Owner, 400, CardOrder, stage, 0f);
+            Assert.IsNotNull(p);
+            Assert.IsTrue(flow.Desk.IsWaiting(1), "the line is the commit point");
+            Assert.IsTrue(stage.Calls.Any(c => c.StartsWith("Log [Register] a presentation step failed")), "logged, not thrown");
+            // The counter's fallback: the hand-over may have thrown (handed false) but the guest is in line: no payment at the counter.
+            Assert.IsFalse(RegisterFlow.FallbackPays(false, flow.Desk.IsWaiting(1)));
+            Assert.IsTrue(RegisterFlow.FallbackPays(false, false), "a guest that never joined: the counter pays the bill");
+            Assert.IsFalse(RegisterFlow.FallbackPays(true, false));
+            Assert.AreEqual(CookOutcome.Ok, flow.Use(Owner + 1, RegisterRules.CardOption, wallet, stage, 1f));
+            Assert.AreEqual(1, wallet.Calls, "paid once, at the register");
+            Assert.AreEqual(400 + p.Tip, wallet.Paid[0].Amount);
+        }
+
+        [Test]
+        public void APayment_SendsTheGuestOutFirst_ThenTheFeedAndTheReward_EvenWhenOneFails()
+        {
+            Shift shift = OpenShift();
+            var flow = new RegisterFlow(shift);
+            var stage = new RecordingStage { ThrowOn = "Feed" };
+            var wallet = new CountingWallet();
+            RegisterPayment p = flow.HandOver(Pick(1), Owner, 1000, CashOrder, stage, 0f);
+            foreach (int coin in CashRules.Coins(p.ChangeDue)) flow.Use(Owner, Slot(coin), wallet, stage, 1f);
+            Assert.AreEqual(CookOutcome.Ok, flow.Use(Owner, RegisterRules.GiveChangeOption, wallet, stage, 2f));
+            List<string> shown = stage.Calls.Where(c => !c.StartsWith("Log")).ToList();
+            int leave = shown.IndexOf("Leave 1");
+            Assert.GreaterOrEqual(leave, 0, "the guest leaves");
+            Assert.Less(leave, shown.FindIndex(c => c.StartsWith("Feed")), "before the feed");
+            Assert.IsTrue(shown.Any(c => c.StartsWith("Reward")), "the reward still comes after the feed failed");
+            Assert.IsFalse(flow.Desk.IsWaiting(1));
+            Assert.AreEqual(p.Tip, shift.Live.Tips);
+        }
+
+        [Test]
+        public void ThePayeeLeaving_SettlesTheBillWithoutATip_AndTheGuestLeaves()
+        {
+            Shift shift = OpenShift();
+            var flow = new RegisterFlow(shift);
+            var stage = new RecordingStage();
+            var wallet = new CountingWallet();
+            RegisterPayment p = flow.HandOver(Pick(1), Owner, 400, CashOrder, stage, 0f);
+            Assert.Greater(p.Tip, 0);
+            Assert.IsTrue(flow.SettleAutomatically(1, wallet, stage, "the payee left"));
+            Assert.AreEqual((Owner, 400L), wallet.Paid.Single(), "the bill only");
+            Assert.Contains("Leave 1", stage.Calls);
+            Assert.AreEqual(0, shift.Live.Tips);
+            Assert.AreEqual(400, shift.Live.Earned);
+            Assert.IsFalse(flow.SettleAutomatically(1, wallet, stage, "again"), "once");
+        }
+
+        [Test]
+        public void ClosingTime_SettlesEveryWaitingGuest_BillOnly()
+        {
+            Shift shift = OpenShift();
+            var flow = new RegisterFlow(shift);
+            var stage = new RecordingStage();
+            var wallet = new CountingWallet();
+            flow.HandOver(Pick(1), Owner, 400, CashOrder, stage, 0f);
+            flow.HandOver(Pick(2), Owner + 1, 200, CardOrder, stage, 0f);
+            shift.OnClock(14, 10f, 0); // closes: the summary shows, the register settles after
+            flow.SettleAll(_ => wallet, stage);
+            CollectionAssert.AreEquivalent(new[] { (Owner, 400L), (Owner + 1, 200L) }, wallet.Paid);
+            Assert.IsNull(flow.Desk.Head);
+            Assert.Contains("Leave 1", stage.Calls);
+            Assert.Contains("Leave 2", stage.Calls);
+            Assert.AreEqual(0, shift.Last.Tips, "no tip for skipping the register");
+            Assert.AreEqual(2, shift.Last.Served);
+        }
+
+        [Test]
+        public void AHeadNobodyTakes_SettlesByItselfAfter30Seconds()
+        {
+            var flow = new RegisterFlow(OpenShift());
+            var stage = new RecordingStage();
+            var wallet = new CountingWallet();
+            flow.HandOver(Pick(1), Owner, 400, CashOrder, stage, 0f);
+            Assert.IsFalse(flow.Tick(10f, _ => wallet, stage));
+            flow.Use(Owner, Slot(5), wallet, stage, 20f); // touched at 20 s
+            Assert.IsFalse(flow.Tick(45f, _ => wallet, stage), "25 s since the last touch");
+            Assert.IsTrue(flow.Tick(50.5f, _ => wallet, stage), "30 s untouched");
+            Assert.AreEqual(400, wallet.Paid.Single().Amount, "the bill, the tray ignored, no tip");
+            Assert.Contains("Leave 1", stage.Calls);
+        }
+
+        [Test]
+        public void ARefusedSelfSettle_StillSendsTheGuestOut_AndAGoneGuestSettlesWithoutLeaving()
+        {
+            var flow = new RegisterFlow(OpenShift());
+            var stage = new RecordingStage();
+            var refusing = new CountingWallet { Refuse = CookOutcome.SimRefused };
+            flow.HandOver(Pick(1), Owner, 400, CashOrder, stage, 0f);
+            Assert.IsTrue(flow.SettleAutomatically(1, refusing, stage, "test"));
+            Assert.IsFalse(flow.Desk.IsWaiting(1), "no ghost in the line");
+            Assert.Contains("Leave 1", stage.Calls, "no ghost in the shop");
+
+            // OnExited of a paying guest: it settles (bill only) so the money is not lost; it cannot walk out any more.
+            var wallet = new CountingWallet();
+            flow.HandOver(Pick(2), Owner, 300, CardOrder, stage, 0f);
+            stage.Calls.Clear();
+            Assert.IsTrue(flow.Exited(2, wallet, stage));
+            Assert.AreEqual(300, wallet.Paid.Single().Amount);
+            Assert.IsFalse(stage.Calls.Contains("Leave 2"));
+            Assert.IsFalse(flow.Exited(2, wallet, stage), "once");
+        }
+
+        [Test]
+        public void TheShift_RecordsTheTipActuallyPaid_AfterAWrongChange()
+        {
+            Shift shift = OpenShift();
+            var flow = new RegisterFlow(shift);
+            var stage = new RecordingStage();
+            var wallet = new CountingWallet();
+            RegisterPayment p = flow.HandOver(Pick(1), Owner, 1000, CashOrder, stage, 0f);
+            Assert.Greater(p.Tip, 5);
+            foreach (int coin in CashRules.Coins(p.ChangeDue + 5)) flow.Use(Owner, Slot(coin), wallet, stage, 1f); // five too many
+            flow.Use(Owner, RegisterRules.GiveChangeOption, wallet, stage, 2f);
+            Assert.AreEqual(p.Due - 5, wallet.Paid.Single().Amount);
+            Assert.AreEqual(p.Tip - 5, shift.Live.Tips, "the wrong change came out of the tip");
+            Assert.AreEqual(p.Due - 5, shift.Live.Earned);
         }
 
         // ---- patience ----

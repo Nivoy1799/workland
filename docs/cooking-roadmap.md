@@ -109,3 +109,6 @@ tuned later by the human.
   (spec 014 demand reconcile) is now the top miss reason and may be redundant with patience; order bubbles behind the
   ticket rail from the kitchen; rail cards dim from below; third person can only take card payments; one look-tour
   run exited 139 during FishNet shutdown after its sheet (flaky, watch).
+- 032 review (CHANGES REQUESTED): double pay on hand-over failure (must-fix) and register decisions (any cook works the
+  head payment; self-settled payments pay no tip; head untouched 30 s auto-settles) in the 032 fix round. Process:
+  future rounds commit spec and review fixes as separate commits.

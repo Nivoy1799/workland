@@ -102,9 +102,10 @@ lettuce is paid as the order, not as an incomplete recipe (the sim's own rating 
 the register, bubble "Thanks! Here's $400." / "Thanks! Card, please."). The register is `StationKind.Register` (appended, station index 9)
 with nine slots as `RequestStation` options: tray 0-5, take back 6, hand over 7, card terminal 8. The pure `Shop/RegisterDesk` behind
 `IRegisterWallet` (031b pattern): a tray click adds to the server's change, take back empties it, hand over / the terminal settle once
-(the payment leaves the line); refusals (NoPayment, NotYourGuest, PaysByCard, PaysCash, TrayFull, TrayEmpty, the wallet's) change and
-pay nothing. Wrong change either way costs the difference and a review star. Only the payee (who handed the food over) works its
-payment; the kitchen closing or the payee leaving settles it by itself (the due, no mistake). On settling: the review, the shift's
+(the payment leaves the line); refusals (NoPayment, PaysByCard, PaysCash, TrayFull, TrayEmpty, the wallet's) change and
+pay nothing. Wrong change either way costs the difference and a review star. Any cook works the head payment, the money goes to
+the payee (who handed the food over); the kitchen closing, the payee leaving or 30 s untouched settle it by itself (the bill, no tip;
+032 review). On settling: the review, the shift's
 numbers, a feed line, the reward moment over the register (stars = the review, paid, tip), the guest leaves with its review bubble.
 Patience: the pure `Npc/PatienceBook` drains only for queued guests standing at their slot; out of patience they leave ("I can't wait any
 longer...", missed: Patience). Missed reasons: Patience, Gone (the 014 demand reconcile, "Never mind..."), Closed.
@@ -180,6 +181,40 @@ modifiers on real builds and the queue pick; the bill and the held guest sale; t
   Wrong change is not shown in the tour (EditMode covers it).
 - Counting change is first person only; third-person E takes only a card payment.
 - The hand-off parcel is the wrap paper for wraps, the box for the veggie box, a bag for everything else (fries too).
+
+**032 review fixes** (review of 129af3d; uncommitted round).
+1. **Hand-over pays once.** The served guest's flow moved into the pure `Shop/RegisterFlow` (CustomerService only routes; the
+   presentation goes through `IGuestStage`, the money through `IRegisterWallet`). `RegisterFlow.HandOver` opens the payment in the
+   register's line first (the commit point), then shows it; every presentation step runs on its own and is logged on failure, never
+   thrown. `OnHandedOver` returns true once the guest is in line; the counter's fallback pays only when `RegisterFlow.FallbackPays(handed,
+   IsPaying(guest))` (not handed and not in line). Test: a hand-over whose presentation throws after the line joined pays once.
+2. **Orchestrator decisions.** Any cook works the head payment (`NotYourGuest` is gone; the money still goes to the payee who served).
+   Payments that settle by themselves pay the bill only, no tip: closing (`SettleAll`), the payee leaving, the guest's object gone
+   (`Exited`), and a new rule: the head untouched for 30 s (`RegisterFlow.Tick`, `IdleSettleSeconds`). `RegisterSettlement.TipPaid`.
+3. **No ghost guests.** On every settle path the guest is sent out, the leave first, then the feed and the reward (each on its own); a
+   refused self-settle still removes the guest from the line and sends it out; a paying guest whose object is gone settles (bill only).
+4. **SurplusCap margin.** A lots portion counts one dollar less (`PriceRules.LotsRoundingMargin`, `PortionCounted`): with any number
+   of merged lots layers the item's cost is never above what was spent. Tests: three merged taps at $14 cost exactly what was paid; two
+   merged lots layers at $14 (and every bottle price 1-200) never above; the old pin of a lots portion is updated to the new rule;
+   "stays below" reworded to "never above".
+5. **Shift numbers** record `TipPaid` (after a wrong change the difference comes out of the tip first). Test.
+6. **SqueezeHoldGate:** the aim leaving the dispenser before 0.2 s is `Cancelled` (no E action at all); after 0.2 s the squeeze ends. Tests.
+7. **Dead code:** `CustomerService.TryPick(plated, stars, ...)`, `TownEconomy.TrySell(..., npcPayPermille)`, `EconomyService.TrySell(...,
+   npcPayPermille)`, `OrderRules.PayPermille` / `TipOf` (and their constants) removed; their tests replaced (`GuestShare_...`, the
+   guest-sale test in `CustomerOrderTests`) or removed (the 027c `TipOf` test). Only `TrySellForGuest` / `TryPayGuest` adjust balances
+   outside the engine (`AdjustBalance`). `_squeezers` is keyed with `AssemblyDesk.KeyOf`.
+8. **Flow tests** (`OrdersTwoTests`, through `RegisterFlow` with a fake wallet and a recording stage): the hand-over fallback, the payee
+   leaving, settling at closing (no tip), payment then the guest leaving (leave before feed and reward, a failing feed keeps nothing),
+   a paying guest's object gone, the 30 s idle settle, a refused self-settle, the tip after a wrong change, any cook settling another's guest.
+9. `ReviewRules.SlowPermille` (750, integer math; `GuestPatience.SlowShare` removed).
+
+After this round `scripts/verify.sh` PASS: 991 EditMode (was 984), 292 sim (was 291). Visual check: cook ok (570 images, timeouts
+0, aim fallbacks 0, the same payments, rail and rings as before); the look tour wrote its sheet (58 images, timeouts 0) but its client
+exited 139 after `[Tour] done`, in 4 of the last 6 runs (3 in a row). The Windows minidumps (`%LOCALAPPDATA%\CrashDumps\Worktown.exe.*.dmp`,
+11-09) all fault in `D3D12Core.dll` +0x264831 (access violation) during the player's shutdown, after FishNet stopped; an older dump
+(11-07, before 032) is a breakpoint in UnityPlayer.dll. No managed stack, no Exception line. It looks like a D3D12 teardown crash
+(perhaps the PSO cache `dx12_pso_cache_lib.bin`, rewritten at each shutdown), not a game rule; trying `-force-d3d11` for the tours, or
+clearing that cache, is a decision for the orchestrator.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

@@ -11,7 +11,7 @@ namespace Worktown.Game.Shop
     public sealed class RegisterPayment
     {
         public int GuestId;
-        /// <summary>The owner id of the player who handed the food over: the money is theirs, only they work this payment.</summary>
+        /// <summary>The owner id of the player who handed the food over: the money is theirs (032 review: any cook may work the payment).</summary>
         public int Payee;
         public byte Dish;
         public long Bill;

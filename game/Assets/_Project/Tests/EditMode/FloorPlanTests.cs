@@ -824,7 +824,7 @@ namespace Worktown.Game.Tests
                 Assert.IsTrue(queue.TryPick(d => OrderRules.Match(MenuKitchen.ExactFries(), Menu.ById(d)), out QueuedCustomer picked, out OrderMatch match));
                 Assert.AreEqual(41, picked.Id);
                 Assert.AreEqual(OrderMatch.Exact, match);
-                Assert.Greater(OrderRules.PayPermille(match, 4), 0);
+                Assert.Greater(OrderRules.GuestSharePermille(match), 0);
                 Assert.IsTrue(queue.Remove(41));
                 Assert.AreEqual(head, CustomerRules.QueueSlot(head, direction, queue.IndexOf(42)), "the second guest moves up to the head");
                 Assert.AreNotEqual(first, second);

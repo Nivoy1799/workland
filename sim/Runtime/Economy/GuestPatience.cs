@@ -17,8 +17,6 @@ namespace Worktown.Sim.Economy
         public const int BaseSpreadPercent = 10;
         /// <summary>The ring turns Terracotta at this share of patience left or less.</summary>
         public const float LowShare = 0.25f;
-        /// <summary>The guest is "slow-served" (the review notices) past this share of patience used.</summary>
-        public const float SlowShare = 0.75f;
 
         /// <summary>A guest's own base in whole seconds (one draw).</summary>
         public static int DrawBase(IRandom random)

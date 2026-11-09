@@ -53,10 +53,10 @@ namespace Worktown.Sim.Economy
         /// <summary>
         /// Sum of grocer prices of the item's components; null if any component is unpriced. Spec 031b: a squeezed portion of
         /// sauce counts at the least share any squeeze of its amount bucket was charged (<see cref="PortionPercentOf"/>), not at
-        /// the bottle's price. This is a ceiling, not the exact amount paid: rounding can put it $1 above what several merged
-        /// squeezes cost (three 10 % taps of a $14 bottle cost 3 x $1, a "lots" portion counts $4); the -1 in
-        /// <see cref="SurplusCap"/> absorbs that, so the wholesaler's cap stays below what was spent. Items without a squeeze
-        /// are unchanged.
+        /// the bottle's price. 032 review: rounding can put a "lots" layer made of merged squeezes up to $1 above what they cost
+        /// (three 10 % taps of a $14 bottle cost 3 x $1, a 30 % portion is $4), so each lots portion counts
+        /// <see cref="LotsRoundingMargin"/> less; with any number of merged lots layers the cost is never above what was spent, and
+        /// the wholesaler's cap (<see cref="SurplusCap"/>) never pays more than that. Items without a squeeze are unchanged.
         /// </summary>
         public static long? ItemCost(EconomyCatalog c, Item item)
         {
@@ -108,15 +108,24 @@ namespace Worktown.Sim.Economy
         public static int PortionPercentOf(string? amountBucket) =>
             amountBucket == Assembly.Lots ? PortionPercent(Assembly.LotsFrom) : PortionStepPercent;
 
+        /// <summary>032 review: a lots portion counts this much less than a 30 % portion (merged squeezes round down by up to $1).</summary>
+        public const long LotsRoundingMargin = 1;
+
+        /// <summary>What a portion of a <paramref name="price"/> bottle in <paramref name="amountBucket"/> counts in <see cref="ItemCost"/>.</summary>
+        public static long PortionCounted(long price, string? amountBucket)
+        {
+            long cost = PortionCost(price, PortionPercentOf(amountBucket));
+            return amountBucket == Assembly.Lots ? Math.Max(0L, cost - LotsRoundingMargin) : cost;
+        }
+
         private static long PortionDiscount(EconomyCatalog c, Item item)
         {
             if (item.Kind == OperationKind.Portion)
             {
                 item.Buckets.TryGetValue(Assembly.AmountParam, out string? bucket);
-                int percent = PortionPercentOf(bucket);
                 long discount = 0;
                 foreach (var comp in item.Components)
-                    if (c.TryGetGrocerPrice(comp.BaseId, out var p)) discount += p - PortionCost(p, percent);
+                    if (c.TryGetGrocerPrice(comp.BaseId, out var p)) discount += p - PortionCounted(p, bucket);
                 return discount;
             }
             long sum = 0;

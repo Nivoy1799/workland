@@ -11,8 +11,10 @@ namespace Worktown.Game.Shop
     /// - Cash: each click on a tray slot adds that coin or note to the change on the server (<see cref="Use"/>); "take back" empties
     ///   the tray; "hand over" settles: the payee gets the due less the difference of a wrong change (<see cref="CashRules.CashPayout"/>).
     /// - Card: one click on the terminal settles the due.
-    /// - Only the payee (the player who handed the food over) works its payment; the money is theirs.
-    /// - <see cref="SettleAutomatically"/>: the kitchen closed or the payee left: the guest pays the due by itself, no tray.
+    /// - 032 review (orchestrator): any cook works the head payment (co-op: one cook away never blocks the till); the money still goes
+    ///   to the payee (the player who handed the food over).
+    /// - <see cref="SettleAutomatically"/>: the kitchen closed, the payee left or nobody took the payment in time: the guest pays the
+    ///   bill by itself, without a tip, so skipping the register is never better than counting the change.
     /// A settled payment leaves the line, so it can never pay twice.
     /// </summary>
     public sealed class RegisterDesk
@@ -32,10 +34,10 @@ namespace Worktown.Game.Shop
         public bool IsWaiting(int guestId) => IndexOf(guestId) >= 0;
 
         /// <summary>
-        /// One click on register option <paramref name="option"/> by <paramref name="player"/>: a tray slot adds its value, take back
-        /// empties the tray, hand over or the terminal settles (<paramref name="settled"/>). Refusals: NoPayment, NotYourGuest,
-        /// PaysByCard / PaysCash (the other way of paying), TrayFull, TrayEmpty, InvalidOption, and the wallet's own; each changes
-        /// nothing and pays nothing.
+        /// One click on register option <paramref name="option"/> by any cook <paramref name="player"/>: a tray slot adds its value,
+        /// take back empties the tray, hand over or the terminal settles (<paramref name="settled"/>). Refusals: NoPayment, PaysByCard /
+        /// PaysCash (the other way of paying), TrayFull, TrayEmpty, InvalidOption, and the wallet's own; each changes nothing and pays
+        /// nothing.
         /// </summary>
         public CookOutcome Use(int player, int option, IRegisterWallet wallet, out RegisterSettlement settled)
         {
@@ -43,7 +45,6 @@ namespace Worktown.Game.Shop
             if (option < 0 || option >= RegisterRules.SlotCount) return CookOutcome.InvalidOption;
             RegisterPayment head = Head;
             if (head == null) return CookOutcome.NoPayment;
-            if (head.Payee != player) return CookOutcome.NotYourGuest;
             if (option == RegisterRules.CardOption)
                 return head.Card ? Settle(head, head.Due, 0, false, wallet, out settled) : CookOutcome.PaysCash;
             if (head.Card) return CookOutcome.PaysByCard;
@@ -65,8 +66,9 @@ namespace Worktown.Game.Shop
         }
 
         /// <summary>
-        /// The kitchen closed or the payee left: guest <paramref name="guestId"/> pays its due by itself (no tray, no mistake). False
-        /// when it is not in line or the wallet refused (then it stays in line).
+        /// The kitchen closed, the payee left or nobody took the payment in time: guest <paramref name="guestId"/> pays its bill by
+        /// itself, no tip (032 review), no tray, no mistake. False when it is not in line or the wallet refused (then it stays in line;
+        /// the caller decides).
         /// </summary>
         public bool SettleAutomatically(int guestId, IRegisterWallet wallet, out RegisterSettlement settled)
         {
@@ -74,7 +76,7 @@ namespace Worktown.Game.Shop
             int index = IndexOf(guestId);
             if (index < 0) return false;
             RegisterPayment p = _line[index];
-            return Settle(p, p.Due, p.ChangeDue, true, wallet, out settled) == CookOutcome.Ok;
+            return Settle(p, p.Bill, p.ChangeDue, true, wallet, out settled) == CookOutcome.Ok;
         }
 
         /// <summary>Forgets a guest without paying (its object is gone); false when it was not in line.</summary>

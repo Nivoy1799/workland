@@ -115,13 +115,7 @@ namespace Worktown.Game.Economy
         /// <summary>Server: sell a plated dish to NPC demand or the wholesaler.</summary>
         public SaleResult TrySell(NetworkObject player, Item plated)
         {
-            return TrySell(player, plated, EconomyRules.FullPayPermille);
-        }
-
-        /// <summary>Spec 022: a sale to NPC demand pays <paramref name="npcPayPermille"/> of the sim payout (the order factor).</summary>
-        public SaleResult TrySell(NetworkObject player, Item plated, int npcPayPermille)
-        {
-            SaleResult result = _economy.TrySell(EconomyRules.AccountId(player.OwnerId), plated, npcPayPermille);
+            SaleResult result = _economy.TrySell(EconomyRules.AccountId(player.OwnerId), plated);
             PublishWallet(player);
             if (result.Ok) PublishBoard();
             return result;

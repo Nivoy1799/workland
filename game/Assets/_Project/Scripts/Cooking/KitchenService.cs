@@ -290,7 +290,7 @@ namespace Worktown.Game.Cooking
         {
             CookOutcome started = Desk.Press(board.Index, d, player.OwnerId, Tick, WalletOf(player));
             if (started != CookOutcome.Ok) return started;
-            _squeezers[BurnerKey(board.Index, d)] = player;
+            _squeezers[AssemblyDesk.KeyOf(board.Index, d)] = player; // 032 review: the desk's key
             RefreshAssembly(board);
             return CookOutcome.Ok;
         }
@@ -308,7 +308,7 @@ namespace Worktown.Game.Cooking
 
         private CookOutcome EndSqueeze(PickupInteractor player, Station board, int d)
         {
-            _squeezers.Remove(BurnerKey(board.Index, d));
+            _squeezers.Remove(AssemblyDesk.KeyOf(board.Index, d));
             CookOutcome made = Desk.End(board.Index, d, player.OwnerId, Tick, TickRate, WalletOf(player), out AssemblyDesk.SqueezeResult r);
             RefreshAssembly(board);
             if (made != CookOutcome.Ok) return made;
@@ -399,7 +399,7 @@ namespace Worktown.Game.Cooking
             while (_kitchen.TryFindOverdueSqueeze(tick, tickRate, out int board, out int d, out int owner))
             {
                 Station station = board >= 0 && board < _stations.Length ? _stations[board] : null;
-                long key = BurnerKey(board, d);
+                long key = AssemblyDesk.KeyOf(board, d);
                 if (_squeezers.TryGetValue(key, out PickupInteractor player) && player != null && player.OwnerId == owner && station != null)
                 {
                     CookOutcome ended = EndSqueeze(player, station, d);
@@ -989,12 +989,16 @@ namespace Worktown.Game.Cooking
 
             // Spec 014, after the sale is complete: customers must never be able to break the money transaction
             // (review blocker). Spec 032: the guest takes the dish and pays at the register; should that fail, the bill is paid now.
+            // 032 review: never for a guest already in the register's line (it pays there, once; GuestFallback).
             if (served)
             {
                 bool handed = false;
-                try { handed = _customers.OnHandedOver(pick, player, soldPayout, out _); }
+                try { handed = _customers.OnHandedOver(pick, player, soldPayout); }
                 catch (System.Exception e) { Debug.LogException(e); }
-                if (!handed)
+                bool waiting = true;
+                try { waiting = _customers.IsPaying(pick.CustomerId); }
+                catch (System.Exception e) { Debug.LogException(e); }
+                if (Worktown.Game.Shop.RegisterFlow.FallbackPays(handed, waiting))
                     _economy.TryPayGuest(player.OwnerId, player.NetworkObject, EconomyRules.ApplyPermille(soldPayout, pick.BillPermille), out _);
             }
             return CookOutcome.Ok;

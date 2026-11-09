@@ -4,7 +4,7 @@ namespace Worktown.Sim.Economy
 {
     /// <summary>
     /// Spec 032: the guest's review, deterministic. It starts at the order's stars (1-5) and the guest's mood takes stars off: one
-    /// for a wait past <see cref="GuestPatience.SlowShare"/> of the patience, one for one step short of the order, one for wrong
+    /// for a wait past <see cref="SlowPermille"/> of the patience, one for one step short of the order, one for wrong
     /// change; the wrong dish (two or more steps short) is at most 2 stars. Clamped to 1-5. The key names the main complaint (wrong
     /// dish, wrong change, order a bit off, slow, in that order), else it follows the stars. The text is a template line per key
     /// (no AI text yet, spec 032 out of scope).
@@ -15,11 +15,13 @@ namespace Worktown.Sim.Economy
         public const int MaxStars = 5;
         /// <summary>A wrong dish gets at most this many stars.</summary>
         public const int WrongDishCap = 2;
+        /// <summary>A wait past this share of the patience (permille, integer math) is slow: the review notices.</summary>
+        public const int SlowPermille = 750;
 
         public static GuestReview Review(int orderStars, int waitedTenths, int patienceTenths, int misses, bool wrongChange)
         {
             int stars = Math.Max(MinStars, Math.Min(MaxStars, orderStars));
-            bool slow = patienceTenths > 0 && waitedTenths * 1000L > (long)(GuestPatience.SlowShare * 1000f) * patienceTenths;
+            bool slow = patienceTenths > 0 && waitedTenths * 1000L > (long)SlowPermille * patienceTenths;
             bool wrongDish = misses >= 2;
             if (slow) stars--;
             if (misses == 1) stars--;

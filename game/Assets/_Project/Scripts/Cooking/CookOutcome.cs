@@ -60,8 +60,6 @@ namespace Worktown.Game.Cooking
         NothingToFold,
         /// <summary>Spec 032: nobody waits at the register to pay.</summary>
         NoPayment,
-        /// <summary>Spec 032: the guest at the register was served by another player (only they take its payment).</summary>
-        NotYourGuest,
         /// <summary>Spec 032: the guest pays by card (no cash, no change).</summary>
         PaysByCard,
         /// <summary>Spec 032: the guest pays in cash (the terminal is not for them).</summary>

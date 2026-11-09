@@ -24,9 +24,10 @@ namespace Worktown.Game.Npc
     /// pure clients.
     /// Spec 032: orders 2.0. Each guest draws its modifiers, its patience base and its way of paying from the same seeded RNG
     /// (GuestOrders). Patience drains while it stands in the queue; when it runs out the guest leaves (missed). A guest handed its
-    /// dish (<see cref="OnHandedOver"/>) takes it, walks to the register and waits there (no patience drain) until its payee takes
-    /// the payment (<see cref="UseRegister"/>, the pure <see cref="RegisterDesk"/>): then it pays, leaves a review and goes. The
-    /// kitchen closing (or the payee leaving) settles a waiting payment by itself.
+    /// dish (<see cref="OnHandedOver"/>) takes it, walks to the register and waits there (no patience drain) until a cook takes the
+    /// payment (<see cref="UseRegister"/>; 032 review: any cook, the money goes to the payee; the pure <see cref="RegisterFlow"/> and
+    /// <see cref="RegisterDesk"/>): then it pays, leaves a review and goes. The kitchen closing, the payee leaving or 30 s without a
+    /// touch settle a waiting payment by itself (the bill, no tip).
     /// </summary>
     public sealed class CustomerService : MonoBehaviour
     {
@@ -77,7 +78,9 @@ namespace Worktown.Game.Npc
         private readonly PatienceBook _patience = new PatienceBook();
         private readonly List<KeyValuePair<int, byte>> _patienceBytes = new List<KeyValuePair<int, byte>>();
         private System.Func<int, bool> _atSlot;
-        private readonly RegisterDesk _desk = new RegisterDesk();
+        private RegisterFlow _flowField;
+        private RegisterFlow Flow => _flowField ??= new RegisterFlow(_shift); // 032 review: the register's flow (pure, tested)
+        private System.Func<int, IRegisterWallet> _walletFor;
         private readonly Dictionary<int, PickupInteractor> _payees = new Dictionary<int, PickupInteractor>();
         private readonly List<int> _outOfPatience = new List<int>();
         private readonly List<int> _payeeGone = new List<int>();
@@ -87,7 +90,7 @@ namespace Worktown.Game.Npc
 #endif
 
         /// <summary>Spec 032, tests and the tour log: the register's line.</summary>
-        public RegisterDesk Desk => _desk;
+        public RegisterDesk Desk => Flow.Desk;
 
         private void Start()
         {
@@ -121,7 +124,7 @@ namespace Worktown.Game.Npc
             _arrivedAt.Clear();
             _guests.Clear();
             _patience.Clear();
-            _desk.Clear();
+            Flow.Desk.Clear();
             _payees.Clear();
             _shift.Reset();
             _orders = new SeededRandom(CustomerRules.OrderSeed);
@@ -147,6 +150,12 @@ namespace Worktown.Game.Npc
             }
             UpdatePatience(Time.deltaTime, Time.time);
             SettleForPayeesWhoLeft();
+            // 032 review: a head payment nobody took for 30 s settles by itself (bill only), so one cook away never blocks the till.
+            if (Flow.Tick(Time.time, _walletFor ??= WalletFor, Stage))
+            {
+                PublishShift();
+                PublishRegister();
+            }
             if (Time.time >= _nextRailRefresh)
             {
                 _nextRailRefresh = Time.time + RailRefreshSeconds;
@@ -187,13 +196,8 @@ namespace Worktown.Game.Npc
             }
             _queue.Clear();
             _arrivedAt.Clear();
-            // Spec 032: the register settles every waiting payment by itself (the guests paid; the summary counts them).
-            while (_desk.Head != null)
-            {
-                RegisterPayment p = _desk.Head;
-                if (_desk.SettleAutomatically(p.GuestId, WalletFor(p.GuestId), out RegisterSettlement s)) Finish(s);
-                else _desk.Remove(p.GuestId);
-            }
+            // Spec 032: the register settles every waiting payment by itself (the bill, no tip; the summary counts them).
+            Flow.SettleAll(_walletFor ??= WalletFor, Stage);
             ShiftSummary sum = _shift.Last;
             Debug.Log("[Customers] shift of day " + _shift.LastDay + " closed: served " + sum.Served + ", earned "
                 + EconomyRules.Money(sum.Earned) + " (tips " + EconomyRules.Money(sum.Tips) + "), stars "
@@ -203,21 +207,6 @@ namespace Worktown.Game.Npc
         }
 
         private static bool HasDishes(string market) => Menu.HasDishes(market, Menu.CrateIngredients);
-
-        /// <summary>
-        /// Server, before a counter sale (pure read, nothing changes): who would get <paramref name="plated"/> and the
-        /// pay share. The first exact match in queue order, else the first in line. False when nobody waits or the shift
-        /// is closed (then the sale pays the full sim price as before).
-        /// </summary>
-        public bool TryPick(Item plated, int stars, out int customerId, out byte dish, out OrderMatch match, out int payPermille)
-        {
-            bool picked = TryPick(plated, out GuestPick pick);
-            customerId = pick.CustomerId;
-            dish = picked ? pick.Dish : Menu.None;
-            match = picked ? pick.Fit.Match : OrderMatch.Wrong;
-            payPermille = picked ? OrderRules.PayPermille(match, stars) : EconomyRules.FullPayPermille;
-            return picked;
-        }
 
         /// <summary>
         /// Spec 032, server, a pure read: the guest that gets <paramref name="plated"/> (the first in queue order whose order, with
@@ -241,92 +230,50 @@ namespace Worktown.Game.Npc
 
         private static int Tenths(float seconds) => seconds <= 0f ? 0 : (int)System.Math.Min(int.MaxValue, System.Math.Round(seconds * 10f));
 
+        /// <summary>Spec 032 (review): guest <paramref name="guestId"/> waits in the register's line (it pays there, exactly once).</summary>
+        public bool IsPaying(int guestId) => Flow.Desk.IsWaiting(guestId);
+
         /// <summary>
         /// Spec 032, server, after the sim sold the dish (credited nothing yet: TrySellForGuest): guest <paramref name="pick"/> takes it
         /// from <paramref name="payee"/>, walks to the register and waits to pay its bill (<paramref name="simPayout"/> at the pick's
-        /// share) and its tip (speed, accuracy, quality). False when the guest is gone.
+        /// share) and its tip. False only when the guest is gone (then the caller pays the bill at once). 032 review: the register's
+        /// line is the commit point (RegisterFlow.HandOver); once the guest is in it this returns true whatever the presentation does.
         /// </summary>
-        public bool OnHandedOver(GuestPick pick, PickupInteractor payee, long simPayout, out RegisterPayment payment)
+        public bool OnHandedOver(GuestPick pick, PickupInteractor payee, long simPayout)
         {
-            payment = null;
             if (payee == null || !_queue.Remove(pick.CustomerId)) return false;
             _arrivedAt.Remove(pick.CustomerId);
             _guests.TryGetValue(pick.CustomerId, out Guest g);
             _guests.Remove(pick.CustomerId);
             _patience.Remove(pick.CustomerId); // spec 032: no patience at the register
-            long bill = EconomyRules.ApplyPermille(simPayout, pick.BillPermille);
-            long tip = TipRules.Tip(bill, pick.WaitedTenths, pick.PatienceTenths, pick.Fit.Misses, pick.Fit.Stars);
-            GuestOrder order = g != null ? g.Order : new GuestOrder(new OrderModifier[0], GuestPatience.BaseSeconds, true, CashRules.GuestNotes[0]);
-            payment = new RegisterPayment
-            {
-                GuestId = pick.CustomerId,
-                Payee = payee.OwnerId,
-                Dish = pick.Dish,
-                Bill = bill,
-                Tip = tip,
-                Card = order.PaysByCard,
-                OrderStars = pick.Fit.Stars,
-                Misses = pick.Fit.Misses,
-                WaitedTenths = pick.WaitedTenths,
-                PatienceTenths = pick.PatienceTenths,
-            };
-            payment.Handed = payment.Card ? payment.Due : CashRules.Handed(payment.Due, order.Note);
-            _desk.Open(payment);
             _payees[pick.CustomerId] = payee;
-            if (_customers.TryGetValue(pick.CustomerId, out Customer customer))
+            Flow.HandOver(pick, payee.OwnerId, simPayout, g != null ? g.Order : null, Stage, Time.time);
+            try
             {
-                customer.ServerPay(CustomerRules.PayText(payment.Card, payment.Handed), PaySlot(_desk.Line.Count - 1), _queueFacing);
-                Debug.Log("[Customers] handed " + Menu.NameOf(pick.Dish) + " over: " + OrderRules.Describe(pick.Fit.Match) + " (" + pick.Fit.Misses
-                    + " short, " + pick.Fit.Stars + " stars), bill " + EconomyRules.Money(bill) + " + tip " + EconomyRules.Money(tip) + ", "
-                    + (payment.Card ? "card" : "cash " + EconomyRules.Money(payment.Handed) + ", change " + EconomyRules.Money(payment.ChangeDue))
-                    + "; waited " + (pick.WaitedTenths / 10f).ToString("0.0") + " of " + (pick.PatienceTenths / 10f).ToString("0.0") + " s");
+                Sync();
+                PublishShift();
+                PublishRegister();
             }
-            Sync();
-            PublishShift();
-            PublishRegister();
+            catch (System.Exception e) { Debug.LogException(e); }
             return true;
         }
 
         /// <summary>
-        /// Spec 032, server: one click on the register (RequestStation; reach was checked): a coin or note into the change, take it
-        /// back, hand it over, or the card terminal. The pure desk decides and pays once; a refusal changes and pays nothing.
+        /// Spec 032, server: one click on the register (RequestStation; reach was checked) by any cook: a coin or note into the change,
+        /// take it back, hand it over, or the card terminal. The pure desk decides and pays the payee once; a refusal changes and pays
+        /// nothing.
         /// </summary>
         public CookOutcome UseRegister(PickupInteractor player, int option)
         {
             if (player == null) return CookOutcome.NoPayment;
-            RegisterPayment head = _desk.Head;
-            CookOutcome outcome = _desk.Use(player.OwnerId, option, head != null ? WalletFor(head.GuestId) : null, out RegisterSettlement settled);
+            RegisterPayment head = Flow.Desk.Head;
+            CookOutcome outcome = Flow.Use(player.OwnerId, option, head != null ? WalletFor(head.GuestId) : null, Stage, Time.time);
+            PublishShift();
             PublishRegister();
-            if (outcome == CookOutcome.Ok && settled.Payment != null) Finish(settled);
             return outcome;
         }
 
-        /// <summary>Spec 032: a payment went through: the review, the shift's numbers, the reward over the register, the guest leaves.</summary>
-        private void Finish(RegisterSettlement s)
-        {
-            RegisterPayment p = s.Payment;
-            _payees.Remove(p.GuestId);
-            GuestReview review = ReviewRules.Review(p.OrderStars, p.WaitedTenths, p.PatienceTenths, p.Misses, s.WrongChange);
-            _shift.RecordSale(p.OrderStars, s.Paid, p.Tip, review);
-            if (_feed != null)
-            {
-                string how = p.Card ? "card" : s.WrongChange ? "cash, wrong change (" + EconomyRules.Money(s.ChangeGiven) + " for "
-                    + EconomyRules.Money(p.ChangeDue) + ")" : "cash";
-                _feed.ServerAdd("Guest paid " + EconomyRules.Money(s.Paid) + " (tip " + EconomyRules.Money(p.Tip) + ", " + how + ") · "
-                    + Menu.NameOf(p.Dish) + " · " + review.Stars + "★ \"" + review.Text + "\"");
-                _feed.ServerReward(_registerStation != null ? _registerStation.Index : 0, review.Stars, s.Paid, p.Tip);
-            }
-            Debug.Log("[Register] guest " + p.GuestId + " paid " + EconomyRules.Money(s.Paid) + " of " + EconomyRules.Money(p.Due) + " (tip "
-                + EconomyRules.Money(p.Tip) + ", " + (p.Card ? "card" : "change " + EconomyRules.Money(s.ChangeGiven) + " of " + EconomyRules.Money(p.ChangeDue))
-                + (s.Automatic ? ", settled by the register" : string.Empty) + "); review " + review.Stars + " stars, " + ReviewRules.KeyId(review.Key));
-            if (_customers.TryGetValue(p.GuestId, out Customer customer))
-                customer.ServerLeave(CustomerRules.ReviewText(review), CustomerRules.MoodOf(review), _entry.position, OnExited);
-            MovePayers();
-            PublishShift();
-            PublishRegister();
-        }
-
-        /// <summary>Spec 032: the payee of a waiting payment left the server: the guest pays by itself (the money is still theirs).</summary>
+        /// <summary>Spec 032: the payee of a waiting payment left the server: the guest pays its bill by itself (no tip), the money is still theirs.</summary>
         private void SettleForPayeesWhoLeft()
         {
             if (_payees.Count == 0) return;
@@ -336,8 +283,50 @@ namespace Worktown.Game.Npc
             foreach (int guest in _payeeGone)
             {
                 _payees.Remove(guest);
-                if (_desk.SettleAutomatically(guest, WalletFor(guest), out RegisterSettlement s)) Finish(s);
+                Flow.SettleAutomatically(guest, WalletFor(guest), Stage, "the payee left");
             }
+            if (_payeeGone.Count > 0)
+            {
+                PublishShift();
+                PublishRegister();
+            }
+        }
+
+        /// <summary>Spec 032 (review): what the register's flow shows, through the guests' objects, the feed and the reward moment.</summary>
+        private IGuestStage Stage => _stage ??= new ServiceStage(this);
+        private IGuestStage _stage;
+
+        private sealed class ServiceStage : IGuestStage
+        {
+            private readonly CustomerService _s;
+
+            public ServiceStage(CustomerService service) => _s = service;
+
+            public void Paying(int guestId, string bubble, int lineIndex)
+            {
+                if (_s._customers.TryGetValue(guestId, out Customer c) && c != null)
+                    c.ServerPay(bubble, _s.PaySlot(lineIndex), _s._queueFacing);
+            }
+
+            public void Leave(int guestId, string bubble, byte mood)
+            {
+                if (_s._customers.TryGetValue(guestId, out Customer c) && c != null)
+                    c.ServerLeave(bubble, mood, _s._entry.position, _s.OnExited);
+            }
+
+            public void LineMoved() => _s.MovePayers();
+
+            public void Feed(string line)
+            {
+                if (_s._feed != null) _s._feed.ServerAdd(line);
+            }
+
+            public void Reward(int stars, long paid, long tip)
+            {
+                if (_s._feed != null) _s._feed.ServerReward(_s._registerStation != null ? _s._registerStation.Index : 0, stars, paid, tip);
+            }
+
+            public void Log(string line) => Debug.Log(line);
         }
 
         /// <summary>The wallet of the payee of guest <paramref name="guestId"/> (null without an economy).</summary>
@@ -463,7 +452,7 @@ namespace Worktown.Game.Npc
         /// <summary>Spec 032: the paying guests stand in line at the register, the first in front of it.</summary>
         private void MovePayers()
         {
-            IReadOnlyList<RegisterPayment> line = _desk.Line;
+            IReadOnlyList<RegisterPayment> line = Flow.Desk.Line;
             for (int i = 0; i < line.Count; i++)
                 if (_customers.TryGetValue(line[i].GuestId, out Customer customer))
                     customer.ServerSetTarget(PaySlot(i), _queueFacing);
@@ -480,7 +469,9 @@ namespace Worktown.Game.Npc
             _customers.Remove(customer.ObjectId);
             _guests.Remove(customer.ObjectId);
             _patience.Remove(customer.ObjectId);
-            if (_desk.Remove(customer.ObjectId)) _payees.Remove(customer.ObjectId); // gone before paying (cannot happen: it waits)
+            // 032 review: a guest whose object went while it waited to pay settles by itself (bill only), so no money is lost.
+            if (Flow.Desk.IsWaiting(customer.ObjectId)) Flow.Exited(customer.ObjectId, WalletFor(customer.ObjectId), Stage);
+            _payees.Remove(customer.ObjectId);
             if (customer.IsSpawned) _networkManager.ServerManager.Despawn(customer.NetworkObject);
             Sync(); // room for a waiting customer
         }
@@ -508,7 +499,7 @@ namespace Worktown.Game.Npc
         private void PublishRegister()
         {
             if (_register == null || !_register.IsSpawned) return;
-            RegisterPayment head = _desk.Head;
+            RegisterPayment head = Flow.Desk.Head;
             _register.ServerSet(RegisterRules.PackPayment(head != null, head != null && head.Card, head != null ? head.ChangeDue : 0),
                 head != null ? head.Tray : 0);
         }
