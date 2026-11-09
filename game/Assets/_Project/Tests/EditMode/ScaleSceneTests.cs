@@ -236,7 +236,7 @@ namespace Worktown.Game.Tests
         private static readonly (string Name, Rect Area)[] StreetAreas =
         {
             ("the road", Rect.MinMaxRect(9f, 5.5f, 39f, 10.5f)),
-            ("the customers' path", Rect.MinMaxRect(8.5f, 10.3f, 24f, 11.3f)),
+            ("the customers' path", Rect.MinMaxRect(6.1f, 10.3f, 24f, 11.3f)), // spec 027a: the queue's tail at x 6.64 (was 8.5)
             ("the crossroad's south arm", Rect.MinMaxRect(34f, -50f, 39f, 5.5f))
         };
 

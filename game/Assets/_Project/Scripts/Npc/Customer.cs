@@ -27,6 +27,8 @@ namespace Worktown.Game.Npc
         private static readonly Color MissedColor = Palette.Steel;
         /// <summary>Spec 024: how far the character's colours are pulled towards the wish colour (0 = none).</summary>
         public const float TintStrength = 0.4f;
+        /// <summary>Spec 027a: how fast a customer at its slot turns to face the counter (degrees per second).</summary>
+        private const float TurnSpeed = 360f;
 
         public readonly SyncVar<string> Wish = new SyncVar<string>(string.Empty);
         public readonly SyncVar<string> Bubble = new SyncVar<string>(string.Empty);
@@ -43,6 +45,7 @@ namespace Worktown.Game.Npc
 
         // Server only.
         private Vector3 _target;
+        private Vector3 _facing; // spec 027a: the way to face once at the target (zero: keep the walking direction)
         private bool _leaving;
         private Action<Customer> _onExit;
 
@@ -65,13 +68,18 @@ namespace Worktown.Game.Npc
             Mood.Value = CustomerRules.MoodWaiting;
             Bubble.Value = dish == Menu.None ? CustomerRules.WishText(wish) : CustomerRules.OrderText(dish);
             _target = target;
+            _facing = Vector3.zero;
             _leaving = false;
             Refresh();
         }
 
-        internal void ServerSetTarget(Vector3 target)
+        /// <summary>Spec 027a: <paramref name="facing"/> is the way to turn once the slot is reached (zero: none).</summary>
+        internal void ServerSetTarget(Vector3 target, Vector3 facing)
         {
-            if (!_leaving) _target = target;
+            if (_leaving) return;
+            _target = target;
+            facing.y = 0f;
+            _facing = facing;
         }
 
         internal void ServerLeave(string bubble, byte mood, Vector3 exit, Action<Customer> onExit)
@@ -96,6 +104,8 @@ namespace Worktown.Game.Npc
             Vector3 step = next - position;
             step.y = 0f;
             if (step.sqrMagnitude > 0.000001f) transform.rotation = Quaternion.LookRotation(step);
+            else if (!_leaving && _facing.sqrMagnitude > 0.0001f)
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(_facing), TurnSpeed * Time.deltaTime);
             transform.position = next;
             if (_leaving && (next - _target).sqrMagnitude < 0.01f)
             {

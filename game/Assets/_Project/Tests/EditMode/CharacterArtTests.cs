@@ -96,7 +96,7 @@ namespace Worktown.Game.Tests
             Assert.IsNotNull(prefab);
             var controller = prefab.GetComponent<CharacterController>();
             Assert.AreEqual(2f, controller.height);
-            Assert.AreEqual(0.4f, controller.radius);
+            Assert.AreEqual(0.3f, controller.radius); // spec 027a (orchestrator): 0.3 m so two players pass in the aisle (was 0.4)
             Assert.AreEqual(new Vector3(0f, 1f, 0f), controller.center);
 
             Transform graphic = prefab.transform.Find("Graphic");
