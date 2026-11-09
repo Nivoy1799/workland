@@ -1,7 +1,7 @@
 ---
 id: 038
 title: First-shift tutorial (guided steps through every station, skippable)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

@@ -1,7 +1,7 @@
 ---
 id: 036
 title: Seitan spit (rotating, outer layer cooks, shave slices with the knife)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

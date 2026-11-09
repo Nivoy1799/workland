@@ -131,3 +131,13 @@ tuned later by the human.
   not at the "perfect" cue - a later spec should make "perfect" the best rating everywhere; the scoop is not
   predicted; an open wrap with fillings can't be picked up to scoop onto (the 031 fold-on-click rule); the first-
   person knife saws in the corner; graybox cone and tray labels.
+- 036 review (CHANGES REQUESTED; fixed in the 038 round): cones could not be ordered (no grocer price for
+  seitan_cone), cone lost on a server stop, free cones without supply, plate restart doc, empty-tap text, tests.
+- 038 (feels off): serve and pay steps often pass together with the fries guest; the card covers the top of the view;
+  step 4 points at the board while the knife is still held (text should say "put the knife down"); calm guests still
+  leave on the 014 demand reconcile; the edge arrow is small; scene plates are not reset to their start spots on a
+  server restart (036 review "better still").
+- 038 review (approved with nits) -> 038b: visual-check marks the tutorial done in the dev machine's PlayerPrefs;
+  calm-guests flag can go stale within one session; the engine should tie PriceGoodId to GoodId; a tap pour larger
+  than what is left is refused whole; a returned cone can exceed capacity; two repeated lookups; sim test for
+  PriceGoodId; `string?` nullable.

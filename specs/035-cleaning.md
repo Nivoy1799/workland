@@ -1,7 +1,7 @@
 ---
 id: 035
 title: Cleaning (dirty dishes, sink, trash, spills, hygiene score)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---

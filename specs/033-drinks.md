@@ -1,7 +1,7 @@
 ---
 id: 033
 title: Drinks (cups, dispenser with fill timing, lids, drinks on orders)
-status: approved
+status: done
 owner: architect
 builder: sonnet
 ---

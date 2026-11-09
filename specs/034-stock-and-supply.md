@@ -1,7 +1,7 @@
 ---
 id: 034
 title: Stock and supply (running out, ordering terminal, deliveries in boxes, unpacking)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---
