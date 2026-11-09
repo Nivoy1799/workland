@@ -200,11 +200,14 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void Judge_PutInto_ConfirmsWhenTheFoodIsGoneOrThePotChanged()
+        public void Judge_PutInto_ConfirmsOnlyWhenOurFoodIsGone()
         {
             Assert.AreEqual(PredictionPhase.Pending, FeelRules.Judge(PredictionKind.PutInto, 1, Item(1, 2), Item(1, 2)));
             Assert.AreEqual(PredictionPhase.Confirmed, FeelRules.Judge(PredictionKind.PutInto, 1, Item(1, 2), ItemSnapshot.Gone));
-            Assert.AreEqual(PredictionPhase.Confirmed, FeelRules.Judge(PredictionKind.PutInto, 1, Item(1, 2), Item(1, 3)));
+            // Review of spec 027b: another player's put-in (or a pot that went away) changes the count, not our food.
+            Assert.AreEqual(PredictionPhase.Pending, FeelRules.Judge(PredictionKind.PutInto, 1, Item(1, 2), Item(1, 3)));
+            Assert.AreEqual(PredictionPhase.Pending, FeelRules.Judge(PredictionKind.PutInto, 1, Item(1, 2), Item(1, 0)));
+            Assert.IsTrue(FeelRules.IsRelevantChange(Item(1, 2), Item(1, 3)), "but the timeout counts from it");
             Assert.AreEqual(PredictionPhase.Denied, FeelRules.Judge(PredictionKind.PutInto, 1, Item(1, 2), Item(-1, 2)));
         }
 
@@ -230,6 +233,46 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(PredictionPhase.Denied, p.Phase);
             Assert.IsTrue(p.TimedOut);
             Assert.That(p.ResolvedTime, Is.InRange(0.35f, 0.42f));
+        }
+
+        // ---- Review of spec 027b: request spacing, timeout, queued clicks ----
+
+        [TestCase(1f / 30f)]
+        [TestCase(1f / 60f)]
+        [TestCase(1f / 20f)]
+        public void ClientInterval_IsAtLeastTheServerIntervalPlusOneTick(float tick)
+        {
+            float client = Worktown.Game.Net.Rules.PickupRules.ClientRequestInterval(tick);
+            Assert.GreaterOrEqual(client, Worktown.Game.Net.Rules.PickupRules.ServerRequestInterval + tick + 0.01f - 1e-6f);
+            var buffer = new ClickBuffer(client);
+            Assert.GreaterOrEqual(buffer.Interval, Worktown.Game.Net.Rules.PickupRules.ServerRequestInterval + tick);
+            Assert.IsTrue(buffer.Click(0f));
+            Assert.IsFalse(buffer.Click(0.2f + tick * 0.5f), "a click a tick inside the server limit waits");
+        }
+
+        [Test]
+        public void ClientInterval_BadTickCountsAs30Hz()
+        {
+            float at30 = Worktown.Game.Net.Rules.PickupRules.ClientRequestInterval(1f / 30f);
+            Assert.AreEqual(at30, Worktown.Game.Net.Rules.PickupRules.ClientRequestInterval(0f), 1e-6f);
+            Assert.AreEqual(at30, Worktown.Game.Net.Rules.PickupRules.ClientRequestInterval(float.NaN), 1e-6f);
+        }
+
+        [Test]
+        public void ConfirmTimeout_GrowsWithTheRoundTrip()
+        {
+            Assert.AreEqual(0.35f, FeelRules.ConfirmTimeout(0.35f, 0.05f, 1f / 30f), 1e-6f, "a fast host keeps the setting");
+            Assert.AreEqual(0.3f * 1.5f + 2f / 30f, FeelRules.ConfirmTimeout(0.35f, 0.3f, 1f / 30f), 1e-5f, "300 ms of round trip");
+            Assert.AreEqual(0.35f, FeelRules.ConfirmTimeout(0.35f, float.NaN, float.NaN), 1e-6f);
+        }
+
+        [Test]
+        public void QueuedClick_IsDroppedWhenTheTargetChangedOrItDidNothing()
+        {
+            Assert.IsTrue(FeelRules.KeepQueuedClick(true, 42, -1, 42, -1));
+            Assert.IsFalse(FeelRules.KeepQueuedClick(true, 42, -1, 43, -1), "the dot moved to something else");
+            Assert.IsFalse(FeelRules.KeepQueuedClick(true, 42, 2, 42, 3), "another spot of the same worktop");
+            Assert.IsFalse(FeelRules.KeepQueuedClick(false, 42, -1, 42, -1), "it did nothing when it was clicked");
         }
 
         // ---- Click buffer ----

@@ -176,6 +176,34 @@ minimum 0.1 s; third-person damping 0.08 / 0.05; Preset B values above.
   length (`*-x4` cells), because a 0.15 s arc only spans one or two 0.1 s frames. The cook sheet shows the highlight and
   prompt before each click, the ghost on the burner, the potato dropping into the pot, and the onion in slow motion.
   The observer sheets only take guests'-view shots every 6 s, so they do not show remote arcs frame by frame.
+- **Review fix round (on top of 027c).**
+  - Request spacing: clicks, Q, E and knife strokes keep `PickupRules.ClientRequestInterval(tick)` = 0.2 s + one tick
+    + 0.01 s (0.243 s at 30 Hz), so a queued click never lands inside the server's limit.
+  - Answers: every answered request is numbered (`PredictionBook`); the n-th answer reaches only the prediction of the
+    n-th request with the matching kind (ReportCook maps to PutInto only). Requests dropped by the server's rate limit
+    are written off after 1 s without requests.
+  - Confirm timeout: `FeelRules.ConfirmTimeout` = max(setting, 1.5 x round trip + 2 ticks).
+  - Networked roots: never moved. A mesh on the root (the spec 003 cube) gets a "TweenVisual" child at client start
+    (root renderer off; collider and network components stay on the root); without a visual child nothing moves.
+  - Pure state machines: the look logic moved from `Pickup` into `ItemLook` (goal, tween to start, settle, prediction).
+    The waiting predictions and answer matching are in `PredictionBook`. The AC3 tests drive these classes directly.
+    Settling is cleared whenever a holder is drawn.
+  - Superseded clicks: a prediction is replaced only by a newer one for the same item, so a quick second click on
+    another item never makes the first bounce.
+  - Queued clicks: E goes through the buffer as well. A queued click is dropped when it did nothing when clicked, or
+    when the target (or spot) changed before it could go out.
+  - Put-into: confirmed only when our food is despawned; a changed content count only restarts the timeout.
+  - Exact hits: a direct exact hit now goes through `FeelRules.PickTarget` as a Direct candidate.
+  - Hot paths:
+    - `Vessel.ContentsAnchor` / `ContentPoint` are cached;
+    - `ItemTween` caches its child list;
+    - pickups come from `Pickup.ClientList` (filled in OnStartClient / OnStopClient);
+    - stove buttons and surfaces are looked up once;
+    - KitchenSounds is looked up once;
+    - spot occupancy is cached for 0.1 s.
+  - Shutdown: pending predictions end in `PickupInteractor.OnStopClient`.
+  - Legs layer: weight is `CharacterAnimRules.LegsLayerWeight(idle, moving)`, which is 0 outside idle and gone by the
+    middle of an idle-to-walk fade. The avatar masks are destroyed once the layer has copied them.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

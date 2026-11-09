@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
@@ -22,7 +23,7 @@ namespace Worktown.Game.Net
     /// Spec 027b, client side only: nothing teleports. Every viewer draws the model children through an
     /// <see cref="ItemTween"/>: when the holder or the resting place changes, they ease from where they were drawn last
     /// (pick up: an arc, put down: a settle). After a put-down the networked position takes a few ticks to arrive, so the
-    /// model waits where it was until it has (at most <see cref="RestSettleMax"/>) and then settles onto it. The owner's
+    /// model waits where it was until it has (at most <see cref="ItemLook.RestSettleMax"/>) and then settles onto it. The owner's
     /// <see cref="PickupInteractor"/> can predict the look of a click (<see cref="PredictHeld"/>, <see cref="PredictRest"/>,
     /// <see cref="PredictInto"/>); the synced state confirms or denies it there, and a denied look eases back.
     /// </summary>
@@ -45,44 +46,30 @@ namespace Worktown.Game.Net
         /// <summary>m, in the holder's yaw frame: a little in front of the hand anchor, so the item sits in the fingers.</summary>
         private static readonly Vector3 HandOffset = new Vector3(0f, -0.02f, 0.06f);
         private const float HolderLookupSeconds = 0.5f;
-        /// <summary>s: the longest the model waits for the networked position after a put-down before settling anyway.</summary>
-        public const float RestSettleMax = 0.3f;
-        /// <summary>s: the networked position counts as arrived after this long without moving.</summary>
-        private const float RestQuiet = 0.05f;
-        /// <summary>s: a confirmed put-into keeps its look at most this long while the despawn is on its way.</summary>
-        private const float ConfirmedIntoMax = 1f;
         /// <summary>s: the longest frame a tween is started early by, so the first frame after a click already moves.</summary>
         private const float MaxFrameLead = 1f / 30f;
+
+        /// <summary>Spec 027b review: every pickup this client has started (OnStartClient to OnStopClient), so the aim needs
+        /// no FindObjectsByType. Client only; never read on a headless server.</summary>
+        private static readonly List<Pickup> ClientPickups = new List<Pickup>();
 
         private CharacterVisual _handHolder;
         private int _handHolderId = PickupRegistry.NoHolder;
         private float _nextHolderLookup;
         private ItemTween _tween;
+        private readonly ItemLook _look = new ItemLook();
+        private HeldGoalSource _heldGoal;
         private bool _renderHooked;
+        private bool _registered;
         private int _poseFrame = -1;
         private Pose _framePose;
-        private bool _hasGoal;
-        private ItemGoalKind _goalKind;
-        private int _goalHolder = PickupRegistry.NoHolder;
-        private int _seenHolder = PickupRegistry.NoHolder;
-        // The resting place: the client's own copy of the tilt (the server's is server only), and the settle wait.
+        // The client's own copy of the resting tilt (the server's is server only), for a predicted place.
         private Quaternion _clientRestTilt = Quaternion.identity;
-        private bool _settling;
-        private Pose _settleLatch;
-        private float _settleDeadline;
-        private bool _settleSawMove;
-        private float _lastRootMove = float.NegativeInfinity;
-        private Pose _lastRoot;
-        private bool _hasLastRoot;
-        // A predicted look (owner of the click only).
-        private bool _hasPrediction;
-        private ItemGoalKind _predictedKind;
-        private Pose _predictedPose;
-        private int _predictedHolder = PickupRegistry.NoHolder;
-        private bool _predictionConfirmed;
-        private float _predictionKeepUntil;
 
         public bool IsHeld => HolderClientId.Value != PickupRegistry.NoHolder;
+
+        /// <summary>Spec 027b review: the pickups this client knows (started and not stopped yet).</summary>
+        public static IReadOnlyList<Pickup> ClientList => ClientPickups;
 
         /// <summary>Spec 027b: frame number of the first render that drew the current prediction (-1 before).</summary>
         internal int PredictionDrawnFrame { get; private set; } = -1;
@@ -91,6 +78,7 @@ namespace Worktown.Game.Net
         {
             _collider = GetComponent<Collider>();
             _tween = new ItemTween(transform);
+            _heldGoal = HeldGoal;
             // A carried item never collides: on the holder's screen it trails a tick behind the
             // head, and the predicted jump would hit it from below (spec 010 play-test).
             HolderClientId.OnChange += (_, holder, _) =>
@@ -118,10 +106,16 @@ namespace Worktown.Game.Net
         {
             base.OnStartClient();
             ResetVisual();
-            _seenHolder = HolderClientId.Value;
-            if (_seenHolder == PickupRegistry.NoHolder) _clientRestTilt = PlaceSpots.TiltOf(transform.rotation);
+            if (HolderClientId.Value == PickupRegistry.NoHolder) _clientRestTilt = PlaceSpots.TiltOf(transform.rotation);
+            if (!_registered)
+            {
+                _registered = true;
+                ClientPickups.Add(this);
+            }
             if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null && !_renderHooked)
             {
+                // Spec 027b review: the networked root never moves; a mesh on the root gets a visual child to move instead.
+                ItemTween.EnsureVisualChild(transform);
                 _renderHooked = true;
                 RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
                 RenderPipelineManager.endCameraRendering += OnEndCameraRendering;
@@ -156,6 +150,11 @@ namespace Worktown.Game.Net
         {
             _tween?.Restore();
             ResetVisual();
+            if (_registered)
+            {
+                _registered = false;
+                ClientPickups.Remove(this);
+            }
             if (!_renderHooked) return;
             _renderHooked = false;
             RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
@@ -165,76 +164,40 @@ namespace Worktown.Game.Net
         private void ResetVisual()
         {
             _tween?.Reset();
-            _hasGoal = false;
-            _settling = false;
-            _hasLastRoot = false;
-            _hasPrediction = false;
+            _look.Reset(HolderClientId.Value);
             _poseFrame = -1;
             _handHolder = null;
             _handHolderId = PickupRegistry.NoHolder;
         }
 
-        // ---- Spec 027b: predicted looks, set by the owner's PickupInteractor ----
+        // ---- Spec 027b: predicted looks, set by the owner's PickupInteractor (logic in ItemLook) ----
 
         /// <summary>Draws the item in <paramref name="clientId"/>'s hands (a predicted pick-up).</summary>
-        internal void PredictHeld(int clientId) => StartPrediction(ItemGoalKind.Hand, default, clientId);
+        internal void PredictHeld(int clientId) => StartPrediction(() => _look.PredictHeld(clientId));
 
         /// <summary>Draws the item lying at <paramref name="pose"/> (a predicted place or drop).</summary>
-        internal void PredictRest(Pose pose) => StartPrediction(ItemGoalKind.Rest, pose, PickupRegistry.NoHolder);
+        internal void PredictRest(Pose pose) => StartPrediction(() => _look.PredictRest(pose));
 
         /// <summary>Draws the item just above the contents of the cookware it goes into (a predicted put-into).</summary>
-        internal void PredictInto(Pose pose) => StartPrediction(ItemGoalKind.Into, pose, PickupRegistry.NoHolder);
+        internal void PredictInto(Pose pose) => StartPrediction(() => _look.PredictInto(pose));
 
         /// <summary>True while a predicted look is drawn (pending, or confirmed and waiting for the state to catch up).</summary>
-        internal bool HasPrediction => _hasPrediction;
+        internal bool HasPrediction => _look.HasPrediction;
 
-        private void StartPrediction(ItemGoalKind kind, Pose pose, int holder)
+        private void StartPrediction(System.Action predict)
         {
-            _hasPrediction = true;
-            _predictedKind = kind;
-            _predictedPose = pose;
-            _predictedHolder = holder;
-            _predictionConfirmed = false;
+            predict();
             PredictionDrawnFrame = -1;
         }
 
-        /// <summary>
-        /// The prediction is over. Denied: the look follows the real state again (it eases back). Confirmed: a pick-up
-        /// simply continues (you hold it now); a place keeps its spot until the networked position has arrived there; a
-        /// put-into stays above the cookware until the food is despawned.
-        /// </summary>
-        internal void EndPrediction(bool confirmed)
-        {
-            if (!_hasPrediction) return;
-            float now = Time.unscaledTime;
-            if (!confirmed || _predictedKind == ItemGoalKind.Hand)
-            {
-                _hasPrediction = false;
-                return;
-            }
-            if (_predictedKind == ItemGoalKind.Rest)
-            {
-                _hasPrediction = false;
-                BeginSettling(_predictedPose, now);
-                return;
-            }
-            _predictionConfirmed = true;
-            _predictionKeepUntil = now + ConfirmedIntoMax;
-        }
+        /// <summary>The prediction is over (see <see cref="ItemLook.EndPrediction"/>).</summary>
+        internal void EndPrediction(bool confirmed) => _look.EndPrediction(confirmed, Time.unscaledTime);
 
-        /// <summary>Client: who holds it as this client draws it (a predicted pick-up counts).</summary>
-        private int EffectiveHolder()
-        {
-            if (_hasPrediction && _predictedKind == ItemGoalKind.Hand) return _predictedHolder;
-            if (_hasPrediction) return PickupRegistry.NoHolder;
-            return HolderClientId.Value;
-        }
-
-        /// <summary>Spec 024: raise the holder's arm while it carries this item.</summary>
+        /// <summary>Spec 024: raise the holder's arm while it carries this item (a predicted pick-up counts).</summary>
         private void LateUpdate()
         {
             if (!IsClientInitialized) return;
-            int holder = EffectiveHolder();
+            int holder = _look.DrawnHolder(HolderClientId.Value);
             if (holder == PickupRegistry.NoHolder) return;
             CharacterVisual visual = HolderVisual(holder, Time.unscaledTime);
             if (visual != null) visual.MarkHolding();
@@ -276,111 +239,29 @@ namespace Worktown.Game.Net
             _tween.Restore();
         }
 
-        /// <summary>Where the model is drawn this frame: the goal, eased from the last drawn pose when the goal changed.</summary>
+        /// <summary>Where the model is drawn this frame: ItemLook's goal, eased by the tween it starts.</summary>
         private Pose ComputeFramePose(float now)
         {
-            Pose goal = ComputeGoal(now, out ItemGoalKind kind, out int holder);
-            if (_hasGoal && (kind != _goalKind || holder != _goalHolder))
+            Pose root = ItemTween.RootPose(transform);
+            ItemFrame frame = _look.Resolve(HolderClientId.Value, root, _tween.HasDrawn, _tween.Drawn, now, _heldGoal);
+            if (frame.Begin != TweenStyle.None)
             {
-                TweenStyle style = FeelRules.StyleFor(_goalKind, _goalHolder, kind, holder);
                 FeelSettings feel = FeelSettings.Current;
                 // Started a frame early: the first frame after the change already shows movement (feel.md 1).
                 float lead = Mathf.Min(Time.unscaledDeltaTime, MaxFrameLead);
-                _tween.Begin(style, FeelRules.TweenSeconds(style, kind, feel), FeelRules.TweenAmount(style, kind, feel), now - lead);
+                _tween.Begin(frame.Begin, FeelRules.TweenSeconds(frame.Begin, frame.Kind, feel), FeelRules.TweenAmount(frame.Begin, frame.Kind, feel), now - lead);
             }
-            _hasGoal = true;
-            _goalKind = kind;
-            _goalHolder = holder;
-            Pose drawn = _tween.Evaluate(goal, now);
-            if (_hasPrediction && PredictionDrawnFrame < 0) PredictionDrawnFrame = Time.frameCount;
+            if (frame.Kind == ItemGoalKind.Rest && !_look.HasPrediction && !_look.IsSettling)
+                _clientRestTilt = PlaceSpots.TiltOf(root.rotation);
+            Pose drawn = _tween.Evaluate(frame.Goal, now);
+            if (_look.HasPrediction && PredictionDrawnFrame < 0) PredictionDrawnFrame = Time.frameCount;
             return drawn;
         }
 
-        private Pose ComputeGoal(float now, out ItemGoalKind kind, out int holder)
+        /// <summary>Spec 024 / 018: in the holder's right hand or in your own first-person view; false: the hold point.</summary>
+        private bool HeldGoal(int holder, out ItemGoalKind kind, out Pose pose)
         {
-            int synced = HolderClientId.Value;
-            bool rootMoved = TrackRoot(now);
-            if (synced != _seenHolder)
-            {
-                // Put down (or taken from someone): wait for the networked position before settling on it.
-                if (synced == PickupRegistry.NoHolder && !_settling)
-                    BeginSettling(_tween.HasDrawn ? _tween.Drawn : ItemTween.RootPose(transform), now);
-                else if (synced != PickupRegistry.NoHolder) _settling = false;
-                _seenHolder = synced;
-            }
-
-            if (_hasPrediction)
-            {
-                if (_predictedKind == ItemGoalKind.Into)
-                {
-                    if (_predictionConfirmed && now > _predictionKeepUntil) _hasPrediction = false;
-                    else
-                    {
-                        kind = ItemGoalKind.Into;
-                        holder = PickupRegistry.NoHolder;
-                        return _predictedPose;
-                    }
-                }
-                else if (_predictedKind == ItemGoalKind.Rest)
-                {
-                    kind = ItemGoalKind.Rest;
-                    holder = PickupRegistry.NoHolder;
-                    return _predictedPose;
-                }
-            }
-
-            holder = EffectiveHolder();
-            if (holder != PickupRegistry.NoHolder) return HeldGoal(holder, now, out kind);
-
-            kind = ItemGoalKind.Rest;
-            Pose root = ItemTween.RootPose(transform);
-            // The server moved a lying item: wait until it stopped, then settle onto the new place.
-            if (!_settling && rootMoved && _tween.HasDrawn) BeginSettling(_tween.Drawn, now);
-            if (_settling)
-            {
-                bool arrived = _settleSawMove && now - _lastRootMove >= RestQuiet;
-                if (!arrived && now < _settleDeadline) return _settleLatch;
-                _settling = false;
-                bool apart = (root.position - _settleLatch.position).sqrMagnitude > FeelRules.MoveEpsilon * FeelRules.MoveEpsilon
-                             || Quaternion.Angle(root.rotation, _settleLatch.rotation) > 2f;
-                if (apart)
-                {
-                    FeelSettings feel = FeelSettings.Current;
-                    _tween.Begin(TweenStyle.Settle, feel.PlaceSeconds, feel.PlaceSettle, now);
-                }
-            }
-            _clientRestTilt = PlaceSpots.TiltOf(root.rotation);
-            return root;
-        }
-
-        private void BeginSettling(Pose latch, float now)
-        {
-            _settling = true;
-            _settleLatch = latch;
-            _settleDeadline = now + RestSettleMax;
-            _settleSawMove = false;
-        }
-
-        /// <summary>Notes whether the networked transform moved since the last frame.</summary>
-        private bool TrackRoot(float now)
-        {
-            Pose root = ItemTween.RootPose(transform);
-            bool moved = _hasLastRoot && ((root.position - _lastRoot.position).sqrMagnitude > 1e-6f
-                                          || Quaternion.Angle(root.rotation, _lastRoot.rotation) > 0.2f);
-            _lastRoot = root;
-            _hasLastRoot = true;
-            if (moved)
-            {
-                _lastRootMove = now;
-                _settleSawMove = true;
-            }
-            return moved;
-        }
-
-        /// <summary>Spec 024 / 018: in the holder's right hand, in your own first-person view, or at the hold point.</summary>
-        private Pose HeldGoal(int holder, float now, out ItemGoalKind kind)
-        {
-            CharacterVisual visual = HolderVisual(holder, now);
+            CharacterVisual visual = HolderVisual(holder, Time.unscaledTime);
             if (visual != null)
             {
                 Transform hand = visual.Hand;
@@ -388,16 +269,18 @@ namespace Worktown.Game.Net
                 {
                     kind = ItemGoalKind.Hand;
                     Quaternion frame = Quaternion.Euler(0f, visual.Yaw, 0f);
-                    return new Pose(hand.position + frame * HandOffset, frame);
+                    pose = new Pose(hand.position + frame * HandOffset, frame);
+                    return true;
                 }
-                if (!visual.DrawsHeldInHand && visual.TryGetComponent(out HeldItemView view) && view.TryGetViewPose(this, out Pose inView))
+                if (!visual.DrawsHeldInHand && visual.TryGetComponent(out HeldItemView view) && view.TryGetViewPose(this, out pose))
                 {
                     kind = ItemGoalKind.View;
-                    return inView;
+                    return true;
                 }
             }
             kind = ItemGoalKind.HoldPoint;
-            return ItemTween.RootPose(transform);
+            pose = default;
+            return false;
         }
 
         /// <summary>Server: attach to a holder after the registry accepted the claim.</summary>

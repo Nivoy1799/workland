@@ -204,10 +204,33 @@ namespace Worktown.Game.Player
         // ---- Prediction (docs/feel.md 1) ----
 
         /// <summary>
+        /// Spec 027b review: the confirm timeout actually used: the setting, but never less than one and a half round trips
+        /// plus two ticks (the request waits for a tick to leave, the state for one to come back), so a slow connection does
+        /// not send a success back. Bad inputs count as 0.
+        /// </summary>
+        public static float ConfirmTimeout(float setting, float roundTripSeconds, float tickDelta)
+        {
+            if (float.IsNaN(setting) || setting < 0f) setting = 0f;
+            if (float.IsNaN(roundTripSeconds) || float.IsInfinity(roundTripSeconds) || roundTripSeconds < 0f) roundTripSeconds = 0f;
+            if (float.IsNaN(tickDelta) || float.IsInfinity(tickDelta) || tickDelta < 0f) tickDelta = 0f;
+            return System.Math.Max(setting, roundTripSeconds * 1.5f + 2f * tickDelta);
+        }
+
+        /// <summary>
+        /// Spec 027b review: a click queued inside the request interval is still sent only if the dot is on the same target
+        /// (and spot) as when it was clicked, and that click did something then. Otherwise it is dropped, never retargeted.
+        /// </summary>
+        public static bool KeepQueuedClick(bool hadAction, int queuedTarget, int queuedSpot, int nowTarget, int nowSpot)
+        {
+            return hadAction && queuedTarget == nowTarget && queuedSpot == nowSpot;
+        }
+
+        /// <summary>
         /// What the synced state <paramref name="now"/> says about a prediction made when it was <paramref name="start"/>:
         /// PickUp is confirmed when you hold it and denied when someone else does or it is gone. Place and Drop are
         /// confirmed when nobody holds it any more, denied when someone else holds it or it is gone. PutInto is confirmed
-        /// when the food is gone or the cookware's content count changed, denied when you no longer hold it. Anything else
+        /// only when our own food is gone (the server despawns what it put in; a content count that changes can be another
+        /// player's put-in or a pot that went away, so it only restarts the timeout), denied when you no longer hold it. Anything else
         /// is still <see cref="PredictionPhase.Pending"/>.
         /// </summary>
         public static PredictionPhase Judge(PredictionKind kind, int me, ItemSnapshot start, ItemSnapshot now)
@@ -225,7 +248,7 @@ namespace Worktown.Game.Player
                     if (now.Holder == noHolder) return PredictionPhase.Confirmed;
                     return now.Holder != me ? PredictionPhase.Denied : PredictionPhase.Pending;
                 case PredictionKind.PutInto:
-                    if (!now.Exists || now.VesselCount != start.VesselCount) return PredictionPhase.Confirmed;
+                    if (!now.Exists) return PredictionPhase.Confirmed;
                     return now.Holder != me ? PredictionPhase.Denied : PredictionPhase.Pending;
                 default:
                     return PredictionPhase.Pending;

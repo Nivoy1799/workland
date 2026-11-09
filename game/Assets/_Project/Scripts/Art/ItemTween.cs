@@ -10,17 +10,20 @@ namespace Worktown.Game.Art
     /// <c>pose.position + pose.rotation * (root scale x their local position)</c>, which is exactly where they are when the
     /// pose equals the root's own pose. <see cref="Apply"/> moves only the visual children (not labels) for one camera
     /// render and <see cref="Restore"/> puts them back right after, so the networked transform, the colliders and every
-    /// rule always see the real state. An item without children (the spec 003 cube) moves as a whole for the render, as
-    /// the spec 024 hand drawing did.
+    /// rule always see the real state. The root itself is never moved (review of spec 027b): an item whose mesh sits on
+    /// the root (the spec 003 cube) gets a visual child first (<see cref="EnsureVisualChild"/>); without one nothing moves.
+    /// The list of children is cached and only collected again when the number of children changes.
     /// </summary>
     public sealed class ItemTween
     {
+        /// <summary>Name of the child <see cref="EnsureVisualChild"/> adds.</summary>
+        public const string VisualChildName = "TweenVisual";
+
         private readonly Transform _root;
-        private readonly List<Transform> _moved = new List<Transform>();
+        private readonly List<Transform> _parts = new List<Transform>();
         private readonly List<Vector3> _positions = new List<Vector3>();
         private readonly List<Quaternion> _rotations = new List<Quaternion>();
-        private Vector3 _rootPosition;
-        private Quaternion _rootRotation;
+        private int _partsForChildCount = -1;
         private bool _applied;
 
         private TweenStyle _style;
@@ -41,6 +44,33 @@ namespace Worktown.Game.Art
 
         /// <summary>The root's own pose: drawn there, the children are exactly where the scene has them.</summary>
         public static Pose RootPose(Transform root) => new Pose(root.position, root.rotation);
+
+        /// <summary>
+        /// Client only: if the item's mesh sits on the root and it has no visual child yet, moves the look to a new child
+        /// (same mesh and materials) and turns the root's renderer off. The root keeps its collider and every networked
+        /// component; only the child is ever moved. Returns true when a child was added.
+        /// </summary>
+        public static bool EnsureVisualChild(Transform root)
+        {
+            if (root == null || HasVisualChild(root)) return false;
+            if (!root.TryGetComponent(out MeshRenderer renderer) || !root.TryGetComponent(out MeshFilter filter)) return false;
+            var child = new GameObject(VisualChildName);
+            child.transform.SetParent(root, false);
+            child.AddComponent<MeshFilter>().sharedMesh = filter.sharedMesh;
+            var copy = child.AddComponent<MeshRenderer>();
+            copy.sharedMaterials = renderer.sharedMaterials;
+            copy.shadowCastingMode = renderer.shadowCastingMode;
+            copy.receiveShadows = renderer.receiveShadows;
+            renderer.enabled = false;
+            return true;
+        }
+
+        private static bool HasVisualChild(Transform root)
+        {
+            foreach (Transform child in root)
+                if (!child.TryGetComponent(out TextMesh _)) return true;
+            return false;
+        }
 
         public bool IsActive(float now) => _style != TweenStyle.None && now - _start < _seconds;
 
@@ -88,31 +118,23 @@ namespace Worktown.Game.Art
         }
 
         /// <summary>
-        /// Draws the item at <paramref name="pose"/> until <see cref="Restore"/>: moves the visual children (labels stay),
-        /// or the root of an item without children. Does nothing when the pose is the root's own (nothing to move).
+        /// Draws the item at <paramref name="pose"/> until <see cref="Restore"/>: moves the visual children (labels stay).
+        /// Does nothing when the pose is the root's own, or when the item has no visual child (the root never moves).
         /// </summary>
         public void Apply(Pose pose)
         {
             Restore();
-            if (_root == null) return;
-            if (IsRootPose(pose)) return;
-            foreach (Transform child in _root)
-                if (!child.TryGetComponent(out TextMesh _)) _moved.Add(child);
-            if (_moved.Count == 0)
-            {
-                _rootPosition = _root.position;
-                _rootRotation = _root.rotation;
-                _root.SetPositionAndRotation(pose.position, pose.rotation);
-                _applied = true;
-                return;
-            }
+            if (_root == null || IsRootPose(pose)) return;
+            CollectParts();
+            if (_parts.Count == 0) return;
             Vector3 scale = _root.lossyScale;
-            foreach (Transform moved in _moved)
+            for (int i = 0; i < _parts.Count; i++)
             {
-                _positions.Add(moved.localPosition);
-                _rotations.Add(moved.localRotation);
-                moved.SetPositionAndRotation(pose.position + pose.rotation * Vector3.Scale(scale, moved.localPosition),
-                    pose.rotation * moved.localRotation);
+                Transform part = _parts[i];
+                if (part == null) continue;
+                _positions[i] = part.localPosition;
+                _rotations[i] = part.localRotation;
+                part.SetPositionAndRotation(pose.position + pose.rotation * Vector3.Scale(scale, _positions[i]), pose.rotation * _rotations[i]);
             }
             _applied = true;
         }
@@ -122,16 +144,25 @@ namespace Worktown.Game.Art
         {
             if (!_applied) return;
             _applied = false;
-            if (_moved.Count == 0)
-            {
-                if (_root != null) _root.SetPositionAndRotation(_rootPosition, _rootRotation);
-                return;
-            }
-            for (int i = 0; i < _moved.Count; i++)
-                if (_moved[i] != null) _moved[i].SetLocalPositionAndRotation(_positions[i], _rotations[i]);
-            _moved.Clear();
+            for (int i = 0; i < _parts.Count; i++)
+                if (_parts[i] != null) _parts[i].SetLocalPositionAndRotation(_positions[i], _rotations[i]);
+        }
+
+        /// <summary>The visual children (not labels), collected again only when the number of children changed.</summary>
+        private void CollectParts()
+        {
+            if (_root.childCount == _partsForChildCount) return;
+            _partsForChildCount = _root.childCount;
+            _parts.Clear();
             _positions.Clear();
             _rotations.Clear();
+            foreach (Transform child in _root)
+            {
+                if (child.TryGetComponent(out TextMesh _)) continue;
+                _parts.Add(child);
+                _positions.Add(Vector3.zero);
+                _rotations.Add(Quaternion.identity);
+            }
         }
 
         private bool IsRootPose(Pose pose)

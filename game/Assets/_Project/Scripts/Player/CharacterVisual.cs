@@ -188,7 +188,7 @@ namespace Worktown.Game.Player
 
             // Spec 027b: the idle clip stands with one foot 0.29 m ahead (a frozen stride from the side); its legs are pulled
             // towards the feet-together pose while (and as much as) the idle shows.
-            if (_hasLegsLayer) _layers.SetInputWeight(LegsLayer, CharacterAnimRules.StandLegsWeight * _groupWeights[IdleGroup]);
+            if (_hasLegsLayer) _layers.SetInputWeight(LegsLayer, LegsWeight());
             if (_hasHoldLayer)
             {
                 _layers.SetInputWeight(HoldLayer, _holdWeight);
@@ -277,15 +277,15 @@ namespace Worktown.Game.Player
             {
                 _standClip = CreateClip(_stand, true);
                 _graph.Connect(_standClip, 0, _layers, LegsLayer);
-                _layers.SetLayerMaskFromAvatarMask(LegsLayer, LegsMask());
-                _layers.SetInputWeight(LegsLayer, CharacterAnimRules.StandLegsWeight * _groupWeights[IdleGroup]);
+                SetMask(LegsLayer, LegsMask());
+                _layers.SetInputWeight(LegsLayer, LegsWeight());
             }
             _hasHoldLayer = _hold != null;
             if (_hasHoldLayer)
             {
                 _holdClip = CreateClip(_hold, false);
                 _graph.Connect(_holdClip, 0, _layers, HoldLayer);
-                _layers.SetLayerMaskFromAvatarMask(HoldLayer, RightArmMask());
+                SetMask(HoldLayer, RightArmMask());
                 _layers.SetInputWeight(HoldLayer, _holdWeight);
             }
             output.SetSourcePlayable(_layers);
@@ -301,7 +301,19 @@ namespace Worktown.Game.Player
             return playable;
         }
 
-        /// <summary>Spec 027b: a Humanoid mask with only the legs and their foot IK active (the standing pose's layer).</summary>
+        /// <summary>Spec 027b: the standing-legs weight: the idle over the moving clips (CharacterAnimRules.LegsLayerWeight).</summary>
+        private float LegsWeight() => CharacterAnimRules.LegsLayerWeight(_groupWeights[IdleGroup],
+            _groupWeights[MoveGroup] + _groupWeights[CrouchWalkGroup]);
+
+        /// <summary>The layer mixer copies the mask, so the mask object is destroyed right away (no leak per graph).</summary>
+        private void SetMask(int layer, AvatarMask mask)
+        {
+            _layers.SetLayerMaskFromAvatarMask((uint)layer, mask);
+            Destroy(mask);
+        }
+
+        /// <summary>Spec 027b: a Humanoid mask with only the legs and their foot IK active (the standing pose's layer).
+        /// A new object: the caller destroys it.</summary>
         public static AvatarMask LegsMask()
         {
             var mask = new AvatarMask();

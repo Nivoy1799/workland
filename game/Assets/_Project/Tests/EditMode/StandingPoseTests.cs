@@ -52,7 +52,9 @@ namespace Worktown.Game.Tests
                 graph.Connect(idlePlayable, 0, layers, 0);
                 graph.Connect(standPlayable, 0, layers, 1);
                 layers.SetInputWeight(0, 1f);
-                layers.SetLayerMaskFromAvatarMask(1, CharacterVisual.LegsMask());
+                AvatarMask legs = CharacterVisual.LegsMask();
+                layers.SetLayerMaskFromAvatarMask(1, legs);
+                Object.DestroyImmediate(legs);
                 layers.SetInputWeight(1, legsWeight);
                 output.SetSourcePlayable(layers);
                 float apart = 0f;
@@ -99,6 +101,18 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(mask.GetHumanoidBodyPartActive(AvatarMaskBodyPart.RightFootIK));
             Assert.IsFalse(mask.GetHumanoidBodyPartActive(AvatarMaskBodyPart.Body), "the hips and the upper body keep the idle");
             Assert.IsFalse(mask.GetHumanoidBodyPartActive(AvatarMaskBodyPart.RightArm));
+            Object.DestroyImmediate(mask);
+        }
+
+        [Test]
+        public void LegsLayer_IsZeroOutsideIdle_AndGoneByTheMiddleOfAWalkFade()
+        {
+            Assert.AreEqual(CharacterAnimRules.StandLegsWeight, CharacterAnimRules.LegsLayerWeight(1f, 0f), 1e-6f, "standing");
+            Assert.AreEqual(0f, CharacterAnimRules.LegsLayerWeight(0f, 1f), 1e-6f, "walking");
+            Assert.AreEqual(0f, CharacterAnimRules.LegsLayerWeight(0f, 0f), 1e-6f, "crouching (neither idle nor moving)");
+            Assert.AreEqual(0f, CharacterAnimRules.LegsLayerWeight(0.5f, 0.5f), 1e-6f, "the middle of the idle-to-walk fade");
+            Assert.Less(CharacterAnimRules.LegsLayerWeight(0.8f, 0.2f), CharacterAnimRules.StandLegsWeight * 0.8f, "fades faster than the idle");
+            Assert.AreEqual(0f, CharacterAnimRules.LegsLayerWeight(float.NaN, float.NaN), 1e-6f);
         }
     }
 }

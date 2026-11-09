@@ -30,6 +30,18 @@ namespace Worktown.Game.Player
         /// </summary>
         public const float StandLegsWeight = 0.7f;
 
+        /// <summary>
+        /// Spec 027b: the weight of the standing-legs layer for the idle's fade weight and the moving clips' weight (walk,
+        /// run and crouch walk together): <see cref="StandLegsWeight"/> times what the idle has over the moving clips, so it
+        /// is 0 outside idle and gone by the middle of an idle-to-walk fade (the first steps keep their own legs).
+        /// </summary>
+        public static float LegsLayerWeight(float idleWeight, float movingWeight)
+        {
+            if (float.IsNaN(idleWeight)) idleWeight = 0f;
+            if (float.IsNaN(movingWeight)) movingWeight = 0f;
+            return StandLegsWeight * Clamp(idleWeight - movingWeight, 0f, 1f);
+        }
+
         /// <summary>Seconds a clip takes to fade in or out.</summary>
         public const float FadeSeconds = 0.15f;
         /// <summary>1/s: how fast the measured speed follows the real one (smooths network jitter).</summary>

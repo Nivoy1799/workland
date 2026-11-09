@@ -55,6 +55,28 @@ namespace Worktown.Game.Cooking
         /// <summary>How many things lie in it, as clients see it.</summary>
         public int ContentCount => Mathf.Max(Names.Count, Looks.Count);
 
+        /// <summary>Name of the child where the contents are drawn.</summary>
+        public const string ContentsName = "Contents";
+        private Transform _contents;
+        private bool _contentsLooked;
+
+        /// <summary>Spec 027b review: the "Contents" anchor (looked up once), or null.</summary>
+        public Transform ContentsAnchor
+        {
+            get
+            {
+                if (!_contentsLooked)
+                {
+                    _contentsLooked = true;
+                    _contents = transform.Find(ContentsName);
+                }
+                return _contents;
+            }
+        }
+
+        /// <summary>Spec 027b: where the contents are drawn, else a little above the pivot (aim, ghost, drop).</summary>
+        public Vector3 ContentPoint => ContentsAnchor != null ? ContentsAnchor.position : transform.position + Vector3.up * 0.05f;
+
         private void Awake()
         {
             Names.OnChange += (_, _, _, _, _) => _labelDirty = true;
