@@ -93,3 +93,10 @@ tuned later by the human.
   pending); KitchenService.TakeIngredient can charge without an item if the spawn fails (refund or check first);
   test the TakeIngredient sequence (TryBuy 0 times on refusal); StockTakeLook liveness when the interactor dies;
   nits (NearestSlot test point, real Finish path, measured log, crate variable names, readonly row arrays).
+- 029b review (approved with nits; must-fix test and label decision moved into 030): stock take after Pay can still
+  fail on pool or spawn errors (needs an Economy refund backstop, track for 034); the cook tour should press the basket
+  button through DevClick (end-to-end intent); a dispatch test for tip vs pour and VesselFull on tip; TipBasket log.
+- 030 (feels off) -> polish round 2 (before or with 032): warning lead time = clamp(0.4 x good window, 1 s, 3 s)
+  (orchestrator decision; toast warned before Good); first person shows 6 rings and 6 labels at once (show rings and
+  labels only for the aimed spot plus spots in Warning or worse); grill marks stay on the plated item; a spatula motion
+  in the hand on flip; griddle to plates 4.2 m; per-dish menu prices (spec 037).

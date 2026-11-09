@@ -4,10 +4,14 @@ Hop in whenever you like. Answer by writing under a question (or just tell Claud
 every question has a default, and work continues on other items until you answer. Newest first.
 
 ## Status (updated 2026-11-09 05:00)
-- **Running:** spec 029 (deep fryer: baskets, lower, shake, lift, drain; fries and falafel).
+- **Running:** spec 030 (griddle: two-sided cooking, flip with the spatula, grill marks).
 - **Next:** fryer (029), griddle (030), assembly and packaging (031), orders 2.0 (032). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
+  - **Specs 029 + 029b, deep fryer and polish:** two baskets you lower, shake, raise and let drain; fries and
+    falafel; bubbles, rings, a bubbling loop, rattle and drips; tip fries from the basket straight onto a plate you
+    hold. Labels speak your words ("golden fries", "well done"). The review caught an exploit (re-frying stacked the
+    shake bonus up to a perfect rating), now capped. The stoves stand side by side; the fryer is 3.3 m from the plates.
   - **Spec 028b, compact stock:** a fridge (vegetables, seitan, falafel mix, lemon) and a dry shelf (sauces,
     potato, onion, flatbread, wraps) right next to the cutting board; aim at an item and click, it flies into your
     hand at once. Both are simple graybox models for now (no fridge in our Kenney furniture).
