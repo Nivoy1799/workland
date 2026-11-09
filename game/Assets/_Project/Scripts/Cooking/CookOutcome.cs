@@ -67,6 +67,54 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 032: the change tray holds no more (it is synced as a byte).</summary>
         TrayFull,
         /// <summary>Spec 032: there is no change in the tray to take back.</summary>
-        TrayEmpty
+        TrayEmpty,
+        /// <summary>Spec 033: a tap pours into a cup in the hands, the lid stack lids one: take a cup first.</summary>
+        NeedsCup,
+        /// <summary>Spec 033: the cup has its lid (nothing more goes in, it is lidded once).</summary>
+        CupClosed,
+        /// <summary>Spec 033: the cup holds another drink (a top-up is the same drink only).</summary>
+        OtherDrink,
+        /// <summary>Spec 033: the cup ran over (or the server stopped it): nothing more goes in.</summary>
+        CupFull,
+        /// <summary>Spec 033: a lid goes only on a filled cup.</summary>
+        NotFilled,
+        /// <summary>Spec 033: enough empty cups lie about already (DrinkRules.MaxEmptyCups).</summary>
+        NoCupsLeft,
+        /// <summary>Spec 034: the slot (or the sauce's bottles, the tap's kegs, the rack, the cups) is empty: order more at the terminal.</summary>
+        OutOfStock,
+        /// <summary>Spec 034: the slot is full: the box stays as it is.</summary>
+        StockFull,
+        /// <summary>Spec 034: this box holds another good (it is unpacked at its own slot).</summary>
+        WrongBox,
+        /// <summary>Spec 034: too many orders are on their way (Sim.Economy.SupplyBook.MaxPending).</summary>
+        TooManyOrders,
+        /// <summary>Spec 035: every clean plate is in use or dirty: wash some at the sink.</summary>
+        NoCleanPlates,
+        /// <summary>Spec 035: no dirty dish waits at the dish return.</summary>
+        NoDirtyDishes,
+        /// <summary>Spec 035: only a dirty dish goes into the sink (take one from the dish return).</summary>
+        NotDirty,
+        /// <summary>Spec 035: the sink holds no more dishes: scrub one first.</summary>
+        SinkFull,
+        /// <summary>Spec 035: nothing in the sink to scrub.</summary>
+        SinkEmpty,
+        /// <summary>Spec 035: the trash can is full: take the bag out first.</summary>
+        TrashFull,
+        /// <summary>Spec 035: the trash can is empty (no bag to take out).</summary>
+        TrashEmpty,
+        /// <summary>Spec 035: that does not go into the trash (a tool, cookware without food, a dirty dish: wash it).</summary>
+        CannotDiscard,
+        /// <summary>Spec 035: only a trash bag goes into the bin outside.</summary>
+        NotABag,
+        /// <summary>Spec 035: wiping needs the cloth in the hands.</summary>
+        NoCloth,
+        /// <summary>Spec 035: there is nothing to wipe here.</summary>
+        NoSpill,
+        /// <summary>035 review: this player still holds another timed hold (a wipe, a scrub, a shave): finish that first.</summary>
+        StillHolding,
+        /// <summary>Spec 036: the spit has no cone (or it ran out): load a new one from stock.</summary>
+        NoCone,
+        /// <summary>Spec 036: the spit still has a cone with seitan on it.</summary>
+        ConeLoaded
     }
 }

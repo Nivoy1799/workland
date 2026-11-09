@@ -18,14 +18,24 @@ namespace Worktown.Sim.Economy
         /// <summary>A wait past this share of the patience (permille, integer math) is slow: the review notices.</summary>
         public const int SlowPermille = 750;
 
-        public static GuestReview Review(int orderStars, int waitedTenths, int patienceTenths, int misses, bool wrongChange)
+        public static GuestReview Review(int orderStars, int waitedTenths, int patienceTenths, int misses, bool wrongChange) =>
+            Review(orderStars, waitedTenths, patienceTenths, misses, wrongChange, HygieneRules.StartPercent);
+
+        /// <summary>
+        /// Spec 035: as above, at the shop's hygiene score <paramref name="hygienePercent"/> when the guest reviews: below
+        /// <see cref="HygieneRules.ReviewBelow"/> % one more star goes (HygieneRules.ReviewPenalty); the key says so when nothing worse
+        /// happened (wrong dish, wrong change, order off and slow come first).
+        /// </summary>
+        public static GuestReview Review(int orderStars, int waitedTenths, int patienceTenths, int misses, bool wrongChange, int hygienePercent)
         {
             int stars = Math.Max(MinStars, Math.Min(MaxStars, orderStars));
             bool slow = patienceTenths > 0 && waitedTenths * 1000L > (long)SlowPermille * patienceTenths;
             bool wrongDish = misses >= 2;
+            int dirty = HygieneRules.ReviewPenalty(hygienePercent);
             if (slow) stars--;
             if (misses == 1) stars--;
             if (wrongChange) stars--;
+            stars -= dirty;
             if (wrongDish) stars = Math.Min(stars, WrongDishCap);
             stars = Math.Max(MinStars, Math.Min(MaxStars, stars));
 
@@ -34,6 +44,7 @@ namespace Worktown.Sim.Economy
             else if (wrongChange) key = ReviewKey.WrongChange;
             else if (misses == 1) key = ReviewKey.OrderOff;
             else if (slow) key = ReviewKey.Slow;
+            else if (dirty > 0) key = ReviewKey.Dirty;
             else key = ByStars(stars);
             return new GuestReview(stars, key);
         }
@@ -64,6 +75,7 @@ namespace Worktown.Sim.Economy
                 case ReviewKey.OrderOff: return "review.order_off";
                 case ReviewKey.WrongOrder: return "review.wrong_order";
                 case ReviewKey.WrongChange: return "review.wrong_change";
+                case ReviewKey.Dirty: return "review.dirty"; // spec 035
                 default: return "review.unknown";
             }
         }
@@ -82,6 +94,7 @@ namespace Worktown.Sim.Economy
                 case ReviewKey.OrderOff: return "Nice, but not quite what I asked.";
                 case ReviewKey.WrongOrder: return "That's not what I ordered.";
                 case ReviewKey.WrongChange: return "They got my change wrong.";
+                case ReviewKey.Dirty: return "Tasty, but the place was dirty."; // spec 035
                 default: return "...";
             }
         }

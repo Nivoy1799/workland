@@ -11,7 +11,7 @@ namespace Worktown.Game.Art
     /// squeezing player sees it from the press to the release at once (<see cref="Predict"/>), not waiting for the server. The
     /// sauce layer itself appears when the server adds it (on the release). No per-frame allocations.
     /// </summary>
-    public sealed class SauceDispenserView : MonoBehaviour
+    public sealed class SauceDispenserView : MonoBehaviour, IPourView
     {
         [SerializeField] private Station _board;
         [SerializeField] private int _dispenser;

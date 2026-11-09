@@ -17,6 +17,8 @@ namespace Worktown.Game.Art
         public const float ServingCounterHeight = 1.05f;
         /// <summary>Spec 028b: the fridge and the dry shelf (m; the guide's fridge row).</summary>
         public const float StockHeight = 1.80f;
+        /// <summary>Spec 034: the delivery box, largest side (docs/art-direction.md "Delivery box").</summary>
+        public const float DeliveryBoxSize = 0.40f;
         /// <summary>Spec 029: a fryer basket's real length with its handle (m; x1.15 in the game).</summary>
         public const float BasketReal = 0.45f;
         /// <summary>Width of one worktop cabinet module along the run (m).</summary>
@@ -56,6 +58,19 @@ namespace Worktown.Game.Art
             World(ArtKey.StationAssembly, WorktopHeight, SizeAxis.Height, Worktop),
             // Spec 032: the register stands on the serving counter's run (its own height above the counter top).
             World(ArtKey.StationRegister, RegisterArtRules.Height, SizeAxis.Height, "Register"),
+            // Spec 033: the drink dispenser stands on the front counter (its own height above the counter top).
+            World(ArtKey.StationDrinkDispenser, DrinkArtRules.Height, SizeAxis.Height, "Drink dispenser"),
+            // Spec 034: the ordering terminal (a wall screen) and the delivery box (world size: a box is carried with both hands).
+            World(ArtKey.StationTerminal, TerminalArtRules.Height, SizeAxis.Height, "Ordering terminal"),
+            World(ArtKey.PropDeliveryBox, DeliveryBoxSize, SizeAxis.Largest, "Delivery box"),
+            // Spec 035: the cleaning stations (graybox): the sink worktop high, the dish return on the front counter (its own height
+            // above the counter top), the kitchen trash can and the bin outside.
+            World(ArtKey.StationSink, WorktopHeight, SizeAxis.Height, Worktop),
+            World(ArtKey.StationDishReturn, CleaningArtRules.ReturnHeight, SizeAxis.Height, "Dish return"),
+            World(ArtKey.StationTrash, CleaningArtRules.TrashHeight, SizeAxis.Height, "Kitchen trash can"),
+            World(ArtKey.StationBin, CleaningArtRules.BinHeight, SizeAxis.Height, "Bin (outside)"),
+            // Spec 036: the seitan spit stands on the front counter (its own height above the counter top).
+            World(ArtKey.StationSpit, SpitArtRules.Height, SizeAxis.Height, "Seitan spit"),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).
@@ -116,6 +131,8 @@ namespace Worktown.Game.Art
             Food(ArtKey.FoodWrapPaper, 0.25f, "Wrapped wrap (paper)"),
             Food(ArtKey.PropTakeawayBox, 0.20f, "Takeaway box"),
             Food(ArtKey.PropPaperBag, 0.28f, "Paper bag"),
+            // Spec 033: a 400 ml takeaway cup is 12 cm tall (small: x1.5).
+            Small(ArtKey.PropCup, DrinkArtRules.CupReal, "Takeaway cup (400 ml)"),
 
             // Cookware and tools (x1.15).
             Cookware(ArtKey.FoodPlate, 0.26f, "Plate"),

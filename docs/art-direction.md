@@ -61,6 +61,16 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Takeaway box | 0.20 | same | over 15 cm: real size; the Kenney styrofoam box; added in spec 031 |
 | Paper bag | 0.28 | same | over 15 cm: real size; the Kenney bag; added in spec 031 |
 | Register | 0.24 | same | height above the counter top (the display); 1.0 x 0.5 m with its change mat and card terminal; graybox; added in spec 032 |
+| Drink dispenser | 0.56 | same | height above the counter top; 0.84 x 0.42 m with three taps, the cup stack and the lid stack; graybox; added in spec 033 |
+| Takeaway cup (400 ml) | 0.12 | 0.18 | x1.5; the Kenney soda glass, a lid and the fill line drawn on it; added in spec 033 |
+| Ordering terminal | 0.46 | same | height of the wall screen; 1.0 x 0.46 m, 2 cm deep, on the back wall above the landing worktop; graybox; added in spec 034 |
+| Delivery box | 0.40 | same | largest side; the Kenney cardboard box (Furniture Kit), carried with both hands; added in spec 034 |
+| Dish return | 0.30 | same | height above the counter top; a 0.60 x 0.40 m rack on the front counter where eat-in guests' dirty plates come back; graybox; added in spec 035 |
+| Kitchen trash can | 0.85 | same | height; 0.46 x 0.46 m with a flip lid, by the staff gap; graybox; added in spec 035 |
+| Bin (outside) | 1.10 | same | height; a 0.62 x 0.74 m wheelie bin outside the staff gap; graybox; added in spec 035 |
+| Trash bag | 0.45 | same | largest side (world size: carried with both hands); graybox; added in spec 035 |
+| Wipe cloth | 0.25 | 0.29 | x1.15 (a tool, like the knife); folded flat, 2 cm thick; graybox; added in spec 035 |
+| Seitan spit | 0.78 | same | height above the counter top; a 0.56 x 0.52 m base with the heat panel, the turning cone (0.5 m of stacked discs, 0.17 to 0.27 m across) and the catch tray; graybox; added in spec 036 |
 | Small house (2 storeys, to the ridge) | 7–8 | same | |
 | Shop (ground floor 4 m + 1 storey) | 7–8 | same | |
 | Tree small / large | 4 / 8 | same | |

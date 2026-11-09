@@ -47,9 +47,11 @@ namespace Worktown.Sim.Cooking
         /// <summary>The built-in operation set from spec 005. Bucket boundaries are provisional.</summary>
         public static OperationCatalog CreateDefault()
         {
-            var plated = new[] { "plated" };
+            // Spec 033: a cup (empty, filled or lidded: tagged "cup") goes into no other op: only the drinks station fills and lids it.
+            // Forbidden tags are no part of an item's hash, so every old item keeps its hash and rating.
+            var plated = new[] { "plated", Drinks.CupTag };
             // Spec 031b: builds stay builds: no cut, heat op or mix takes a build (a plate takes one only alone, ItemFactory).
-            var platedOrBuild = new[] { "plated", Assembly.BuildTag };
+            var platedOrBuild = new[] { "plated", Assembly.BuildTag, Drinks.CupTag };
             var none = Array.Empty<string>();
 
             var shape = new ParamDef("shape", ParamKind.Choice, 0f, 1f, new[]
@@ -90,10 +92,12 @@ namespace Worktown.Sim.Cooking
                 new OperationDef("mix", "counter", OperationKind.Mix, true, 2, CookingLimits.MaxMixInputs,
                     Array.Empty<ParamDef>(), null, platedOrBuild, none, "{in} mix"),
                 new OperationDef("plate", "counter", OperationKind.Plate, true, 1, CookingLimits.MaxPlateInputs,
-                    Array.Empty<ParamDef>(), null, plated, plated, "plate of {in}"),
+                    Array.Empty<ParamDef>(), null, plated, new[] { "plated" }, "plate of {in}"), // 033 review: the plate adds only "plated"
                 DeepFryOperation(platedOrBuild, none),
                 GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, platedOrBuild, none),
                 GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, platedOrBuild, none),
+                // Spec 036: the seitan spit (item hashes use the op id, so its place in the list changes no old item).
+                SpitOperation(platedOrBuild, none),
                 // Spec 031: the assembly board.
                 new OperationDef(Assembly.SqueezeOperationId, "dispenser", OperationKind.Portion, false, 1, 1, new[]
                 {
@@ -105,7 +109,7 @@ namespace Worktown.Sim.Cooking
                     }),
                 }, null, plated, none, "{" + Assembly.AmountParam + "} {in}"),
                 new OperationDef(Assembly.AssembleOperationId, Assembly.Station, OperationKind.Assemble, false, 1, CookingLimits.MaxBuildLayers,
-                    Array.Empty<ParamDef>(), null, new[] { Assembly.PlatedTag, Assembly.BuildTag }, new[] { Assembly.BuildTag }, "{in}"),
+                    Array.Empty<ParamDef>(), null, platedOrBuild, new[] { Assembly.BuildTag }, "{in}"),
                 new OperationDef(Assembly.CloseOperationId, Assembly.Station, OperationKind.Close, false, 1, 1, new[]
                 {
                     new ParamDef(Assembly.StyleParam, ParamKind.Choice, 0f, 1f, new[]
@@ -122,6 +126,20 @@ namespace Worktown.Sim.Cooking
                         new BucketDef(Assembly.Bag, 1f, "bagged"),
                     }),
                 }, null, plated, new[] { Assembly.PackedTag, Assembly.PlatedTag }, "{" + Assembly.ContainerParam + "} {in}"),
+                // Spec 033: the drinks station. A fill's input is the drink itself (ItemFactory checks it is a drink base item) and the
+                // cup is tagged "cup" (no other op takes it); a lid goes only on a fill and finishes it ("plated": the drink market).
+                new OperationDef(Drinks.FillOperationId, Drinks.Station, OperationKind.Fill, false, 1, 1, new[]
+                {
+                    new ParamDef(Drinks.MlParam, ParamKind.Number, 0f, Drinks.MaxMl, new[]
+                    {
+                        new BucketDef(Drinks.Low, 0f, "half-full"),
+                        new BucketDef(Drinks.Right, Drinks.RightFrom, ""),
+                        new BucketDef(Drinks.Full, Drinks.FullFrom, "brimming"),
+                        new BucketDef(Drinks.Spilled, Drinks.SpillFrom, "overfilled"),
+                    }),
+                }, null, new[] { "plated", Assembly.BuildTag, Drinks.CupTag }, new[] { Drinks.CupTag }, "{" + Drinks.MlParam + "} cup of {in}"),
+                new OperationDef(Drinks.LidOperationId, Drinks.Station, OperationKind.Lid, false, 1, 1, Array.Empty<ParamDef>(), null,
+                    new[] { "plated", Assembly.BuildTag }, new[] { Drinks.PlatedTag }, "{in} to go"),
             });
         }
 
@@ -145,6 +163,24 @@ namespace Worktown.Sim.Cooking
             string done = profile.Toasts ? "toasted" : "grilled";
             return new OperationDef(id, Griddle.Station, OperationKind.Heat, false, 1, 1, new[] { shortSide, longSide },
                 new HeatProfile(Griddle.PlateTempC, 0.1f, -0.3f, 0.4f, 0.25f, 0f, null, profile), plated, none, done + " {in}");
+        }
+
+        /// <summary>
+        /// Spec 036: the spit's <c>shave</c> heat op at the station "spit": the panel's fixed temperature, "time" = the outer layer's
+        /// heat time (sim seconds at high heat, 0..<see cref="Spit.MaxLayerSeconds"/>) in the buckets pale (short), shaved (medium, from
+        /// the good level) and charred (long, from the window's end). Doneness follows <see cref="Spit.OuterCurve"/>.
+        /// </summary>
+        private static OperationDef SpitOperation(string[] plated, string[] none)
+        {
+            var layer = new ParamDef("time", ParamKind.Number, 0f, Spit.MaxLayerSeconds, new[]
+            {
+                new BucketDef("short", 0f, "pale"),
+                new BucketDef("medium", Spit.OuterCurve.WindowMinAt, ""),
+                new BucketDef("long", Spit.OuterCurve.WindowMaxAt, "charred"),
+            });
+            return new OperationDef(Spit.OperationId, Spit.Station, OperationKind.Heat, false, 1, 1, new[] { layer },
+                new HeatProfile(Spit.PanelTempC, 0.2f, -0.3f, 0.35f, 0.25f, 0f, null, null, Spit.OuterCurve), plated, none,
+                "{time} shaved {in}");
         }
 
         /// <summary>
@@ -233,6 +269,14 @@ namespace Worktown.Sim.Cooking
                 if (shape == null || shape.Kind != ParamKind.Choice)
                     throw new ArgumentException($"Cut operation '{op.Id}' needs a Choice param 'shape'.", p);
             }
+            else if (op.Kind == OperationKind.Fill || op.Kind == OperationKind.Lid)
+            {
+                // Spec 033: a fill has one Number param (the millilitres), a lid none; each takes one input.
+                if (op.MinInputs != 1 || op.MaxInputs != 1 || op.Params.Count != (op.Kind == OperationKind.Fill ? 1 : 0))
+                    throw new ArgumentException($"Operation '{op.Id}' takes one input and {(op.Kind == OperationKind.Fill ? "one param" : "no param")}.", p);
+                if (op.Kind == OperationKind.Fill && op.Params[0].Kind != ParamKind.Number)
+                    throw new ArgumentException($"Operation '{op.Id}' needs a Number param.", p);
+            }
             else if (op.Kind == OperationKind.Portion || op.Kind == OperationKind.Close || op.Kind == OperationKind.Pack)
             {
                 // Spec 031: a squeeze has a Number amount, a close or pack exactly one Choice (the style or the container).
@@ -256,6 +300,14 @@ namespace Worktown.Sim.Cooking
                 bool hasTemp = temp != null && temp.Kind == ParamKind.Number;
                 if (hasTemp == op.Heat.FixedTemperatureC.HasValue)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs exactly one of a 'temp' param or a fixed temperature.", p);
+                if (h.Spit != null)
+                {
+                    // Spec 036: a spit op has one finite, ordered curve and no fryer or griddle part.
+                    var c = h.Spit;
+                    if (h.Fry != null || h.Grill != null || !(c.WindowMinAt > 0f && c.WindowMaxAt > c.WindowMinAt && c.BurntAt > c.WindowMaxAt)
+                        || !Fin(c.BurntAt))
+                        throw new ArgumentException($"Spit operation '{op.Id}' has an invalid curve.", p);
+                }
                 if (h.Grill != null)
                 {
                     // Spec 030: a griddle op has the long side next to "time", in the same range, and finite, ordered curves.

@@ -111,7 +111,8 @@ namespace Worktown.Game.Art
         public const int FalafelBalls = 4;
 
         /// <summary>Fried in the pan or (spec 029) in the fryer, or (spec 031b) grilled: all shift golden.</summary>
-        public static bool IsFried(byte heat) => heat == FoodLook.HeatFried || heat == FoodLook.HeatDeepFried || heat == FoodLook.HeatGrilled;
+        public static bool IsFried(byte heat) => heat == FoodLook.HeatFried || heat == FoodLook.HeatDeepFried || heat == FoodLook.HeatGrilled
+            || heat == FoodLook.HeatShaved; // spec 036
 
         /// <summary>
         /// Spec 031b: grilled food done to the medium bucket or longer (both sides at least medium: the sim's "time" is the shorter

@@ -41,6 +41,11 @@ namespace Worktown.Game.Npc
         /// when it changes (a few times a second while waiting, never while it pays): the server owns the clock, the client only draws.
         /// </summary>
         public readonly SyncVar<byte> Patience = new SyncVar<byte>(255);
+        /// <summary>
+        /// Spec 035: the guest eats in (its plate comes back dirty) or takes its order away. Presentation only, set once before the
+        /// spawn: the hand-off shows the plate instead of a parcel. The server keeps its own record for the plates.
+        /// </summary>
+        public readonly SyncVar<bool> EatIn = new SyncVar<bool>(false);
 
         [SerializeField] private TextMesh _label;
         [Tooltip("Spec 024: every renderer of every character variant; tinted with the wish colour.")]
@@ -91,13 +96,31 @@ namespace Worktown.Game.Npc
         internal void ServerInit(string wish, byte dish, Vector3 target) => ServerInit(wish, dish, 0, target);
 
         /// <summary>Spec 032: with the order's packed modifiers: the bubble says them in plain words; patience starts full.</summary>
-        internal void ServerInit(string wish, byte dish, byte modifiers, Vector3 target)
+        internal void ServerInit(string wish, byte dish, byte modifiers, Vector3 target) => ServerInit(wish, dish, modifiers, 0, target);
+
+        /// <summary>Spec 033: with the order's drink line (DrinkRules.DrinkByte, 0 none): the bubble adds "+ lemonade".</summary>
+        internal void ServerInit(string wish, byte dish, byte modifiers, byte drink, Vector3 target)
+        {
+            EatIn.Value = false;
+            ServerInitOrder(wish, dish, modifiers, drink, target);
+        }
+
+        /// <summary>Spec 035: with the way it eats: the bubble adds "for here" or "to go".</summary>
+        internal void ServerInit(string wish, byte dish, byte modifiers, byte drink, bool eatIn, Vector3 target)
+        {
+            EatIn.Value = eatIn;
+            ServerInitOrder(wish, dish, modifiers, drink, target);
+            if (dish != Menu.None) Bubble.Value = CustomerRules.OrderText(dish, modifiers, drink, eatIn);
+            Refresh();
+        }
+
+        private void ServerInitOrder(string wish, byte dish, byte modifiers, byte drink, Vector3 target)
         {
             Wish.Value = wish;
             Dish.Value = dish;
             Mood.Value = CustomerRules.MoodWaiting;
             Patience.Value = 255;
-            Bubble.Value = dish == Menu.None ? CustomerRules.WishText(wish) : CustomerRules.OrderText(dish, modifiers);
+            Bubble.Value = dish == Menu.None ? CustomerRules.WishText(wish) : CustomerRules.OrderText(dish, modifiers, drink);
             _target = target;
             _facing = Vector3.zero;
             _leaving = false;
@@ -111,6 +134,14 @@ namespace Worktown.Game.Npc
             _target = target;
             facing.y = 0f;
             _facing = facing;
+        }
+
+        /// <summary>Spec 033, server: what the waiting guest says now (one line of its order came, the other is still open).</summary>
+        internal void ServerSay(string bubble)
+        {
+            if (_leaving || Bubble.Value == bubble) return;
+            Bubble.Value = bubble;
+            Refresh();
         }
 
         /// <summary>Spec 032, server: the patience byte (only a change is sent).</summary>

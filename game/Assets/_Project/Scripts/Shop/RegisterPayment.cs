@@ -24,6 +24,8 @@ namespace Worktown.Game.Shop
         public int Misses;
         public int WaitedTenths;
         public int PatienceTenths;
+        /// <summary>Spec 036: what the review says about how the dish was made (OrderFit.Note), or null.</summary>
+        public string Note;
 
         /// <summary>What the guest pays: the bill and the tip.</summary>
         public long Due => Bill + Tip;

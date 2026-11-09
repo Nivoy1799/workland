@@ -127,7 +127,7 @@ namespace Worktown.Game.Tests
                         Assert.AreEqual(box.bounds.size.y, b.size.y, 0.02f, surface.name + " height");
                     }
                 }
-                Assert.AreEqual(5, worktops);
+                Assert.AreEqual(4, worktops); // spec 035: the bowl's worktop after the plate shelf is the sink (its drainboard)
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

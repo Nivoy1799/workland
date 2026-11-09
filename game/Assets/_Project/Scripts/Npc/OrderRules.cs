@@ -95,7 +95,24 @@ namespace Worktown.Game.Npc
             int misses = check.Misses;
             OrderMatch match = misses == 0 ? OrderMatch.Exact : misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
             float quality = check.Score.Quality;
-            return new OrderFit(match, misses, quality, Worktown.Game.Cooking.StarRating.Stars(quality));
+            // Spec 036: the seitan wrap and flatbread take shaved or grilled seitan alike; the review says which.
+            return new OrderFit(match, misses, quality, Worktown.Game.Cooking.StarRating.Stars(quality), Spit.ReviewNote(served));
+        }
+
+        /// <summary>
+        /// Spec 033: a served cup against the order's drink line <paramref name="orderedDrink"/> (a drink base id): the ordered drink filled
+        /// to the line (right) and lidded is Exact; the ordered drink low, full to the brim or overfilled is Close (one step short); another
+        /// drink, no lid, an empty cup or anything else is Wrong (two steps). Quality and stars are the cup's own rating.
+        /// </summary>
+        public static OrderFit FitDrink(Item served, string orderedDrink)
+        {
+            float quality = served != null ? Worktown.Sim.Cooking.ItemRater.Rate(served).Quality : 0f;
+            int stars = Worktown.Game.Cooking.StarRating.Stars(quality);
+            if (served == null || orderedDrink == null || !Drinks.IsLidded(served) || Drinks.DrinkOf(served) != orderedDrink)
+                return new OrderFit(OrderMatch.Wrong, 2, quality, stars);
+            return Drinks.LevelOf(served) == Drinks.Right
+                ? new OrderFit(OrderMatch.Exact, 0, quality, stars)
+                : new OrderFit(OrderMatch.Close, 1, quality, stars);
         }
 
         /// <summary>Spec 032: <see cref="Fit"/>'s match only.</summary>

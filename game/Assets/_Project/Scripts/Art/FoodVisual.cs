@@ -92,8 +92,22 @@ namespace Worktown.Game.Art
         /// <summary>A food object: a single pile, or a plate / bowl with up to four parts.</summary>
         public void ShowFood(FoodLook look, IReadOnlyList<FoodLook> parts)
         {
+            bool wasCup = _cupShown;
+            byte wasKind = _cupKind;
             ReleaseAll();
             bool shown;
+            if (FoodLookRules.IsCup(look))
+            {
+                // Spec 033: a cup (the Kenney cup) with its liquid at the level, the fill line and (lidded) its lid. The lid's click
+                // plays for everyone but the player who predicted it (it heard it at its click).
+                shown = AddCup(look);
+                if (wasCup && wasKind == FoodLook.KindCup && look.Kind == FoodLook.KindLidded && !_lidPredicted) PlayHere(Audio.SoundKey.LidClick);
+                if (look.Kind == FoodLook.KindLidded) _lidPredicted = false; // confirmed (a level change keeps a pending lid)
+                ShowFallback(!shown, look);
+                return;
+            }
+            _predictedMl = -1f;
+            _lidPredicted = false;
             if (look.Kind == FoodLook.KindSingle)
             {
                 shown = AddPile(look, Vector3.zero, 1f);
@@ -176,6 +190,9 @@ namespace Worktown.Game.Art
 
         private void Update()
         {
+            // Spec 033: an unconfirmed level of the owner's last pour does not stay for ever.
+            if (_predictedMl >= 0f && !_pouring && Time.unscaledTime > _predictionUntil && DrinkRules.LevelOfMl(_predictedMl) != _cupLevel)
+                EndPrediction();
             if (_dropping.Count == 0) return;
             FeelSettings feel = FeelSettings.Current;
             float t = feel.DropSeconds > 0f ? (Time.unscaledTime - _dropStart) / feel.DropSeconds : 1f;
@@ -300,6 +317,168 @@ namespace Worktown.Game.Art
             return any;
         }
 
+        // ---- Spec 033: a cup ----
+
+        private bool _cupShown;
+        private byte _cupKind;
+        private byte _cupLevel;
+        private Transform _liquid;
+        private Transform _lid;
+        private Bounds _cupBounds;
+        private Vector3 _discSize;
+        private float _predictedMl = -1f;
+        private bool _pouring;
+        private bool _lidPredicted;
+        private static Audio.KitchenSounds _sounds;
+        private static bool _soundsLooked;
+
+        /// <summary>Spec 033: this visual shows a cup now.</summary>
+        public bool ShowsCup => _cupShown;
+
+        /// <summary>Spec 033: the drawn liquid height of the cup (fraction of the cup), for tests and the tour log.</summary>
+        public float DrawnFill { get; private set; }
+
+        /// <summary>Spec 033: the lid is drawn (synced or predicted).</summary>
+        public bool LidShown => _lid != null && _lid.gameObject.activeSelf;
+
+        private bool AddCup(FoodLook look)
+        {
+            _cupShown = false;
+            _liquid = null;
+            _lid = null;
+            if (!TryGetPrefab(ArtKey.PropCup, out GameObject cupPrefab) || !Add(ArtKey.PropCup, Vector3.zero, 0f, 1f, default, false, false))
+                return false;
+            _cupShown = true;
+            _cupKind = look.Kind;
+            _cupLevel = look.Shape;
+            _cupBounds = PrefabBounds(cupPrefab, ref _cupBoundsMeasured, ref _cupBoundsCache);
+            Bounds b = _cupBounds;
+            int tap = DrinkRules.TapOfDrinkByte(look.Ingredient);
+            if (TryGetPrefab(ArtKey.FoodLayerDisc, out GameObject disc))
+            {
+                _discSize = PrefabBounds(disc, ref _discMeasured, ref _discCache).size;
+                // The liquid: a disc in the drink's colour, moved to the level (rebuilt only on a new look; the level moves it). The cup's
+                // model carries its fill line.
+                AddFixed(ArtKey.FoodLayerDisc, new Vector3(b.center.x, b.min.y, b.center.z), Vector3.one, DrinkArtRules.DrinkColour(tap));
+                _liquid = _active[_active.Count - 1].transform;
+                // The lid: a Cream disc over the rim (shown when lidded, or from the owner's click).
+                float lid = 2f * (DrinkArtRules.CupTopRadius + DrinkArtRules.CupWall) * 1.05f;
+                AddFixed(ArtKey.FoodLayerDisc, new Vector3(b.center.x, b.max.y - 0.002f, b.center.z),
+                    new Vector3(lid / _discSize.x, 0.012f / _discSize.y, lid / _discSize.z), Palette.Cream);
+                _lid = _active[_active.Count - 1].transform;
+                _lid.gameObject.SetActive(look.Kind == FoodLook.KindLidded || _lidPredicted);
+            }
+            // Spec 033: the owner's own pour keeps its exact level while the server's bucket agrees with it.
+            if (_predictedMl >= 0f && !_pouring && DrinkRules.LevelOfMl(_predictedMl) != look.Shape) _predictedMl = -1f;
+            ApplyLevel();
+            return true;
+        }
+
+        private bool _cupBoundsMeasured, _discMeasured;
+        private Bounds _cupBoundsCache, _discCache;
+
+        private void ApplyLevel()
+        {
+            if (!_cupShown) return;
+            float fill = _predictedMl >= 0f ? DrinkRules.DrawnFill(_predictedMl) : DrinkRules.DrawnFill(_cupLevel);
+            DrawnFill = fill;
+            if (_liquid == null) return;
+            bool on = fill > 0.001f;
+            if (_liquid.gameObject.activeSelf != on) _liquid.gameObject.SetActive(on);
+            if (!on) return;
+            float share = DrinkArtRules.CupLiquidHeight(fill);
+            float d = DrinkArtRules.CupInnerDiameter(share) * 0.97f;
+            _liquid.localPosition = new Vector3(_cupBounds.center.x, _cupBounds.min.y + _cupBounds.size.y * share - 0.004f, _cupBounds.center.z);
+            _liquid.localScale = new Vector3(d / Mathf.Max(1e-4f, _discSize.x), 0.004f / Mathf.Max(1e-4f, _discSize.y), d / Mathf.Max(1e-4f, _discSize.z));
+        }
+
+        /// <summary>
+        /// Spec 033, the pouring player only: its cup holds <paramref name="ml"/> now (its own prediction from the press, docs/feel.md 1).
+        /// The level moves without a rebuild. <paramref name="pouring"/> false: the pour ended; the level stays while the server's bucket
+        /// agrees with it, else it goes back to the bucket's.
+        /// </summary>
+        public void PredictMl(float ml, bool pouring)
+        {
+            _predictedMl = Mathf.Max(0f, ml);
+            _pouring = pouring;
+            _predictionUntil = Time.unscaledTime + PredictionKeepSeconds;
+            ApplyLevel();
+        }
+
+        /// <summary>Spec 033: a pour's level that the server's bucket never confirmed goes after this long (a lost answer).</summary>
+        public const float PredictionKeepSeconds = 3f;
+        private float _predictionUntil;
+
+        /// <summary>Spec 033: the owner's predicted ml in this cup (-1: none).</summary>
+        public float PredictedMl => _predictedMl;
+
+        /// <summary>Spec 033: the level the owner's prediction shows (LevelEmpty without one).</summary>
+        public byte PredictedLevel => _predictedMl >= 0f ? DrinkRules.LevelOfMl(_predictedMl) : DrinkRules.LevelEmpty;
+
+        /// <summary>Spec 033: the tap the owner's prediction pours from (-1: none).</summary>
+        public int PredictedTap => _predictedMl >= 0f ? _predictedTap : -1;
+
+        private int _predictedTap = -1;
+
+        /// <summary>Spec 033: the owner pours from tap <paramref name="tap"/> into this cup (the rules see its drink before the server's look).</summary>
+        public void SetPredictedTap(int tap)
+        {
+            _predictedTap = tap;
+            if (_liquid != null && DrinkRules.IsTap(tap)) Tint(_liquid.gameObject, DrinkArtRules.DrinkColour(tap), true); // an empty cup fills
+        }
+
+        /// <summary>Spec 033: the owner's pour was refused: back to the synced level.</summary>
+        public void EndPrediction()
+        {
+            _predictedMl = -1f;
+            _pouring = false;
+            ApplyLevel();
+        }
+
+        /// <summary>Spec 033, the owner's lid click: the lid shows now (<paramref name="on"/>), or goes again on a refusal.</summary>
+        public void PredictLid(bool on)
+        {
+            _lidPredicted = on;
+            if (_lid != null) _lid.gameObject.SetActive(on || _cupKind == FoodLook.KindLidded);
+        }
+
+        /// <summary>The model bounds of a prefab in its root's space (renderers' meshes), measured once.</summary>
+        private static Bounds PrefabBounds(GameObject prefab, ref bool measured, ref Bounds cache)
+        {
+            if (measured) return cache;
+            measured = true;
+            bool any = false;
+            Bounds result = new Bounds(Vector3.zero, Vector3.one * 0.1f);
+            foreach (MeshFilter f in prefab.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (f.sharedMesh == null) continue;
+                Bounds m = f.sharedMesh.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = m.center + Vector3.Scale(m.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                    Vector3 p = prefab.transform.InverseTransformPoint(f.transform.TransformPoint(corner));
+                    if (!any)
+                    {
+                        result = new Bounds(p, Vector3.zero);
+                        any = true;
+                    }
+                    else result.Encapsulate(p);
+                }
+            }
+            cache = result;
+            return cache;
+        }
+
+        private void PlayHere(Audio.SoundKey key)
+        {
+            if (!_soundsLooked)
+            {
+                _soundsLooked = true;
+                _sounds = FindFirstObjectByType<Audio.KitchenSounds>();
+            }
+            if (_sounds != null) _sounds.Play(key, transform.position);
+        }
+
         private static FoodLook BreadLook(FoodLook build) => new FoodLook(build.Ingredient, FoodLook.ShapeWhole, 0, 0, FoodLook.KindSingle, 0);
 
         private bool AddFixed(ArtKey key, Vector3 position, Vector3 scale, Color colour)
@@ -404,6 +583,9 @@ namespace Worktown.Game.Art
         private void ReleaseAll()
         {
             StopDrop();
+            _cupShown = false; // spec 033
+            _liquid = null;
+            _lid = null;
             for (int i = 0; i < _active.Count; i++)
             {
                 GameObject instance = _active[i];

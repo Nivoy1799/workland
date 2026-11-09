@@ -223,7 +223,7 @@ namespace Worktown.Game.Audio
                 }
                 // Spec 027c: the level follows the heat and the zone; the pitch rises a little when overdone.
                 HeatZone zone = steam.Vessel.Zone;
-                float target = SoundRules.LoopLevel(steam.IsHot, zone);
+                float target = SoundRules.LoopLevel(steam.IsHot, zone) * steam.HeatScale; // spec 036: the spit's sizzle follows its knob
                 loop.Level = Mathf.MoveTowards(loop.Level, target, LoopFadePerSecond * dt);
                 loop.Source.volume = loop.Level * SoundCatalog.MasterVolume * SoundCatalog.GainOf(key);
                 loop.Source.pitch = Mathf.MoveTowards(loop.Source.pitch, SoundRules.LoopPitchOf(steam.Vessel.Kind, zone), dt);

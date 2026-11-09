@@ -19,5 +19,10 @@ namespace Worktown.Game.Cooking
         CookOutcome Pay();
         /// <summary>The food object is spawned into the hands.</summary>
         bool HandOver();
+        /// <summary>
+        /// Spec 034, the refund backstop: <see cref="Pay"/> took the item (from stock, or the money) but <see cref="HandOver"/> failed: it
+        /// goes back. Called at most once, only then.
+        /// </summary>
+        void Refund();
     }
 }

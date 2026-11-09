@@ -59,16 +59,27 @@ namespace Worktown.Game.Tests
                     // Spec 028b: the fridge and the dry shelf are 1.80 m high (the guide's fridge).
                     // Spec 032: the register stands on the serving counter's run: its own height above the counter top.
                     bool register = station.Kind == StationKind.Register;
-                    float floor = register ? ArtSizeTable.ServingCounterHeight : 0f;
+                    bool drinks = station.Kind == StationKind.DrinkDispenser; // spec 033: on the front counter too
+                    bool terminal = station.Kind == StationKind.Terminal; // spec 034: a screen hanging on the back wall
+                    bool cleaning = Worktown.Game.Shop.CleaningRules.IsCleaningStation(station.Kind); // spec 035
+                    bool spit = station.Kind == StationKind.Spit; // spec 036: on the front counter too
+                    bool onCounter = register || drinks || station.Kind == StationKind.DishReturn || spit;
+                    float floor = onCounter ? ArtSizeTable.ServingCounterHeight
+                        : terminal ? TerminalArtRules.CentreHeight - TerminalArtRules.Height * 0.5f : 0f;
                     float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
                         : register ? floor + RegisterArtRules.Height
+                        : drinks ? floor + DrinkArtRules.Height
+                        : spit ? floor + SpitArtRules.Height
+                        : terminal ? floor + TerminalArtRules.Height
+                        : cleaning ? floor + CleaningArtRules.SizeOf(station.Kind).y
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");
                     Bounds body = station.transform.Find("Body").GetComponent<BoxCollider>().bounds;
                     // Spec 029: the fryer's collider stops under its oil wells (a lowered basket is aimed at above it).
                     float colliderTop = station.Kind == StationKind.Fryer ? FryerArt.BodyColliderTop : expected;
                     Assert.AreEqual(colliderTop, body.max.y, HeightTolerance, station.name + " collider top");
-                    Assert.AreEqual(floor, body.min.y, 0.001f, station.name + (register ? " stands on the counter top" : " stands on the floor"));
+                    Assert.AreEqual(floor, body.min.y, 0.001f, station.name + (onCounter ? " stands on the counter top"
+                        : terminal ? " hangs at its height on the wall" : " stands on the floor"));
                     if (station.Kind == StationKind.Counter) counters++;
                     if (station.Kind == StationKind.Stove) stoves++;
                 }
@@ -141,7 +152,7 @@ namespace Worktown.Game.Tests
                         surface.name + ": modules of " + width + " m");
                     Assert.IsNull(surface.transform.Find("Art_" + ArtKey.Worktop), surface.name + " still has the stretched cabinet");
                 }
-                Assert.AreEqual(5, worktops);
+                Assert.AreEqual(4, worktops); // spec 035: the bowl's worktop after the plate shelf is the sink (its drainboard)
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }
@@ -158,6 +169,7 @@ namespace Worktown.Game.Tests
                 // Spec 030: the six griddle spots lie on the griddle's plate.
                 Assert.AreEqual(Worktown.Game.Cooking.GriddleRules.SpotsPerGriddle, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Griddle));
                 Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Assembly)); // spec 031: the build spot on its board
+                Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.SpitCone || VesselTestKit.KindOf(v) == VesselKind.SpitTray)); // spec 036
                 Assert.AreEqual(6, vessels.Count);
                 foreach (Component vessel in vessels)
                 {

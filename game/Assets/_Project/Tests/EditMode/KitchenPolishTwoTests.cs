@@ -73,6 +73,14 @@ namespace Worktown.Game.Tests
                 AffordChecks++;
                 return !Broke;
             }
+
+            /// <summary>Spec 034: what a refused press answers (money here).</summary>
+            public CookOutcome Short => CookOutcome.NotEnoughMoney;
+
+            /// <summary>Spec 034: the refund backstop's calls.</summary>
+            public int Refunds;
+
+            public void Refund(int owner, string grocerId, int percent, long cost) => Refunds++;
         }
 
         // ---- 10.0: a repeated press never restarts the squeeze ----

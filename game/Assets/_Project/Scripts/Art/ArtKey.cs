@@ -109,6 +109,20 @@ namespace Worktown.Game.Art
         PropTakeawayBox,
         PropPaperBag,
         /// <summary>Spec 032: the register on the counter (graybox, RegisterArtRules).</summary>
-        StationRegister
+        StationRegister,
+        /// <summary>Spec 033: the drink dispenser on the front counter (graybox, DrinkArtRules) and the takeaway cup (Kenney cup).</summary>
+        StationDrinkDispenser,
+        PropCup,
+        /// <summary>Spec 034: the ordering terminal on the back wall (graybox, TerminalArtRules) and the delivery box (the Kenney
+        /// cardboard box of the Furniture Kit).</summary>
+        StationTerminal,
+        PropDeliveryBox,
+        /// <summary>Spec 035: the sink, the dish return, the kitchen trash can and the bin outside (graybox, CleaningArtRules).</summary>
+        StationSink,
+        StationDishReturn,
+        StationTrash,
+        StationBin,
+        /// <summary>Spec 036: the seitan spit on the front counter (graybox, SpitArtRules: base, heat panel, skewer, motor housing).</summary>
+        StationSpit
     }
 }

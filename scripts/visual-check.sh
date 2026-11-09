@@ -5,7 +5,7 @@
 # numbers to names). The tour client starts first and the observer second, so another window has focus while
 # the tour runs: the tour moves through its intents, not simulated keys.
 #
-#   bash scripts/visual-check.sh [--tours look,walk,cook] [--out .verify/visual] [--server local|wsl]
+#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial] [--out .verify/visual] [--server local|wsl]
 #
 #   --server local (default): the observer is a windowed -host (server plus observer), because the WSL link
 #                  has MTU 1280 while Tailscale runs and nothing spawns there (spec 003).
@@ -47,7 +47,8 @@ timeout_for() {
   case "$1" in
     look) echo 360 ;;
     walk) echo 420 ;;
-    cook) echo 1260 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register
+    cook) echo 1860 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register; spec 033: the lemonade; spec 034: the stock run; spec 035: the cleaning loop; spec 036: the spit
+    tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)
     *) echo 420 ;;
   esac
 }
@@ -105,20 +106,25 @@ failed=0
 report=()
 IFS=',' read -r -a tour_list <<< "$TOURS"
 for tour in "${tour_list[@]}"; do
-  case "$tour" in look|walk|cook) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  case "$tour" in look|walk|cook|tutorial) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
   rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer"
   tour_log="$OUT/$tour-tour.log"
   observer_log="$OUT/$tour-observer.log"
   deadline=$(( $(date +%s) + $(timeout_for "$tour") ))
   echo "==> tour $tour ($SERVER server)"
 
-  "$GAME" -connect "$ADDRESS" -tour "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -logFile "$(cygpath -w "$tour_log")" &
+  # Spec 038: the tutorial tour's client runs the tutorial (-tutorial overrides -skip-whatsnew).
+  tour_extra=()
+  if [ "$tour" = "tutorial" ]; then tour_extra=(-tutorial); fi
+  "$GAME" -connect "$ADDRESS" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$tour_log")" &
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
   sleep 3
   # Spec 032: the cook tour's host scripts its first orders (a wrap with a modifier, cash with change) and longer patience.
   host_extra=()
   if [ "$tour" = "cook" ]; then host_extra=(-tour-orders); fi
+  # Spec 038: the tutorial host has the tour's stock and trash set-up and the tutorial's calm guests (its scripted orders come first).
+  if [ "$tour" = "tutorial" ]; then host_extra=(-tour-orders -tutorial); fi
   if [ "$SERVER" = "local" ]; then
     "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${host_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
   else

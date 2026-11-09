@@ -40,6 +40,13 @@ namespace Worktown.Game.Art
                 case StationKind.Griddle: return ArtKey.StationGriddle; // spec 030
                 case StationKind.Assembly: return ArtKey.StationAssembly; // spec 031
                 case StationKind.Register: return ArtKey.StationRegister; // spec 032
+                case StationKind.DrinkDispenser: return ArtKey.StationDrinkDispenser; // spec 033
+                case StationKind.Terminal: return ArtKey.StationTerminal; // spec 034
+                case StationKind.Sink: return ArtKey.StationSink; // spec 035
+                case StationKind.DishReturn: return ArtKey.StationDishReturn;
+                case StationKind.TrashCan: return ArtKey.StationTrash;
+                case StationKind.Bin: return ArtKey.StationBin;
+                case StationKind.Spit: return ArtKey.StationSpit; // spec 036
                 default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for station kind");
             }
         }

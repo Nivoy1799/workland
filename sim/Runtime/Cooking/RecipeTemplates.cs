@@ -50,6 +50,8 @@ namespace Worktown.Sim.Cooking
         private static readonly string[] Chili = { "chili_sauce" };
         private static readonly string[] AnySauce = { "garlic_herb_sauce", "chili_sauce" };
         private static readonly string[] Griddled = { Griddle.OperationId };
+        /// <summary>Spec 036: the seitan of a seitan wrap or flatbread: grilled strips (griddle) or shaved off the spit, both prepared right.</summary>
+        private static readonly string[] SeitanHeated = { Griddle.OperationId, Spit.OperationId };
         private static readonly string[] DeepFried = { DeepFry.OperationId };
         private static readonly string[] FriedPotato = { DeepFry.OperationId, "fry" };
 
@@ -62,7 +64,7 @@ namespace Worktown.Sim.Cooking
             new RecipeTemplate(SeitanWrapId, "seitan wrap", Array.AsReadOnly(new[]
             {
                 Layer(LayerRole.Base, Wrap),
-                Layer(LayerRole.Filling, Seitan, Griddled),
+                Layer(LayerRole.Filling, Seitan, SeitanHeated),
                 Layer(LayerRole.Salad, Lettuce, cut: true),
                 Layer(LayerRole.Salad, Salads, cut: true, required: false),
                 Layer(LayerRole.Sauce, Chili),
@@ -78,7 +80,7 @@ namespace Worktown.Sim.Cooking
             new RecipeTemplate(SeitanFlatbreadId, "seitan flatbread", Array.AsReadOnly(new[]
             {
                 Layer(LayerRole.Base, Flatbread),
-                Layer(LayerRole.Filling, Seitan, Griddled),
+                Layer(LayerRole.Filling, Seitan, SeitanHeated),
                 Layer(LayerRole.Salad, CabbageOrLettuce, cut: true),
                 Layer(LayerRole.Salad, Salads, cut: true, required: false),
                 Layer(LayerRole.Sauce, AnySauce),

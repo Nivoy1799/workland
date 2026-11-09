@@ -48,7 +48,7 @@ sits too far back and high.
 | 035 | Cleaning: trays and plates come back dirty, sink, trash, spills, hygiene score | 5 |
 | 036 | Seitan spit: rotating, outer layer cooks, shave slices with the knife | 2, signature |
 | 037 | Business: price menu, equipment shop and upgrades, shop rating unlocks items | 6 |
-| 038 | First-shift onboarding (guided tutorial) | 7 |
+| 038 | First-shift onboarding (guided tutorial) - built before 037, which waits for the price-scale answer | 7 |
 
 **Feel comes before features** (human, 2026-11-08: "most important it should feel good"). 027a–027c run
 before any new station, and every later spec has docs/feel.md acceptance criteria of its own.
@@ -112,3 +112,32 @@ tuned later by the human.
 - 032 review (CHANGES REQUESTED): double pay on hand-over failure (must-fix) and register decisions (any cook works the
   head payment; self-settled payments pay no tip; head untouched 30 s auto-settles) in the 032 fix round. Process:
   future rounds commit spec and review fixes as separate commits.
+- 033 review (CHANGES REQUESTED, fixed in the 034 round): plate op added "cup" to every plated dish; cups into an
+  empty bowl server-side; pour hardening; tab close order; GuestTab.Serve guard. Later: a drink line when the drink
+  market has no open demand; near-empty cups profitable to NPC demand (037 pricing).
+- 034 (feels off): terminal rows small and buttons dim; taps, rack and cup stack show counts only in prompts; a
+  sauce dispenser's open bottle is not visible to the client; third-person carried box has no arm pose; the delivery
+  knock replays for late joiners; packs are expensive next to the start money (037); old money-only wallet paths can
+  be removed once every scene has a SupplyService.
+- 034 review (CHANGES REQUESTED; fixed in the 035 round): delivery boxes stacked on one spot (physics sync), last
+  drops, stock reset vs economy, unstocked goods free, lost boxes, pour key leftover, refund bound, tests.
+- 035 (feels off): hygiene rates far too harsh (one spill 100 -> 49 % in 40 s; decision: all decay and recovery 10x
+  slower, in the 036 round); eat-in guests leave holding their plate (no seats yet); the trash bag copy flies in as a
+  box; third-person wipe cloth in the hand does not move; the bin has no byte (onlookers see the bag vanish).
+- 035 review (CHANGES REQUESTED; fixed in the 036 round): plate invariant on a server stop, dead ForgetBox, CanDraw
+  minimum share, failed refunds keep the order, GrocerPaid in the snapshot, scrub auto-stop, full bags only, tests.
+  Note for the human (minor): the HUD shows an exact hygiene % (the spec asked for it); effects switch at 50/30.
+- 036 (feels off): best quality comes at the end of the good window (70 s on the spit; fryer and griddle the same),
+  not at the "perfect" cue - a later spec should make "perfect" the best rating everywhere; the scoop is not
+  predicted; an open wrap with fillings can't be picked up to scoop onto (the 031 fold-on-click rule); the first-
+  person knife saws in the corner; graybox cone and tray labels.
+- 036 review (CHANGES REQUESTED; fixed in the 038 round): cones could not be ordered (no grocer price for
+  seitan_cone), cone lost on a server stop, free cones without supply, plate restart doc, empty-tap text, tests.
+- 038 (feels off): serve and pay steps often pass together with the fries guest; the card covers the top of the view;
+  step 4 points at the board while the knife is still held (text should say "put the knife down"); calm guests still
+  leave on the 014 demand reconcile; the edge arrow is small; scene plates are not reset to their start spots on a
+  server restart (036 review "better still").
+- 038 review (approved with nits) -> 038b: visual-check marks the tutorial done in the dev machine's PlayerPrefs;
+  calm-guests flag can go stale within one session; the engine should tie PriceGoodId to GoodId; a tap pour larger
+  than what is left is refused whole; a returned cone can exceed capacity; two repeated lookups; sim test for
+  PriceGoodId; `string?` nullable.

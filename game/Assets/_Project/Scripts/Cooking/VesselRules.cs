@@ -39,6 +39,8 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Basket: return 1; // spec 029: one portion
                 case VesselKind.Griddle: return 1; // spec 030: one item per spot
                 case VesselKind.Assembly: return CookingLimits.MaxBuildLayers; // spec 031: the layers of one build
+                case VesselKind.SpitTray: return SpitRules.TrayCapacity; // spec 036: shaved portions
+                case VesselKind.SpitCone: return 1;
                 default: return 0;
             }
         }
@@ -48,7 +50,8 @@ namespace Worktown.Game.Cooking
             kind == VesselKind.Pan || kind == VesselKind.Pot || kind == VesselKind.Basket || kind == VesselKind.Griddle; // spec 030: a griddle spot
 
         /// <summary>Spec 030: cookware fixed to its station (no Pickup, never carried): a fryer basket, a griddle spot.</summary>
-        public static bool IsFixed(VesselKind kind) => kind == VesselKind.Basket || kind == VesselKind.Griddle || kind == VesselKind.Assembly; // spec 031: the build spot
+        public static bool IsFixed(VesselKind kind) => kind == VesselKind.Basket || kind == VesselKind.Griddle || kind == VesselKind.Assembly // spec 031: the build spot
+            || kind == VesselKind.SpitCone || kind == VesselKind.SpitTray; // spec 036
 
         /// <summary>Spec 029: the cookware that cooks on a burner (pan, pot); a basket hangs in its fryer.</summary>
         public static bool StandsOnBurner(VesselKind kind) => kind == VesselKind.Pan || kind == VesselKind.Pot;
@@ -142,6 +145,8 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Basket: return "basket";
                 case VesselKind.Griddle: return "griddle";
                 case VesselKind.Assembly: return "build"; // spec 031
+                case VesselKind.SpitCone: return "cone"; // spec 036
+                case VesselKind.SpitTray: return "tray";
                 default: return "it";
             }
         }

@@ -84,9 +84,10 @@ namespace Worktown.Sim.Tests.Economy
         [Fact]
         public void SurplusCapIsCostMinusOneMinusWeightTimesB()
         {
-            Assert.Equal(28, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedFries()));          // 60-1-31
-            Assert.Equal(157, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedTomatoCashew())); // 220-1-62
-            Assert.Equal(3, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedSalt()));           // 35-1-31
+            // Spec 034: the cost is the supplier's bulk unit price (80 %, never below B + 1 = 32), not the grocer price.
+            Assert.Equal(16, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedFries()));          // 48-1-31
+            Assert.Equal(113, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedTomatoCashew())); // (56+120)-1-62
+            Assert.Equal(0, PriceRules.SurplusCap(TestEconomy.Catalog, TestEconomy.PlatedSalt()));           // 32-1-31
             var noBasil = TestEconomy.Build(grocer: TestEconomy.GrocerWithout("basil"));
             Assert.Equal(0, PriceRules.SurplusCap(noBasil, T.Ok(T.Plate(T.Base("basil")))));
         }
@@ -96,14 +97,17 @@ namespace Worktown.Sim.Tests.Economy
         {
             var snack = Snack;
             var meal = TestEconomy.Catalog.Markets.Single(m => m.Id == "meal");
-            // fries q=696: WholesalePayout(100,696) = 100*848/1000 = 84, cap 28
-            Assert.Equal(28, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedFries(), 696));
-            // plated salt q=166: 100*583/1000 = 58, cap 3
-            Assert.Equal(3, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedSalt(), 166));
-            // tomato+cashew q=746: 300*873/1000 = 261, cap 157
-            Assert.Equal(157, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, meal, TestEconomy.PlatedTomatoCashew(), 746));
-            // floor payout below cap: apple q=0: 100*500/1000 = 50, cap 48 -> 48; q=0 salt: 50 vs 3 -> 3
-            Assert.Equal(48, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedApple(), 0));
+            // Spec 034: the caps at the bulk unit price.
+            // fries q=696: WholesalePayout(100,696) = 100*848/1000 = 84, cap 16
+            Assert.Equal(16, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedFries(), 696));
+            // plated salt q=166: 100*583/1000 = 58, cap 0 (the wholesaler refuses below 1)
+            Assert.Equal(0, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedSalt(), 166));
+            // tomato+cashew q=746: 300*873/1000 = 261, cap 113
+            Assert.Equal(113, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, meal, TestEconomy.PlatedTomatoCashew(), 746));
+            // apple q=0: 100*500/1000 = 50, cap 64-1-31 = 32 -> 32
+            Assert.Equal(32, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, snack, TestEconomy.PlatedApple(), 0));
+            // a low quality pays the floor payout when it is below the cap: tomato+cashew q=0: 300*500/1000 = 150, cap 113 -> 113
+            Assert.Equal(113, PriceRules.ItemWholesalePayout(TestEconomy.Catalog, meal, TestEconomy.PlatedTomatoCashew(), 0));
         }
 
         [Fact]

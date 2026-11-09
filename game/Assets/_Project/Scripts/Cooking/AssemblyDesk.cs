@@ -60,7 +60,7 @@ namespace Worktown.Game.Cooking
             string sauce = BuildRules.SauceOf(dispenser);
             if (sauce != null && wallet != null && !_kitchen.IsSqueezing(board, dispenser, out _, out _)
                 && !wallet.CanAfford(owner, sauce, PriceRules.PortionStepPercent))
-                return CookOutcome.NotEnoughMoney;
+                return wallet.Short; // spec 034: OutOfStock when the sauce's bottles are used up
             return _kitchen.TryStartSqueeze(board, dispenser, owner, tick);
         }
 
@@ -95,7 +95,11 @@ namespace Worktown.Game.Cooking
                 CookOutcome paid = wallet.Charge(owner, sauce, PriceRules.PortionPercent(seconds), out cost);
                 if (paid != CookOutcome.Ok) return paid;
             }
-            _kitchen.CommitBuild(_kitchen.BuildSpotOf(board), build, sauce, top);
+            if (!_kitchen.CommitBuild(_kitchen.BuildSpotOf(board), build, sauce, top))
+            {
+                wallet?.Refund(owner, sauce, PriceRules.PortionPercent(seconds), cost); // spec 034: the refund backstop
+                return CookOutcome.SimRefused;
+            }
             result = new SqueezeResult(seconds, top, cost, build);
             return CookOutcome.Ok;
         }
@@ -145,7 +149,12 @@ namespace Worktown.Game.Cooking
                     return paid;
                 }
             }
-            _kitchen.CommitBuild(spot, packed);
+            if (!_kitchen.CommitBuild(spot, packed))
+            {
+                wallet?.Refund(owner, BuildRules.PackagingId(packaging), 100, cost); // spec 034: the refund backstop
+                packed = null;
+                return CookOutcome.SimRefused;
+            }
             return CookOutcome.Ok;
         }
     }

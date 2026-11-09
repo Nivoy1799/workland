@@ -62,7 +62,8 @@ namespace Worktown.Game.Npc
         /// <summary>Spec 032: served, waiting at the register to pay (its patience does not drain).</summary>
         public const byte MoodPaying = 5;
 
-        public const int MaxTicketMinutes = 0xFFFF;
+        /// <summary>Spec 033: 13 bits (8191 in-game minutes, over five days); bits 21-23 carry the drink line.</summary>
+        public const int MaxTicketMinutes = 0x1FFF;
 
         public static byte MoodOf(OrderMatch match)
         {
@@ -127,6 +128,81 @@ namespace Worktown.Game.Npc
 
         public static byte TicketModifiers(int ticket) => (byte)((ticket >> 24) & 0xFF);
 
+        // ---- spec 033: the order's drink line ----
+
+        /// <summary>Seed of the server's drink-line RNG (AGENTS rule 7), its own so the 022/032 order draws keep their sequence.</summary>
+        public const ulong DrinkSeed = 33;
+
+        private const int TicketDrinkShift = 21;
+        private const int TicketServedBit = 1 << 23;
+
+        /// <summary>
+        /// Spec 033: a rail ticket with the order's drink line (Cooking.DrinkRules.DrinkByte, 0 none) in bits 21-22 and, in bit 23,
+        /// whether its dish came already (it waits only for its drink). A ticket without a drink is the 032 ticket.
+        /// </summary>
+        public static int PackTicket(byte dish, int minutes, byte modifiers, byte drink, bool dishServed)
+        {
+            return PackTicket(dish, minutes, modifiers) | ((drink & 0x03) << TicketDrinkShift) | (dishServed ? TicketServedBit : 0);
+        }
+
+        public static byte TicketDrink(int ticket) => (byte)((ticket >> TicketDrinkShift) & 0x03);
+
+        public static bool TicketDishServed(int ticket) => (ticket & TicketServedBit) != 0;
+
+        /// <summary>The drink line on the ticket and in the bubble: "+ lemonade" (empty for none).</summary>
+        public static string DrinkLine(byte drink)
+        {
+            int tap = Worktown.Game.Cooking.DrinkRules.TapOfDrinkByte(drink);
+            return tap < 0 ? string.Empty : "+ " + Worktown.Game.Cooking.DrinkRules.DrinkName(tap);
+        }
+
+        /// <summary>The order bubble with its drink line: "Falafel wrap" / "extra garlic" / "+ lemonade".</summary>
+        public static string OrderText(byte dish, byte modifiers, byte drink)
+        {
+            string text = OrderText(dish, modifiers);
+            string line = DrinkLine(drink);
+            return line.Length == 0 ? text : text + "\n" + line;
+        }
+
+        /// <summary>Spec 035: the order bubble says whether the guest eats in ("for here") or takes it away ("to go").</summary>
+        public static string OrderText(byte dish, byte modifiers, byte drink, bool eatIn) =>
+            OrderText(dish, modifiers, drink) + "\n" + DiningText(eatIn);
+
+        public static string DiningText(bool eatIn) => eatIn ? "· for here" : "· to go";
+
+        /// <summary>Seed of the server's eat-in RNG (AGENTS rule 7), its own so the 022/032/033 draws keep their sequence.</summary>
+        public const ulong EatInSeed = 35;
+
+        /// <summary>
+        /// Spec 035: a new guest's patience (s): the 032 base and layers (and the 033 drink), the tour's scale, and the shop's hygiene
+        /// (Sim.Economy.HygieneRules.Patience: 20 % less below 30 %). Deterministic.
+        /// </summary>
+        public static float PatienceFor(GuestOrder order, int layers, bool drink, float scale, int hygienePercent) =>
+            HygieneRules.Patience(GuestOrders.PatienceSeconds(order, layers + (drink ? 1 : 0)) * scale, hygienePercent);
+
+        /// <summary>
+        /// Spec 033: the wishes the queue is reconciled to, with one more for each queued guest whose dish came already
+        /// (<paramref name="dishServed"/>) and that still waits for its drink: its dish was sold to the demand, so without it the
+        /// reconcile would send another guest of that wish away. <paramref name="desired"/> itself when there is none.
+        /// </summary>
+        public static IReadOnlyList<string> KeepOpenOrders(IReadOnlyList<string> desired, IReadOnlyList<QueuedCustomer> queue,
+            Func<int, bool> dishServed)
+        {
+            if (queue == null || dishServed == null) return desired;
+            List<string> kept = null;
+            foreach (QueuedCustomer entry in queue)
+                if (dishServed(entry.Id)) (kept ??= new List<string>(desired)).Add(entry.Wish);
+            return kept != null ? kept : desired;
+        }
+
+        /// <summary>What a guest says when one line of its order came and the other is still open.</summary>
+        public static string StillWaitingText(bool dishCame, byte dish, byte drink)
+        {
+            if (!dishCame) return "Thanks! And my " + Menu.NameOf(dish).ToLowerInvariant() + "?";
+            int tap = Worktown.Game.Cooking.DrinkRules.TapOfDrinkByte(drink);
+            return "Thanks! And my " + (tap < 0 ? "drink" : Worktown.Game.Cooking.DrinkRules.DrinkName(tap)) + "?";
+        }
+
         /// <summary>The modifiers of a packed byte for <paramref name="dish"/> (none for a dish without a recipe template).</summary>
         public static IReadOnlyList<OrderModifier> ModifiersOf(byte dish, byte packed)
         {
@@ -168,8 +244,15 @@ namespace Worktown.Game.Npc
             card ? "Thanks! Card, please." : "Thanks! Here's " + EconomyRules.Money(handed) + ".";
 
         /// <summary>The review a guest leaves with: "★★★★☆ Tasty, I'd come back."</summary>
-        public static string ReviewText(GuestReview review) =>
-            review == null ? string.Empty : Worktown.Game.Cooking.StarRating.Format(review.Stars) + " " + review.Text;
+        public static string ReviewText(GuestReview review) => ReviewText(review, null);
+
+        /// <summary>Spec 036: the review with the dish's note after it ("★★★★☆ Tasty, I'd come back. The seitan was shaved fresh off the spit.").</summary>
+        public static string ReviewText(GuestReview review, string note) =>
+            review == null ? string.Empty : Worktown.Game.Cooking.StarRating.Format(review.Stars) + " " + ReviewWords(review, note);
+
+        /// <summary>Spec 036: the review's words and the dish's note (when there is one).</summary>
+        public static string ReviewWords(GuestReview review, string note) =>
+            review == null ? string.Empty : string.IsNullOrEmpty(note) ? review.Text : review.Text + " " + note;
 
         /// <summary>The review's mood colour: 4-5 stars happy, 3 ok, less unhappy.</summary>
         public static byte MoodOf(GuestReview review) =>

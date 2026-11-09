@@ -82,6 +82,38 @@ namespace Worktown.Game.Economy
             return result.Error;
         }
 
+        /// <summary>
+        /// Spec 033: one pour at the drink dispenser, charged once: <paramref name="percent"/> % of the drink and the cup when
+        /// <paramref name="withCup"/>. On failure nothing changes.
+        /// </summary>
+        public EconomyError TryBuyFill(string accountId, string drinkId, int percent, bool withCup, out long cost)
+        {
+            PurchaseResult result = _engine.TryBuyFill(_state, accountId, drinkId, percent, withCup);
+            cost = result.Cost;
+            if (result.Ok) _state = result.State;
+            return result.Error;
+        }
+
+        /// <summary>Spec 034: the catalog (the supplier's offers and the wholesaler's cap read it).</summary>
+        public EconomyCatalog Catalog => _catalog;
+
+        /// <summary>Spec 034: pays <paramref name="packs"/> packs of <paramref name="offer"/> to the supplier, once. On failure nothing changes.</summary>
+        public EconomyError TryBuySupply(string accountId, SupplierOffer offer, int packs, out long cost)
+        {
+            PurchaseResult result = _engine.TryBuySupply(_state, accountId, offer, packs);
+            cost = result.Cost;
+            if (result.Ok) _state = result.State;
+            return result.Error;
+        }
+
+        /// <summary>Spec 034, the refund backstop: <paramref name="amount"/> paid to the grocer or supplier goes back. On failure nothing changes.</summary>
+        public EconomyError Refund(string accountId, long amount)
+        {
+            LedgerResult result = _engine.Refund(_state, accountId, amount);
+            if (result.Ok) _state = result.State;
+            return result.Error;
+        }
+
         /// <summary>Sells a plated item. On failure nothing changes.</summary>
         public SaleResult TrySell(string accountId, Item platedItem)
         {

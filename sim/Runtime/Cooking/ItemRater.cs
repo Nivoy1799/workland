@@ -26,6 +26,13 @@ namespace Worktown.Sim.Cooking
                 if (best != null) return new ItemRating(best.Quality, best.Taste, best.DonenessFactor);
             }
 
+            // Spec 033: a cup of a drink rates by the drink's own taste (its balance) and the fill level (the quality factor).
+            if (item.Kind == OperationKind.Fill || item.Kind == OperationKind.Lid)
+            {
+                float drink = Drinks.Taste(item.Stats);
+                return new ItemRating(Clamp01(drink * item.QualityFactor), drink, 1f);
+            }
+
             if (item.Kind == OperationKind.Plate)
             {
                 float quality = 0f, taste = 0f, factor = 0f, total = 0f;

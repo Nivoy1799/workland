@@ -50,6 +50,14 @@ namespace Worktown.Game.Audio
                 case SoundKey.Squeeze: return 0.55f;
                 case SoundKey.Fold: return 0.7f;
                 case SoundKey.Paper: return 0.7f;
+                case SoundKey.Pour: return 0.5f; // spec 033
+                case SoundKey.ShaveRasp: return 0.6f; // spec 036
+                case SoundKey.MotorHum: return 0.25f;
+                case SoundKey.LidClick: return 0.8f;
+                case SoundKey.Splash: return 0.8f;
+                case SoundKey.Scrub: return 0.55f; // spec 035
+                case SoundKey.TrashRustle: return 0.75f;
+                case SoundKey.LidThump: return 0.8f;
                 default: return 1f;
             }
         }

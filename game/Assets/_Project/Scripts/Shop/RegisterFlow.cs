@@ -38,6 +38,9 @@ namespace Worktown.Game.Shop
 
         public RegisterDesk Desk => _desk;
 
+        /// <summary>Spec 035: the shop's hygiene score when a guest reviews (below 50 % the review loses a star; Sim.Economy.HygieneRules).</summary>
+        public int HygienePercent { get; set; } = HygieneRules.StartPercent;
+
         /// <summary>
         /// 032 review: the counter pays the bill at once only when the hand-over did not happen and the guest is not in the register's
         /// line (a guest in the line pays there, exactly once, whatever failed after it joined).
@@ -66,6 +69,7 @@ namespace Worktown.Game.Shop
                 Misses = pick.Fit.Misses,
                 WaitedTenths = pick.WaitedTenths,
                 PatienceTenths = pick.PatienceTenths,
+                Note = pick.Fit.Note, // spec 036
             };
             payment.Handed = payment.Card ? payment.Due : CashRules.Handed(payment.Due, order.Note);
             _desk.Open(payment); // the commit point: from here the register pays it, exactly once
@@ -158,15 +162,15 @@ namespace Worktown.Game.Shop
         private void Finish(RegisterSettlement s, IGuestStage stage, bool leaves)
         {
             RegisterPayment p = s.Payment;
-            GuestReview review = ReviewRules.Review(p.OrderStars, p.WaitedTenths, p.PatienceTenths, p.Misses, s.WrongChange);
-            if (leaves) Show(stage, st => st.Leave(p.GuestId, CustomerRules.ReviewText(review), CustomerRules.MoodOf(review)));
+            GuestReview review = ReviewRules.Review(p.OrderStars, p.WaitedTenths, p.PatienceTenths, p.Misses, s.WrongChange, HygienePercent);
+            if (leaves) Show(stage, st => st.Leave(p.GuestId, CustomerRules.ReviewText(review, p.Note), CustomerRules.MoodOf(review)));
             Show(stage, st => st.LineMoved());
             long tip = s.TipPaid;
             _shift.RecordSale(p.OrderStars, s.Paid, tip, review);
             string how = s.Automatic ? "settled by the register, no tip" : p.Card ? "card" : s.WrongChange ? "cash, wrong change ("
                 + EconomyRules.Money(s.ChangeGiven) + " for " + EconomyRules.Money(p.ChangeDue) + ")" : "cash";
             Show(stage, st => st.Feed("Guest paid " + EconomyRules.Money(s.Paid) + " (tip " + EconomyRules.Money(tip) + ", " + how + ") · "
-                + Menu.NameOf(p.Dish) + " · " + review.Stars + "★ \"" + review.Text + "\""));
+                + Menu.NameOf(p.Dish) + " · " + review.Stars + "★ \"" + CustomerRules.ReviewWords(review, p.Note) + "\""));
             Show(stage, st => st.Reward(review.Stars, s.Paid, tip));
             Show(stage, st => st.Log("[Register] guest " + p.GuestId + " paid " + EconomyRules.Money(s.Paid) + " of " + EconomyRules.Money(p.Due)
                 + " (tip " + EconomyRules.Money(tip) + ", " + (p.Card ? "card" : "change " + EconomyRules.Money(s.ChangeGiven) + " of "

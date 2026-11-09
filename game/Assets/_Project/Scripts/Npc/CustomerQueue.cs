@@ -67,6 +67,44 @@ namespace Worktown.Game.Npc
             _entries.Add(new QueuedCustomer(id, wish, dish, modifiers));
         }
 
+        /// <summary>Spec 033: with the order's drink line too (Cooking.DrinkRules.DrinkByte; 0 = none).</summary>
+        public void Add(int id, string wish, byte dish, byte modifiers, byte drink)
+        {
+            _entries.Add(new QueuedCustomer(id, wish, dish, modifiers, drink));
+        }
+
+        /// <summary>
+        /// Spec 033: as <see cref="TryPick(Func{QueuedCustomer, OrderMatch}, out QueuedCustomer, out OrderMatch)"/> among the guests
+        /// <paramref name="eligible"/> says still want this kind of line (a guest whose dish came already waits only for its drink): the
+        /// first of them in queue order that matches exactly, else the first of them. False when none is eligible.
+        /// </summary>
+        public bool TryPick(Func<QueuedCustomer, bool> eligible, Func<QueuedCustomer, OrderMatch> match, out QueuedCustomer customer,
+            out OrderMatch result)
+        {
+            customer = default;
+            result = OrderMatch.Wrong;
+            if (eligible == null || match == null) return false;
+            bool any = false;
+            QueuedCustomer first = default;
+            foreach (QueuedCustomer entry in _entries)
+            {
+                if (!eligible(entry)) continue;
+                if (!any)
+                {
+                    any = true;
+                    first = entry;
+                }
+                if (match(entry) != OrderMatch.Exact) continue;
+                customer = entry;
+                result = OrderMatch.Exact;
+                return true;
+            }
+            if (!any) return false;
+            customer = first;
+            result = match(first);
+            return true;
+        }
+
         /// <summary>
         /// Spec 022: who gets a served dish, without changing the queue. <paramref name="match"/> rates the dish
         /// against an ordered dish id. The first customer (in queue order) whose order matches exactly, else the

@@ -230,6 +230,64 @@ namespace Worktown.Sim.Economy
             return Debit(s, ai, PriceRules.PortionCost(price, percent));
         }
 
+        /// <summary>
+        /// Spec 033: one pour at the drinks station, charged once: the cup's grocer price when <paramref name="withCup"/> (it was
+        /// empty) plus <paramref name="percent"/> % of the drink's (<see cref="PriceRules.FillCost"/>). Percent outside 1..100 is
+        /// InvalidQuantity; on any failure nothing changes.
+        /// </summary>
+        public PurchaseResult TryBuyFill(EconomyState s, string buyerId, string drinkId, int percent, bool withCup)
+        {
+            Need(s);
+            int ai = FindAccount(s, buyerId);
+            if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
+            if (!_catalog.TryGetGrocerPrice(drinkId, out var drink)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            long cup = 0;
+            if (withCup && !_catalog.TryGetGrocerPrice(Drinks.CupId, out cup)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            if (percent < 1 || percent > 100) return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
+            return Debit(s, ai, PriceRules.FillCost(cup, drink, percent, withCup));
+        }
+
+        /// <summary>
+        /// Spec 034: an order of <paramref name="packs"/> packs from the supplier, paid once: <see cref="Supplier.OrderCost"/> of the
+        /// good's grocer price (the bulk price). UnknownBaseItem for a good the catalog does not price or an offer at another price,
+        /// InvalidQuantity outside 1..<see cref="Supplier.MaxPacksPerOrder"/>, InsufficientFunds; on any failure nothing changes.
+        /// </summary>
+        public PurchaseResult TryBuySupply(EconomyState s, string buyerId, SupplierOffer offer, int packs)
+        {
+            Need(s);
+            if (offer == null) throw new ArgumentNullException(nameof(offer));
+            int ai = FindAccount(s, buyerId);
+            if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
+            if (!_catalog.TryGetGrocerPrice(offer.PriceGoodId, out var price) || price != offer.GrocerPrice) // 036 review: the price good
+                return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            if (packs < 1 || packs > Supplier.MaxPacksPerOrder || offer.PackSize < 1 || offer.GrocerItemsPerUnit < 1)
+                return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
+            return Debit(s, ai, Supplier.OrderCost(_catalog, offer, packs));
+        }
+
+        /// <summary>
+        /// Spec 034, the refund backstop: <paramref name="amount"/> paid to the grocer or supplier goes back to the account (a server
+        /// path charged but could not hand over). Money only moves: the grocer's revenue falls by the same amount. UnknownAccount,
+        /// InvalidQuantity for 0 or less, more than the grocer ever took or (034 review) more than this account paid it (Account.GrocerPaid),
+        /// BalanceLimit; nothing changes then.
+        /// </summary>
+        public LedgerResult Refund(EconomyState s, string accountId, long amount)
+        {
+            Need(s);
+            int ai = FindAccount(s, accountId);
+            if (ai < 0) return Led(s, EconomyError.UnknownAccount);
+            var acc = s.Accounts[ai];
+            // 034 review: never more than this account paid the grocer and supplier (less what it got back already).
+            if (amount <= 0 || amount > s.Totals.GrocerRevenue || amount > acc.GrocerPaid) return Led(s, EconomyError.InvalidQuantity);
+            if (acc.Balance > EconomyLimits.MaxBalance - amount) return Led(s, EconomyError.BalanceLimit);
+            var next = s with
+            {
+                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance + amount, GrocerPaid = acc.GrocerPaid - amount }),
+                Totals = s.Totals with { GrocerRevenue = s.Totals.GrocerRevenue - amount },
+            };
+            return new LedgerResult(next, EconomyError.None);
+        }
+
         /// <summary>031b review: the grocer debit shared by <see cref="TryBuyBase"/> and <see cref="TryBuyPortion"/>: account
         /// <paramref name="ai"/> pays <paramref name="cost"/> to the grocer, or InsufficientFunds and nothing changes.</summary>
         private static PurchaseResult Debit(EconomyState s, int ai, long cost)
@@ -238,7 +296,7 @@ namespace Worktown.Sim.Economy
             if (cost > acc.Balance) return new PurchaseResult(s, EconomyError.InsufficientFunds, 0);
             var next = s with
             {
-                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance - cost }),
+                Accounts = ReplaceAccount(s, ai, acc with { Balance = acc.Balance - cost, GrocerPaid = Sat(acc.GrocerPaid, cost) }),
                 Totals = s.Totals with { GrocerRevenue = Sat(s.Totals.GrocerRevenue, cost) },
             };
             return new PurchaseResult(next, EconomyError.None, cost);

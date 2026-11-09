@@ -330,6 +330,71 @@ namespace Worktown.Game.Tests
             Assert.IsNotNull(entry, "spec 032 AC5");
             Assert.AreEqual("2026-11-09", entry.date);
             Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 033 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec033Entry_WithTestSteps_AsTheNewest()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-09-spec-033") entry = e;
+            Assert.IsNotNull(entry, "spec 033 AC5");
+            Assert.AreEqual("2026-11-09", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 034 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec034Entry_WithTestSteps()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-09-spec-034") entry = e;
+            Assert.IsNotNull(entry, "spec 034 AC5");
+            Assert.AreEqual("2026-11-09", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 035 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec035Entry_WithTestSteps()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-09-spec-035") entry = e;
+            Assert.IsNotNull(entry, "spec 035 AC5");
+            Assert.AreEqual("2026-11-09", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 036 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec036Entry_WithTestSteps()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-09-spec-036") entry = e;
+            Assert.IsNotNull(entry, "spec 036 AC5");
+            Assert.AreEqual("2026-11-09", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 038 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec038Entry_WithTestSteps_AsTheNewest()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-09-spec-038") entry = e;
+            Assert.IsNotNull(entry, "spec 038 AC5");
+            Assert.AreEqual("2026-11-09", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
             Assert.AreSame(entry, WhatsNewRules.Newest(entries), "the newest entry, so the banner shows it");
         }
     }

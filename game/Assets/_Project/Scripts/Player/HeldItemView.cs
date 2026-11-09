@@ -71,8 +71,12 @@ namespace Worktown.Game.Player
             {
                 // Spec 019: on its edge, tip forward; a short dip while chopping.
                 float chop = ChopAmount(Time.unscaledTime - _chopStart);
-                pose = new Pose(anchor.TransformPoint(KnifeHoldOffset + new Vector3(0f, -ChopDrop * chop, 0.02f * chop)),
-                    anchor.rotation * Quaternion.Euler(ChopAngle * chop, 0f, 0f) * KnifeHoldRotation);
+                // Spec 036: while shaving the spit's cone the knife reaches forward and saws down and up the cone.
+                float shave = _shaving ? Worktown.Game.Art.SpitArtRules.KnifeStroke(Time.unscaledTimeAsDouble - _shaveStart) : 0f;
+                float reach = _shaving ? ShaveReach : 0f;
+                pose = new Pose(anchor.TransformPoint(KnifeHoldOffset + new Vector3(_shaving ? -0.04f : 0f,
+                        -ChopDrop * chop - ShaveDrop * shave, 0.02f * chop + reach)),
+                    anchor.rotation * Quaternion.Euler(ChopAngle * chop + ShaveAngle * shave, 0f, _shaving ? ShaveRoll : 0f) * KnifeHoldRotation);
                 return true;
             }
             Bounds local = LocalBounds(item);
@@ -85,6 +89,14 @@ namespace Worktown.Game.Player
             LastViewScale = scale;
             Quaternion rotation = eye.rotation * HoldViewRules.Tilt;
             Vector3 inView = HoldViewRules.CentreInView(_camera.fieldOfView, _camera.aspect);
+            if (item.TryGetComponent(out Worktown.Game.Shop.SupplyBox _))
+            {
+                // Spec 034: a delivery box is carried with both hands, low in the middle of the view (its top below the centre).
+                scale = HoldViewRules.BoxFitScale(size, _camera.fieldOfView);
+                LastViewScale = scale;
+                rotation = eye.rotation * HoldViewRules.BoxTilt;
+                inView = HoldViewRules.BoxCentreInView(_camera.fieldOfView, _camera.aspect);
+            }
             if (item.TryGetComponent(out Worktown.Game.Cooking.Spatula _))
             {
                 // Spec 031b: on a flip the spatula scoops forward and turns over its long side (local, like the knife's chop).
@@ -94,7 +106,44 @@ namespace Worktown.Game.Player
             }
             Vector3 middle = eye.TransformPoint(inView);
             pose = new Pose(middle - rotation * (centre * scale), rotation);
+            // Spec 033: while pouring, the cup moves from the hand to under the tap (an ease-out, feel.md 2) and back after the release.
+            float share = PourShare(Time.unscaledTime);
+            if (share > 0f)
+            {
+                Vector3 bottom = new Vector3(local.center.x, local.min.y, local.center.z);
+                Vector3 lossyBottom = Vector3.Scale(lossy, bottom);
+                var under = new Pose(_pourPose.position - _pourPose.rotation * lossyBottom, _pourPose.rotation);
+                pose = new Pose(Vector3.Lerp(pose.position, under.position, share), Quaternion.Slerp(pose.rotation, under.rotation, share));
+                scale = Mathf.Lerp(scale, 1f, share);
+            }
             return true;
+        }
+
+        // Spec 033: the cup under a tap while pouring (first person; others see it in the hand).
+        private bool _pouring;
+        private Pose _pourPose;
+        private float _pourChanged = float.NegativeInfinity;
+        private float _pourShareAtChange;
+
+        /// <summary>
+        /// Spec 033: the held cup goes under a tap (<paramref name="on"/>, its bottom at <paramref name="under"/>) and comes back on the
+        /// release; the move takes <see cref="Worktown.Game.Art.DrinkArtRules.UnderTapSeconds"/> and starts where it is.
+        /// </summary>
+        public void SetPourPose(bool on, Pose under)
+        {
+            if (on) _pourPose = under;
+            if (on == _pouring) return;
+            float now = Time.unscaledTime;
+            _pourShareAtChange = PourShare(now);
+            _pouring = on;
+            _pourChanged = now;
+        }
+
+        /// <summary>Spec 033: how far (0..1) the held cup is drawn towards the tap now.</summary>
+        public float PourShare(float now)
+        {
+            float t = Worktown.Game.Art.DrinkArtRules.UnderTapShare(now - _pourChanged, Worktown.Game.Art.DrinkArtRules.UnderTapSeconds);
+            return _pouring ? Mathf.Lerp(_pourShareAtChange, 1f, t) : Mathf.Lerp(_pourShareAtChange, 0f, t);
         }
 
         /// <summary>Spec 031b: the held item's size (m, its model's diagonal) and drawn scale in the view pose asked last (tour log).</summary>
@@ -151,6 +200,24 @@ namespace Worktown.Game.Player
             _bounds = any ? result : new Bounds(Vector3.zero, Vector3.one * 0.1f);
             return _bounds;
         }
+
+        // Spec 036: the knife's shave in view.
+        private const float ShaveReach = 0.2f;
+        private const float ShaveDrop = 0.1f;
+        private const float ShaveAngle = 18f;
+        private const float ShaveRoll = -25f;
+        private bool _shaving;
+        private double _shaveStart;
+
+        /// <summary>Spec 036: the knife saws down the spit's cone while the owner holds the shave (first person; others see the spit's knife).</summary>
+        public void SetShaving(bool on)
+        {
+            if (on && !_shaving) _shaveStart = Time.unscaledTimeAsDouble;
+            _shaving = on;
+        }
+
+        /// <summary>Spec 036: whether the knife in view is shaving now.</summary>
+        public bool IsShaving => _shaving;
 
         /// <summary>Spec 019: one chop of the knife in view (the owner sent a stroke).</summary>
         public void PlayChop()

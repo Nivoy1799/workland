@@ -61,6 +61,12 @@ namespace Worktown.Sim.Cooking
                 foreach (var input in flat)
                     if (Assembly.IsBuild(input)) return Fail(OperationError.ForbiddenInput);
 
+            // Spec 033: a fill pours a drink (a drink base item) into a cup; a lid goes only on a filled cup.
+            if (op.Kind == OperationKind.Fill && !Drinks.IsDrinkBase(flat[0])) return Fail(OperationError.ForbiddenInput);
+            if (op.Kind == OperationKind.Lid && !Drinks.IsFill(flat[0])) return Fail(OperationError.StepOrder);
+            // Spec 036: the spit shaves only the cone's meat (a base seitan item): never shaved seitan again, nothing cut or cooked.
+            if (op.Heat?.Spit != null && !Spit.IsConeMeat(flat[0])) return Fail(OperationError.ForbiddenInput);
+
             // 3. params
             if (!TryResolve(op, parameters, out var resolved)) return Fail(OperationError.InvalidParam);
             // Spec 030: a griddle op's "time" is the shorter side (Griddle.Params), so one item has one hash whichever side went first.
@@ -99,6 +105,17 @@ namespace Worktown.Sim.Cooking
                     factor = src.QualityFactor;
                     break;
                 }
+                case OperationKind.Fill:
+                {
+                    // Spec 033: a cup of the drink: its stats; the exact millilitres only set the quality (Drinks.FillFactor).
+                    var src = flat[0];
+                    stats = src.Stats;
+                    surface = src.Surface;
+                    components = new List<ItemComponent>(src.Components);
+                    factor = src.QualityFactor * Drinks.FillFactor(NumberOf(resolved, Drinks.MlParam));
+                    break;
+                }
+                case OperationKind.Lid:
                 case OperationKind.Portion:
                 case OperationKind.Close:
                 case OperationKind.Pack:
@@ -224,7 +241,22 @@ namespace Worktown.Sim.Cooking
             float g;
             components = new List<ItemComponent>(src.Components.Count);
             float doneSum = 0f;
-            if (profile.Grill != null)
+            if (profile.Spit != null)
+            {
+                // Spec 036: the spit's outer layer along its one curve for its heat time; the stat changes saturate at the window's end.
+                FryCurve curve = profile.Spit;
+                g = 0f;
+                foreach (var c in src.Components)
+                {
+                    float d = DeepFry.Doneness(curve, c.Ideal, c.Doneness, time);
+                    doneSum += d;
+                    components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
+                    g += Math.Min(1f, time / curve.WindowMaxAt);
+                }
+                g /= Math.Max(1, src.Components.Count);
+                factor = src.QualityFactor; // no bonus: shaving again never raises a portion
+            }
+            else if (profile.Grill != null)
             {
                 // Spec 030: each side along its curve (time = the shorter side, longSide the longer), combined per component; the
                 // stat changes follow the mean of the two sides, saturating at the end of the window.

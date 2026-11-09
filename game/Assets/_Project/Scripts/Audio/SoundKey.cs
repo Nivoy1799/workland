@@ -35,6 +35,20 @@ namespace Worktown.Game.Audio
         /// <summary>Spec 032: a coin or note into the register's change tray.</summary>
         Clink,
         /// <summary>Spec 032: the card terminal.</summary>
-        Beep
+        Beep,
+        /// <summary>Spec 033: a tap pouring into a cup (loop while held), the lid clicking on, a spill splashing on the counter.</summary>
+        Pour,
+        LidClick,
+        Splash,
+        /// <summary>Spec 034: a delivery at the back door (two knocks on the door, then the boxes set down) and a box unpacked into a slot.</summary>
+        Delivery,
+        Unpack,
+        /// <summary>Spec 035: scrubbing a plate in the sink (loop while held), a trash bag's rustle, the trash can's lid thump.</summary>
+        Scrub,
+        TrashRustle,
+        LidThump,
+        /// <summary>Spec 036: the knife shaving the spit's cone (a rasp, loop while held) and the spit's motor turning the cone (a hum, loop).</summary>
+        ShaveRasp,
+        MotorHum
     }
 }

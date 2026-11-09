@@ -19,6 +19,12 @@ namespace Worktown.Game.Cooking
         Griddle,
         /// <summary>Spec 031: the build spot of an assembly board. Fixed to its board (no Pickup): food goes on as the next layer, empty
         /// hands fold a wrap or take the finished build (<see cref="AssemblySpot"/>, <see cref="BuildRules"/>).</summary>
-        Assembly
+        Assembly,
+        /// <summary>Spec 036: the seitan cone on its spit. Fixed (no Pickup, no collider: the station's cone slot is aimed at): its heat
+        /// bytes are the outer layer, its mode the portions left (<see cref="SpitPart"/>, <see cref="SpitRules"/>).</summary>
+        SpitCone,
+        /// <summary>Spec 036: the spit's catch tray. Fixed (no Pickup): holds up to <see cref="SpitRules.TrayCapacity"/> portions of shaved
+        /// seitan; empty hands scoop one, a build in the hands gets one as its next layer.</summary>
+        SpitTray
     }
 }

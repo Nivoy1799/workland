@@ -78,8 +78,12 @@ namespace Worktown.Game.Net
         /// <summary>Spec 027b: frame number of the first render that drew the current prediction (-1 before).</summary>
         internal int PredictionDrawnFrame { get; private set; } = -1;
 
+        // Spec 034: this pickup is a delivery box (its carry pose).
+        private bool _isBox;
+
         private void Awake()
         {
+            _isBox = TryGetComponent(out Worktown.Game.Shop.SupplyBox _);
             _collider = GetComponent<Collider>();
             _tween = new ItemTween(transform);
             _heldGoal = HeldGoal;
@@ -284,6 +288,9 @@ namespace Worktown.Game.Net
                     kind = ItemGoalKind.Hand;
                     Quaternion frame = Quaternion.Euler(0f, visual.Yaw, 0f);
                     pose = new Pose(hand.position + frame * HandOffset, frame);
+                    // Spec 034: a delivery box is carried in front of the chest with both hands (HoldViewRules.BoxCarry*), not in one hand.
+                    if (_isBox) pose = new Pose(visual.transform.position + Vector3.up * HoldViewRules.BoxCarryHeight
+                        + frame * (Vector3.forward * HoldViewRules.BoxCarryForward), frame);
                     return true;
                 }
                 if (!visual.DrawsHeldInHand && visual.TryGetComponent(out HeldItemView view) && view.TryGetViewPose(this, out pose, out _viewScale))

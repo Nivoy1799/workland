@@ -25,11 +25,14 @@ namespace Worktown.Game.Dev
         public const string LookTour = "look";
         public const string WalkTour = "walk";
         public const string CookTour = "cook";
+        /// <summary>Spec 038: the first-shift tutorial walked through the cook tour's steps; its client and host run with -tutorial.</summary>
+        public const string TutorialTour = "tutorial";
 
         /// <summary>Act names the runner knows.</summary>
         public const string ActPickUpPan = "pick-up-pan";
         public const string ActPutPanBack = "put-pan-back";
         public const string ActCook = "cook";
+        public const string ActTutorial = "tutorial";
         /// <summary>Spec 027b: the same pick-up and put-back, with a highlight shot before the click and frames every
         /// <see cref="FrameInterval"/> around it (the arc into the hand, the ghost, the settle on the burner).</summary>
         public const string ActPickUpPanFrames = "pick-up-pan-frames";
@@ -69,10 +72,10 @@ namespace Worktown.Game.Dev
         /// <summary>The observer's player counts as at its spot within this distance.</summary>
         public const float ObserverSpotDistance = 0.6f;
 
-        public static readonly IReadOnlyList<string> Names = new[] { LookTour, WalkTour, CookTour };
+        public static readonly IReadOnlyList<string> Names = new[] { LookTour, WalkTour, CookTour, TutorialTour };
         public static readonly IReadOnlyList<string> Acts = new[]
         {
-            ActPickUpPan, ActPutPanBack, ActCook, ActPickUpPanFrames, ActPutPanBackFrames, ActSlowMotion, ActNormalMotion
+            ActPickUpPan, ActPutPanBack, ActCook, ActTutorial, ActPickUpPanFrames, ActPutPanBackFrames, ActSlowMotion, ActNormalMotion
         };
 
         public static bool IsKnown(string name) => TryGet(name, out _);
@@ -85,6 +88,7 @@ namespace Worktown.Game.Dev
                 case LookTour: tour = BuildLook(); return true;
                 case WalkTour: tour = BuildWalk(); return true;
                 case CookTour: tour = BuildCook(); return true;
+                case TutorialTour: tour = BuildTutorial(); return true;
                 default: tour = null; return false;
             }
         }
@@ -166,6 +170,13 @@ namespace Worktown.Game.Dev
         private const float WorktopBetweenX = 9.71f; // spec 029b: the plating worktop after stove B; spec 031: one plate pair wide (9.34 to 10.08)
         /// <summary>Spec 031: the assembly board after the plates (the plate shelf and the counter at 11.64).</summary>
         private const float AssemblyX = 10.55f;
+        // Spec 033: the drink dispenser on the front counter, left of the serving counter (GrayboxSceneBuilder.DrinkDispenserX), and the
+        // front counter's middle line.
+        private const float DrinksX = 10.49f;
+        private const float SpitX = 8.10f; // spec 036: the spit on the front counter, between the stoves across the aisle
+        /// <summary>Spec 034: the ordering terminal's x (the middle of the landing worktop, GrayboxSceneBuilder.TerminalX).</summary>
+        private const float TerminalX = 1.11f;
+        private const float FrontCounterZ = 11.85f;
         /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
         public const float ParkX = -2.5f; // spec 028b: 2.8 m west of the side wall, as in 027a
         private const float ObserverExitX = -0.7f; // the observers' way south from the staff gap, west of the side wall
@@ -240,6 +251,17 @@ namespace Worktown.Game.Dev
                 // Spec 031: the assembly board from the aisle (first person): the cutting board, the two dispensers, the packaging rack.
                 TourStep.WalkTo(AssemblyX, StandZ), TourStep.LookAt(AssemblyX, 0.75f, BackLineZ - 0.2f), TourStep.Wait(0.6f),
                 TourStep.Shot("assembly-first"),
+                // Spec 033: the drink dispenser on the front counter from the aisle (first person): the taps, the cup and lid stacks.
+                TourStep.WalkTo(DrinksX, AisleZ), TourStep.LookAt(DrinksX, 1.25f, FrontCounterZ), TourStep.Wait(0.6f),
+                TourStep.Shot("drinks-first"),
+                // Spec 036: the seitan spit on the front counter from the aisle (first person): the cone, the heat panel, the tray, the knob.
+                TourStep.WalkTo(SpitX, AisleZ), TourStep.LookAt(SpitX, 1.35f, FrontCounterZ), TourStep.Wait(0.6f),
+                TourStep.Shot("spit-first"),
+                // Spec 034: the ordering terminal on the back wall over the landing worktop, and the back door (first person).
+                TourStep.WalkTo(TerminalX + 0.3f, AisleZ), TourStep.LookAt(TerminalX, 1.3f, 14.9f), TourStep.Wait(0.6f),
+                TourStep.Shot("terminal-first"),
+                TourStep.WalkTo(2.8f, AisleZ), TourStep.LookAt(0.36f, 1.5f, AisleZ), TourStep.Wait(0.6f),
+                TourStep.Shot("back-door-first"),
                 TourStep.WalkTo(LookObserverX, AisleZ), TourStep.LookAt(LookObserverX, 1.4f, LookObserverZ), TourStep.Wait(0.6f),
                 TourStep.Shot("scale-person"),
                 TourStep.WalkTo(StoveBX, AisleZ), TourStep.View(ViewMode.ThirdPerson), TourStep.Look(0f, -10f), TourStep.Wait(1.2f),
@@ -294,7 +316,20 @@ namespace Worktown.Game.Dev
             {
                 new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
             };
-            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 960f); // spec 030: + the griddle; spec 031: + the wrap; spec 032: + the register
+            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 1140f); // spec 030: + the griddle; spec 031: + the wrap; spec 032: + the register; spec 033: + the lemonade; spec 034: + the stock run
+        }
+        /// <summary>
+        /// Spec 038: the tutorial tour: the cook tour's observer, and the tour player walks the tutorial's steps (Dev/TutorialSequence: the
+        /// fries, the wrap with its lemonade, the payments, the wash, the order, the spit), a shot of every card and its highlight.
+        /// </summary>
+        private static Tour BuildTutorial()
+        {
+            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), Park, TourStep.WaitObserver(), TourStep.Act(ActTutorial) };
+            var route = new List<Vector3>
+            {
+                new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
+            };
+            return new Tour(TutorialTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 1140f);
         }
     }
 }

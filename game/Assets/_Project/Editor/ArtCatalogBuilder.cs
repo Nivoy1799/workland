@@ -107,6 +107,19 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationAssembly, Mode = Fit.Graybox },
             // Spec 032: no register in the packs: a graybox till (body, leaning display, change drawer, buttons, card terminal, mat).
             new Def { Key = ArtKey.StationRegister, Mode = Fit.Graybox },
+            // Spec 033: no drink dispenser in the packs: a graybox (Steel body, a panel per drink, spouts, a drip tray).
+            new Def { Key = ArtKey.StationDrinkDispenser, Mode = Fit.Graybox },
+            // Spec 034: no ordering terminal in the packs: a graybox wall screen (a Charcoal frame, a DeepBlue screen).
+            new Def { Key = ArtKey.StationTerminal, Mode = Fit.Graybox },
+            // Spec 035: no sink, dish return, kitchen trash can or wheelie bin in the packs: graybox models (CleaningArtRules).
+            new Def { Key = ArtKey.StationSink, Mode = Fit.Graybox },
+            new Def { Key = ArtKey.StationDishReturn, Mode = Fit.Graybox },
+            new Def { Key = ArtKey.StationTrash, Mode = Fit.Graybox },
+            new Def { Key = ArtKey.StationBin, Mode = Fit.Graybox },
+            // Spec 036: no doner spit in the packs: a graybox (a Steel base, a Charcoal heat panel frame, the skewer, the motor housing).
+            new Def { Key = ArtKey.StationSpit, Mode = Fit.Graybox },
+            // Spec 034: the delivery box is the Furniture Kit's cardboard box (the crate's model), 0.40 m.
+            Fitted(ArtKey.PropDeliveryBox, Furniture + "cardboardBoxOpen.fbx", Fit.Max),
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -167,6 +180,9 @@ namespace Worktown.Game.Editor
             // Spec 031b: the clamshell's lid is turned shut, so the box reads as one closed box, not two trays.
             new Def { Key = ArtKey.PropTakeawayBox, Model = FoodKit + "styrofoam.fbx", Mode = Fit.Max, CloseLid = true },
             FoodDef(ArtKey.PropPaperBag, "bag.fbx"),
+            // Spec 033: the takeaway cup. The Kenney cup is a mug and the soda glass a purple cocktail glass with a straw and lemon, so
+            // the cup is a graybox: an open, tapered Cream paper cup with its fill line (DrinkArtRules), 12 cm real, x1.5.
+            new Def { Key = ArtKey.PropCup, Mode = Fit.Graybox },
             // Cookware (real size x1.15).
             FoodDef(ArtKey.FoodPlate, "plate.fbx"),
             FoodDef(ArtKey.FoodBowl, "bowl.fbx"),
@@ -892,6 +908,14 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationGriddle) return BuildGriddle(parent); // spec 030
             if (key == ArtKey.StationAssembly) return BuildAssembly(parent); // spec 031
             if (key == ArtKey.StationRegister) return BuildRegister(parent); // spec 032
+            if (key == ArtKey.StationDrinkDispenser) return BuildDrinkDispenser(parent); // spec 033
+            if (key == ArtKey.PropCup) return BuildCup(parent);
+            if (key == ArtKey.StationTerminal) return BuildTerminal(parent); // spec 034
+            if (key == ArtKey.StationSink) return BuildSink(parent); // spec 035
+            if (key == ArtKey.StationDishReturn) return BuildDishReturn(parent);
+            if (key == ArtKey.StationTrash) return BuildTrash(parent);
+            if (key == ArtKey.StationBin) return BuildBin(parent);
+            if (key == ArtKey.StationSpit) return BuildSpit(parent); // spec 036
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -1074,6 +1098,22 @@ namespace Worktown.Game.Editor
         /// each compartment (palette colours by value), the Terracotta BACK and Sage GIVE buttons, the DeepBlue card terminal and the
         /// WoodLight change mat. Front on +Z like the kit (the scene builder turns it to the cook).
         /// </summary>
+        /// <summary>
+        /// Spec 034: the graybox ordering terminal as the wrapper's "Model" (TerminalArtRules; its bottom on the origin, front on +Z like
+        /// the kit): a Charcoal frame and a DeepBlue screen inset on its front. Its rows, buttons and texts are the scene's (they change).
+        /// </summary>
+        private static GameObject BuildTerminal(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material frame = GrayboxMaterial("TerminalFrame", Palette.Charcoal);
+            Material screen = GrayboxMaterial("TerminalScreen", Palette.DeepBlue);
+            float w = TerminalArtRules.Width, h = TerminalArtRules.Height, d = TerminalArtRules.Depth;
+            Box(model, "Frame", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
+            Box(model, "Screen", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.05f, h - 0.05f, 0.002f), screen);
+            return model;
+        }
+
         private static GameObject BuildRegister(Transform parent)
         {
             var model = new GameObject("Model");
@@ -1100,6 +1140,208 @@ namespace Worktown.Game.Editor
             Box(model, "Give", F(RegisterArtRules.GiveCentre), RegisterArtRules.ButtonSize, give);
             Box(model, "Terminal", F(RegisterArtRules.TerminalCentre), RegisterArtRules.TerminalSize, screen);
             Box(model, "Change mat", F(RegisterArtRules.MatCentre), RegisterArtRules.MatSize, mat);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 033: the graybox drink dispenser as the wrapper's "Model" (DrinkArtRules, the base on the counter top at the origin): a
+        /// Steel body with a cap, a coloured panel per drink above its tap, the three Steel spouts and the Charcoal drip tray. The levers,
+        /// the cup stack and the lid stack are the scene's (they move or fly). Front on +Z like the kit (the scene turns it to the cook).
+        /// </summary>
+        private static GameObject BuildDrinkDispenser(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("DrinkBody", Palette.Steel);
+            Material cap = GrayboxMaterial("DrinkCap", Palette.DeepBlue);
+            Material tray = GrayboxMaterial("DrinkTray", Palette.Charcoal);
+            Material spout = GrayboxMaterial("DrinkSpout", Palette.Charcoal);
+            Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
+            Box(model, "Body", F(DrinkArtRules.BodyCentre), DrinkArtRules.BodySize, steel);
+            Box(model, "Cap", F(DrinkArtRules.CapCentre), DrinkArtRules.CapSize, cap);
+            Box(model, "Drip tray", F(DrinkArtRules.TrayCentre), DrinkArtRules.TraySize, tray);
+            for (int tap = 0; tap < Worktown.Game.Cooking.DrinkRules.TapCount; tap++)
+            {
+                Box(model, "Panel " + tap, F(DrinkArtRules.PanelCentre(tap)), DrinkArtRules.PanelSize,
+                    GrayboxMaterial("DrinkPanel" + tap, DrinkArtRules.DrinkColour(tap)));
+                Box(model, "Spout " + tap, F(DrinkArtRules.SpoutCentre(tap)), DrinkArtRules.SpoutSize, spout);
+                // The spout's arm back into the body.
+                Vector3 arm = DrinkArtRules.SpoutCentre(tap) + new Vector3(0f, DrinkArtRules.SpoutSize.y * 0.5f - 0.01f, 0.06f);
+                Box(model, "Arm " + tap, F(arm), new Vector3(0.03f, 0.02f, 0.12f), spout);
+            }
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 033: the graybox takeaway cup as the wrapper's "Model": <see cref="DrinkArtRules.CupSides"/> Cream wall slabs leaning out
+        /// from the bottom radius to the top one (an open, tapered paper cup, so the liquid shows from above), a Cream bottom, and the fill
+        /// line printed round the outside (short Charcoal dashes on every slab). Its bottom at the origin.
+        /// </summary>
+        /// <summary>Spec 035: the name of a graybox's lid hinge (the scene's views swing it) and of the trash can's rim.</summary>
+        public const string LidHingeName = "Lid hinge";
+        public const string TrashRimName = "Rim";
+
+        /// <summary>
+        /// Spec 035: the graybox sink as the wrapper's "Model" (CleaningArtRules; station x and z mirrored: the front on +Z like the kit): a
+        /// WoodLight cabinet with two WoodDark doors, a Steel top with the basin let into its left half (darker walls and bottom), a faucet
+        /// at the basin's back and the drainboard's ridges on the right half. The water, the plates and the bubbles are the scene's.
+        /// </summary>
+        private static GameObject BuildSink(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material wood = GrayboxMaterial("SinkWood", Palette.WoodLight);
+            Material dark = GrayboxMaterial("SinkDoor", Palette.WoodDark);
+            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            Material inner = GrayboxMaterial("SinkInner", Palette.Shade(Palette.Steel, 0.72f));
+            Vector3 F(float x, float y, float z) => new Vector3(-x, y, -z);
+            const float w = CleaningArtRules.SinkWidth, d = CleaningArtRules.SinkDepth, slab = 0.04f;
+            float h = CleaningArtRules.SinkHeight;
+            // The cabinet stops under the basin; round the basin the upper part is four blocks, so the basin is open down to its floor.
+            float under = h - CleaningArtRules.BasinDepth - 0.012f;
+            Box(model, "Cabinet", F(0f, under * 0.5f, 0f), new Vector3(w, under, d), wood);
+            for (int side = -1; side <= 1; side += 2)
+                Box(model, side < 0 ? "Door left" : "Door right", F(side * w * 0.25f, (h - slab) * 0.5f, -d * 0.5f - 0.005f),
+                    new Vector3(w * 0.5f - 0.03f, h - slab - 0.1f, 0.01f), dark);
+            Vector3 c = CleaningArtRules.BasinCentre;
+            Vector2 s = CleaningArtRules.BasinSize;
+            float x0 = c.x - s.x * 0.5f, x1 = c.x + s.x * 0.5f, z0 = c.z - s.y * 0.5f, z1 = c.z + s.y * 0.5f;
+            float top = h - slab * 0.5f;
+            float upper = h - slab - under, upperY = under + upper * 0.5f;
+            Box(model, "Upper left", F((-w * 0.5f + x0) * 0.5f, upperY, 0f), new Vector3(x0 + w * 0.5f, upper, d), wood);
+            Box(model, "Upper right", F((x1 + w * 0.5f) * 0.5f, upperY, 0f), new Vector3(w * 0.5f - x1, upper, d), wood);
+            Box(model, "Upper front", F(c.x, upperY, (-d * 0.5f + z0) * 0.5f), new Vector3(s.x, upper, z0 + d * 0.5f), wood);
+            Box(model, "Upper back", F(c.x, upperY, (z1 + d * 0.5f) * 0.5f), new Vector3(s.x, upper, d * 0.5f - z1), wood);
+            // The top round the basin: left of it, right of it (the drainboard half), in front of it and behind it.
+            Box(model, "Top left", F((-w * 0.5f + x0) * 0.5f, top, 0f), new Vector3(x0 + w * 0.5f, slab, d), steel);
+            Box(model, "Top right", F((x1 + w * 0.5f) * 0.5f, top, 0f), new Vector3(w * 0.5f - x1, slab, d), steel);
+            Box(model, "Top front", F(c.x, top, (-d * 0.5f + z0) * 0.5f), new Vector3(s.x, slab, z0 + d * 0.5f), steel);
+            Box(model, "Top back", F(c.x, top, (z1 + d * 0.5f) * 0.5f), new Vector3(s.x, slab, d * 0.5f - z1), steel);
+            float bottom = h - CleaningArtRules.BasinDepth;
+            const float wall = 0.012f;
+            Box(model, "Basin bottom", F(c.x, bottom, c.z), new Vector3(s.x, wall, s.y), inner);
+            Box(model, "Basin left", F(x0 + wall * 0.5f, (bottom + h) * 0.5f, c.z), new Vector3(wall, h - bottom, s.y), inner);
+            Box(model, "Basin right", F(x1 - wall * 0.5f, (bottom + h) * 0.5f, c.z), new Vector3(wall, h - bottom, s.y), inner);
+            Box(model, "Basin front", F(c.x, (bottom + h) * 0.5f, z0 + wall * 0.5f), new Vector3(s.x, h - bottom, wall), inner);
+            Box(model, "Basin back", F(c.x, (bottom + h) * 0.5f, z1 - wall * 0.5f), new Vector3(s.x, h - bottom, wall), inner);
+            // The faucet stands above the top: the scene builds it (the model's height is the worktop's, as the size table says).
+            Vector2 drain = CleaningArtRules.DrainCentre, size = CleaningArtRules.DrainSize;
+            for (int i = 0; i < 5; i++)
+                Box(model, "Ridge " + (i + 1), F(drain.x - size.x * 0.4f + i * size.x * 0.2f, h - 0.002f, drain.y), new Vector3(0.012f, 0.008f, size.y * 0.9f), inner);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 035: the graybox dish return as the wrapper's "Model" (on the counter top at the origin; front on +Z): a WoodDark tray with
+        /// low rails along its sides and a pass-through arch on the guests' side (its height). The dirty plates are the scene's.
+        /// </summary>
+        private static GameObject BuildDishReturn(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material dark = GrayboxMaterial("ReturnTray", Palette.WoodDark);
+            Material light = GrayboxMaterial("ReturnArch", Palette.WoodLight);
+            Vector3 F(float x, float y, float z) => new Vector3(-x, y, -z);
+            const float w = CleaningArtRules.ReturnWidth, d = CleaningArtRules.ReturnDepth, h = CleaningArtRules.ReturnHeight;
+            const float floor = CleaningArtRules.ReturnShelfHeight;
+            Box(model, "Tray", F(0f, floor * 0.5f, 0f), new Vector3(w, floor, d), dark);
+            for (int side = -1; side <= 1; side += 2)
+                Box(model, side < 0 ? "Rail left" : "Rail right", F(side * (w * 0.5f - 0.01f), floor + 0.03f, 0f), new Vector3(0.02f, 0.06f, d), dark);
+            // The arch on the guests' side (station +z): two posts and a lintel.
+            for (int side = -1; side <= 1; side += 2)
+                Box(model, side < 0 ? "Post left" : "Post right", F(side * (w * 0.5f - 0.02f), h * 0.5f, d * 0.5f - 0.02f), new Vector3(0.04f, h, 0.04f), light);
+            Box(model, "Lintel", F(0f, h - 0.02f, d * 0.5f - 0.02f), new Vector3(w, 0.04f, 0.04f), light);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 035: the graybox kitchen trash can as the wrapper's "Model" (front on +Z): an open Steel box with a Charcoal liner rim (the
+        /// view tints it Terracotta when full) and a flip lid on a hinge at its back (<see cref="LidHingeName"/>; the view swings it). The
+        /// bag inside is the scene's (it rises with the fill).
+        /// </summary>
+        private static GameObject BuildTrash(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            Material rim = GrayboxMaterial("TrashRim", Palette.Charcoal);
+            Material lid = GrayboxMaterial("TrashLid", Palette.Shade(Palette.Steel, 0.85f));
+            Vector3 F(float x, float y, float z) => new Vector3(-x, y, -z);
+            const float w = CleaningArtRules.TrashWidth, d = CleaningArtRules.TrashDepth, t = 0.02f, lidT = 0.02f;
+            const float h = CleaningArtRules.TrashHeight - lidT; // the walls; the lid on them makes the can's height
+            Box(model, "Bottom", F(0f, t * 0.5f, 0f), new Vector3(w, t, d), steel);
+            Box(model, "Wall front", F(0f, h * 0.5f, -d * 0.5f + t * 0.5f), new Vector3(w, h, t), steel);
+            Box(model, "Wall back", F(0f, h * 0.5f, d * 0.5f - t * 0.5f), new Vector3(w, h, t), steel);
+            Box(model, "Wall left", F(-w * 0.5f + t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, d), steel);
+            Box(model, "Wall right", F(w * 0.5f - t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, d), steel);
+            // The liner's rim: four bars round the opening (the view tints them Terracotta when full; the bag inside shows between them).
+            const float bar = 0.03f;
+            Box(model, TrashRimName + " front", F(0f, h - 0.012f, -d * 0.5f + bar * 0.5f), new Vector3(w + 0.012f, 0.024f, bar), rim);
+            Box(model, TrashRimName + " back", F(0f, h - 0.012f, d * 0.5f - bar * 0.5f), new Vector3(w + 0.012f, 0.024f, bar), rim);
+            Box(model, TrashRimName + " left", F(-w * 0.5f + bar * 0.5f, h - 0.012f, 0f), new Vector3(bar, 0.024f, d), rim);
+            Box(model, TrashRimName + " right", F(w * 0.5f - bar * 0.5f, h - 0.012f, 0f), new Vector3(bar, 0.024f, d), rim);
+            var hinge = new GameObject(LidHingeName);
+            hinge.transform.SetParent(model.transform, false);
+            hinge.transform.localPosition = F(0f, h, d * 0.5f); // the back edge, on top
+            Box(hinge, "Lid", new Vector3(0f, lidT * 0.5f, d * 0.5f), new Vector3(w + 0.012f, lidT, d + 0.012f), lid); // towards the front (+Z)
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 035: the graybox wheelie bin outside as the wrapper's "Model" (front on +Z): a Leaf body, a Charcoal lid on a hinge at its back
+        /// (<see cref="LidHingeName"/>), two wheels and a handle at the back.
+        /// </summary>
+        private static GameObject BuildBin(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material body = GrayboxMaterial("BinBody", Palette.Leaf);
+            Material dark = GrayboxMaterial("BinLid", Palette.Charcoal);
+            Vector3 F(float x, float y, float z) => new Vector3(-x, y, -z);
+            const float w = CleaningArtRules.BinWidth, d = CleaningArtRules.BinDepth, h = CleaningArtRules.BinHeight, lid = 0.05f;
+            Box(model, "Body", F(0f, (h - lid) * 0.5f + 0.04f, 0f), new Vector3(w, h - lid - 0.08f, d - 0.04f), body);
+            for (int side = -1; side <= 1; side += 2)
+                Box(model, side < 0 ? "Wheel left" : "Wheel right", F(side * (w * 0.5f - 0.04f), 0.06f, d * 0.5f - 0.08f), new Vector3(0.05f, 0.12f, 0.12f), dark);
+            Box(model, "Handle", F(0f, h - lid - 0.05f, d * 0.5f + 0.02f), new Vector3(w * 0.7f, 0.03f, 0.04f), dark);
+            var hinge = new GameObject(LidHingeName);
+            hinge.transform.SetParent(model.transform, false);
+            hinge.transform.localPosition = F(0f, h - lid, d * 0.5f);
+            Box(hinge, "Lid", new Vector3(0f, lid * 0.5f, d * 0.5f), new Vector3(w + 0.03f, lid, d + 0.02f), dark);
+            return model;
+        }
+
+        private static GameObject BuildCup(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material paper = GrayboxMaterial("Cup", Palette.Cream);
+            Material line = GrayboxMaterial("CupLine", Palette.Charcoal);
+            float h = DrinkArtRules.CupHeight, rb = DrinkArtRules.CupBottomRadius, rt = DrinkArtRules.CupTopRadius, t = DrinkArtRules.CupWall;
+            int n = DrinkArtRules.CupSides;
+            float slant = Mathf.Sqrt(h * h + (rt - rb) * (rt - rb));
+            float tilt = Mathf.Atan2(rt - rb, h) * Mathf.Rad2Deg;
+            float width = 2f * Mathf.PI * (rt + t) / n * 1.04f;
+            float lineY = h * DrinkArtRules.FillLineHeight;
+            float lineR = rb + (rt - rb) * lineY / h + t;
+            for (int i = 0; i < n; i++)
+            {
+                float a = 360f * i / n;
+                Quaternion turn = Quaternion.Euler(0f, a, 0f);
+                Vector3 radial = turn * Vector3.forward;
+                GameObject wall = Box(model, "Wall " + i, radial * ((rb + rt) * 0.5f + t * 0.5f) + Vector3.up * (h * 0.5f),
+                    new Vector3(width, slant, t), paper);
+                wall.transform.localRotation = turn * Quaternion.Euler(tilt, 0f, 0f);
+                GameObject dash = Box(model, "Fill line " + i, radial * (lineR + 0.0012f) + Vector3.up * lineY,
+                    new Vector3(width * 0.55f, 0.004f, 0.0015f), line);
+                dash.transform.localRotation = turn * Quaternion.Euler(tilt, 0f, 0f);
+            }
+            GameObject bottom = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            bottom.name = "Bottom";
+            UnityEngine.Object.DestroyImmediate(bottom.GetComponent<Collider>());
+            bottom.transform.SetParent(model.transform, false);
+            bottom.transform.localPosition = new Vector3(0f, 0.003f, 0f);
+            bottom.transform.localScale = new Vector3(2f * rb + t, 0.003f, 2f * rb + t); // Unity's cylinder is 2 m high
+            bottom.GetComponent<MeshRenderer>().sharedMaterial = paper;
             return model;
         }
 
@@ -1149,6 +1391,26 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>Spec 028b: one graybox part, a cube without its collider.</summary>
+        /// <summary>
+        /// Spec 036: the graybox seitan spit as the wrapper's "Model" (SpitArtRules, the base on the counter top at the origin): a Steel
+        /// base plate reaching forward under the tray, the heat panel's Charcoal frame at the back, the skewer and the motor housing on
+        /// top. The cone, the panel's glowing face, the tray and the knob are the scene's (they turn, glow or are aimed at). Front on +Z like
+        /// the kit (the scene turns it to the cook).
+        /// </summary>
+        private static GameObject BuildSpit(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("SpitSteel", Palette.Steel);
+            Material frame = GrayboxMaterial("SpitFrame", Palette.Charcoal);
+            Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
+            Box(model, "Base", F(SpitArtRules.BaseCentre), SpitArtRules.BaseSize, steel);
+            Box(model, "Panel", F(SpitArtRules.PanelCentre), SpitArtRules.PanelSize, frame);
+            Box(model, "Housing", F(SpitArtRules.HousingCentre), SpitArtRules.HousingSize, steel);
+            Box(model, "Skewer", F(SpitArtRules.SkewerCentre), SpitArtRules.SkewerSize, steel);
+            return model;
+        }
+
         private static GameObject Box(GameObject parent, string name, Vector3 centre, Vector3 size, Material material)
         {
             GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);

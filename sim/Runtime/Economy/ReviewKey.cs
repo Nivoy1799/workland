@@ -15,5 +15,7 @@ namespace Worktown.Sim.Economy
         OrderOff = 6,
         WrongOrder = 7,
         WrongChange = 8,
+        /// <summary>Spec 035: the food was fine, but the shop was dirty (the hygiene score below HygieneRules.ReviewBelow).</summary>
+        Dirty = 9,
     }
 }

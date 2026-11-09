@@ -34,10 +34,20 @@ namespace Worktown.Game.Net.Rules
         public readonly bool IsTooFar;
         /// <summary>Spec 029, cookware: its synced mode byte (a basket's <see cref="FryerRules.Mode"/>).</summary>
         public readonly byte Mode;
+        /// <summary>Spec 034: the stock line this slot shows and a delivery box unpacks into (Shop.StockCatalog), -1 for none.</summary>
+        public readonly int StockLine;
+        /// <summary>Spec 034: that line's synced count as this client sees it (Shop.StockCounts), -1 while unknown.</summary>
+        public readonly int StockCount;
+        /// <summary>Spec 035: a cleaning station's (or the plate shelf's) synced byte is known (<see cref="StoveFlags"/> holds it).</summary>
+        public readonly bool Known;
 
         private AimTarget(AimKind kind, StationKind station, VesselKind vessel, int contentCount, string contentName, int option,
-            byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar, byte mode = 0)
+            byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar, byte mode = 0, int stockLine = -1,
+            int stockCount = -1, bool known = false)
         {
+            Known = known;
+            StockLine = stockLine < 0 ? -1 : stockLine;
+            StockCount = stockCount < 0 ? -1 : stockCount;
             Mode = mode;
             Kind = kind;
             Station = station;
@@ -63,7 +73,45 @@ namespace Worktown.Game.Net.Rules
 
         private AimTarget With(bool tooFar)
         {
-            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar, Mode);
+            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar, Mode,
+                StockLine, StockCount, Known);
+        }
+
+        /// <summary>
+        /// Spec 035: a cleaning station (the dish return, the sink or its basin, the trash can, the bin) or the plate shelf, with its synced
+        /// byte (Shop.CleaningRules: the dirty count, the basin and scrubbing bit, the fill, the clean plates) when <paramref name="known"/>.
+        /// </summary>
+        public static AimTarget CleaningStation(StationKind kind, int option, byte flags, bool known)
+        {
+            return new AimTarget(AimKind.Station, kind, default, 0, null, option, flags, null, -1, PlaceSpots.None, false, false, 0, -1, -1, known);
+        }
+
+        /// <summary>
+        /// Spec 036: a slot of the seitan spit (SpitRules: the cone): <see cref="StoveFlags"/> the spit's byte as this client sees it (the
+        /// level, someone shaving: the interactor clears its own, a cone), <see cref="Mode"/> the cone's mode byte (portions left),
+        /// <see cref="ContentCount"/> the portions in the catch tray, <see cref="ContentName"/> and <see cref="Name"/> what a shave gives now.
+        /// </summary>
+        public static AimTarget SpitTool(int slot, byte flags, byte coneMode, int tray, string takeName)
+        {
+            return new AimTarget(AimKind.Station, StationKind.Spit, VesselKind.SpitCone, tray, takeName, slot, flags, takeName, -1,
+                PlaceSpots.None, false, false, coneMode);
+        }
+
+        /// <summary>Spec 034: the same target showing stock line <paramref name="line"/> at <paramref name="count"/> (-1: unknown).</summary>
+        public AimTarget WithStock(int line, int count)
+        {
+            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, IsTooFar,
+                Mode, line, count, Known);
+        }
+
+        /// <summary>
+        /// Spec 034: a slot of the ordering terminal (Shop.TerminalRules): <see cref="Option"/> the slot (a row or a button), <see cref="Name"/>
+        /// the words of its click ("order 1 pack of tomato ($336, 1 h)", "next page (2/4)"), null when it does nothing (a row past the list's
+        /// end), <see cref="Price"/> a row's order price.
+        /// </summary>
+        public static AimTarget TerminalSlot(int slot, string words, long price)
+        {
+            return new AimTarget(AimKind.Station, StationKind.Terminal, default, 0, null, slot, 0, words, price, PlaceSpots.None, false, false);
         }
 
         public static AimTarget Button(int option, byte stoveFlags) => Button(StationKind.Stove, option, stoveFlags);
@@ -94,6 +142,17 @@ namespace Worktown.Game.Net.Rules
         {
             return new AimTarget(AimKind.Station, StationKind.Assembly, VesselKind.Assembly, layers, layers > 0 ? "the build" : null, tool,
                 boardFlags, name, price, PlaceSpots.None, false, false, buildMode);
+        }
+
+        /// <summary>
+        /// Spec 033: a tool of the drink dispenser (<see cref="DrinkRules"/>: a tap, the cup stack or the lid stack): <see cref="Option"/>
+        /// the tool, <see cref="StoveFlags"/> the dispenser's byte (who pours, the spill; the interactor clears its own pour's bit),
+        /// <see cref="Name"/> the tap's drink, <see cref="Price"/> the price shown (a cup with a full pour of the drink, or -1).
+        /// </summary>
+        public static AimTarget DrinkTool(int tool, byte flags, string name, long price)
+        {
+            return new AimTarget(AimKind.Station, StationKind.DrinkDispenser, default, 0, null, tool, flags, name, price, PlaceSpots.None,
+                false, false);
         }
 
         /// <summary>

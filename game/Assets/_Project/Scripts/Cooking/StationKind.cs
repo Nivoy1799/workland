@@ -30,6 +30,25 @@ namespace Worktown.Game.Cooking
         Assembly,
         /// <summary>Spec 032: the register on the counter: the change tray's coins and notes, take back, hand over and the card
         /// terminal are its slots (Shop.RegisterRules).</summary>
-        Register
+        Register,
+        /// <summary>Spec 033: the drink dispenser on the front counter: three taps held to pour into the cup in the hands, the cup
+        /// stack and the lid stack are its slots (<see cref="DrinkRules"/>).</summary>
+        DrinkDispenser,
+        /// <summary>Spec 034: the ordering terminal on the back wall: its screen's rows order a good, its buttons page and pick the pack
+        /// count (Shop.TerminalRules; the rows and buttons are its slots).</summary>
+        Terminal,
+        /// <summary>Spec 035: the dish return on the front counter: eat-in guests' dirty plates come back here; empty hands take one
+        /// (Shop.CleaningRules).</summary>
+        DishReturn,
+        /// <summary>Spec 035: the sink at the end of the back line: a dirty dish goes in, holding scrubs it (server-timed), and it goes to
+        /// the clean plate shelf (Shop.CleaningRules; the basin is its slot).</summary>
+        Sink,
+        /// <summary>Spec 035: the trash can by the staff gap: discard food and empty packaging; empty hands take the bag out.</summary>
+        TrashCan,
+        /// <summary>Spec 035: the bin outside the staff gap, where the trash bag goes.</summary>
+        Bin,
+        /// <summary>Spec 036: the seitan spit on the front counter opposite the heat block: a heat knob, the turning cone (the knife is
+        /// held on it to shave; empty hands load a new cone from stock) and the catch tray (<see cref="SpitRules"/>).</summary>
+        Spit
     }
 }

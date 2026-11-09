@@ -74,13 +74,14 @@ namespace Worktown.Game.Tests
             public bool CanHand = true;
             public CookOutcome PayAnswer = CookOutcome.Ok;
             public bool HandAnswer = true;
-            public int Checks, Creates, HandChecks, Pays, HandOvers;
+            public int Checks, Creates, HandChecks, Pays, HandOvers, Refunds;
 
             public CookOutcome Check() { Checks++; return CheckAnswer; }
             public CookOutcome Create() { Creates++; return CreateAnswer; }
             public bool CanHandOver() { HandChecks++; return CanHand; }
             public CookOutcome Pay() { Pays++; return PayAnswer; }
             public bool HandOver() { HandOvers++; return HandAnswer; }
+            public void Refund() { Refunds++; } // spec 034
         }
 
         [Test]

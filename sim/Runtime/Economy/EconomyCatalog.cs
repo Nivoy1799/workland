@@ -152,6 +152,9 @@ namespace Worktown.Sim.Economy
                 new GrocerPrice("paprika", 60), new GrocerPrice("eggplant", 70), new GrocerPrice("mushroom", 80),
                 // Spec 031: packaging at the assembly board (defaults to review; no cheaper than the cheapest food, anti-faucet rule).
                 new GrocerPrice("wrap_paper", 35), new GrocerPrice("takeaway_box", 40), new GrocerPrice("paper_bag", 35),
+                // Spec 033: the drinks station (defaults to review). A cup (its lid included) and one full cup (400 ml) of each drink;
+                // a fill pays the cup once and its share of the drink (PriceRules.FillPercent).
+                new GrocerPrice(Drinks.CupId, 35), new GrocerPrice("lemonade", 60), new GrocerPrice("iced_tea", 55), new GrocerPrice("soda", 50),
             };
             return new EconomyCatalog(markets, rules, byproducts, grocer, OperationCatalog.CreateDefault());
         }

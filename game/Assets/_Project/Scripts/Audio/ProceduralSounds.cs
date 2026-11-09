@@ -459,6 +459,225 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>
+        /// Spec 033: a tap pouring into a cup (loop, 1 s): a bright, gurgling band noise (the stream) over a low bubbling body, faded at
+        /// the ends so the loop has no click.
+        /// </summary>
+        public static float[] Pour()
+        {
+            var rng = new System.Random(3301);
+            var s = new float[SampleRate];
+            float band = 0f, low = 0f, previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                band += (high - band) * 0.35f;
+                low += (noise - low) * 0.05f;
+                float gurgle = 0.75f + 0.25f * (float)Math.Sin(2.0 * Math.PI * 11.0 * t) * (float)Math.Sin(2.0 * Math.PI * 3.0 * t);
+                float edge = Math.Min(1f, Math.Min(t, 1f - t) / 0.03f);
+                s[i] = (band * 0.28f + low * 0.6f) * gurgle * edge;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 033: a plastic lid snapping onto a cup: a short, dry click with a hollow body.</summary>
+        public static float[] LidClick()
+        {
+            var rng = new System.Random(3302);
+            var s = new float[(int)(SampleRate * 0.09f)];
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                float snap = high * 0.3f * (float)Math.Exp(-t / 0.004f);
+                float body = (float)Math.Sin(2.0 * Math.PI * 820.0 * t) * 0.25f * (float)Math.Exp(-t / 0.018f);
+                s[i] = (snap + body) * Math.Min(1f, t / 0.0008f);
+            }
+            return s;
+        }
+
+        /// <summary>Spec 033: a cup running over: a wet splash (a noise burst falling in pitch) and a few drops after it.</summary>
+        public static float[] Splash()
+        {
+            var rng = new System.Random(3303);
+            var s = new float[(int)(SampleRate * 0.45f)];
+            float band = 0f;
+            float[] dropsAt = { 0.18f, 0.27f, 0.36f };
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float k = 0.6f - 0.5f * Math.Min(1f, t / 0.25f); // the splash darkens as it falls
+                band += (noise - band) * k;
+                float env = (float)Math.Exp(-t / 0.09f) * Math.Min(1f, t / 0.003f);
+                float drops = 0f;
+                foreach (float at in dropsAt)
+                    if (t >= at) drops += (float)Math.Sin(2.0 * Math.PI * 1300.0 * (t - at)) * 0.12f * (float)Math.Exp(-(t - at) / 0.012f);
+                s[i] = band * 0.5f * env + drops;
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// Spec 034: a delivery at the back door: two knocks on a wooden door (a low thump with a short knock partial), then the boxes set
+        /// down (a soft cardboard thud).
+        /// </summary>
+        public static float[] Delivery()
+        {
+            var rng = new System.Random(3401);
+            var s = new float[(int)(SampleRate * 0.9f)];
+            float[] knocks = { 0f, 0.17f };
+            const float thudAt = 0.5f;
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float v = 0f;
+                foreach (float at in knocks)
+                {
+                    if (t < at) continue;
+                    float k = t - at;
+                    v += (float)Math.Sin(2.0 * Math.PI * 150.0 * k) * 0.45f * (float)Math.Exp(-k / 0.03f) * Math.Min(1f, k / 0.001f);
+                    v += (float)Math.Sin(2.0 * Math.PI * 410.0 * k) * 0.18f * (float)Math.Exp(-k / 0.012f);
+                }
+                if (t >= thudAt)
+                {
+                    float k = t - thudAt;
+                    float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                    band += (noise - band) * 0.08f;
+                    v += band * 0.9f * (float)Math.Exp(-k / 0.06f) * Math.Min(1f, k / 0.004f);
+                    v += (float)Math.Sin(2.0 * Math.PI * 95.0 * k) * 0.3f * (float)Math.Exp(-k / 0.05f);
+                }
+                s[i] = v;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 034: a box unpacked into a slot: a cardboard flap (a dull rustle) and the goods sliding out.</summary>
+        public static float[] Unpack()
+        {
+            var rng = new System.Random(3402);
+            var s = new float[(int)(SampleRate * 0.4f)];
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                band += (noise - band) * (0.18f - 0.12f * Math.Min(1f, t / 0.4f));
+                float flap = (float)Math.Exp(-t / 0.05f) * Math.Min(1f, t / 0.003f);
+                float slide = (float)Math.Sin(Math.PI * Math.Min(1f, Math.Max(0f, t - 0.08f) / 0.3f)) * 0.5f;
+                s[i] = band * 0.8f * (flap + slide);
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// Spec 035: scrubbing a plate in water (a loop): a brush's band of noise pulsing back and forth about four times a second, with
+        /// a little wet gurgle under it. The ends fade so the loop has no click.
+        /// </summary>
+        public static float[] Scrub()
+        {
+            var rng = new System.Random(3501);
+            var s = new float[(int)(SampleRate * 1.0f)];
+            float band = 0f, low = 0f, previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                band += (high - band) * 0.35f;
+                low += (noise - low) * 0.02f;
+                float stroke = 0.5f + 0.5f * (float)Math.Sin(2.0 * Math.PI * 4.0 * t); // four strokes a second (one loop is whole strokes)
+                float gurgle = (float)Math.Sin(2.0 * Math.PI * 180.0 * t + 3.0 * Math.Sin(2.0 * Math.PI * 6.0 * t)) * 0.05f;
+                float edge = Math.Min(1f, Math.Min(t, 1f - t) / 0.02f);
+                s[i] = (band * 0.35f * stroke + low * 0.5f + gurgle) * edge;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 035: a plastic trash bag: a crinkly rustle (bursts of bright noise) that settles.</summary>
+        public static float[] TrashRustle()
+        {
+            var rng = new System.Random(3502);
+            var s = new float[(int)(SampleRate * 0.5f)];
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                float crinkle = rng.NextDouble() < 0.08 ? 1f : 0.25f; // sparse crackles in the rustle
+                float env = (float)Math.Exp(-t / 0.18f) * Math.Min(1f, t / 0.01f);
+                s[i] = high * 0.35f * crinkle * env;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 035: the trash can's lid falling shut: a dull low thump with a short plastic rattle.</summary>
+        public static float[] LidThump()
+        {
+            var rng = new System.Random(3503);
+            var s = new float[(int)(SampleRate * 0.3f)];
+            float band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                band += (noise - band) * 0.12f;
+                float thump = (float)Math.Sin(2.0 * Math.PI * 110.0 * t) * 0.5f * (float)Math.Exp(-t / 0.05f);
+                float rattle = t > 0.04f ? band * 0.4f * (float)Math.Exp(-(t - 0.04f) / 0.03f) : 0f;
+                s[i] = (thump + band * 0.3f * (float)Math.Exp(-t / 0.01f) + rattle) * Math.Min(1f, t / 0.001f);
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// Spec 036: the knife shaving the cone (a loop): a dry rasp of bright noise in quick strokes (about six a second, one loop is whole
+        /// strokes) over a little crackle of the browned crust. The ends fade so the loop has no click.
+        /// </summary>
+        public static float[] ShaveRasp()
+        {
+            var rng = new System.Random(3601);
+            var s = new float[(int)(SampleRate * 1.0f)];
+            float previous = 0f, band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                band += (high - band) * 0.6f;
+                float stroke = (float)Math.Pow(0.5 + 0.5 * Math.Sin(2.0 * Math.PI * 6.0 * t), 2.0);
+                float crackle = rng.NextDouble() < 0.01 ? 0.6f : 0f;
+                float edge = Math.Min(1f, Math.Min(t, 1f - t) / 0.02f);
+                s[i] = (band * 0.25f * stroke + crackle * high * 0.4f) * edge;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 036: the spit's motor (a loop): a low 50 Hz hum with its harmonics and a slow wobble of the gear, very quiet.</summary>
+        public static float[] MotorHum()
+        {
+            var s = new float[SampleRate]; // one second: whole periods of every partial
+            for (int i = 0; i < s.Length; i++)
+            {
+                double t = i / (double)SampleRate;
+                double wobble = 1.0 + 0.15 * Math.Sin(2.0 * Math.PI * 2.0 * t);
+                double hum = Math.Sin(2.0 * Math.PI * 50.0 * t) * 0.5 + Math.Sin(2.0 * Math.PI * 100.0 * t) * 0.25
+                    + Math.Sin(2.0 * Math.PI * 150.0 * t) * 0.1;
+                s[i] = (float)(hum * wobble * 0.35);
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -494,11 +713,24 @@ namespace Worktown.Game.Audio
                 case SoundKey.Paper: return Paper();
                 case SoundKey.Clink: return Clink(); // spec 032
                 case SoundKey.Beep: return Beep();
+                case SoundKey.Pour: return Pour(); // spec 033
+                case SoundKey.LidClick: return LidClick();
+                case SoundKey.Splash: return Splash();
+                case SoundKey.Delivery: return Delivery(); // spec 034
+                case SoundKey.Unpack: return Unpack();
+                case SoundKey.Scrub: return Scrub(); // spec 035
+                case SoundKey.TrashRustle: return TrashRustle();
+                case SoundKey.LidThump: return LidThump();
+                case SoundKey.ShaveRasp: return ShaveRasp(); // spec 036
+                case SoundKey.MotorHum: return MotorHum();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }
 
-        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer || key == SoundKey.Squeeze;
+        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer || key == SoundKey.Squeeze
+            || key == SoundKey.Pour // spec 033
+            || key == SoundKey.Scrub // spec 035
+            || key == SoundKey.ShaveRasp || key == SoundKey.MotorHum; // spec 036
 
         public static AudioClip CreateClip(SoundKey key)
         {

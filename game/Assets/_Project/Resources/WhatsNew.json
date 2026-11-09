@@ -565,6 +565,110 @@
         "Take a card payment with one click: does it beep?",
         "Open the summary (F3): do you see tips, reviews and the missed guests?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-033",
+      "date": "2026-11-09",
+      "title": "Drinks: cups, the dispenser and a fill line",
+      "items": [
+        "A drink dispenser on the front counter, left of the serving counter: lemonade, iced tea and soda",
+        "Click the cup stack for a cup, then hold left click on a tap: the cup goes under it and fills while you hold",
+        "Stop at the line on the cup (about 1.8 s). Too little is half-full, over the brim it spills on the counter",
+        "Click the lid stack to put a lid on; a drink is sold with its lid on",
+        "About half the guests order a drink with their food ('+ lemonade' in the bubble and on the rail); hand over both, in any order, then they pay for both at once",
+        "A cup and its drink are charged once, when you let go of the tap; a top-up of the same drink pays no second cup",
+        "Third person: tap E at the dispenser for a cup or a lid, hold E to pour from the nearest tap"
+      ],
+      "test": [
+        "Fill a lemonade to the line: does the level rise from the moment you press, and stop where you let go?",
+        "Hold too long: does it splash and leave a puddle? Is the drink worth less?",
+        "Put a lid on an empty cup: is it refused? Lid a filled one: does it click?",
+        "Serve a wrap to a guest who wants a lemonade: does it wait for the drink, then go to the register with one bill?",
+        "Watch your money: is a pour charged once, cup plus drink, when you let go?"
+      ]
+    },
+    {
+      "id": "2026-11-09-spec-034",
+      "date": "2026-11-09",
+      "title": "Stock and supply: slots run empty, order at the terminal, unpack the delivery",
+      "items": [
+        "Every fridge and shelf slot, the packaging rack, the cup stack and the drink taps now hold a counted stock; a new game starts at half",
+        "Taking from a slot is free (the order paid for it); the samples and the tag show what is left, an empty slot says 'empty'",
+        "Sauces come in bottles (a squeeze uses 10 to 30 % of one, the next opens from the dry shelf); drinks come in kegs of 20 cups",
+        "The ordering terminal hangs on the back wall by the staff door: pick a row (page and pack count with its buttons); it shows the price and the delivery time",
+        "Orders cost the supplier's bulk price (80 % of the grocer's) and are paid when you place them",
+        "About a minute later (one game hour) the boxes arrive on the worktop by the back door, with a knock",
+        "Carry a box (both hands) to its slot and click: the slot fills up to its capacity, the rest stays in the box",
+        "The HUD lists 'Low stock' under a quarter; third person: E unpacks into the station you stand at, E at the terminal orders the nearest row"
+      ],
+      "test": [
+        "Take tomatoes until the slot is empty: do the samples go one by one, does the tag turn red and say 'empty'?",
+        "Order one pack at the terminal: is the price taken from your money once, and does the feed say when it is due?",
+        "Wait for the knock: are the boxes on the worktop by the back door? Carry one: is it held low in front of you?",
+        "Unpack into the slot: does it fill at once, and a full slot keep the rest in the box?",
+        "Use up the cups or a sauce: is it refused with 'Out of stock'? Does the HUD say 'Low stock' first?"
+      ]
+    },
+    {
+      "id": "2026-11-09-spec-035",
+      "date": "2026-11-09",
+      "title": "Cleaning: dirty dishes, the sink, the trash, spills and the hygiene score",
+      "items": [
+        "The shop owns eight plates. Half the guests eat in ('for here' on their bubble): their plate comes back dirty to the dish return on the counter, by the register, after their meal",
+        "Take a dirty plate from the dish return, put it in the sink next to the plate shelf, and hold to scrub (1.5 s): it goes back on the clean shelf. Without washing, plates run out",
+        "Throw burnt food, scraps and empty cups into the trash can by the staff gap; at 12 items it is full",
+        "With empty hands take the bag out of the can and carry it to the bin outside the staff gap",
+        "A spilled drink leaves a puddle: take the cloth from the sink's drainboard and hold it on the puddle to wipe it",
+        "The HUD shows the hygiene score (a drop and %): dirty dishes left out over two game minutes, a full trash, spills and burning food lower it; it recovers when all is clean",
+        "Guests notice: below 50 % a review loses a star, below 30 % new guests are 20 % less patient"
+      ],
+      "test": [
+        "Serve an eat-in guest a plate dish: about 20 s later, is a dirty plate on the dish return? Wash it: is the shelf one plate fuller?",
+        "Hold the scrub only a second: does the plate stay dirty? Hold it 1.5 s: is it clean, with bubbles and the scrub sound?",
+        "Fill the trash to 12: does it refuse more and turn red? Take the bag out to the bin: is it empty again?",
+        "Overfill a cup, then wipe the puddle with the cloth: does it shrink away?",
+        "Leave dishes and a spill: does the hygiene meter drop and turn yellow, then red? Clean up: does it climb again?"
+      ]
+    },
+    {
+      "id": "2026-11-09-spec-036",
+      "date": "2026-11-09",
+      "title": "The seitan spit: a turning cone, shaved with the knife",
+      "items": [
+        "A seitan spit stands on the front counter, across the aisle from the stoves: a cone of seitan turns in front of a heat panel",
+        "Empty hands at the bare spit load a cone from stock (one cone is about 30 portions; order more at the terminal, a cone comes in its own box)",
+        "The knob turns the heat off, low or high. Only the outside cooks: it browns (the ring shows it), good at 40 s, perfect at 55 s, burnt at 90 s on high",
+        "Hold the knife on the cone to shave: one second is one portion. The curls fall into the catch tray (it holds 3), and the next layer starts half-way",
+        "Take a portion from the tray, or scoop it straight onto the wrap in your hands. Seitan wraps and flatbreads take shaved seitan or grilled strips, and the review says which",
+        "Hygiene now changes ten times slower (a spill costs 0.2 % a game minute)"
+      ],
+      "test": [
+        "Load a cone and switch the knob to high: does the cone turn and brown, the panel glow, the sizzle and the motor hum play?",
+        "Shave at about 55 s with the knife: do curls fall into the tray and the knife saw in your view? Is the tray at 1 after a 1 s hold, 3 after a long one?",
+        "Shave right after a shave: is the new seitan pale? Leave it on high for 90 s: does it char and smoke?",
+        "Build a seitan wrap with shaved seitan (scoop onto the wrap in your hands or put it on the board), wrap it and serve: does the review mention the spit?",
+        "Make a spill and watch the hygiene meter: does it fall slowly now (about 1 % every 5 s)?"
+      ]
+    },
+    {
+      "id": "2026-11-09-spec-038",
+      "date": "2026-11-09",
+      "title": "Your first shift: a guided tutorial through every station",
+      "items": [
+        "A small card at the top shows one step at a time (3 / 14): take a potato, cut sticks, fry, plate, build and wrap a falafel wrap, serve, take the payment, lemonade, wash a plate, order stock, and the spit (optional)",
+        "The thing to use next pulses in mustard, even when you do not aim at it; an arrow at the screen edge points to it when it is out of view",
+        "A step you already did completes at once. F4 (or Skip tutorial) ends it, F5 skips the optional spit step; it starts by itself only on your first game",
+        "Play it again with Play the tutorial here or Replay tutorial in the F1 menu",
+        "When you host, the guests of your tutorial are calm (three times the patience) and the first ones order fries and a falafel wrap with lemonade, paid in cash. A dedicated server never changes its rules",
+        "Seitan cones can be ordered at the terminal again (they were priced as an unknown good)"
+      ],
+      "test": [
+        "Host a new game: does the card appear at the top, and does each step finish as soon as you do it?",
+        "Turn away from the shelf: does the edge arrow point the right way, and does the target pulse in mustard?",
+        "Hold a potato before step 2 shows: does step 2 finish at once?",
+        "Do the guests wait longer during the tutorial, and is the first guest's order fries (cash, eat in)?",
+        "Press F4: is the card gone, and does it stay gone after a restart? Replay it from F1 or Play the tutorial"
+      ]
     }
   ]
 }

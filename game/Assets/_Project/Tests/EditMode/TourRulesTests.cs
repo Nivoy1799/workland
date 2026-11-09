@@ -157,7 +157,7 @@ namespace Worktown.Game.Tests
         public void LookTour_HasTheStandardShots()
         {
             string[] shots = Get(TourRules.LookTour).Steps.Where(s => s.Kind == TourStepKind.Shot).Select(s => s.Name).ToArray();
-            CollectionAssert.AreEqual(new[] { "kitchen-third", "stock-third", "stock-first", "fridge-slot", "shelf-slot", "griddle-first", "fryer-first", "stove-first", "pan-first", "worktop-first", "assembly-first", "scale-person", "counter-guests", "street-third" }, shots);
+            CollectionAssert.AreEqual(new[] { "kitchen-third", "stock-third", "stock-first", "fridge-slot", "shelf-slot", "griddle-first", "fryer-first", "stove-first", "pan-first", "worktop-first", "assembly-first", "drinks-first", "spit-first", "terminal-first", "back-door-first", "scale-person", "counter-guests", "street-third" }, shots);
         }
 
         [Test]
@@ -189,7 +189,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void KnownTours_AreLookWalkCook()
         {
-            CollectionAssert.AreEqual(new[] { "look", "walk", "cook" }, TourRules.Names.ToArray());
+            CollectionAssert.AreEqual(new[] { "look", "walk", "cook", "tutorial" }, TourRules.Names.ToArray()); // spec 038: + tutorial
             foreach (string name in TourRules.Names) Assert.IsTrue(TourRules.IsKnown(name));
         }
 

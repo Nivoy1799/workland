@@ -39,6 +39,11 @@ namespace Worktown.Game.Art
         private StationContents _fryer;
         // Spec 030: a griddle spot is hot while its griddle is on.
         private StationContents _griddle;
+        // Spec 036: the spit's cone is hot while it has seitan on it and the knob is not off.
+        private StationContents _spit;
+
+        /// <summary>Spec 036: how loud the sizzle is for this heat (the spit's low heat is quieter; 1 for everything else).</summary>
+        public float HeatScale { get; private set; } = 1f;
 
         /// <summary>The vessel holds something and stands on a burner that is on.</summary>
         public bool IsHot { get; private set; }
@@ -67,6 +72,11 @@ namespace Worktown.Game.Art
             {
                 GriddleSpot spot = GetComponent<GriddleSpot>();
                 if (spot != null && spot.Griddle != null) _griddle = spot.Griddle.GetComponent<StationContents>();
+            }
+            else if (_vessel.Kind == VesselKind.SpitCone)
+            {
+                SpitPart part = GetComponent<SpitPart>();
+                if (part != null && part.Spit != null) _spit = part.Spit.GetComponent<StationContents>();
             }
             else if (_vessel.Kind != VesselKind.Pan && _vessel.Kind != VesselKind.Pot)
             {
@@ -125,6 +135,12 @@ namespace Worktown.Game.Art
                 return _fryer != null && FryerRules.IsOn(_fryer.StoveFlags.Value)
                     && FryerRules.StateOf(_vessel.Mode.Value) == BasketState.Lowered;
             if (_vessel.Kind == VesselKind.Griddle) return _griddle != null && GriddleRules.IsOn(_griddle.StoveFlags.Value); // spec 030
+            if (_vessel.Kind == VesselKind.SpitCone) // spec 036
+            {
+                byte flags = _spit != null ? _spit.StoveFlags.Value : (byte)0;
+                HeatScale = Worktown.Game.Audio.SoundRules.SpitSizzleScale(SpitRules.LevelOf(flags));
+                return SpitRules.HasCone(flags) && SpitRules.IsOn(flags);
+            }
             Vector3 position = transform.position;
             for (int i = 0; i < _burners.Length; i++)
             {

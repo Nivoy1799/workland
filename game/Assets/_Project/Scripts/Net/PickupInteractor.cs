@@ -96,7 +96,15 @@ namespace Worktown.Game.Net
         private float _nextGriddleLookup;
         private Vessel[] _assemblyVessels = new Vessel[0];
         private readonly SqueezeHold _squeeze = new SqueezeHold();
-        private Worktown.Game.Art.SauceDispenserView _squeezeView;
+        private Worktown.Game.Art.IPourView _squeezeView; // spec 033: a sauce dispenser or a drink tap
+        // Spec 033: our own pour at a drink tap: its view, the cup in the hands and its predicted ml (owner only), the lid click's answer.
+        private Worktown.Game.Art.DrinkTapView _pourTap;
+        private Food _pourCup;
+        private int _lidRequest;
+        private Food _lidCup;
+        // The cup of our last pour and the request number of its stop: a refused start or stop takes the predicted level back out.
+        private Food _lastPourCup;
+        private int _pourStopRequest;
         // Spec 028b: the copy of a taken ingredient flying into the hand until the server's food is there (owner only).
         private Worktown.Game.Art.StockTakeLook _pendingTake;
         private string _pendingTakeName;
@@ -232,6 +240,7 @@ namespace Worktown.Game.Net
             _ending.Clear();
             _squeeze.Reset(); // spec 031: the server stops a squeeze left running
             if (_squeezeView != null) _squeezeView.Predict(false);
+            StopPourLook(false); // spec 033
             _pendingTake = null;
             _pendingPickUp = null;
             ClearQueuedClick();
@@ -477,6 +486,34 @@ namespace Worktown.Game.Net
                 case InteractionAction.Pay when Target is StockSlot till:
                     PayWithLook(till); // spec 032: the clink or the beep and the coin in the tray at the click
                     break;
+                case InteractionAction.Unpack when Target is StockSlot into:
+                    UnpackWithLook(into); // spec 034: the box tips into the slot at the click
+                    break;
+                case InteractionAction.Order when Target is StockSlot row:
+                    TerminalClick(row); // spec 034: the beep and the lit row
+                    break;
+                case InteractionAction.Page when Target is StockSlot pageButton:
+                    TerminalClick(pageButton); // spec 034: the page or the pack count at once
+                    break;
+                case InteractionAction.Take when Target is StockSlot dirty && dirty.Station != null
+                    && (dirty.Station.Kind == StationKind.DishReturn || dirty.Station.Kind == StationKind.TrashCan):
+                    CleaningTakeWithLook(dirty); // spec 035: the top dirty plate (or the bag) flies into the hands at the click
+                    break;
+                case InteractionAction.Wash when Target is StockSlot basin && basin.Station != null:
+                    WashWithLook(basin); // spec 035: the plate drops into the sink at the click
+                    break;
+                case InteractionAction.Discard:
+                    DiscardWithLook(Target); // spec 035: into the trash (or the bag into the bin) at the click
+                    break;
+                case InteractionAction.Take when Target is StockSlot cups && cups.Station != null && cups.Station.Kind == StationKind.DrinkDispenser:
+                    TakeWithLook(cups, DrinkRules.CupOption, "empty cup"); // spec 033: the top cup flies into the hand at the click
+                    break;
+                case InteractionAction.Load when Target is StockSlot coneSlot && coneSlot.Station != null:
+                    LoadConeWithLook(coneSlot); // spec 036: the full cone stands on the spit at the click
+                    break;
+                case InteractionAction.Lid when Target is StockSlot lids && lids.Station != null:
+                    LidWithLook(lids.Station); // spec 033: the lid snaps on at the click
+                    break;
                 case InteractionAction.Pack when Target is StockSlot rack:
                 {
                     // Spec 031: wrap paper, a box or a bag from the rack onto the build, its look at the click.
@@ -562,17 +599,22 @@ namespace Worktown.Game.Net
         /// pick-up arc into the hand, judged like any predicted look (confirmed when food is in the hands; a refusal or the
         /// timeout sends it back with "nope").
         /// </summary>
-        private void TakeWithLook(StockSlot slot)
+        private void TakeWithLook(StockSlot slot, int option = -1, string name = null)
         {
             PlaySound(SoundKey.Pick, slot.Anchor);
-            SendStation(slot.Station.Index, slot.Option);
+            SendStation(slot.Station.Index, option >= 0 ? option : slot.Option); // spec 033: the cup stack's option is its own
+            if (slot.TryGetComponent(out Worktown.Game.Art.StockSlotLook stockLook)) // spec 034: one fewer at once
+            {
+                stockLook.PredictTake(_lastRequest);
+                _pendingStockLook = stockLook;
+            }
             if (_snapshotOf == null) _snapshotOf = Snapshot;
             float now = Time.unscaledTime;
             Worktown.Game.Art.StockTakeLook look = Worktown.Game.Art.StockTakeLook.Begin(slot.transform, HandPose, now, FeelSettings.Current, this);
             if (look == null) return;
             _pendingTake = look;
             string id = slot.IngredientId;
-            _pendingTakeName = id != null ? DemoIngredients.All[slot.IngredientIndex].DisplayName : "food";
+            _pendingTakeName = name ?? (id != null ? DemoIngredients.All[slot.IngredientIndex].DisplayName : "food");
             var pending = new PendingLook { Take = look, ClickFrame = Time.frameCount };
             float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
                 TimeManager != null ? (float)TimeManager.TickDelta : 0f);
@@ -752,7 +794,10 @@ namespace Worktown.Game.Net
         private ItemSnapshot TakeSnapshot(Pickup held)
         {
             if (held == null) return ItemSnapshot.Gone;
-            return FeelRules.HandsSnapshot(OwnerId, held.NetworkObject.ObjectId, held.TryGetComponent(out Food _));
+            // Spec 035: a dirty dish from the return or the bag from the trash can confirms its take like food does.
+            bool taken = held.TryGetComponent(out Food _) || held.TryGetComponent(out Worktown.Game.Shop.DirtyDish _)
+                || held.TryGetComponent(out Worktown.Game.Shop.TrashBag _);
+            return FeelRules.HandsSnapshot(OwnerId, held.NetworkObject.ObjectId, taken);
         }
 
         private ItemSnapshot Snapshot(PendingLook look)
@@ -889,11 +934,39 @@ namespace Worktown.Game.Net
             if (held == null) return Held.Nothing;
             if (held.TryGetComponent(out Knife _)) return Held.Knife;
             if (held.TryGetComponent(out Spatula _)) return Held.Spatula; // spec 030
+            if (held.TryGetComponent(out WipeCloth _)) return Held.Cloth; // spec 035
+            if (held.TryGetComponent(out Worktown.Game.Shop.DirtyDish _)) return Held.DirtyDish;
+            if (held.TryGetComponent(out Worktown.Game.Shop.TrashBag _)) return Held.TrashBag;
             if (held.TryGetComponent(out Vessel vessel)) return Held.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value);
             if (held.TryGetComponent(out Food food))
-                return Held.Food(food.DisplayName.Value, FoodLookRules.IsFinished(food.Look.Value), // spec 031: a finished build too
-                    FoodLookRules.IsBuild(food.Look.Value)); // 031b: a build goes back only on an empty board
+            {
+                FoodLook look = food.Look.Value;
+                if (FoodLookRules.IsCup(look)) return DescribeCup(food, look); // spec 033
+                return Held.Food(food.DisplayName.Value, FoodLookRules.IsFinished(look), // spec 031: a finished build too
+                    FoodLookRules.IsBuild(look)); // 031b: a build goes back only on an empty board
+            }
+            // Spec 034: a delivery box: its good and units (the box's synced contents), so it unpacks only into its own slot.
+            if (held.TryGetComponent(out Worktown.Game.Shop.SupplyBox supply) && supply.TryGetContents(out Worktown.Game.Shop.BoxContents box))
+                return Held.Box("box of " + Worktown.Game.Shop.StockCatalog.NameOf(box.Line), box.Line, box.Units);
             return Held.Item("box");
+        }
+
+        /// <summary>
+        /// Spec 033: a held cup as the rules see it: its synced drink and level, or this player's own pour and lid first (the level from
+        /// the release on, the lid from the click on), so the next click never waits for the server's look.
+        /// </summary>
+        private static Held DescribeCup(Food food, FoodLook look)
+        {
+            Worktown.Game.Art.FoodVisual visual = food.Visual;
+            int tap = DrinkRules.TapOfDrinkByte(look.Ingredient);
+            byte level = look.Shape;
+            bool lidded = look.Kind == FoodLook.KindLidded || (visual != null && visual.LidShown);
+            if (visual != null && visual.ShowsCup && level == DrinkRules.LevelEmpty && visual.PredictedLevel != DrinkRules.LevelEmpty)
+            {
+                level = visual.PredictedLevel;
+                tap = visual.PredictedTap;
+            }
+            return Held.Cup(food.DisplayName.Value, tap, level, lidded);
         }
 
         /// <summary>Spec 020/021: the target as InteractionRules sees it (what every client can see of it).</summary>
@@ -916,16 +989,29 @@ namespace Worktown.Game.Net
                         return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value, stackView.SeenMode);
                     return AimTarget.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value, vessel.Mode.Value);
                 case StockSlot slot:
-                    if (slot.Station != null && slot.Station.Kind == StationKind.Assembly) return DescribeTool(slot); // spec 031
+                    if (slot.Station != null && IsCleaningKind(slot.Station.Kind)) return DescribeCleaning(slot.Station, slot.Option); // spec 035
+                    if (slot.Station != null && slot.Station.Kind == StationKind.Assembly) return WithStock(DescribeTool(slot), slot); // spec 031
                     if (slot.Station != null && slot.Station.Kind == StationKind.Register) return DescribeRegister(slot); // spec 032
-                    return DescribeStock(slot.IngredientIndex); // spec 028b: a slot takes like a crate
+                    if (slot.Station != null && slot.Station.Kind == StationKind.DrinkDispenser) return WithStock(DescribeDrinkTool(slot), slot); // spec 033
+                    if (slot.Station != null && slot.Station.Kind == StationKind.Terminal) return DescribeTerminal(slot); // spec 034
+                    if (slot.Station != null && slot.Station.Kind == StationKind.Spit) return WithStock(DescribeSpit(slot), slot); // spec 036
+                    return WithStock(DescribeStock(slot.IngredientIndex), slot); // spec 028b: a slot takes like a crate (034: from its count)
                 case Station station:
                     // Spec 032: the register's body (between its slots) is no slot: nothing to click, no prompt.
                     if (station.Kind == StationKind.Register) return AimTarget.RegisterSlot(-1, 0, 0);
+                    if (station.Kind == StationKind.DrinkDispenser) return AimTarget.DrinkTool(-1, 0, null, -1); // spec 033: the body itself
+                    if (station.Kind == StationKind.Terminal) return AimTarget.TerminalSlot(-1, null, -1); // spec 034: the frame itself
+                    if (IsCleaningKind(station.Kind) || station.Kind == StationKind.PlateShelf) return DescribeCleaning(station, 0); // spec 035
                     return station.Kind == StationKind.Crate ? DescribeStock(station.IngredientIndex) : AimTarget.OnStation(station.Kind);
                 case Pickup pickup:
                     if (pickup.TryGetComponent(out Knife _)) return AimTarget.Item("knife");
                     if (pickup.TryGetComponent(out Spatula _)) return AimTarget.Item("spatula"); // spec 030
+                    if (pickup.TryGetComponent(out WipeCloth _)) return AimTarget.Item("the cloth"); // spec 035
+                    if (pickup.TryGetComponent(out Worktown.Game.Shop.DirtyDish _)) return AimTarget.Item("the dirty plate");
+                    if (pickup.TryGetComponent(out Worktown.Game.Shop.TrashBag _)) return AimTarget.Item("the trash bag");
+                    // Spec 034: a delivery box says what is in it ("Click · pick up the box of 6 tomato").
+                    if (pickup.TryGetComponent(out Worktown.Game.Shop.SupplyBox delivery) && delivery.TryGetContents(out Worktown.Game.Shop.BoxContents inBox))
+                        return AimTarget.Item(delivery.PickupName(inBox));
                     if (pickup.TryGetComponent(out Food food))
                         return AimTarget.Item(food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food");
                     return AimTarget.Item("box");
@@ -933,6 +1019,332 @@ namespace Worktown.Game.Net
                     return AimTarget.Nothing;
             }
         }
+
+        // ---- Spec 035: cleaning (owner side) ----
+
+        private static bool IsCleaningKind(StationKind kind) => Worktown.Game.Shop.CleaningRules.IsCleaningStation(kind);
+
+        /// <summary>
+        /// Spec 035: a cleaning station (or the plate shelf) as the rules see it: its synced byte with this player's own pending step first
+        /// (the views' Seen values), so a second click never waits for the server; our own scrub's bit is cleared.
+        /// </summary>
+        private AimTarget DescribeCleaning(Station station, int option)
+        {
+            bool known = station.TryGetComponent(out StationContents contents) && contents.IsSpawned;
+            // 035 review (F8): the plate shelf's byte means "clean plates" only where a cleaning service counts them (else it is endless).
+            if (station.Kind == StationKind.PlateShelf) known = Worktown.Game.Shop.CleaningRules.ShelfKnown(known, HasCleaningService());
+            byte b = known ? contents.StoveFlags.Value : (byte)0;
+            switch (station.Kind)
+            {
+                case StationKind.DishReturn:
+                    if (station.TryGetComponent(out Worktown.Game.Art.DishReturnView ret)) b = ret.SeenCount;
+                    break;
+                case StationKind.Sink:
+                    if (station.TryGetSlot(Worktown.Game.Shop.CleaningRules.BasinTool, out StockSlot basin)
+                        && basin.TryGetComponent(out Worktown.Game.Art.SinkView sink)) b = sink.SeenByte;
+                    if (OwnSqueeze(station.Index, Worktown.Game.Shop.CleaningRules.BasinTool))
+                        b = (byte)(b & ~Worktown.Game.Shop.CleaningRules.ScrubbingBit);
+                    break;
+                case StationKind.TrashCan:
+                    if (station.TryGetComponent(out Worktown.Game.Art.TrashCanView can)) b = can.SeenFill;
+                    break;
+            }
+            return AimTarget.CleaningStation(station.Kind, option, b, known);
+        }
+
+        private Worktown.Game.Shop.CleaningService _cleaningService;
+        private bool _cleaningLooked;
+
+        /// <summary>035 review: whether the scene has a cleaning service (looked up once).</summary>
+        private bool HasCleaningService()
+        {
+            if (!_cleaningLooked)
+            {
+                _cleaningLooked = true;
+                _cleaningService = FindFirstObjectByType<Worktown.Game.Shop.CleaningService>();
+            }
+            return _cleaningService != null;
+        }
+
+        private float RequestTimeout() => FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+            TimeManager != null ? (float)TimeManager.TickDelta : 0f);
+
+        /// <summary>Spec 035: the dish return's top plate (or the trash can's bag) on the pick-up arc into the hands, the station's look one fewer.</summary>
+        private void CleaningTakeWithLook(StockSlot slot)
+        {
+            Station station = slot.Station;
+            bool bag = station.Kind == StationKind.TrashCan;
+            if (bag) PlaySound(SoundRules.BagSound, slot.Anchor);
+            TakeWithLook(slot, 0, bag ? "trash bag" : "dirty plate");
+            if (!bag && station.TryGetComponent(out Worktown.Game.Art.DishReturnView ret)) ret.PredictTake(RequestTimeout());
+            if (bag && station.TryGetComponent(out Worktown.Game.Art.TrashCanView can)) can.PredictTakeBag(RequestTimeout());
+        }
+
+        /// <summary>Spec 035: the dirty plate in the hands drops into the sink at the click (the splash), judged like any put-in.</summary>
+        private void WashWithLook(StockSlot basin)
+        {
+            Pickup held = FindHeldPickup();
+            SendStation(basin.Station.Index, Worktown.Game.Shop.CleaningRules.SinkPutOption);
+            PlaySound(SoundRules.IntoTheSinkSound, basin.Anchor);
+            if (basin.TryGetComponent(out Worktown.Game.Art.SinkView sink)) sink.PredictAdd(RequestTimeout());
+            if (held == null) return;
+            Predict(PredictionKind.PutInto, held, null);
+            held.PredictInto(new Pose(basin.Anchor + Vector3.up * 0.05f, held.transform.rotation));
+        }
+
+        /// <summary>Spec 035: what the hands hold goes into the trash can (the lid thump), or the bag into the bin, at the click.</summary>
+        private void DiscardWithLook(Component target)
+        {
+            Station station = target is StockSlot s ? s.Station : target as Station;
+            if (station == null) return;
+            Pickup held = FindHeldPickup();
+            bool bin = station.Kind == StationKind.Bin;
+            Vector3 opening = station.transform.position + Vector3.up * 0.5f;
+            if (station.TryGetComponent(out Worktown.Game.Art.TrashCanView can))
+            {
+                opening = can.Opening;
+                if (held == null || !held.TryGetComponent(out Vessel _)) can.PredictDiscard(RequestTimeout());
+            }
+            else if (station.TryGetComponent(out Worktown.Game.Art.BinView binView))
+            {
+                opening = binView.Opening;
+                binView.PredictBag();
+            }
+            PlaySound(SoundRules.DiscardSound(bin), opening);
+            SendStation(station.Index, bin ? Worktown.Game.Shop.CleaningRules.BinOption : Worktown.Game.Shop.CleaningRules.TrashOption);
+            // Food and the bag fly in and are gone; cookware stays in the hands (only its food goes).
+            if (held == null || held.TryGetComponent(out Vessel _)) return;
+            Predict(PredictionKind.PutInto, held, null);
+            held.PredictInto(new Pose(opening, held.transform.rotation));
+        }
+
+        // ---- Spec 036: the seitan spit (owner side) ----
+
+        /// <summary>Spec 036: the spit's cone is a held tool for the squeeze-like hold (the knife on it shaves).</summary>
+        private static bool IsSpitHold(StockSlot tool) =>
+            tool != null && tool.Station != null && tool.Station.Kind == StationKind.Spit && tool.Option == SpitRules.ConeTool;
+
+        /// <summary>
+        /// Spec 036: the spit's cone as the rules see it: the spit's byte (our own loaded cone first, our own shave's bit cleared), the
+        /// cone's portions and take name, the tray's portions.
+        /// </summary>
+        private AimTarget DescribeSpit(StockSlot slot)
+        {
+            Station spit = slot.Station;
+            slot.TryGetComponent(out Worktown.Game.Art.SpitView view);
+            byte flags = view != null ? view.SeenFlags : spit.TryGetComponent(out StationContents contents) ? contents.StoveFlags.Value : (byte)0;
+            if (OwnSqueeze(spit.Index, SpitRules.ConeTool)) flags = SpitRules.WithShaving(flags, false);
+            Vessel cone = view != null ? view.Cone : null;
+            Vessel tray = view != null ? view.Tray : null;
+            return AimTarget.SpitTool(slot.Option, flags, cone != null ? cone.Mode.Value : (byte)0, tray != null ? tray.ContentCount : 0,
+                cone != null ? cone.Title.Value : null);
+        }
+
+        /// <summary>Spec 036: the load at the click: the pick sound, the full cone stands on the spit at once (SpitView), RequestStation goes out.</summary>
+        private void LoadConeWithLook(StockSlot slot)
+        {
+            PlaySound(SoundKey.Pick, slot.Anchor);
+            if (slot.TryGetComponent(out Worktown.Game.Art.SpitView view)) view.PredictLoad(RequestTimeout());
+            SendStation(slot.Station.Index, SpitRules.LoadOption);
+        }
+
+        private Worktown.Game.Art.SpitView _shaveView;
+
+        /// <summary>Spec 036: our own shave's look starts at the press: the knife saws in view, the spit's curls fly (its IPourView).</summary>
+        private void StartShaveLook(StockSlot cone)
+        {
+            _shaveView = cone.GetComponent<Worktown.Game.Art.SpitView>();
+            if (_shaveView != null) _shaveView.OwnKnifeInHand = IsFirstPerson;
+            if (_heldView != null) _heldView.SetShaving(true);
+        }
+
+        private void StopShaveLook()
+        {
+            if (_shaveView != null) _shaveView.OwnKnifeInHand = false;
+            _shaveView = null;
+            if (_heldView != null && _heldView.IsShaving) _heldView.SetShaving(false);
+        }
+
+        /// <summary>Spec 035: the sink's basin or the dispenser's spill is a held tool for the squeeze-like hold.</summary>
+        private static bool IsCleaningHold(StockSlot tool) =>
+            tool != null && tool.Station != null && ((tool.Station.Kind == StationKind.Sink && tool.Option == Worktown.Game.Shop.CleaningRules.BasinTool)
+                || (tool.Station.Kind == StationKind.DrinkDispenser && tool.Option == Worktown.Game.Shop.CleaningRules.SpillTool));
+
+        private Worktown.Game.Art.SpillWipeView _wipeView;
+
+        /// <summary>Every frame of our own wipe: the held cloth goes round on the puddle (the view's pose), and back when it ends.</summary>
+        private void UpdateWipeLook()
+        {
+            if (_heldView == null) return;
+            if (_wipeView != null && _squeeze.Held)
+            {
+                _wipeView.OwnClothInHand = IsFirstPerson;
+                if (IsFirstPerson) _heldView.SetPourPose(true, _wipeView.ClothPose(Time.unscaledTimeAsDouble));
+            }
+            else if (_wipeView != null)
+            {
+                _heldView.SetPourPose(false, default);
+                _wipeView = null;
+            }
+        }
+
+        // ---- Spec 034: stock counts, delivery boxes and the ordering terminal ----
+
+        private Worktown.Game.Shop.StockCounts _stockCounts;
+        private float _nextStockCountsLookup;
+
+        /// <summary>Spec 034: the synced stock counts (found once, looked for again at most once a second while missing).</summary>
+        private Worktown.Game.Shop.StockCounts StockCountsNow()
+        {
+            if (_stockCounts == null && Time.unscaledTime >= _nextStockCountsLookup)
+            {
+                _nextStockCountsLookup = Time.unscaledTime + 1f;
+                _stockCounts = FindFirstObjectByType<Worktown.Game.Shop.StockCounts>();
+            }
+            return _stockCounts;
+        }
+
+        /// <summary>
+        /// Spec 034: the target with the stock of its slot as this client sees it: the synced count, our own pending take or unpack first
+        /// (Art.StockSlotLook), so a second click never acts on a count that already went.
+        /// </summary>
+        private AimTarget WithStock(AimTarget target, StockSlot slot)
+        {
+            if (slot == null || slot.Station == null) return target;
+            int line = Worktown.Game.Shop.StockCatalog.LineOfSlot(slot.Station.Kind, slot.Option);
+            if (line < 0) return target;
+            int count = -1;
+            Worktown.Game.Shop.StockCounts counts = StockCountsNow();
+            if (counts != null && counts.TryGet(line, out byte synced)) count = synced;
+            if (count >= 0 && slot.TryGetComponent(out Worktown.Game.Art.StockSlotLook look)) count = look.Shown(count);
+            return target.WithStock(line, count);
+        }
+
+        /// <summary>Spec 034: a slot of the terminal: a row's order words and price, a button's words (the terminal's own page and packs).</summary>
+        private AimTarget DescribeTerminal(StockSlot slot)
+        {
+            if (!slot.Station.TryGetComponent(out Worktown.Game.Shop.TerminalView view)) return AimTarget.TerminalSlot(slot.Option, null, -1);
+            string words = view.WordsFor(slot.Option, out long price); // cached per page and pack count
+            return AimTarget.TerminalSlot(slot.Option, words, price);
+        }
+
+        /// <summary>
+        /// Spec 034: a terminal click: a row orders (RequestStation(terminal, TerminalRules.OrderOption(line, packs)), the beep and the
+        /// row lit at the click, the server checks and charges); a button turns the page or the pack count at once (the client's view).
+        /// </summary>
+        private void TerminalClick(StockSlot slot)
+        {
+            if (slot == null || slot.Station == null || !slot.Station.TryGetComponent(out Worktown.Game.Shop.TerminalView view)) return;
+            if (Worktown.Game.Shop.TerminalRules.IsRow(slot.Option))
+            {
+                int line = Worktown.Game.Shop.TerminalRules.LineAt(view.Page, slot.Option);
+                if (line < 0) return;
+                PlaySound(SoundKey.Beep, slot.Anchor);
+                SendStation(slot.Station.Index, Worktown.Game.Shop.TerminalRules.OrderOption(line, view.Packs));
+                view.PredictOrder(slot.Option, _lastRequest);
+                _pendingTerminal = view;
+                return;
+            }
+            PlaySound(SoundKey.Button, slot.Anchor);
+            view.Press(slot.Option);
+        }
+
+        /// <summary>
+        /// Spec 034: the carried box into its slot: RequestStation(station, the slot's unpack option) and the unpack look at the click (the
+        /// box tips and shakes, the slot's samples pop in up to what fits); a refusal takes the slot's predicted count back with "nope".
+        /// </summary>
+        private void UnpackWithLook(StockSlot slot)
+        {
+            if (slot == null || slot.Station == null) return;
+            int option = Worktown.Game.Shop.StockCatalog.UnpackOptionOf(slot.Station.Kind, slot.Option);
+            if (option < 0) return;
+            Pickup held = FindHeldPickup();
+            Held hands = Describe(held);
+            PlaySound(SoundKey.Unpack, slot.Anchor);
+            SendStation(slot.Station.Index, option);
+            AimTarget seen = WithStock(AimTarget.Nothing, slot);
+            int room = Worktown.Game.Shop.StockCatalog.RoomFor(seen.StockLine, seen.StockCount);
+            if (held != null && held.TryGetComponent(out Worktown.Game.Shop.SupplyBox box))
+            {
+                if (room >= hands.BoxUnits && box.Model != null)
+                {
+                    // Everything fits: the box's copy tips into the slot and shrinks away; the real box hides until the server empties it.
+                    Pose from = new Pose(box.Model.transform.position, box.Model.transform.rotation);
+                    float scale = 1f;
+                    if (_heldView != null && _heldView.TryGetViewPose(held, out Pose root, out scale))
+                    {
+                        Vector3 local = held.transform.InverseTransformPoint(box.Model.transform.position);
+                        from = new Pose(root.position + root.rotation * (local * scale), root.rotation);
+                    }
+                    Worktown.Game.Art.UnpackLook.Begin(box.Model, from, scale, slot.Anchor);
+                    box.HideForUnpack(Mathf.Max(1f, FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+                        TimeManager != null ? (float)TimeManager.TickDelta : 0f)));
+                    _pendingUnpackBox = box;
+                }
+                else box.PlayUnpack(); // part of it fits: the box tips and shakes in the hands, the rest stays in it
+            }
+            if (slot.TryGetComponent(out Worktown.Game.Art.StockSlotLook look))
+            {
+                look.PredictUnpack(hands.BoxUnits, _lastRequest);
+                _pendingStockLook = look;
+            }
+        }
+
+        /// <summary>Spec 034, third person: the slot of <paramref name="station"/> that takes the carried box's good, or null.</summary>
+        private static StockSlot SlotForBox(Station station, Held hands)
+        {
+            if (station == null || !hands.IsBox) return null;
+            for (int s = 0; s < station.SlotCount; s++)
+                if (Worktown.Game.Shop.StockCatalog.LineOfSlot(station.Kind, s) == hands.BoxLine && station.TryGetSlot(s, out StockSlot slot))
+                    return slot;
+            return null;
+        }
+
+        /// <summary>Spec 034, third person: the terminal's row nearest to the player (on its current page).</summary>
+        private StockSlot NearestTerminalRow(Station terminal)
+        {
+            StockSlot best = null;
+            float bestSqr = float.MaxValue;
+            for (int r = 0; r < Worktown.Game.Shop.TerminalRules.Rows; r++)
+            {
+                if (!terminal.TryGetSlot(r, out StockSlot row) || row == null) continue;
+                if (terminal.TryGetComponent(out Worktown.Game.Shop.TerminalView view) && Worktown.Game.Shop.TerminalRules.LineAt(view.Page, r) < 0) continue;
+                float sqr = (row.Anchor - transform.position).sqrMagnitude;
+                if (sqr >= bestSqr) continue;
+                bestSqr = sqr;
+                best = row;
+            }
+            return best;
+        }
+
+        // Spec 034: the stock looks waiting for the server's answer to our request (one each: a take or unpack, an order).
+        private Worktown.Game.Art.StockSlotLook _pendingStockLook;
+        private Worktown.Game.Shop.TerminalView _pendingTerminal;
+        private Worktown.Game.Shop.SupplyBox _pendingUnpackBox;
+
+        /// <summary>Spec 034: the server answered request <paramref name="answered"/>: a refused take, unpack or order takes its look back, "nope".</summary>
+        private void AnswerStockLooks(int answered, CookOutcome outcome)
+        {
+            bool ok = outcome == CookOutcome.Ok;
+            if (_pendingStockLook != null && _pendingStockLook.Answer(answered, ok))
+            {
+                if (!ok && outcome != CookOutcome.TooFast) PlaySound(SoundKey.Nope, _pendingStockLook.transform.position);
+                if (!ok && _pendingUnpackBox != null) _pendingUnpackBox.ShowAgain(); // a refused unpack: the box is still in the hands
+                _pendingStockLook = null;
+                _pendingUnpackBox = null;
+            }
+            if (_pendingTerminal != null && _pendingTerminal.Answer(answered, ok))
+            {
+                if (!ok && outcome != CookOutcome.TooFast) PlaySound(SoundKey.Nope, _pendingTerminal.transform.position);
+                _pendingTerminal = null;
+            }
+        }
+
+        /// <summary>Spec 034, the tours: a terminal row or button clicked through the normal path.</summary>
+        public void DevTerminal(StockSlot slot) => TerminalClick(slot);
+
+        /// <summary>Spec 034, the tours: the carried box unpacked into <paramref name="slot"/> through the normal path.</summary>
+        public void DevUnpack(StockSlot slot) => UnpackWithLook(slot);
 
         // ---- Spec 032: the register ----
 
@@ -1097,8 +1509,11 @@ namespace Worktown.Game.Net
         private bool UpdateSqueeze(Mouse mouse, Gamepad gamepad, bool locked)
         {
             StockSlot tool = Target as StockSlot;
-            bool onDispenser = CurrentAction == InteractionAction.Squeeze && tool != null && tool.Station != null
-                && BuildRules.IsDispenser(tool.Option);
+            bool onDispenser = tool != null && tool.Station != null
+                && ((CurrentAction == InteractionAction.Squeeze && BuildRules.IsDispenser(tool.Option))
+                    || (CurrentAction == InteractionAction.Fill && DrinkRules.IsTap(tool.Option)) // spec 033: a drink tap
+                    || ((CurrentAction == InteractionAction.Scrub || CurrentAction == InteractionAction.Wipe) && IsCleaningHold(tool)) // spec 035
+                    || (CurrentAction == InteractionAction.Shave && IsSpitHold(tool))); // spec 036
             bool mouseDown = mouse != null && locked && mouse.leftButton.isPressed;
             bool padDown = gamepad != null && gamepad.rightTrigger.isPressed;
             bool pressedNow = (mouse != null && locked && _lockedLastFrame && mouse.leftButton.wasPressedThisFrame)
@@ -1116,16 +1531,33 @@ namespace Worktown.Game.Net
         private bool UpdateThirdPersonSqueeze(Keyboard keyboard, Gamepad gamepad, out bool tapped)
         {
             tapped = false;
-            Station board = Target is Station s && s.Kind == StationKind.Assembly ? s : null;
-            if (board != _thirdPersonBoard || (board != null && (_thirdPersonSpot == null || _thirdPersonTool == null)))
+            Station board = Target is Station s && (s.Kind == StationKind.Assembly || s.Kind == StationKind.DrinkDispenser
+                || s.Kind == StationKind.Sink || s.Kind == StationKind.Spit) ? s : null; // spec 033; spec 035: the sink; spec 036: the spit
+            bool needsSpot = board != null && board.Kind == StationKind.Assembly; // spec 033: the drink dispenser has no build spot
+            // Spec 035: with the cloth in the hands at a dispenser with a spill, E is held on the spill (not on a tap).
+            Held hands = Hands(FindHeldPickup());
+            bool wipe = board != null && board.Kind == StationKind.DrinkDispenser && hands.IsCloth;
+            if (board != _thirdPersonBoard || wipe != _thirdPersonWipe
+                || (board != null && ((needsSpot && _thirdPersonSpot == null) || _thirdPersonTool == null)))
             {
                 _thirdPersonBoard = board;
-                _thirdPersonTool = board != null ? NearestDispenser(board) : null;
-                _thirdPersonSpot = board != null ? BuildSpotOf(board, out _thirdPersonView) : null;
+                _thirdPersonWipe = wipe;
+                StockSlot spill = null;
+                if (wipe) board.TryGetSlot(Worktown.Game.Shop.CleaningRules.SpillTool, out spill);
+                StockSlot basin = null;
+                if (board != null && board.Kind == StationKind.Sink) board.TryGetSlot(Worktown.Game.Shop.CleaningRules.BasinTool, out basin);
+                if (board != null && board.Kind == StationKind.Spit) board.TryGetSlot(SpitRules.ConeTool, out basin); // spec 036: the cone
+                _thirdPersonTool = board == null ? null : wipe ? spill : basin != null ? basin : NearestDispenser(board);
+                _thirdPersonView = null;
+                _thirdPersonSpot = needsSpot ? BuildSpotOf(board, out _thirdPersonView) : null;
             }
             StockSlot tool = _thirdPersonTool;
-            bool offered = tool != null && InteractionRules.ActionFor(Hands(FindHeldPickup()),
-                DescribeTool(tool, _thirdPersonSpot, _thirdPersonView)) == InteractionAction.Squeeze;
+            bool drinks = board != null && board.Kind == StationKind.DrinkDispenser;
+            InteractionAction offeredAction = tool == null ? InteractionAction.None : InteractionRules.ActionFor(hands,
+                IsCleaningHold(tool) || IsSpitHold(tool) ? Describe(tool) : drinks ? DescribeDrinkTool(tool) : DescribeTool(tool, _thirdPersonSpot, _thirdPersonView));
+            bool offered = offeredAction == InteractionAction.Squeeze || offeredAction == InteractionAction.Fill // spec 033: a tap too
+                || offeredAction == InteractionAction.Scrub || offeredAction == InteractionAction.Wipe // spec 035
+                || offeredAction == InteractionAction.Shave; // spec 036
             bool down = (keyboard != null && keyboard.eKey.isPressed) || (gamepad != null && gamepad.rightTrigger.isPressed);
             bool pressedNow = (keyboard != null && keyboard.eKey.wasPressedThisFrame)
                 || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame);
@@ -1139,6 +1571,7 @@ namespace Worktown.Game.Net
         // 031b review: third person's cached board, its nearest dispenser and build spot (refreshed when the target changes).
         private readonly SqueezeHoldGate _thirdPersonGate = new SqueezeHoldGate();
         private Station _thirdPersonBoard;
+        private bool _thirdPersonWipe; // spec 035: the cloth was in the hands when the tool was picked
         private StockSlot _thirdPersonTool;
         private Vessel _thirdPersonSpot;
         private Worktown.Game.Art.BuildStackView _thirdPersonView;
@@ -1149,9 +1582,10 @@ namespace Worktown.Game.Net
             RefreshInteractables();
             StockSlot best = null;
             float bestSqr = float.MaxValue;
+            bool drinks = board != null && board.Kind == StationKind.DrinkDispenser; // spec 033: its nearest tap
             foreach (StockSlot slot in _allSlots)
             {
-                if (slot == null || slot.Station != board || !BuildRules.IsDispenser(slot.Option)) continue;
+                if (slot == null || slot.Station != board || !(drinks ? DrinkRules.IsTap(slot.Option) : BuildRules.IsDispenser(slot.Option))) continue;
                 float sqr = (slot.transform.position - transform.position).sqrMagnitude;
                 if (sqr < bestSqr)
                 {
@@ -1175,22 +1609,117 @@ namespace Worktown.Game.Net
                 {
                     _squeeze.Release(now);
                     if (_squeezeView != null) _squeezeView.Predict(false);
+                    StopPourLook(true); // spec 033: the cup comes back from under the tap, its level stays
+                    StopShaveLook(); // spec 036: the knife comes back
                 }
             }
             else if (onDispenser && pressedNow && _squeeze.Press(tool.Station.Index, tool.Option, now))
             {
-                _squeezeView = tool.GetComponent<Worktown.Game.Art.SauceDispenserView>();
+                _squeezeView = tool.GetComponent<Worktown.Game.Art.IPourView>();
                 if (_squeezeView != null) _squeezeView.Predict(true); // the look in the press's frame
+                if (tool.Station.Kind == StationKind.DrinkDispenser && DrinkRules.IsTap(tool.Option)) StartPourLook(tool, now); // spec 033
+                if (tool.Station.Kind == StationKind.DrinkDispenser && tool.Option == Worktown.Game.Shop.CleaningRules.SpillTool)
+                    _wipeView = tool.GetComponent<Worktown.Game.Art.SpillWipeView>(); // spec 035: the held cloth goes to the puddle
+                if (tool.Station.Kind == StationKind.Sink) PlaySound(SoundKey.Splash, tool.Anchor); // spec 035: the hands into the water
+                if (IsSpitHold(tool)) StartShaveLook(tool); // spec 036: the knife to the cone
             }
 
             PollSqueeze();
             return _squeeze.Held || onDispenser;
         }
 
+        // ---- Spec 033: the drink dispenser (owner side) ----
+
+        /// <summary>Spec 033: a tool of the drink dispenser as the rules see it: the dispenser's byte with our own pour's bit cleared.</summary>
+        private AimTarget DescribeDrinkTool(StockSlot slot)
+        {
+            Station dispenser = slot.Station;
+            int tool = slot.Option;
+            byte flags = dispenser.TryGetComponent(out StationContents contents) ? contents.StoveFlags.Value : (byte)0;
+            if (DrinkRules.IsTap(tool) && OwnSqueeze(dispenser.Index, tool)) flags = DrinkRules.WithPouring(flags, tool, false);
+            // Spec 035: our own wipe is not "someone wiping"; a spill we just wiped is gone for us already.
+            if (tool == Worktown.Game.Shop.CleaningRules.SpillTool)
+            {
+                if (OwnSqueeze(dispenser.Index, tool)) flags = (byte)(flags & ~Worktown.Game.Shop.CleaningRules.WipingBit);
+                if (slot.TryGetComponent(out Worktown.Game.Art.SpillWipeView wipe) && wipe.SeenWiped) flags = DrinkRules.WithSpill(flags, false);
+            }
+            return AimTarget.DrinkTool(tool, flags, DrinkRules.IsTap(tool) ? DrinkRules.DrinkName(tool) : tool == DrinkRules.CupTool ? "a cup" : "a lid", -1);
+        }
+
+        /// <summary>
+        /// Spec 033: our press on a drink tap: the cup in the hands goes under the tap and its liquid starts rising in this frame, from what
+        /// we see in it (docs/feel.md 1); the server measures the real pour.
+        /// </summary>
+        private void StartPourLook(StockSlot tap, double now)
+        {
+            StopPourLook(true);
+            _pourTap = tap.GetComponent<Worktown.Game.Art.DrinkTapView>();
+            Pickup held = FindHeldPickup();
+            _pourCup = held != null && held.TryGetComponent(out Food cup) && FoodLookRules.IsCup(cup.Look.Value) ? cup : null;
+            _lastPourCup = _pourCup;
+            float start = 0f;
+            if (_pourCup != null)
+            {
+                Held seen = DescribeCup(_pourCup, _pourCup.Look.Value);
+                start = _pourCup.Visual != null && _pourCup.Visual.PredictedMl >= 0f ? _pourCup.Visual.PredictedMl : DrinkRules.SeenMl(seen.CupLevel);
+                if (_pourCup.Visual != null) _pourCup.Visual.SetPredictedTap(tap.Option);
+            }
+            if (_pourTap != null) _pourTap.PredictFrom(start, now);
+            if (_heldView != null && _pourTap != null && _pourCup != null) _heldView.SetPourPose(true, _pourTap.CupPose);
+            UpdatePourLook();
+        }
+
+        /// <summary>Every frame while we pour: the cup's predicted level and where the stream lands in it.</summary>
+        private void UpdatePourLook()
+        {
+            if (_pourTap == null || _pourCup == null) return;
+            float ml = _pourTap.PredictedMl(Time.unscaledTimeAsDouble);
+            if (_pourCup.Visual != null) _pourCup.Visual.PredictMl(ml, true);
+            Pose under = _pourTap.CupPose;
+            if (_heldView != null) _heldView.SetPourPose(true, under);
+            _pourTap.SetStreamEnd(under.position + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight
+                * Worktown.Game.Art.DrinkArtRules.CupLiquidHeight(DrinkRules.DrawnFill(ml))));
+        }
+
+        /// <summary>Our pour's look ends: the cup comes back to the hand; <paramref name="keepLevel"/> keeps its predicted level (a release),
+        /// else (a refusal) it goes back to the synced one.</summary>
+        private void StopPourLook(bool keepLevel)
+        {
+            if (_pourTap != null && _pourCup != null && _pourCup.Visual != null)
+            {
+                if (keepLevel) _pourCup.Visual.PredictMl(_pourTap.PredictedMl(Time.unscaledTimeAsDouble), false);
+                else _pourCup.Visual.EndPrediction();
+            }
+            if (_heldView != null) _heldView.SetPourPose(false, default);
+            _pourTap = null;
+            _pourCup = null;
+        }
+
+        /// <summary>Spec 033: the lid stack: the lid snaps onto the held cup at the click (sound and look), RequestStation goes out.</summary>
+        private void LidWithLook(Station dispenser)
+        {
+            Pickup held = FindHeldPickup();
+            _lidCup = held != null && held.TryGetComponent(out Food cup) ? cup : null;
+            PlaySound(SoundKey.LidClick, held != null ? held.transform.position : dispenser.transform.position);
+            if (_lidCup != null && _lidCup.Visual != null) _lidCup.Visual.PredictLid(true);
+            SendStation(dispenser.Index, DrinkRules.LidOption);
+            _lidRequest = _lastRequest;
+        }
+
+        /// <summary>The station kind of station index <paramref name="index"/> as this client knows it (Crate when unknown).</summary>
+        private StationKind StationKindOf(int index)
+        {
+            if (_stations == null) _stations = FindObjectsByType<Station>(FindObjectsSortMode.None);
+            foreach (Station s in _stations)
+                if (s != null && s.Index == index) return s.Kind;
+            return StationKind.Crate;
+        }
+
         private bool _devSqueeze;
         // 031b: the request number of the last squeeze start and its dispenser's view (a refusal ends the predicted ribbon at once).
         private int _squeezeStartRequest;
-        private Worktown.Game.Art.SauceDispenserView _squeezeStartView;
+        private Worktown.Game.Art.IPourView _squeezeStartView;
+        private bool _squeezeStartIsPour; // 033 review: the start was a drink tap's (only then does a refusal undo the cup's level)
         // 031b: our own stop went out for this dispenser; until the board's byte catches up its bit is still ours.
         private int _ownStopBoard = -1;
         private int _ownStopDispenser = -1;
@@ -1204,19 +1733,41 @@ namespace Worktown.Game.Net
             switch (_squeeze.Poll(canSend, Time.unscaledTimeAsDouble))
             {
                 case SqueezeHold.Send.Start:
-                    SendStation(_squeeze.SendBoard, BuildRules.SqueezeStartOption(_squeeze.SendDispenser));
+                    // Spec 033: a drink tap's press goes out as its own option; spec 035: the sink's scrub and the spill's wipe too.
+                    _squeezeStartIsPour = StationKindOf(_squeeze.SendBoard) == StationKind.DrinkDispenser && DrinkRules.IsTap(_squeeze.SendDispenser);
+                    SendStation(_squeeze.SendBoard, HoldOption(_squeeze.SendBoard, _squeeze.SendDispenser, true));
                     _squeezeStartRequest = _lastRequest;
                     _squeezeStartView = DispenserView(_squeeze.SendBoard, _squeeze.SendDispenser);
                     break;
                 case SqueezeHold.Send.Stop:
-                    SendStation(_squeeze.SendBoard, BuildRules.SqueezeStopOption(_squeeze.SendDispenser));
+                    bool drinkStop = StationKindOf(_squeeze.SendBoard) == StationKind.DrinkDispenser && DrinkRules.IsTap(_squeeze.SendDispenser);
+                    SendStation(_squeeze.SendBoard, HoldOption(_squeeze.SendBoard, _squeeze.SendDispenser, false));
+                    if (drinkStop) _pourStopRequest = _lastRequest; // spec 033: a refused stop (no money, cup put down) undoes the level
                     _ownStopBoard = _squeeze.SendBoard;
                     _ownStopDispenser = _squeeze.SendDispenser;
                     _ownStopUntil = Time.unscaledTime + Mathf.Max(1f, 2f * RoundTripSeconds());
                     if (_devSqueeze && _squeeze.Idle) _devSqueeze = false;
                     break;
             }
+            UpdatePourLook(); // spec 033: every frame of our own pour (the tours' held tap too)
+            UpdateWipeLook(); // spec 035: and of our own wipe
             return _squeeze.Held;
+        }
+
+        /// <summary>
+        /// The RequestStation option of a held tool's press (<paramref name="start"/>) or release: a sauce dispenser (031), a drink tap (033),
+        /// the sink's scrub or the spill's wipe (spec 035).
+        /// </summary>
+        private int HoldOption(int station, int tool, bool start)
+        {
+            StationKind kind = StationKindOf(station);
+            if (kind == StationKind.Sink)
+                return start ? Worktown.Game.Shop.CleaningRules.ScrubStartOption : Worktown.Game.Shop.CleaningRules.ScrubStopOption;
+            if (kind == StationKind.DrinkDispenser && tool == Worktown.Game.Shop.CleaningRules.SpillTool)
+                return start ? Worktown.Game.Shop.CleaningRules.WipeStartOption : Worktown.Game.Shop.CleaningRules.WipeStopOption;
+            if (kind == StationKind.DrinkDispenser) return start ? DrinkRules.PourStartOption(tool) : DrinkRules.PourStopOption(tool);
+            if (kind == StationKind.Spit) return start ? SpitRules.ShaveStartOption : SpitRules.ShaveStopOption; // spec 036
+            return start ? BuildRules.SqueezeStartOption(tool) : BuildRules.SqueezeStopOption(tool);
         }
 
         /// <summary>031b: the board's squeezing bit for <paramref name="dispenser"/> is our own squeeze (held, waiting, or its stop
@@ -1227,13 +1778,13 @@ namespace Worktown.Game.Net
             return board == _ownStopBoard && dispenser == _ownStopDispenser && Time.unscaledTime < _ownStopUntil;
         }
 
-        /// <summary>031b: the view of dispenser <paramref name="dispenser"/> of board <paramref name="board"/>, or null.</summary>
-        private Worktown.Game.Art.SauceDispenserView DispenserView(int board, int dispenser)
+        /// <summary>031b: the view of dispenser <paramref name="dispenser"/> of board <paramref name="board"/>, or null (spec 033: a tap too).</summary>
+        private Worktown.Game.Art.IPourView DispenserView(int board, int dispenser)
         {
             RefreshInteractables();
             foreach (StockSlot slot in _allSlots)
                 if (slot != null && slot.Station != null && slot.Station.Index == board && slot.Option == dispenser)
-                    return slot.GetComponent<Worktown.Game.Art.SauceDispenserView>();
+                    return slot.GetComponent<Worktown.Game.Art.IPourView>();
             return null;
         }
 
@@ -1400,7 +1951,8 @@ namespace Worktown.Game.Net
                 Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
                 StockSlot slot = station != null && station.SlotCount > 0 ? station.NearestSlot(_rayHits[i].point) : null;
                 // Spec 031: on the assembly board a ray means a tool only near it (elsewhere it is the board itself).
-                if (station != null && (station.Kind == StationKind.Assembly || station.Kind == StationKind.Register)) slot = ToolOnRay(station, ray); // spec 032: the register too
+                if (station != null && (station.Kind == StationKind.Assembly || station.Kind == StationKind.Register
+                    || station.Kind == StationKind.DrinkDispenser)) slot = ToolOnRay(station, ray); // spec 032: the register; spec 033: the drinks
                 if (slot != null)
                     AddAimHit(distance, AimKind.Station, slot); // spec 028b: the fridge or shelf means its slot nearest the hit; reach to its anchor
                 else if (station != null)
@@ -1584,7 +2136,8 @@ namespace Worktown.Game.Net
             }
             foreach (StockSlot slot in _allSlots) // spec 028b: reach to the slot's anchor, as the server measures it
                 if (slot != null && slot.Station != null && (!hands.IsHolding || slot.Station.Kind == StationKind.Assembly
-                    || slot.Station.Kind == StationKind.Register)) // spec 031: tools with any hands; spec 032: the register too
+                    || slot.Station.Kind == StationKind.Register || slot.Station.Kind == StationKind.DrinkDispenser // spec 031-033: tools with any hands
+                    || slot.Station.Kind == StationKind.Sink || slot.Station.Kind == StationKind.TrashCan)) // spec 035: a dish in, a discard
                     AddCone(ray, slot, PlaceSpots.None, slot.Anchor, hands, Describe(slot), range, feel.AimCone);
             if (held != null)
             {
@@ -1726,22 +2279,111 @@ namespace Worktown.Game.Net
             return fresh;
         }
 
+        /// <summary>
+        /// Spec 036, third person: a tap of E at the spit loads a cone (empty hands, bare spit), else scoops from the tray (empty hands, or
+        /// onto the build in them), else turns the knob; with the knife it does nothing (holding E shaves).
+        /// </summary>
+        private bool HandleSpitKey(Station spit, bool holding)
+        {
+            Held hands = Hands(FindHeldPickup());
+            if (!spit.TryGetSlot(SpitRules.ConeTool, out StockSlot cone)) return false;
+            if (hands.IsKnife) return true;
+            AimTarget seen = WithStock(DescribeSpit(cone), cone);
+            if (InteractionRules.ActionFor(hands, seen) == InteractionAction.Load)
+            {
+                LoadConeWithLook(cone);
+                return true;
+            }
+            if (cone.TryGetComponent(out Worktown.Game.Art.SpitView view) && view.Tray != null)
+            {
+                AimTarget tray = AimTarget.Cookware(VesselKind.SpitTray, view.Tray.ContentCount, view.Tray.Title.Value);
+                if (InteractionRules.ActionFor(hands, tray) == InteractionAction.Take)
+                {
+                    PlaySound(holding ? SoundKey.PlaceFood : SoundKey.Pick, view.Tray.transform.position);
+                    SendUse(view.Tray.NetworkObject, VesselRules.ActionUse);
+                    return true;
+                }
+            }
+            if (holding) return false;
+            PlaySound(SoundKey.Button, spit.transform.position);
+            SendStation(spit.Index, SpitRules.KnobOption);
+            return true;
+        }
+
         /// <summary>Third person (spec 007/021): E at a crate or the shelf with empty hands, at the counter holding something.</summary>
         private bool TryHandleStationKey(Station station, bool holding)
         {
+            // Spec 034, third person: a carried delivery box goes into this station's slot for its good (E).
+            if (holding)
+            {
+                StockSlot boxSlot = SlotForBox(station, Hands(FindHeldPickup()));
+                if (boxSlot != null)
+                {
+                    UnpackWithLook(boxSlot);
+                    return true;
+                }
+            }
             switch (station.Kind)
             {
+                case StationKind.Terminal:
+                {
+                    // Spec 034, third person: E orders the nearest row of the terminal's page (paging is a first-person job).
+                    StockSlot row = NearestTerminalRow(station);
+                    if (row == null) return false;
+                    TerminalClick(row);
+                    return true;
+                }
                 case StationKind.Crate:
                 case StationKind.PlateShelf:
                     if (holding) return false;
                     PlaySound(SoundKey.Pick, station.transform.position);
                     SendStation(station.Index, 0);
                     return true;
+                // Spec 035, third person: E at the cleaning stations does their click (holding E at the sink scrubs).
+                case StationKind.DishReturn:
+                case StationKind.Sink:
+                case StationKind.TrashCan:
+                case StationKind.Bin:
+                {
+                    StockSlot slot = station.SlotCount > 0 && station.TryGetSlot(0, out StockSlot first) ? first : null;
+                    Component target = slot != null ? slot : station;
+                    Held hands = Hands(FindHeldPickup());
+                    switch (InteractionRules.ActionFor(hands, Describe(target)))
+                    {
+                        case InteractionAction.Take when slot != null:
+                            CleaningTakeWithLook(slot);
+                            return true;
+                        case InteractionAction.Wash when slot != null:
+                            WashWithLook(slot);
+                            return true;
+                        case InteractionAction.Discard:
+                            DiscardWithLook(target);
+                            return true;
+                        default:
+                            return false;
+                    }
+                }
                 case StationKind.Counter:
                     if (!holding) return false;
                     PlaySound(SoundKey.Button, station.transform.position);
                     SendStation(station.Index, 0);
                     return true;
+                case StationKind.Spit:
+                    return HandleSpitKey(station, holding); // spec 036
+                case StationKind.DrinkDispenser:
+                {
+                    // Spec 033, third person: a tap of E takes a cup with empty hands or lids the filled cup in them (holding E pours).
+                    Held hands = Hands(FindHeldPickup());
+                    if (!holding)
+                    {
+                        if (station.TryGetSlot(DrinkRules.CupTool, out StockSlot cups)) TakeWithLook(cups, DrinkRules.CupOption, "empty cup");
+                        else SendStation(station.Index, DrinkRules.CupOption);
+                        return true;
+                    }
+                    if (DrinkRules.CanLid(hands.IsCup, hands.CupLidded, hands.CupLevel) != CookOutcome.Ok) return false;
+                    LidWithLook(station);
+                    return true;
+                }
                 case StationKind.Register:
                     // Spec 032, third person: E takes a card payment (counting change out is a first-person job, by the coin).
                     if (!station.TryGetComponent(out Worktown.Game.Shop.Register till) || !Worktown.Game.Shop.RegisterRules.IsCard(till.Payment.Value))
@@ -1773,6 +2415,9 @@ namespace Worktown.Game.Net
 
         /// <summary>Owner side: true if a cube we own says we hold it.</summary>
         public bool IsHoldingSomething() => FindHeldPickup() != null;
+
+        /// <summary>Spec 038, owner side: what the hands hold now in either view (CurrentHeld is first person only), for the tutorial.</summary>
+        public Held HandsNow => Hands(FindHeldPickup());
 
         /// <summary>Owner side: the cube this client holds, or null.</summary>
         public Pickup FindHeldPickup()
@@ -1922,11 +2567,38 @@ namespace Worktown.Game.Net
         private void ReportCook(NetworkConnection target, CookOutcome outcome)
         {
             int answered = NoteAnswer(AnswerKind.Cook, outcome == CookOutcome.Ok);
+            if (answered != 0) AnswerStockLooks(answered, outcome); // spec 034
             if (answered != 0 && answered == _squeezeStartRequest)
             {
                 // 031b (review of 031): a refused squeeze start ends the predicted ribbon at once (not after its 8 s hold).
                 _squeezeStartRequest = 0;
                 if (outcome != CookOutcome.Ok && _squeezeStartView != null) _squeezeStartView.Predict(false);
+                if (outcome != CookOutcome.Ok && outcome != CookOutcome.TooFast && _squeezeStartIsPour) // 033 review: only a tap's start
+                {
+                    StopPourLook(false); // spec 033: no pour: back to the hand
+                    if (_lastPourCup != null && _lastPourCup.Visual != null) _lastPourCup.Visual.EndPrediction();
+                }
+            }
+            if (answered != 0 && answered == _pourStopRequest)
+            {
+                // Spec 033: the server did not fill the cup (its wallet said no, or the cup was put down): the level goes back, "nope".
+                _pourStopRequest = 0;
+                if (outcome != CookOutcome.Ok && outcome != CookOutcome.TooFast && _lastPourCup != null)
+                {
+                    if (_lastPourCup.Visual != null) _lastPourCup.Visual.EndPrediction();
+                    PlaySound(SoundKey.Nope, _lastPourCup.transform.position);
+                }
+            }
+            if (answered != 0 && answered == _lidRequest)
+            {
+                // Spec 033: a refused lid comes off again with "nope".
+                _lidRequest = 0;
+                if (outcome != CookOutcome.Ok && _lidCup != null && _lidCup.Visual != null)
+                {
+                    _lidCup.Visual.PredictLid(false);
+                    PlaySound(SoundKey.Nope, _lidCup.transform.position);
+                }
+                _lidCup = null;
             }
             RegisterAnswered(answered, outcome == CookOutcome.Ok); // spec 032
             if (outcome == CookOutcome.TooFast) return; // review of spec 027b: answered only to keep the numbering
@@ -1985,14 +2657,31 @@ namespace Worktown.Game.Net
             if (dispenser == null || dispenser.Station == null
                 || !_squeeze.Press(dispenser.Station.Index, dispenser.Option, Time.unscaledTimeAsDouble)) return;
             _devSqueeze = true;
-            _squeezeView = dispenser.GetComponent<Worktown.Game.Art.SauceDispenserView>();
+            _squeezeView = dispenser.GetComponent<Worktown.Game.Art.IPourView>();
             if (_squeezeView != null) _squeezeView.Predict(true);
+            if (dispenser.Station.Kind == StationKind.DrinkDispenser && DrinkRules.IsTap(dispenser.Option))
+                StartPourLook(dispenser, Time.unscaledTimeAsDouble); // spec 033: a tap too
+            if (dispenser.Station.Kind == StationKind.DrinkDispenser && dispenser.Option == Worktown.Game.Shop.CleaningRules.SpillTool)
+                _wipeView = dispenser.GetComponent<Worktown.Game.Art.SpillWipeView>(); // spec 035: the cloth to the puddle
+            if (IsSpitHold(dispenser)) StartShaveLook(dispenser); // spec 036: the knife to the cone
         }
         /// <summary>Spec 031, tours: let go of the dispenser (the look ends now, the stop goes out when allowed).</summary>
         public void DevSqueezeRelease()
         {
             _squeeze.Release(Time.unscaledTimeAsDouble);
             if (_squeezeView != null) _squeezeView.Predict(false);
+            StopPourLook(true); // spec 033
+            StopShaveLook(); // spec 036
+        }
+        /// <summary>Spec 033, tours: a lid from the lid stack with its look, like a click on it.</summary>
+        public void DevLid(Station dispenser)
+        {
+            if (dispenser != null) LidWithLook(dispenser);
+        }
+        /// <summary>Spec 033, tours: a cup from the cup stack with its look, like a click on it.</summary>
+        public void DevTakeCup(Station dispenser)
+        {
+            if (dispenser != null && dispenser.TryGetSlot(DrinkRules.CupTool, out StockSlot cups)) TakeWithLook(cups, DrinkRules.CupOption, "empty cup");
         }
         /// <summary>Spec 031, tours: the squeeze still has a request to send.</summary>
         public bool DevSqueezeBusy => !_squeeze.Idle;
