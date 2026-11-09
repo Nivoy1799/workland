@@ -74,3 +74,10 @@ tuned later by the human.
   item; (10) cache Contents/children, no Find* or allocations per frame; (11) end predictions in OnStopClient;
   (12) extract the prediction state machine into a pure tested class, remove the unused direct-hit branch, test the
   legs layer weight outside idle; nits: legs layer during the idle-to-walk fade, AvatarMask lifetime.
+- 027c + 027b-fix review (2026-11-09, CHANGES REQUESTED): must-fix: server rate limit as a token bucket (burst 2,
+  one token per 0.2 s) so bunched requests are not dropped and PredictionBook stays in step; test: a drop inside a
+  burst, then a refusal of n+1 must not deny n. Also: queued click compares the action too; cache the heat timeline
+  per (item hash, op, temperature); surface test for ServeFeed/ServeReward; reset ServeRewardView `_seen` on
+  despawn; destroy the HeatRingView material; HeatRingView rig lookup and Contents via Vessel.ContentsAnchor;
+  cached _BaseColor id; coin after the distance check; no closure per click. Later: RTT 0 before the first ping;
+  tests that copy glue from PickupInteractor/Pickup.
