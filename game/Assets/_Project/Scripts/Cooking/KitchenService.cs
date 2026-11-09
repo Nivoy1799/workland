@@ -99,20 +99,21 @@ namespace Worktown.Game.Cooking
         private uint Tick => _networkManager.TimeManager.Tick;
         private double TickRate => _networkManager.TimeManager.TickRate;
 
-        // ---- stations: crates, counter, stoves, plate shelf (RequestStation) ----
+        // ---- stations: stock (fridge, shelf, crates), counter, stoves, plate shelf (RequestStation) ----
 
         public CookOutcome TryUseStation(PickupInteractor player, int stationIndex, int option)
         {
             if (stationIndex < 0 || stationIndex >= _stations.Length || _stations[stationIndex] == null)
                 return CookOutcome.UnknownStation;
             Station station = _stations[stationIndex];
+            // Spec 028b: stock checks its option (the slot) and the reach to that slot's anchor itself (StockRules).
+            if (station.Kind == StationKind.Crate || StockLayout.IsStock(station.Kind)) return TakeIngredient(player, station, option);
             if (!StationRules.IsInReach(player.transform.position, station.transform.position))
                 return CookOutcome.TooFar;
             EnsureInitialized();
 
             switch (station.Kind)
             {
-                case StationKind.Crate: return TakeIngredient(player, station);
                 case StationKind.Counter: return Serve(player, station);
                 case StationKind.Stove: return UseBurner(station, option);
                 case StationKind.PlateShelf: return TakePlate(player);
@@ -433,30 +434,33 @@ namespace Worktown.Game.Cooking
             }
         }
 
-        // ---- crates and the counter (spec 007/009) ----
+        // ---- stock and the counter (spec 007/009, spec 028b) ----
 
-        private CookOutcome TakeIngredient(PickupInteractor player, Station crate)
+        /// <summary>
+        /// Spec 028b: one ingredient from a fridge or shelf slot (option = slot) or a crate (option 0), the same way the
+        /// crates always worked: StockRules checks the slot, the reach to its anchor, free hands and the ingredient; then the
+        /// sim item, the grocer's price (spec 009: no money, no potato) and the food in the hands.
+        /// </summary>
+        private CookOutcome TakeIngredient(PickupInteractor player, Station stock, int option)
         {
-            if (_pickups.TryGetHeld(player, out _)) return CookOutcome.HandsFull;
-            int ingredient = crate.IngredientIndex;
-            if (ingredient < 0 || ingredient >= DemoIngredients.All.Count) return CookOutcome.UnknownStation;
+            CookOutcome check = StockRules.CheckTake(stock, option, player.transform.position, _pickups.TryGetHeld(player, out _),
+                out string baseId);
+            if (check != CookOutcome.Ok) return check;
+            EnsureInitialized();
 
-            string baseId = DemoIngredients.All[ingredient].Id;
             CookOutcome created = _kitchen.TryCreateIngredient(baseId, out Item item);
             if (created != CookOutcome.Ok) return created;
 
-            // Spec 009: pay the NPC grocer first; no money, no potato.
             long cost = 0;
             if (_economy != null)
             {
-                EconomyError paid = _economy.TryBuy(player.NetworkObject, baseId, out cost);
-                if (paid == EconomyError.InsufficientFunds) return CookOutcome.NotEnoughMoney;
-                if (paid != EconomyError.None) return CookOutcome.SimRefused;
+                CookOutcome paid = StockRules.PaidOutcome(_economy.TryBuy(player.NetworkObject, baseId, out cost));
+                if (paid != CookOutcome.Ok) return paid;
             }
 
             if (!SpawnFoodInHands(player, item)) return CookOutcome.SimRefused;
-            Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item)
-                + " for " + EconomyRules.Money(cost));
+            Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item) + " from the "
+                + stock.DisplayName + " (option " + option + ") for " + EconomyRules.Money(cost));
             return CookOutcome.Ok;
         }
 

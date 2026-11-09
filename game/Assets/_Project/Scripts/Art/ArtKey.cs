@@ -81,6 +81,10 @@ namespace Worktown.Game.Art
         FoodLemon,
         FoodLemonHalf,
         FoodSauceGarlicHerb,
-        FoodSauceChili
+        FoodSauceChili,
+
+        // Spec 028b: the stock stations (graybox: the Furniture Kit in the repo has no fridge and no bookcase).
+        StationFridge,
+        StationShelf
     }
 }

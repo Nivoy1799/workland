@@ -91,6 +91,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(ArtKey.StationPlatingTable, ArtCatalogRules.StationKey(StationKind.PlateShelf));
             Assert.AreEqual(ArtKey.StationCounter, ArtCatalogRules.StationKey(StationKind.Counter));
             Assert.AreEqual(ArtKey.StationCrate, ArtCatalogRules.StationKey(StationKind.Crate));
+            Assert.AreEqual(ArtKey.StationFridge, ArtCatalogRules.StationKey(StationKind.Fridge)); // spec 028b
+            Assert.AreEqual(ArtKey.StationShelf, ArtCatalogRules.StationKey(StationKind.Shelf));
         }
 
         // AC4
@@ -115,32 +117,34 @@ namespace Worktown.Game.Tests
             try
             {
                 var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>(CatalogPath);
-                // Spec 027a: the shop floor plan. Crates 1.24 m apart from x -0.12, then the two stoves, the serving counter (in
-                // the front counter at z 11.85, 0.7 m deep, opposite the plate shelf) and the plate shelf; the back line at z 14.3.
-                float[] fixedX = { 6.64f, 9.14f, 11.64f, 11.64f };
-                int crates = DemoIngredients.All.Count;
+                // Spec 027a: the shop floor plan; spec 028b: the dry shelf and the fridge where the last two 027a crates stood
+                // (x 2.36 and 3.60, 1.8 m high, 0.5 and 0.62 m deep, their backs on the back line's back at z 14.9), then the two
+                // stoves, the serving counter (in the front counter at z 11.85, 0.7 m deep, opposite the plate shelf) and the plate
+                // shelf; the back line at z 14.3.
+                float[] fixedX = { 2.36f, 3.60f, 6.64f, 9.14f, 11.64f, 11.64f };
+                StationKind[] kinds = { StationKind.Shelf, StationKind.Fridge, StationKind.Stove, StationKind.Stove, StationKind.Counter, StationKind.PlateShelf };
                 int count = 0;
                 foreach (GameObject root in scene.GetRootGameObjects())
                 {
                     foreach (Station station in root.GetComponentsInChildren<Station>(true))
                     {
                         count++;
-                        // Spec 028: the first four crates 1.24 m apart; the ten street-food crates are 0.52 m wide, 0.56 m apart, from x -6.34.
-                        bool bank = station.Kind == StationKind.Crate && station.Index >= DemoIngredients.FirstStreetFood;
-                        float width = bank ? 0.52f : 1.2f;
-                        float x = station.Index < crates
-                            ? (bank ? -6.34f + (station.Index - DemoIngredients.FirstStreetFood + 0.5f) * 0.56f : -0.12f + station.Index * 1.24f)
-                            : fixedX[station.Index - crates];
-                        // Spec 026: the body is as high as the furniture (0.90 m, the counter 1.05 m; was 1.0 m).
-                        float height = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
-                        var expected = new Vector3(x, height * 0.5f, station.Kind == StationKind.Counter ? 11.85f : 14.3f);
+                        Assert.AreEqual(kinds[station.Index], station.Kind, station.name);
+                        bool stock = StockLayout.IsStock(station.Kind);
+                        float x = fixedX[station.Index];
+                        // Spec 026: the body is as high as the furniture (0.90 m, the counter 1.05 m; was 1.0 m); spec 028b: the stock 1.80 m.
+                        float height = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
+                            : stock ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
+                        float depth = station.Kind == StationKind.Counter ? 0.7f : stock ? StockArt.DepthOf(station.Kind) : 1.2f;
+                        float z = station.Kind == StationKind.Counter ? 11.85f : stock ? 14.9f - depth * 0.5f : 14.3f;
+                        var expected = new Vector3(x, height * 0.5f, z);
                         Transform body = station.transform.Find("Body");
                         Assert.IsNotNull(body, station.name + " lost its Body");
                         Assert.AreEqual(Vector3.zero, body.localPosition, station.name);
                         var box = body.GetComponent<BoxCollider>();
                         Assert.IsNotNull(box, station.name + " lost its BoxCollider");
                         Assert.AreEqual(Vector3.one, box.size);
-                        Assert.AreEqual(new Vector3(width, height, station.Kind == StationKind.Counter ? 0.7f : 1.2f), body.localScale); // spec 027a: the counter is 0.7 m deep
+                        Assert.AreEqual(new Vector3(1.2f, height, depth), body.localScale); // spec 027a: the counter is 0.7 m deep
                         Vector3 colliderCenter = box.bounds.center;
                         Assert.AreEqual(0f, Vector3.Distance(expected, colliderCenter), 0.001f, station.name + " moved");
                         Assert.IsNull(body.GetComponent<MeshRenderer>(), station.name + " still shows the cube");
@@ -150,15 +154,19 @@ namespace Worktown.Game.Tests
                         Assert.IsTrue(catalog.TryGet(ArtCatalogRules.StationKey(station.Kind), out GameObject expectedPrefab));
                         Assert.AreSame(expectedPrefab, PrefabUtility.GetCorrespondingObjectFromSource(visual.gameObject),
                             station.name + " uses the wrong wrapper");
-                        var renderers = visual.GetComponentsInChildren<Renderer>();
+                        // Spec 028b: the fridge's open doors stand out of its body; its cabinet is what fills the body.
+                        Transform measured = stock ? visual.Find("Model/Cabinet") : visual;
+                        Assert.IsNotNull(measured, station.name + " has no cabinet");
+                        var renderers = measured.GetComponentsInChildren<Renderer>();
                         Assert.Greater(renderers.Length, 0);
                         Bounds b = renderers[0].bounds;
                         foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
                         Assert.AreEqual(colliderCenter.x, b.center.x, 0.05f, station.name + " visual off centre in X");
                         Assert.AreEqual(colliderCenter.z, b.center.z, 0.05f, station.name + " visual off centre in Z");
+                        if (stock) Assert.AreEqual(box.bounds.size.y, b.size.y, 0.01f, station.name + " cabinet as high as its body");
                     }
                 }
-                Assert.AreEqual(DemoIngredients.All.Count + 4, count, "crates plus two stoves, the counter and the plate shelf");
+                Assert.AreEqual(6, count, "the dry shelf, the fridge, two stoves, the counter and the plate shelf");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

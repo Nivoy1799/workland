@@ -18,7 +18,7 @@ namespace Worktown.Game.Tests
         // The graybox spawn points (GrayboxSceneBuilder.CreateSpawnPoints). Spec 027a: on the cook aisle's centre line (was a
         // ring of radius 3 around the origin).
         private static readonly Vector3[] Spawns =
-            { new Vector3(0.6f, 0f, 12.95f), new Vector3(2.2f, 0f, 12.95f), new Vector3(3.8f, 0f, 12.95f), new Vector3(5.4f, 0f, 12.95f) };
+            { new Vector3(1.2f, 0f, 12.95f), new Vector3(2.6f, 0f, 12.95f), new Vector3(4.0f, 0f, 12.95f), new Vector3(5.4f, 0f, 12.95f) }; // spec 028b: the aisle starts at x 0.46
 
         private static Tour Get(string name)
         {
@@ -157,7 +157,7 @@ namespace Worktown.Game.Tests
         public void LookTour_HasTheStandardShots()
         {
             string[] shots = Get(TourRules.LookTour).Steps.Where(s => s.Kind == TourStepKind.Shot).Select(s => s.Name).ToArray();
-            CollectionAssert.AreEqual(new[] { "kitchen-third", "stock-third", "stock-first", "stove-first", "pan-first", "worktop-first", "scale-person", "counter-guests", "street-third" }, shots);
+            CollectionAssert.AreEqual(new[] { "kitchen-third", "stock-third", "stock-first", "fridge-slot", "shelf-slot", "stove-first", "pan-first", "worktop-first", "scale-person", "counter-guests", "street-third" }, shots);
         }
 
         [Test]

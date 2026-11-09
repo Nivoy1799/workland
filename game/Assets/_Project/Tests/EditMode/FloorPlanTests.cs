@@ -328,21 +328,24 @@ namespace Worktown.Game.Tests
             Plan plan = Open();
             try
             {
-                var crates = plan.BackStations.FindAll(s => s.Kind == StationKind.Crate);
+                // Spec 028b: the stock is the dry shelf and the fridge; the crates are gone.
+                var stock = plan.BackStations.FindAll(s => StockLayout.IsStock(s.Kind));
                 var stoves = plan.BackStations.FindAll(s => s.Kind == StationKind.Stove);
-                Assert.AreEqual(DemoIngredients.All.Count, crates.Count); // spec 028: four crates and the ten-crate street-food bank
+                Assert.AreEqual(0, plan.Stations.FindAll(s => s.Kind == StationKind.Crate).Count, "no crates any more");
+                Assert.AreEqual(1, stock.FindAll(s => s.Kind == StationKind.Fridge).Count, "one fridge");
+                Assert.AreEqual(1, stock.FindAll(s => s.Kind == StationKind.Shelf).Count, "one dry shelf");
                 Assert.AreEqual(2, stoves.Count);
                 stoves.Sort((a, b) => plan.V(a.transform.position).CompareTo(plan.V(b.transform.position)));
                 Component board = VesselTestKit.AllOf(plan.Scene, VesselTestKit.VesselType).Find(v => VesselTestKit.KindOf(v) == VesselKind.Board);
-                float lastCrate = float.MinValue;
-                foreach (Station crate in crates) lastCrate = Mathf.Max(lastCrate, plan.V(crate.transform.position));
+                float lastStock = float.MinValue;
+                foreach (Station s in stock) lastStock = Mathf.Max(lastStock, plan.V(s.transform.position));
                 float boardV = plan.V(board.transform.position), stoveA = plan.V(stoves[0].transform.position);
                 float stoveB = plan.V(stoves[1].transform.position), shelf = plan.V(plan.Shelf.transform.position);
 
-                Assert.Less(lastCrate, boardV, "stock before prep");
+                Assert.Less(lastStock, boardV, "stock before prep");
                 Assert.Less(boardV, stoveA, "prep before heat");
                 Assert.Less(stoveB, shelf, "heat before plating");
-                Assert.LessOrEqual(boardV - lastCrate, 3f, "crates to board");
+                Assert.LessOrEqual(boardV - lastStock, 3f, "stock to board");
                 Assert.LessOrEqual(stoveA - boardV, 3f, "board to stove A");
                 Assert.LessOrEqual(shelf - stoveB, 3f, "stove B to the plate shelf");
 
@@ -351,6 +354,66 @@ namespace Worktown.Game.Tests
                     "the walk from the plate shelf to the serving counter");
                 Vector2 flat = new Vector2(serving.x - plan.Shelf.transform.position.x, serving.z - plan.Shelf.transform.position.z);
                 Assert.LessOrEqual(flat.magnitude, 2.5f + 1e-3f, "plate shelf and serving counter, centre to centre");
+            }
+            finally { Close(plan); }
+        }
+
+        // ---- Spec 028b AC3: compact stock ----
+
+        /// <summary>The 027a kitchen's aisle (between the side walls' inner faces, x -2.02 to 13.54).</summary>
+        private const float SpecAisleLength027a = 15.56f;
+
+        [Test]
+        public void Stock_FridgeAndShelf_AreAtMostTwoAndAHalfMetresFromTheBoard_AndTheKitchenIsCompact()
+        {
+            Plan plan = Open();
+            try
+            {
+                Component board = VesselTestKit.AllOf(plan.Scene, VesselTestKit.VesselType).Find(v => VesselTestKit.KindOf(v) == VesselKind.Board);
+                Vector3 b = board.transform.position;
+                foreach (Station s in plan.BackStations.FindAll(s => StockLayout.IsStock(s.Kind)))
+                {
+                    Vector3 p = s.transform.position;
+                    float flat = new Vector2(p.x - b.x, p.z - b.z).magnitude;
+                    Assert.LessOrEqual(flat, 2.5f, s.name + " to the board, centre to centre (feel.md 6: a few steps)");
+                }
+                Assert.LessOrEqual(plan.AisleRight - plan.AisleLeft, SpecAisleLength027a + 1.5f, "no longer than the 027a kitchen plus 1.5 m");
+            }
+            finally { Close(plan); }
+        }
+
+        [Test]
+        public void StockSlots_OneIngredientEach_FaceTheAisle_AndAreInReach()
+        {
+            Plan plan = Open();
+            try
+            {
+                var ids = new HashSet<string>();
+                int slots = 0;
+                foreach (Station station in plan.BackStations.FindAll(s => StockLayout.IsStock(s.Kind)))
+                {
+                    Assert.AreEqual(StockLayout.SlotsOf(station.Kind).Count, station.SlotCount, station.name);
+                    Bounds body = BodyOf(station);
+                    for (int option = 0; option < station.SlotCount; option++)
+                    {
+                        Assert.IsTrue(station.TryGetSlot(option, out StockSlot slot), station.name + " slot " + option);
+                        slots++;
+                        Assert.AreSame(station, slot.Station);
+                        Assert.AreEqual(option, slot.Option, slot.name + ": the option is its index");
+                        Assert.AreEqual(StockLayout.SlotsOf(station.Kind)[option], slot.IngredientId, slot.name);
+                        Assert.IsTrue(ids.Add(slot.IngredientId), slot.IngredientId + " is in two slots");
+                        Assert.Greater(slot.transform.childCount, 0, slot.name + " shows its item");
+                        Assert.IsEmpty(slot.GetComponentsInChildren<Collider>(true), slot.name + ": the items never block a ray");
+                        Assert.AreSame(slot, station.NearestSlot(slot.Anchor), slot.name + ": a ray on it means it");
+                        // The open side faces the aisle: the items stand just inside the body's aisle-side face.
+                        Vector3 a = slot.Anchor;
+                        Assert.IsTrue(body.Contains(a), slot.name + " stands inside " + station.name);
+                        Assert.That(MaxAlong(body, plan.Street) - plan.U(a), Is.InRange(0.05f, 0.3f), slot.name + " stands at the open front");
+                        Vector3 cook = plan.AislePointNear(a);
+                        Assert.IsTrue(PickupRules.IsInReach(cook, a), slot.name + " is out of reach from the aisle (" + Vector3.Distance(cook, a).ToString("0.00") + " m)");
+                    }
+                }
+                Assert.AreEqual(DemoIngredients.All.Count, slots, "every ingredient has its slot");
             }
             finally { Close(plan); }
         }
@@ -480,6 +543,7 @@ namespace Worktown.Game.Tests
                 }
                 foreach (StationButton button in All<StationButton>(plan.Scene)) Reach(button.name, button.transform.position);
                 foreach (Station station in plan.Stations) Reach(station.name, station.transform.position);
+                foreach (StockSlot slot in All<StockSlot>(plan.Scene)) Reach(slot.name, slot.Anchor); // spec 028b: reach is to the slot
                 int spots = 0;
                 foreach (PlaceSurface surface in All<PlaceSurface>(plan.Scene))
                     for (int i = 0; i < surface.SpotCount; i++, spots++) Reach(surface.name + " spot " + i, surface.SpotWorldPosition(i));

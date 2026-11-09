@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Worktown.Game.Art;
+using Worktown.Game.Cooking;
 using Worktown.Game.Player;
 
 namespace Worktown.Game.Dev
@@ -8,14 +10,15 @@ namespace Worktown.Game.Dev
     /// <summary>
     /// Spec 027, pure: the tours (shot table) and the path following and aiming they use. Coordinates are the graybox
     /// scene's (GrayboxSceneBuilder). Spec 027a, the shop floor plan: back line at z 14.3 (stove A at x 6.64, stove B 9.14,
-    /// plate shelf 11.64), the cook aisle z 12.2 to 13.7 (centre 12.95; players spawn on that line at x 0.6 to 5.4), the
-    /// front counter z 11.5 to 12.2, the guests' queue at z 11.1 (x 6.64 to 11.64), the staff gap at the aisle's west end
-    /// (side walls at x -7.82 to -7.62; spec 028: the stock bank of ten narrow crates stands at x -6.34 to -0.74), the road at z 5.5 to 10.5 east of x 9, a ring of pickup cubes at 5 and 7 m around
+    /// plate shelf 11.64; spec 028b: the dry shelf at x 2.36 and the fridge at 3.60, 1.8 m high, against the back wall), the
+    /// cook aisle z 12.2 to 13.7 (centre 12.95; players spawn on that line at x 1.2 to 5.4), the front counter z 11.5 to 12.2,
+    /// the guests' queue at z 11.1 (x 6.64 to 11.64), the staff gap at the aisle's west end (side walls at x 0.26 to 0.46),
+    /// the road at z 5.5 to 10.5 east of x 9, a ring of pickup cubes at 5 and 7 m around
     /// the origin, a box at x 15 to 19, z 1.5 to 2.5. Both players start in the single-file aisle and cannot pass each other
     /// there, so every tour first walks out through the staff gap to <see cref="ParkX"/> (the same way as its observer,
     /// whichever of the two is in front; two 0.3 m players can pass in the 1.5 m aisle, but the straight-line steering
     /// would only slide past), and the observers' spots are outside the aisle; observer routes leave the gap
-    /// southwards at x -8.9. If the layout changes, change the points here (TourRulesTests walks every route).
+    /// southwards at x -0.7. If the layout changes, change the points here (TourRulesTests walks every route).
     /// </summary>
     public static class TourRules
     {
@@ -157,12 +160,41 @@ namespace Worktown.Game.Dev
         private const float StoveBX = 9.14f;
         private const float WorktopBetweenX = 7.89f; // the worktop between the stoves
         /// <summary>Outside the staff gap, on the aisle's line: every tour parks here first (see the class summary).</summary>
-        public const float ParkX = -10.8f;
-        private const float ObserverExitX = -8.9f; // the observers' way south from the staff gap, west of the side wall
-        private const float LookObserverX = 2.6f;  // the look tour's person for scale, at the front counter's street side
+        public const float ParkX = -2.5f; // spec 028b: 2.8 m west of the side wall, as in 027a
+        private const float ObserverExitX = -0.7f; // the observers' way south from the staff gap, west of the side wall
+        private const float LookObserverX = 5.0f;  // the look tour's person for scale, at the front counter's street side (spec 028b: clear of the stock shot)
         private const float LookObserverZ = 10.9f;
 
         private static readonly TourStep Park = TourStep.WalkTo(ParkX, AisleZ);
+
+        /// <summary>Spec 028b: the stock stations' centres (GrayboxSceneBuilder: shelf, fridge, then the prep worktop from x 4.22),
+        /// the back line's back (where both stand with their backs), and where the look tour stands to see both.</summary>
+        public const float StockShelfX = 2.36f;
+        public const float FridgeX = 3.60f;
+        private const float BackLineBackZ = 14.9f;
+        private const float StockViewX = 2.98f;
+
+        /// <summary>
+        /// Spec 028b: the world point of the slot of <paramref name="id"/> on the fridge or the dry shelf (StockLayout and StockArt,
+        /// as the scene builder places it): the middle of its items' bottom, plus 5 cm.
+        /// </summary>
+        public static Vector3 SlotPoint(StationKind kind, string id)
+        {
+            int slot = -1;
+            IReadOnlyList<string> ids = StockLayout.SlotsOf(kind);
+            for (int i = 0; i < ids.Count; i++)
+                if (ids[i] == id) slot = i;
+            if (slot < 0) throw new ArgumentException(id + " is not on the " + kind, nameof(id));
+            Vector3 stand = StockArt.StandPoint(kind, slot);
+            float front = BackLineBackZ - StockArt.DepthOf(kind);
+            return new Vector3((kind == StationKind.Fridge ? FridgeX : StockShelfX) + stand.x, stand.y + 0.05f, front + stand.z);
+        }
+
+        private static TourStep LookAtSlot(StationKind kind, string id)
+        {
+            Vector3 p = SlotPoint(kind, id);
+            return TourStep.LookAt(p.x, p.y, p.z);
+        }
 
         /// <summary>
         /// Standard shots: the kitchen down the aisle (third person), first person at a stove, holding the pan and at a
@@ -175,12 +207,16 @@ namespace Worktown.Game.Dev
             var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), Park, TourStep.WaitObserver() };
             steps.AddRange(new[]
             {
-                TourStep.WalkTo(4.5f, AisleZ),
-                TourStep.View(ViewMode.ThirdPerson), TourStep.Look(90f, -12f), TourStep.Wait(1.2f), TourStep.Shot("kitchen-third"),
-                // Spec 028: the stock bank (ten narrow crates) from the aisle, third person looking west, then close up.
-                TourStep.WalkTo(-0.4f, AisleZ), TourStep.Look(270f, -14f), TourStep.Wait(1.2f), TourStep.Shot("stock-third"),
-                TourStep.View(ViewMode.FirstPerson), TourStep.WalkTo(-3.5f, StandZ), TourStep.LookAt(-3.5f, 0.9f, BackLineZ - 0.15f),
+                // Spec 028b: down the aisle from its east end, looking west (the stock now stands where the camera was).
+                TourStep.WalkTo(10f, AisleZ),
+                TourStep.View(ViewMode.ThirdPerson), TourStep.Look(270f, -12f), TourStep.Wait(1.2f), TourStep.Shot("kitchen-third"),
+                // Spec 028b: the dry shelf and the fridge from the aisle (third person, the cook in front of them), then first
+                // person in front of them, and a slot's highlight and prompt on the fridge (cucumber) and the shelf (potato).
+                TourStep.WalkTo(StockViewX, 12.7f), TourStep.Look(0f, -6f), TourStep.Wait(1.2f), TourStep.Shot("stock-third"),
+                TourStep.View(ViewMode.FirstPerson), TourStep.WalkTo(StockViewX, StandZ), TourStep.LookAt(StockViewX, 1.1f, BackLineZ),
                 TourStep.Wait(0.6f), TourStep.Shot("stock-first"),
+                LookAtSlot(StationKind.Fridge, "cucumber"), TourStep.Wait(0.6f), TourStep.Shot("fridge-slot"),
+                LookAtSlot(StationKind.Shelf, "potato"), TourStep.Wait(0.6f), TourStep.Shot("shelf-slot"),
                 TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
                 TourStep.Wait(0.6f), TourStep.Shot("stove-first"),
                 // Spec 027b: the pick-up with its frames (highlight and prompt, the arc into the hand), the put-back (ghost, settle),

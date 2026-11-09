@@ -427,6 +427,23 @@
         "Take a cucumber, put it on the board with the knife: two strokes give slices",
         "Take a lemon and cut it: do you get halves, then slices?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-028b",
+      "date": "2026-11-09",
+      "title": "Compact stock: a fridge and a dry shelf next to the board",
+      "items": [
+        "The crates are gone: every ingredient now stands in a fridge (vegetables, seitan, falafel mix, lemon, apple) or on a dry shelf (sauces, potato, onion, flatbread, wraps)",
+        "Both stand right next to the cutting board, so a dish needs only a few steps",
+        "Aim at an item in first person: it lights up and the prompt names it with its price; a click takes one and it flies into your hand",
+        "The kitchen is shorter again; the staff gap moved with it"
+      ],
+      "test": [
+        "First person at the fridge: does aiming pick the item you look at, and does the prompt show the right name and price?",
+        "Take a cucumber from the fridge and a potato from the shelf: do they fly into your hand without a jump?",
+        "With something in your hands, or without money, a take is refused: does the item fly back with a short sound?",
+        "Cook a full dish: are the fridge, the shelf and the board a few steps apart?"
+      ]
     }
   ]
 }

@@ -74,6 +74,9 @@ namespace Worktown.Game.Cooking
                 case StationKind.Counter: return stationName + ": E sell";
                 case StationKind.PlateShelf: return stationName + ": E take a plate";
                 case StationKind.Stove: return stationName + ": cook in first person (V)";
+                // Spec 028b: a slot is picked by aiming, so the fridge and the shelf are used in first person.
+                case StationKind.Fridge:
+                case StationKind.Shelf: return stationName + ": pick an item in first person (V)";
                 default: return stationName;
             }
         }

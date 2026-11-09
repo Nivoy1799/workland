@@ -34,6 +34,8 @@ namespace Worktown.Game.Art
                 case StationKind.Counter: return ArtKey.StationCounter;
                 case StationKind.Stove: return ArtKey.StationPan;
                 case StationKind.PlateShelf: return ArtKey.StationPlatingTable;
+                case StationKind.Fridge: return ArtKey.StationFridge; // spec 028b
+                case StationKind.Shelf: return ArtKey.StationShelf;
                 default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for station kind");
             }
         }

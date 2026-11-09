@@ -242,7 +242,8 @@ namespace Worktown.Game.Player
         /// PickUp is confirmed when you hold it and denied when someone else does or it is gone. Place and Drop are
         /// confirmed when nobody holds it any more, denied when someone else holds it or it is gone. PutInto is confirmed
         /// only when our own food is gone (the server despawns what it put in; a content count that changes can be another
-        /// player's put-in or a pot that went away, so it only restarts the timeout), denied when you no longer hold it. Anything else
+        /// player's put-in or a pot that went away, so it only restarts the timeout), denied when you no longer hold it. Spec 028b: Take
+        /// (the snapshot is the hands) is confirmed when you hold something; a refusal or the timeout denies it. Anything else
         /// is still <see cref="PredictionPhase.Pending"/>.
         /// </summary>
         public static PredictionPhase Judge(PredictionKind kind, int me, ItemSnapshot start, ItemSnapshot now)
@@ -259,6 +260,8 @@ namespace Worktown.Game.Player
                     if (!now.Exists) return PredictionPhase.Denied;
                     if (now.Holder == noHolder) return PredictionPhase.Confirmed;
                     return now.Holder != me ? PredictionPhase.Denied : PredictionPhase.Pending;
+                case PredictionKind.Take:
+                    return now.Exists && now.Holder == me ? PredictionPhase.Confirmed : PredictionPhase.Pending;
                 case PredictionKind.PutInto:
                     if (!now.Exists) return PredictionPhase.Confirmed;
                     return now.Holder != me ? PredictionPhase.Denied : PredictionPhase.Pending;

@@ -56,7 +56,9 @@ namespace Worktown.Game.Tests
                 int counters = 0, stoves = 0;
                 foreach (Station station in All<Station>(scene))
                 {
-                    float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
+                    // Spec 028b: the fridge and the dry shelf are 1.80 m high (the guide's fridge).
+                    float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
+                        : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");
                     Bounds body = station.transform.Find("Body").GetComponent<BoxCollider>().bounds;
                     Assert.AreEqual(expected, body.max.y, HeightTolerance, station.name + " collider top");

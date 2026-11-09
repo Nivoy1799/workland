@@ -15,6 +15,8 @@ namespace Worktown.Game.Art
         public const float WorktopHeight = 0.90f;
         /// <summary>The serving counter (m).</summary>
         public const float ServingCounterHeight = 1.05f;
+        /// <summary>Spec 028b: the fridge and the dry shelf (m; the guide's fridge row).</summary>
+        public const float StockHeight = 1.80f;
         /// <summary>Width of one worktop cabinet module along the run (m).</summary>
         public const float WorktopModuleWidth = 0.60f;
         /// <summary>
@@ -41,6 +43,9 @@ namespace Worktown.Game.Art
             World(ArtKey.StationPlatingTable, WorktopHeight, SizeAxis.Height, Worktop),
             World(ArtKey.StationBowl, WorktopHeight, SizeAxis.Height, Worktop),
             World(ArtKey.Worktop, WorktopHeight, SizeAxis.Height, Worktop),
+            // Spec 028b: the stock stations, fridge high (the guide's fridge row); the dry shelf has no row in the guide.
+            World(ArtKey.StationFridge, StockHeight, SizeAxis.Height, "Fridge"),
+            World(ArtKey.StationShelf, StockHeight, SizeAxis.Height),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).
