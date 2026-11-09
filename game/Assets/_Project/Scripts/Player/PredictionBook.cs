@@ -58,10 +58,15 @@ namespace Worktown.Game.Player
             }
         }
 
-        /// <summary>A request that the server answers went out at <paramref name="now"/>; returns its number.</summary>
-        public int Sent(float now)
+        /// <summary>
+        /// A request that the server answers went out at <paramref name="now"/>; returns its number. After a quiet spell of
+        /// <see cref="LedgerResetSeconds"/> (or three round trips, when <paramref name="roundTrip"/> is longer) every older
+        /// request counts as answered, so one that was never answered cannot shift the numbering for good.
+        /// </summary>
+        public int Sent(float now, float roundTrip = 0f)
         {
-            if (now - _lastSend > LedgerResetSeconds) _answered = _sent;
+            float quiet = Math.Max(LedgerResetSeconds, 3f * (float.IsNaN(roundTrip) ? 0f : Math.Max(0f, roundTrip)));
+            if (now - _lastSend > quiet) _answered = _sent;
             _lastSend = now;
             return ++_sent;
         }
@@ -78,12 +83,23 @@ namespace Worktown.Game.Player
             _entries.Add(new Entry { Value = value, Key = key, Prediction = prediction, Request = request });
         }
 
-        /// <summary>The next answer arrived: it reaches only the prediction of that request, if the kind matches.</summary>
+        /// <summary>
+        /// The next answer arrived: it reaches only the prediction of that request, if the kind matches. A refusal is applied
+        /// only when that request was the only one in flight; with more in flight (an older one may have gone unanswered)
+        /// it could belong to another request, so it is ignored and the prediction waits for the synced state or its
+        /// timeout. An "ok" only restarts a timeout, so it is always applied. An answer with nothing in flight (late, after
+        /// a quiet-spell reset) is ignored.
+        /// </summary>
         public void Answer(AnswerKind kind, bool ok, float now)
         {
-            if (_answered < _sent) _answered++;
+            if (_answered >= _sent) return;
+            bool alone = _sent - _answered == 1;
+            _answered++;
             foreach (Entry e in _entries)
-                if (e.Request == _answered && AnswerFor(e.Prediction.Kind) == kind) e.Prediction.NoteAnswer(ok, now);
+            {
+                if (e.Request != _answered || AnswerFor(e.Prediction.Kind) != kind) continue;
+                if (ok || alone) e.Prediction.NoteAnswer(ok, now);
+            }
         }
 
         /// <summary>Reads the synced state of every waiting prediction; adds those that resolved to <paramref name="resolved"/>.</summary>

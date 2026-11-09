@@ -29,6 +29,8 @@ namespace Worktown.Game.UI
             public int Earned;
         }
 
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
         private ServeFeed _feed;
         private float _nextFind;
         private bool _seen;
@@ -58,6 +60,7 @@ namespace Worktown.Game.UI
                 _nextFind = now + FindInterval;
                 _feed = FindAnyObjectByType<ServeFeed>();
             }
+            if (_feed == null || !_feed.IsSpawned) _seen = false; // review: a rejoin finds the last sale again, never pops it
             if (_feed != null && _feed.IsSpawned)
             {
                 ServeReward reward = _feed.LastReward.Value;
@@ -80,10 +83,11 @@ namespace Worktown.Game.UI
             Station counter = CounterOf(reward.Counter);
             if (counter == null) return;
             Vector3 start = ServeRewardRules.StartOver(counter.transform.position, TopOf(counter));
-            if (_sounds == null) _sounds = FindAnyObjectByType<KitchenSounds>();
-            if (_sounds != null) _sounds.Play(SoundKey.Coin, start);
             Camera cam = Camera.main;
             if (cam == null || Vector3.Distance(cam.transform.position, start) > ServeRewardRules.ViewDistance) return;
+            // Review: the coin only for a sale close enough to see.
+            if (_sounds == null) _sounds = FindAnyObjectByType<KitchenSounds>();
+            if (_sounds != null) _sounds.Play(SoundKey.Coin, start);
             Debug.Log("[Reward] " + reward + " at " + counter.name);
 
             if (_popups.Count >= MaxPopups) Release(0);
@@ -157,7 +161,7 @@ namespace Worktown.Game.UI
                 float alpha = ServeRewardRules.Alpha(t);
                 BuildStars(popup, t);
                 _block ??= new MaterialPropertyBlock();
-                _block.SetColor("_BaseColor", Palette.WithAlpha(Color.white, alpha));
+                _block.SetColor(BaseColorId, Palette.WithAlpha(Color.white, alpha));
                 popup.Stars.SetPropertyBlock(_block);
                 popup.Money.color = Palette.WithAlpha(ServeRewardRules.MoneyColor, alpha);
             }

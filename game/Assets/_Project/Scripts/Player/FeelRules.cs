@@ -203,6 +203,15 @@ namespace Worktown.Game.Player
 
         // ---- Prediction (docs/feel.md 1) ----
 
+        /// <summary>Review of spec 027b: s of round trip assumed before the first measurement (FishNet reports 0 until a ping).</summary>
+        public const float AssumedRoundTrip = 0.15f;
+
+        /// <summary>The measured round trip, or <see cref="AssumedRoundTrip"/> while there is none yet (0, negative or NaN).</summary>
+        public static float RoundTrip(float measuredSeconds)
+        {
+            return float.IsNaN(measuredSeconds) || float.IsInfinity(measuredSeconds) || measuredSeconds <= 0f ? AssumedRoundTrip : measuredSeconds;
+        }
+
         /// <summary>
         /// Spec 027b review: the confirm timeout actually used: the setting, but never less than one and a half round trips
         /// plus two ticks (the request waits for a tick to leave, the state for one to come back), so a slow connection does
@@ -218,11 +227,14 @@ namespace Worktown.Game.Player
 
         /// <summary>
         /// Spec 027b review: a click queued inside the request interval is still sent only if the dot is on the same target
-        /// (and spot) as when it was clicked, and that click did something then. Otherwise it is dropped, never retargeted.
+        /// (and spot) as when it was clicked, that click did something then, and it would still do the same thing (second
+        /// review: the action is compared too). Otherwise it is dropped, never retargeted.
         /// </summary>
-        public static bool KeepQueuedClick(bool hadAction, int queuedTarget, int queuedSpot, int nowTarget, int nowSpot)
+        public static bool KeepQueuedClick(Worktown.Game.Net.Rules.InteractionAction queuedAction, int queuedTarget, int queuedSpot,
+            Worktown.Game.Net.Rules.InteractionAction nowAction, int nowTarget, int nowSpot)
         {
-            return hadAction && queuedTarget == nowTarget && queuedSpot == nowSpot;
+            return queuedAction != Worktown.Game.Net.Rules.InteractionAction.None && queuedAction == nowAction
+                   && queuedTarget == nowTarget && queuedSpot == nowSpot;
         }
 
         /// <summary>

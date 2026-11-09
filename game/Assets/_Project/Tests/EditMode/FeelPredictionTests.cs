@@ -294,6 +294,99 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void UnansweredRequestInsideABurst_ThenARefusalOfTheNext_NeverDeniesTheClick()
+        {
+            // Second review: request n-1 is never answered (well under a second before the next ones), n is our pick-up and is
+            // answered ok, n+1 is refused. Counted naively, n+1's refusal would land on n.
+            var book = new PredictionBook<Thing>();
+            book.Sent(0f);                                  // n-1: lost
+            var a = new Thing();
+            FeelPrediction p = Pending(PredictionKind.PickUp, 0.25f);
+            book.Add(a, a, p, book.Sent(0.25f));            // n
+            book.Answer(AnswerKind.Pickup, true, 0.3f);     // n's ok (counted as n-1's)
+            book.Sent(0.5f);                                // n+1
+            book.Answer(AnswerKind.Pickup, false, 0.55f);   // n+1's refusal (counted as n's, but two were in flight)
+            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "an ambiguous refusal is ignored");
+            Assert.AreEqual(PredictionPhase.Confirmed, p.Observe(new ItemSnapshot(true, Me, Vector3.zero, 0), 0.6f), "the state still decides");
+        }
+
+        [Test]
+        public void SlowRoundTrip_DoesNotResetTheNumberingWhileAnAnswerIsStillComing()
+        {
+            // Second review: with 1.5 s of round trip a request sent 1.2 s after the last must not write the last one off.
+            var book = new PredictionBook<Thing>();
+            book.Sent(0f, 1.5f);                            // still in flight
+            var a = new Thing();
+            FeelPrediction p = Pending(PredictionKind.PickUp, 1.2f);
+            book.Add(a, a, p, book.Sent(1.2f, 1.5f));
+            book.Answer(AnswerKind.Pickup, false, 1.5f);    // the first request's late refusal
+            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "it was not ours");
+            book.Answer(AnswerKind.Pickup, false, 2.7f);    // ours
+            Assert.AreEqual(PredictionPhase.Denied, p.Phase);
+        }
+
+        [Test]
+        public void LateAnswer_WithNothingInFlight_IsIgnored()
+        {
+            var book = new PredictionBook<Thing>();
+            book.Sent(0f);
+            book.Answer(AnswerKind.Pickup, false, 0.1f);
+            var a = new Thing();
+            FeelPrediction p = Pending(PredictionKind.PickUp, 0.2f);
+            book.Add(a, a, p, 99); // a number the book never gave out
+            book.Answer(AnswerKind.Pickup, false, 0.3f);
+            Assert.AreEqual(PredictionPhase.Pending, p.Phase);
+        }
+
+        [Test]
+        public void RoundTrip_IsAssumedUntilTheFirstPing()
+        {
+            Assert.AreEqual(FeelRules.AssumedRoundTrip, FeelRules.RoundTrip(0f), 1e-6f);
+            Assert.AreEqual(FeelRules.AssumedRoundTrip, FeelRules.RoundTrip(float.NaN), 1e-6f);
+            Assert.AreEqual(0.04f, FeelRules.RoundTrip(0.04f), 1e-6f);
+            Assert.GreaterOrEqual(FeelRules.AssumedRoundTrip, 0.1f, "conservative");
+        }
+
+        // ---- Server rate limit (second review: a token bucket) ----
+
+        [Test]
+        public void Bucket_LetsABurstOfTwoThrough_ThenOneEveryInterval()
+        {
+            var bucket = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
+            Assert.IsTrue(bucket.TryTake(10f));
+            Assert.IsTrue(bucket.TryTake(10.01f), "two bunched requests both pass");
+            Assert.IsFalse(bucket.TryTake(10.02f), "a third is refused");
+            Assert.IsFalse(bucket.TryTake(10.1f));
+            Assert.IsTrue(bucket.TryTake(10.21f), "one token back after the interval");
+        }
+
+        [Test]
+        public void Bucket_PassesRequestsSentApartButArrivingBunched()
+        {
+            // Sent every 0.243 s (the client spacing); jitter makes some arrive 0.15 s apart, one pair together.
+            var bucket = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
+            float[] arrivals = { 0f, 0.243f, 0.39f, 0.729f, 0.972f, 0.972f, 1.458f, 1.6f };
+            foreach (float t in arrivals) Assert.IsTrue(bucket.TryTake(t), "arrival at " + t);
+        }
+
+        [Test]
+        public void Bucket_CapsTheAverageRate_AndTheSavings()
+        {
+            var bucket = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
+            int passed = 0;
+            for (int i = 0; i < 1000; i++)
+                if (bucket.TryTake(i * 0.01f)) passed++; // spam at 100 per second for 10 s
+            Assert.LessOrEqual(passed, 2 + 50 + 1, "the burst plus one per 0.2 s");
+            Assert.GreaterOrEqual(passed, 50);
+            var idle = new Worktown.Game.Net.Rules.RequestBucket(0.2f);
+            idle.TryTake(0f);
+            idle.TryTake(100f); // a long pause saves at most the burst
+            Assert.LessOrEqual(idle.Tokens, Worktown.Game.Net.Rules.RequestBucket.Burst);
+            Assert.IsTrue(idle.TryTake(100f));
+            Assert.IsFalse(idle.TryTake(100f));
+        }
+
+        [Test]
         public void SupersededPickup_KeepsItsLookUntilItResolves_NoBounce()
         {
             // Two pans clicked quickly: the first pan's look stays in the hand until its own state confirms it.

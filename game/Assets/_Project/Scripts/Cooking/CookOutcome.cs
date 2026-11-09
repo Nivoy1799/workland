@@ -38,6 +38,9 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 021: a pot is poured onto a plate or into a bowl, not emptied by hand.</summary>
         PourInstead,
         /// <summary>Spec 021: the plate shelf gives no more plates while the world has the maximum.</summary>
-        NoPlatesLeft
+        NoPlatesLeft,
+        /// <summary>Review of spec 027b: the request came faster than the server's rate limit allows and was not carried out.
+        /// Answered anyway, so the client's request numbering stays in step; the client shows nothing for it.</summary>
+        TooFast
     }
 }

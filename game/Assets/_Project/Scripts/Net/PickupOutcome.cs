@@ -8,6 +8,8 @@ namespace Worktown.Game.Net
         TooFar,
         Taken,
         AlreadyHolding,
-        NothingHeld
+        NothingHeld,
+        /// <summary>Review of spec 027b: rate-limited, not carried out (see CookOutcome.TooFast).</summary>
+        TooFast
     }
 }

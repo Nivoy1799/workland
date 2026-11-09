@@ -204,6 +204,24 @@ minimum 0.1 s; third-person damping 0.08 / 0.05; Preset B values above.
   - Shutdown: pending predictions end in `PickupInteractor.OnStopClient`.
   - Legs layer: weight is `CharacterAnimRules.LegsLayerWeight(idle, moving)`, which is 0 outside idle and gone by the
     middle of an idle-to-walk fade. The avatar masks are destroyed once the layer has copied them.
+- **Second review round (on top of 027d).**
+  - Server rate limit: a token bucket per player (`RequestBucket`: burst 2, one token per 0.2 s), so bunched arrivals
+    of well-spaced requests pass and the average stays capped. A refused request is now answered with the new
+    `PickupOutcome.TooFast` / `CookOutcome.TooFast` through the existing report RPCs (no new RPC, no new parameter).
+    The client only counts that answer and shows nothing for it.
+  - Numbering: `PredictionBook` applies a refusal only when its request was the only one in flight. "Ok" answers and
+    ambiguous refusals cannot deny anything; the synced state or the timeout decides those. The quiet-spell reset
+    waits for the longer of 1 s and three round trips. A late answer with nothing in flight is ignored.
+  - Round trip: assumed 150 ms until the first ping (`FeelRules.RoundTrip`).
+  - Queued click: dropped when the action changed as well (`FeelRules.KeepQueuedClick` compares the action).
+  - Pickup: no closure allocation per click.
+  - 027c fixes:
+    - heat timelines cached per (item hash, op, temperature) in `KitchenState`;
+    - surface test pinning ServeFeed and ServeReward;
+    - `ServeRewardView` resets `_seen` while the feed is not spawned, caches the `_BaseColor` id, and plays the coin
+      only after the view-distance check;
+    - `HeatRingView` destroys its overlay material, looks up the rig at most once a second, and uses
+      `Vessel.ContentsAnchor`.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

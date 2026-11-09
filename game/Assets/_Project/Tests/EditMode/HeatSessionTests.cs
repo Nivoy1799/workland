@@ -204,5 +204,24 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(kitchen.BurnerOf(PanBurner).IsOn);
             Assert.AreEqual(KitchenState.NoBurner, kitchen.BurnerUnder(Pan));
         }
+
+        [Test]
+        public void HeatTimeline_IsBuiltOncePerItemOpAndTemperature()
+        {
+            // Review of spec 027c: the same food on the same heat reuses its timeline (no hundred sim runs per put-on).
+            var kitchen = KitchenState.CreateDemo();
+            kitchen.TryCreateIngredient("potato", out Item first);
+            kitchen.TryCreateIngredient("potato", out Item second);
+            Assert.AreEqual(first.Hash, second.Hash);
+            kitchen.Register(FoodId, first);
+            kitchen.Register(FoodId + 1, second);
+            HeatTestKit.SwitchOn(kitchen, Pot, PotBurner);
+            Assert.AreEqual(0, kitchen.CachedTimelines);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId, Pot, VesselKind.Pot, Start));
+            Assert.AreEqual(1, kitchen.CachedTimelines);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId + 1, Pot, VesselKind.Pot, Start));
+            Assert.AreEqual(1, kitchen.CachedTimelines, "the second, identical food reused it");
+            Assert.Greater(KitchenState.TimelineCacheLimit, 16);
+        }
     }
 }

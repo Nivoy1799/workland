@@ -269,10 +269,15 @@ namespace Worktown.Game.Tests
         [Test]
         public void QueuedClick_IsDroppedWhenTheTargetChangedOrItDidNothing()
         {
-            Assert.IsTrue(FeelRules.KeepQueuedClick(true, 42, -1, 42, -1));
-            Assert.IsFalse(FeelRules.KeepQueuedClick(true, 42, -1, 43, -1), "the dot moved to something else");
-            Assert.IsFalse(FeelRules.KeepQueuedClick(true, 42, 2, 42, 3), "another spot of the same worktop");
-            Assert.IsFalse(FeelRules.KeepQueuedClick(false, 42, -1, 42, -1), "it did nothing when it was clicked");
+            var pick = Worktown.Game.Net.Rules.InteractionAction.PickUp;
+            var place = Worktown.Game.Net.Rules.InteractionAction.Place;
+            var none = Worktown.Game.Net.Rules.InteractionAction.None;
+            Assert.IsTrue(FeelRules.KeepQueuedClick(pick, 42, -1, pick, 42, -1));
+            Assert.IsFalse(FeelRules.KeepQueuedClick(pick, 42, -1, pick, 43, -1), "the dot moved to something else");
+            Assert.IsFalse(FeelRules.KeepQueuedClick(place, 42, 2, place, 42, 3), "another spot of the same worktop");
+            Assert.IsFalse(FeelRules.KeepQueuedClick(none, 42, -1, none, 42, -1), "it did nothing when it was clicked");
+            Assert.IsFalse(FeelRules.KeepQueuedClick(pick, 42, -1, Worktown.Game.Net.Rules.InteractionAction.PutInto, 42, -1),
+                "same target, but the click would now do something else (second review)");
         }
 
         // ---- Click buffer ----

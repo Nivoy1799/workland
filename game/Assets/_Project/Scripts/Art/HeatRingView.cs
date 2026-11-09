@@ -29,6 +29,8 @@ namespace Worktown.Game.Art
         private Transform _anchor;
         private GameObject _ring;
         private MeshRenderer _renderer;
+        private Material _material;
+        private float _nextRigLookup;
         private Mesh _mesh;
         private MaterialPropertyBlock _block;
         private PlayerCameraRig _rig;
@@ -56,7 +58,7 @@ namespace Worktown.Game.Art
             _vessel = vessel;
             _steam = steam;
             _pickup = vessel.GetComponent<Pickup>();
-            _anchor = vessel.transform.Find("Contents");
+            _anchor = vessel.ContentsAnchor;
             if (_anchor == null) _anchor = vessel.transform;
 
             _ring = new GameObject("HeatRing (" + vessel.name + ")");
@@ -64,7 +66,8 @@ namespace Worktown.Game.Art
             _mesh.MarkDynamic();
             _ring.AddComponent<MeshFilter>().sharedMesh = _mesh;
             _renderer = _ring.AddComponent<MeshRenderer>();
-            _renderer.sharedMaterial = OverlayMaterial.Create(source, "HeatRing");
+            _material = OverlayMaterial.Create(source, "HeatRing");
+            _renderer.sharedMaterial = _material;
             _renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _renderer.receiveShadows = false;
             _renderer.enabled = false;
@@ -79,6 +82,7 @@ namespace Worktown.Game.Art
         {
             if (_ring != null) Destroy(_ring);
             if (_mesh != null) Destroy(_mesh);
+            if (_material != null) Destroy(_material); // review: each ring owns its overlay material
         }
 
         private void LateUpdate()
@@ -109,7 +113,12 @@ namespace Worktown.Game.Art
             Vector3 centre = anchor + view.right * (SideOffset + radius + HeatRingRules.GapPixels * perPixel)
                 + view.up * (UpOffset + radius * 0.3f);
 
-            if (_rig == null) _rig = FindAnyObjectByType<PlayerCameraRig>();
+            if (_rig == null && now >= _nextRigLookup)
+            {
+                // Review: looked up at most once a second until the local player has bound it, not every frame.
+                _nextRigLookup = now + 1f;
+                _rig = FindAnyObjectByType<PlayerCameraRig>();
+            }
             if (_rig != null && _rig.IsFirstPerson)
             {
                 Vector3 screen = cam.WorldToScreenPoint(centre);

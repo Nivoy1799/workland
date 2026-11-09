@@ -173,22 +173,28 @@ namespace Worktown.Game.Net
         // ---- Spec 027b: predicted looks, set by the owner's PickupInteractor (logic in ItemLook) ----
 
         /// <summary>Draws the item in <paramref name="clientId"/>'s hands (a predicted pick-up).</summary>
-        internal void PredictHeld(int clientId) => StartPrediction(() => _look.PredictHeld(clientId));
+        internal void PredictHeld(int clientId)
+        {
+            _look.PredictHeld(clientId);
+            PredictionDrawnFrame = -1;
+        }
 
         /// <summary>Draws the item lying at <paramref name="pose"/> (a predicted place or drop).</summary>
-        internal void PredictRest(Pose pose) => StartPrediction(() => _look.PredictRest(pose));
+        internal void PredictRest(Pose pose)
+        {
+            _look.PredictRest(pose);
+            PredictionDrawnFrame = -1;
+        }
 
         /// <summary>Draws the item just above the contents of the cookware it goes into (a predicted put-into).</summary>
-        internal void PredictInto(Pose pose) => StartPrediction(() => _look.PredictInto(pose));
+        internal void PredictInto(Pose pose)
+        {
+            _look.PredictInto(pose);
+            PredictionDrawnFrame = -1;
+        }
 
         /// <summary>True while a predicted look is drawn (pending, or confirmed and waiting for the state to catch up).</summary>
         internal bool HasPrediction => _look.HasPrediction;
-
-        private void StartPrediction(System.Action predict)
-        {
-            predict();
-            PredictionDrawnFrame = -1;
-        }
 
         /// <summary>The prediction is over (see <see cref="ItemLook.EndPrediction"/>).</summary>
         internal void EndPrediction(bool confirmed) => _look.EndPrediction(confirmed, Time.unscaledTime);

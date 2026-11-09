@@ -40,8 +40,8 @@ namespace Worktown.Game.Net
         /// <summary>Spec 027b review: s a spot's occupancy is reused before the physics query runs again.</summary>
         private const float SpotCacheSeconds = 0.1f;
 
-        // Server only: time of the last accepted request from this player.
-        private float _serverLastRequestTime = float.NegativeInfinity;
+        // Server only: this player's request rate limit (review of spec 027b: a token bucket).
+        private readonly RequestBucket _serverBucket = new RequestBucket();
 
         [SerializeField] private Transform _holdPoint;
 
@@ -342,8 +342,9 @@ namespace Worktown.Game.Net
             QueuedKind kind = _queuedKind;
             _queuedKind = QueuedKind.None;
             if (kind == QueuedKind.Click
-                && !FeelRules.KeepQueuedClick(_queuedAction != InteractionAction.None, _queuedTarget, _queuedSpot, TargetId(Target), TargetSpot))
-                return;
+                && !FeelRules.KeepQueuedClick(_queuedAction, _queuedTarget, _queuedSpot, CurrentAction, TargetId(Target), TargetSpot))
+                return; // review of spec 027b: the target, the spot or the action changed since the click
+
             if (kind == QueuedKind.Key && !firstPerson && TargetId(Target) != _queuedTarget) return;
             Act(kind);
         }
@@ -491,11 +492,17 @@ namespace Worktown.Game.Net
         private void Predict(PredictionKind kind, Pickup item, Vessel vessel)
         {
             float now = Time.unscaledTime;
-            float rtt = TimeManager != null ? TimeManager.RoundTripTime / 1000f : 0f;
+            float rtt = RoundTripSeconds();
             float tick = TimeManager != null ? (float)TimeManager.TickDelta : 0f;
             float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, rtt, tick);
             var look = new PendingLook { Item = item, Vessel = vessel, ClickFrame = Time.frameCount };
             _looks.Add(look, item, new FeelPrediction(kind, OwnerId, Snapshot(look), now, timeout), _lastRequest);
+        }
+
+        /// <summary>The measured round trip in s, or FeelRules.AssumedRoundTrip before the first ping.</summary>
+        private float RoundTripSeconds()
+        {
+            return FeelRules.RoundTrip(TimeManager != null ? TimeManager.RoundTripTime / 1000f : 0f);
         }
 
         private static ItemSnapshot Snapshot(PendingLook look)
@@ -1075,7 +1082,7 @@ namespace Worktown.Game.Net
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestStation(stationIndex, option);
         }
 
@@ -1083,7 +1090,7 @@ namespace Worktown.Game.Net
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestPickup(target);
         }
 
@@ -1091,7 +1098,7 @@ namespace Worktown.Game.Net
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestDrop();
         }
 
@@ -1099,7 +1106,7 @@ namespace Worktown.Game.Net
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestPlace(surfaceIndex, spotIndex);
         }
 
@@ -1107,23 +1114,23 @@ namespace Worktown.Game.Net
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestUse(target, action);
         }
 
         [ServerRpc]
         private void RequestPickup(NetworkObject target)
         {
-            if (IsRateLimited()) return;
-            PickupOutcome outcome = _service != null ? _service.TryPickup(this, target) : PickupOutcome.NotFound;
+            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+                : _service != null ? _service.TryPickup(this, target) : PickupOutcome.NotFound;
             ReportResult(Owner, outcome, true);
         }
 
         [ServerRpc]
         private void RequestDrop()
         {
-            if (IsRateLimited()) return;
-            PickupOutcome outcome = _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
+            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+                : _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
             ReportResult(Owner, outcome, false);
         }
 
@@ -1135,19 +1142,21 @@ namespace Worktown.Game.Net
         [ServerRpc]
         private void RequestPlace(int surfaceIndex, int spotIndex)
         {
-            if (IsRateLimited()) return;
-            PickupOutcome outcome = _service != null ? _service.TryPlace(this, surfaceIndex, spotIndex) : PickupOutcome.NotFound;
+            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+                : _service != null ? _service.TryPlace(this, surfaceIndex, spotIndex) : PickupOutcome.NotFound;
             ReportPlace(Owner, outcome);
         }
 
         [TargetRpc]
         private void ReportPlace(NetworkConnection target, PickupOutcome outcome)
         {
+            // Review of spec 027b: a rate-limited request is answered too (numbering in step) but shows nothing.
+            NoteAnswer(AnswerKind.Place, outcome == PickupOutcome.Ok);
+            if (outcome == PickupOutcome.TooFast) return;
             LastCookOutcome = null;
             LastPickupOutcome = outcome;
             LastPickupWasPlace = true;
             LastResult = "place: " + outcome;
-            NoteAnswer(AnswerKind.Place, outcome == PickupOutcome.Ok);
             if (outcome != PickupOutcome.Ok)
                 Debug.Log("[Pickup] " + LastResult);
         }
@@ -1159,8 +1168,8 @@ namespace Worktown.Game.Net
         [ServerRpc]
         private void RequestStation(int stationIndex, int option)
         {
-            if (IsRateLimited()) return;
-            CookOutcome outcome = _kitchen != null ? _kitchen.TryUseStation(this, stationIndex, option) : CookOutcome.UnknownStation;
+            CookOutcome outcome = IsRateLimited() ? CookOutcome.TooFast
+                : _kitchen != null ? _kitchen.TryUseStation(this, stationIndex, option) : CookOutcome.UnknownStation;
             ReportCook(Owner, outcome);
         }
 
@@ -1172,41 +1181,43 @@ namespace Worktown.Game.Net
         [ServerRpc]
         private void RequestUse(NetworkObject target, int action)
         {
-            if (IsRateLimited()) return;
-            CookOutcome outcome = _kitchen != null ? _kitchen.TryUseVessel(this, target, action) : CookOutcome.NotAVessel;
+            CookOutcome outcome = IsRateLimited() ? CookOutcome.TooFast
+                : _kitchen != null ? _kitchen.TryUseVessel(this, target, action) : CookOutcome.NotAVessel;
             ReportCook(Owner, outcome);
         }
 
         [TargetRpc]
         private void ReportCook(NetworkConnection target, CookOutcome outcome)
         {
+            NoteAnswer(AnswerKind.Cook, outcome == CookOutcome.Ok);
+            if (outcome == CookOutcome.TooFast) return; // review of spec 027b: answered only to keep the numbering
             LastPickupOutcome = null;
             LastCookOutcome = outcome;
             LastResult = "kitchen: " + outcome;
-            NoteAnswer(AnswerKind.Cook, outcome == CookOutcome.Ok);
             if (outcome != CookOutcome.Ok)
                 Debug.Log("[Kitchen] " + LastResult);
         }
 
-        /// <summary>Server: drop requests that come faster than a person can click.
-        /// Spam then costs neither validation work nor reply bandwidth. Spec 019: this also limits knife
-        /// strokes to one per 0.2 s per player; extra strokes are ignored, not errors.</summary>
+        /// <summary>
+        /// Server: refuse requests that come faster than a person can click (spam costs no validation work). Spec 019: this
+        /// also limits knife strokes. Review of spec 027b: a token bucket per player (RequestBucket: burst 2, one token per
+        /// 0.2 s), so requests sent far enough apart but arriving bunched all pass; a refused one is answered with TooFast
+        /// (one small report, the same RPCs) so the client's request numbering never shifts.
+        /// </summary>
         private bool IsRateLimited()
         {
-            float now = Time.unscaledTime;
-            if (now - _serverLastRequestTime < MinRequestInterval) return true;
-            _serverLastRequestTime = now;
-            return false;
+            return !_serverBucket.TryTake(Time.unscaledTime);
         }
 
         [TargetRpc]
         private void ReportResult(NetworkConnection target, PickupOutcome outcome, bool wasPickup)
         {
+            NoteAnswer(wasPickup ? AnswerKind.Pickup : AnswerKind.Drop, outcome == PickupOutcome.Ok);
+            if (outcome == PickupOutcome.TooFast) return; // review of spec 027b: answered only to keep the numbering
             LastCookOutcome = null;
             LastPickupOutcome = outcome;
             LastPickupWasPlace = false;
             LastResult = (wasPickup ? "pickup: " : "drop: ") + outcome;
-            NoteAnswer(wasPickup ? AnswerKind.Pickup : AnswerKind.Drop, outcome == PickupOutcome.Ok);
             if (outcome != PickupOutcome.Ok)
                 Debug.Log("[Pickup] " + LastResult);
         }

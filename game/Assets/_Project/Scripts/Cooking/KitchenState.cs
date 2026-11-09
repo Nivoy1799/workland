@@ -20,6 +20,7 @@ namespace Worktown.Game.Cooking
         private readonly Dictionary<int, Item> _items = new Dictionary<int, Item>();
         // Spec 016/021: food cooking in a pan (one) or a pot (up to four, each with its own clock), per vessel id.
         private readonly Dictionary<int, List<HeatSession>> _heat = new Dictionary<int, List<HeatSession>>();
+        private readonly Dictionary<TimelineKey, HeatTimeline> _timelines = new Dictionary<TimelineKey, HeatTimeline>();
         // Spec 021: each burner's switch and mode (per burner id), and the burner a pan or pot stands on.
         private readonly Dictionary<int, StoveSettings> _burners = new Dictionary<int, StoveSettings>();
         private readonly Dictionary<int, int> _burnerOf = new Dictionary<int, int>();
@@ -588,14 +589,47 @@ namespace Worktown.Game.Cooking
             return reading;
         }
 
-        /// <summary>Spec 027c: the zone timeline of <paramref name="food"/> in the heat op, from the sim op itself.</summary>
+        /// <summary>
+        /// Spec 027c: the zone timeline of <paramref name="food"/> in the heat op, from the sim op itself. Review of spec 027c:
+        /// building it runs the sim op about a hundred times, so it is cached per (item hash, op, temperature): the same
+        /// potato on the same heat reuses it. The cache is cleared when it grows past <see cref="TimelineCacheLimit"/>.
+        /// </summary>
         private HeatTimeline TimelineOf(Item food, string opId, int? tempC, ParamDef time)
         {
-            return HeatZoneRules.Build(time, seconds =>
+            var key = new TimelineKey(food.Hash, opId, tempC);
+            if (_timelines.TryGetValue(key, out HeatTimeline cached)) return cached;
+            HeatTimeline built = HeatZoneRules.Build(time, seconds =>
             {
                 OperationResult cooked = _factory.Apply(opId, new[] { food }, HeatParams(tempC, seconds));
                 return cooked.Ok && cooked.Item != null ? cooked.Item.Components : null;
             });
+            if (_timelines.Count >= TimelineCacheLimit) _timelines.Clear();
+            _timelines[key] = built;
+            return built;
+        }
+
+        /// <summary>Review of spec 027c: how many timelines are kept at most.</summary>
+        public const int TimelineCacheLimit = 256;
+
+        /// <summary>Review of spec 027c: how many heat timelines are cached (for tests).</summary>
+        public int CachedTimelines => _timelines.Count;
+
+        private readonly struct TimelineKey : System.IEquatable<TimelineKey>
+        {
+            private readonly string _hash;
+            private readonly string _op;
+            private readonly int? _temp;
+
+            public TimelineKey(string hash, string op, int? temp)
+            {
+                _hash = hash ?? string.Empty;
+                _op = op ?? string.Empty;
+                _temp = temp;
+            }
+
+            public bool Equals(TimelineKey other) => _hash == other._hash && _op == other._op && _temp == other._temp;
+            public override bool Equals(object obj) => obj is TimelineKey other && Equals(other);
+            public override int GetHashCode() => (_hash.GetHashCode() * 31 + _op.GetHashCode()) * 31 + _temp.GetHashCode();
         }
 
         /// <summary>The look of the first ingredient in the pan or pot; null if it is empty.</summary>
