@@ -3,8 +3,8 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-09 05:00)
-- **Running:** spec 033 (drinks: cups, dispenser with fill timing, lids).
+## Status (updated 2026-11-09 19:45)
+- **The 24 h run is finished.** Read docs/digest-2026-11-09.md first. Everything is merged into main and pushed; verify.sh passes (1120 Unity, 356 sim tests), both builds are fresh in game/Builds. Not built: 037 pricing (waits for question 7).
 - **Next:** fryer (029), griddle (030), assembly and packaging (031), orders 2.0 (032). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
