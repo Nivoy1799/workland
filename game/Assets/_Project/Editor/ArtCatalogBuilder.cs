@@ -141,8 +141,12 @@ namespace Worktown.Game.Editor
             // skin each. Customers use the same skins for now; Customer tints them.
             Character(ArtKey.CharacterPlayerMale, "skaterMaleA"),
             Character(ArtKey.CharacterPlayerFemale, "skaterFemaleA"),
-            Character(ArtKey.CharacterCustomerMale, "skaterMaleA"),
-            Character(ArtKey.CharacterCustomerFemale, "skaterFemaleA")
+            Character(ArtKey.CharacterCustomerMale, CustomerLooks.Of(ArtKey.CharacterCustomerMale).SkinName),
+            Character(ArtKey.CharacterCustomerFemale, CustomerLooks.Of(ArtKey.CharacterCustomerFemale).SkinName),
+            Character(ArtKey.CharacterCustomerMale2, CustomerLooks.Of(ArtKey.CharacterCustomerMale2).SkinName),
+            Character(ArtKey.CharacterCustomerFemale2, CustomerLooks.Of(ArtKey.CharacterCustomerFemale2).SkinName),
+            Character(ArtKey.CharacterCustomerMale3, CustomerLooks.Of(ArtKey.CharacterCustomerMale3).SkinName),
+            Character(ArtKey.CharacterCustomerFemale3, CustomerLooks.Of(ArtKey.CharacterCustomerFemale3).SkinName)
         };
 
         /// <summary>
@@ -452,10 +456,45 @@ namespace Worktown.Game.Editor
                       + bone.name + " at " + hand.transform.position.ToString("F2"));
         }
 
+        private const string SkinFolder = GrayboxSceneBuilder.Root + "/Art/CharacterSkins";
+
+        private static CustomerLook FindLookBySkin(string skin)
+        {
+            foreach (CustomerLook look in CustomerLooks.All) if (look.SkinName == skin) return look;
+            return null;
+        }
+
+        /// <summary>
+        /// Spec 027d: paints the recoloured atlas of a customer look next to the project's art (the Kenney file is read as
+        /// bytes and never touched) and returns its asset path. Same inputs, same pixels, so reruns change nothing.
+        /// </summary>
+        private static string PaintSkin(CustomerLook look)
+        {
+            string source = Protagonists + "Skins/" + look.BaseSkin + ".png";
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!texture.LoadImage(System.IO.File.ReadAllBytes(source))) throw new InvalidOperationException("Cannot read " + source);
+            if (texture.width != texture.height) throw new InvalidOperationException(source + " is not square");
+            Color32[] pixels = SkinRecolourRules.Apply(texture.GetPixels32(), texture.width, look.Female, look.Shirt, look.Trousers, look.Hair);
+            texture.SetPixels32(pixels);
+            byte[] png = texture.EncodeToPNG();
+            UnityEngine.Object.DestroyImmediate(texture);
+            System.IO.Directory.CreateDirectory(SkinFolder);
+            string path = SkinFolder + "/" + look.SkinName + ".png";
+            if (!System.IO.File.Exists(path) || !System.Linq.Enumerable.SequenceEqual(System.IO.File.ReadAllBytes(path), png))
+            {
+                System.IO.File.WriteAllBytes(path, png);
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            }
+            else if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) == null) AssetDatabase.ImportAsset(path);
+            return path;
+        }
+
         /// <summary>Spec 025: the URP Lit material of one skin texture of the body (shared by every wrapper with that skin).</summary>
         private static Material SkinMaterial(string skin)
         {
             string texturePath = Protagonists + "Skins/" + skin + ".png";
+            CustomerLook look = FindLookBySkin(skin);
+            if (look != null && look.SkinName != look.BaseSkin) texturePath = PaintSkin(look);
             var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
             if (texture == null) throw new InvalidOperationException("Skin missing: " + texturePath);
             string path = GrayboxSceneBuilder.Root + "/Art/CharacterSkin_" + skin + ".mat";

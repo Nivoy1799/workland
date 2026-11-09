@@ -9,7 +9,7 @@ namespace Worktown.Game.UI
 {
     /// <summary>
     /// "What's new" banner (spec 011): the newest entry of Resources/WhatsNew.json with what is new
-    /// and what to test. Opens on start once per build, Enter or the button closes it, F2 reopens it.
+    /// and what to test. Opens on start once per build, Enter or the button closes it, F2 reopens it (Shift+F2 in development builds, spec 027b).
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class WhatsNewView : MonoBehaviour
@@ -55,11 +55,30 @@ namespace Worktown.Game.UI
             if (_backdrop == null) return;
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null) return;
-            if (keyboard.f2Key.wasPressedThisFrame) SetOpen(!_open);
+            if (keyboard.f2Key.wasPressedThisFrame && ReopenModifierHeld(keyboard)) SetOpen(!_open);
             else if (_open && (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)) Close();
             // The player may spawn after the banner opened: free the cursor once input exists.
             if (_open && !_reportedOpen) Report(true);
         }
+
+        /// <summary>
+        /// Spec 027b: in development builds plain F2 opens the feel tuning panel (FeelPanelView), so the banner reopens with
+        /// Shift+F2 there; release builds keep F2.
+        /// </summary>
+        private static bool ReopenModifierHeld(Keyboard keyboard)
+        {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            return keyboard.shiftKey.isPressed;
+#else
+            return true;
+#endif
+        }
+
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        private const string ReopenKeyName = "Shift+F2";
+#else
+        private const string ReopenKeyName = "F2";
+#endif
 
         private void Close()
         {
@@ -120,7 +139,7 @@ namespace Worktown.Game.UI
             foreach (string item in entry.items) AddLabel(scroll, "banner-item", "•  " + item);
             AddLabel(scroll, "banner-heading", "Please test");
             foreach (string item in entry.test) AddLabel(scroll, "banner-item", "☐  " + item);
-            AddLabel(banner, "banner-footer", "Scroll for more.  Enter or the button closes this.  F2 opens it again.  F1 debug menu.");
+            AddLabel(banner, "banner-footer", "Scroll for more.  Enter or the button closes this.  " + ReopenKeyName + " opens it again.  F1 debug menu.");
             banner.Add(new Button(Close) { text = "Got it" });
             return backdrop;
         }

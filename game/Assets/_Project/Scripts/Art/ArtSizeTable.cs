@@ -86,7 +86,11 @@ namespace Worktown.Game.Art
             World(ArtKey.CharacterPlayerMale, 1.75f, SizeAxis.Height, Person),
             World(ArtKey.CharacterPlayerFemale, 1.75f, SizeAxis.Height, Person),
             World(ArtKey.CharacterCustomerMale, 1.75f, SizeAxis.Height, Person),
-            World(ArtKey.CharacterCustomerFemale, 1.75f, SizeAxis.Height, Person)
+            World(ArtKey.CharacterCustomerFemale, 1.75f, SizeAxis.Height, Person),
+            World(ArtKey.CharacterCustomerMale2, 1.75f, SizeAxis.Height, Person),
+            World(ArtKey.CharacterCustomerFemale2, 1.75f, SizeAxis.Height, Person),
+            World(ArtKey.CharacterCustomerMale3, 1.75f, SizeAxis.Height, Person),
+            World(ArtKey.CharacterCustomerFemale3, 1.75f, SizeAxis.Height, Person)
         };
 
         /// <summary>Every row, one per key.</summary>

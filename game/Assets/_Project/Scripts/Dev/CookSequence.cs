@@ -17,12 +17,25 @@ namespace Worktown.Game.Dev
     /// and put it on that stove's top next to the pan, take a potato and an onion and put both into the pot, switch the
     /// pot's burner on, then look at the stove. If an aim does not give the expected action in 3 s it logs a warning and
     /// sends the same request directly. Needs first person (<c>-view first</c>) for the clicks.
-    /// The cook tour passes <paramref name="shot"/> to take a picture after each step.
+    /// The cook tour passes <paramref name="capture"/> to take a picture after each step (spec 027b: and frames around the
+    /// pan's pick-up and put-down and the potato going into the pot, the onion in slow motion). Spec 027c, tour only: the
+    /// potato next to the pan then goes into the pan, the pan's burner goes on and stays on until it burns (a shot every
+    /// <see cref="HeatShotEvery"/> s and frames when it burns: ring, colour, smoke), and the burnt potato is served at the
+    /// counter (frames of the reward moment).
     /// </summary>
     public static class CookSequence
     {
-        public static IEnumerator Run(TourActor actor, Func<string, IEnumerator> shot, float lookSeconds)
+        /// <summary>Spec 027c: seconds between the shots while the pan cooks, and the longest it waits for Burnt.</summary>
+        public const float HeatShotEvery = 5f;
+        public const float BurnWait = 95f;
+        public const float BurnFramesSeconds = 1.5f;
+        public const float RewardFramesSeconds = 2.6f;
+        public const float WatchAbove = 0.3f;
+
+        public static IEnumerator Run(TourActor actor, CookCapture capture, float lookSeconds)
         {
+            Func<string, IEnumerator> shot = capture?.Shot;
+            const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
             Station potatoCrate = null, onionCrate = null;
             var stoves = new List<Station>();
@@ -80,13 +93,15 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(atA, false, false);
             if (shot != null) yield return shot("at-stove");
             NetworkObject panObject = pan.NetworkObject;
-            yield return actor.Use("pick up the pan", ContentPoint(pan), InteractionAction.PickUp, () => me.DevSendPickup(panObject));
+            yield return actor.Use("pick up the pan", ContentPoint(pan), InteractionAction.PickUp, () => me.DevSendPickup(panObject),
+                capture?.Before("pan-highlight", "pan-pickup", frames));
             if (shot != null) yield return shot("pan-in-hand");
 
             yield return actor.LevelView();
             yield return actor.WalkTo(atB, false, false);
             Vector3 burnerSpot = freeBurner.SpotWorldPosition(0);
-            yield return actor.Use("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => me.DevSendPlace(freeBurner.Index, 0));
+            yield return actor.Use("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => me.DevSendPlace(freeBurner.Index, 0),
+                capture?.Before("pan-ghost-on-burner", "pan-place", frames));
             Debug.Log("[Demo] the pan is on the burner (" + Time.time.ToString("0.0") + " s)");
             if (shot != null) yield return shot("pan-on-burner");
 
@@ -96,7 +111,7 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(atB, false, false);
             int nextToPan = PlaceSpots.NearestFree(stoveTop.Size, stoveTop.ToTopPlane(burnerSpot), null);
             yield return actor.Use("put the potato on the stove top next to the pan", stoveTop.SpotWorldPosition(nextToPan),
-                InteractionAction.Place, () => me.DevSendPlace(stoveTop.Index, nextToPan));
+                InteractionAction.Place, () => me.DevSendPlace(stoveTop.Index, nextToPan), capture?.Before("potato-aims-next-to-pan", null, 0f));
             Debug.Log("[Demo] potato next to the pan (" + Time.time.ToString("0.0") + " s)");
             if (shot != null) yield return shot("potato-next-to-pan");
 
@@ -107,8 +122,13 @@ namespace Worktown.Game.Dev
                 yield return Buy(actor, "take " + id, crate, laneZ);
                 yield return actor.WalkTo(new Vector3(atB.x, 0f, laneZ), false, false);
                 yield return actor.WalkTo(atB, false, false);
+                // Spec 027b: the potato at normal speed, the onion in slow motion (the drop shows at 0.1 s frames).
+                bool slow = capture != null && crate == onionCrate;
+                if (slow) capture.TweenScale?.Invoke(TourRules.SlowMotionScale);
                 yield return actor.Use("put it into the pot", ContentPoint(pot), InteractionAction.PutInto,
-                    () => me.DevSendUse(potObject, VesselRules.ActionUse));
+                    () => me.DevSendUse(potObject, VesselRules.ActionUse),
+                    capture?.Before(id + "-aims-at-pot", id + "-into-pot" + (slow ? "-x4" : ""), frames));
+                if (slow) capture.TweenScale?.Invoke(1f);
                 if (shot != null) yield return shot(id + "-in-pot");
             }
             yield return actor.Use("switch the pot's burner on", potSwitch.transform.position, InteractionAction.Press,
@@ -120,16 +140,108 @@ namespace Worktown.Game.Dev
                 yield return actor.AimAt(between, lookSeconds);
                 yield break;
             }
-            // The cook tour: watch the pot heat up.
-            float start = Time.unscaledTime;
             yield return actor.AimAt(between, 2f);
             yield return shot("burner-on");
-            foreach (float at in new[] { 10f, 20f, 30f })
+
+            // Spec 027c: the potato from the stove top into the pan, the pan's burner on, and wait until it burns.
+            Food potato = NearestFood(stoveTop.SpotWorldPosition(nextToPan));
+            StationButton panSwitch = SwitchOf(freeBurner);
+            if (potato == null || panSwitch == null)
             {
-                if (at > lookSeconds) break;
-                while (Time.unscaledTime - start < at) yield return null;
-                yield return shot("heating-" + at.ToString("0") + "s");
+                Debug.LogWarning("[Demo] no potato next to the pan or no switch for the pan's burner");
+                actor.CountTimeout("cook: pan heat setup missing");
+                yield break;
             }
+            NetworkObject potatoObject = potato.NetworkObject;
+            yield return actor.Use("pick up the potato next to the pan", potato.transform.position, InteractionAction.PickUp,
+                () => me.DevSendPickup(potatoObject));
+            yield return actor.Use("put the potato into the pan", ContentPoint(pan), InteractionAction.PutInto,
+                () => me.DevSendUse(panObject, VesselRules.ActionUse));
+            yield return actor.Use("switch the pan's burner on", panSwitch.transform.position, InteractionAction.Press,
+                () => me.DevSendStation(panSwitch.Station.Index, panSwitch.Option));
+            float start = Time.unscaledTime;
+            Debug.Log("[Demo] the pan's burner is on (" + Time.time.ToString("0.0") + " s)");
+            // A little above the two, so neither ring sits on the view centre (it would hide there in first person).
+            yield return actor.AimAt(between + Vector3.up * WatchAbove, 1f);
+            float nextShot = 0f;
+            bool burnt = false;
+            while (Time.unscaledTime - start < BurnWait)
+            {
+                float at = Time.unscaledTime - start;
+                if (!burnt && pan.Zone == HeatZone.Burnt)
+                {
+                    burnt = true;
+                    LogHeat("burnt", at, pan, pot);
+                    if (capture.Frames != null) yield return capture.Frames("pan-burns", BurnFramesSeconds);
+                    yield return new WaitForSecondsRealtime(BurnFramesSeconds + 0.5f);
+                    yield return shot("pan-burnt-smoke");
+                    break;
+                }
+                if (at >= nextShot)
+                {
+                    LogHeat("shot", at, pan, pot);
+                    yield return shot("heat-" + Mathf.RoundToInt(at).ToString("00") + "s-" + pan.Zone.ToString().ToLowerInvariant());
+                    nextShot += HeatShotEvery;
+                }
+                yield return null;
+            }
+            if (!burnt) actor.CountTimeout("cook: the pan did not burn in " + BurnWait + " s");
+
+            // Spec 027c: take the burnt potato out and serve it at the counter (the reward moment).
+            yield return actor.Use("take the burnt potato out of the pan", ContentPoint(pan), InteractionAction.Take,
+                () => me.DevSendUse(panObject, VesselRules.ActionUse));
+            Station counter = null;
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+                if (s.Kind == StationKind.Counter) counter = s;
+            if (counter == null)
+            {
+                actor.CountTimeout("cook: no counter");
+                yield break;
+            }
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
+            // The station's pivot is its centre: aim at the middle of its top.
+            Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
+            yield return actor.Use("serve it at the counter", counterTop, InteractionAction.Sell,
+                () => me.DevSendStation(counter.Index, 0), capture.Before("serve-aim", "serve-reward", RewardFramesSeconds));
+            yield return shot("served");
+        }
+
+        /// <summary>Spec 027c: the zone, progress and ring of the pan and pot, for the tour log.</summary>
+        private static void LogHeat(string what, float at, Vessel pan, Vessel pot)
+        {
+            Debug.Log("[Heat] " + what + " at " + at.ToString("0.0") + " s: pan " + Describe(pan) + "; pot " + Describe(pot));
+        }
+
+        private static string Describe(Vessel v)
+        {
+            var ring = v.GetComponent<Worktown.Game.Art.HeatRingView>();
+            return v.Zone + " " + v.HeatProgress.Value + (v.Warning ? " warn" : string.Empty)
+                + (ring != null && ring.IsShown ? " ring" : " no-ring");
+        }
+
+        private static Food NearestFood(Vector3 point)
+        {
+            Food best = null;
+            float bestDistance = 0.3f;
+            foreach (Food f in UnityEngine.Object.FindObjectsByType<Food>(FindObjectsSortMode.None))
+            {
+                float d = Vector3.Distance(f.transform.position, point);
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = f;
+                }
+            }
+            return best;
+        }
+
+        private static StationButton SwitchOf(PlaceSurface burner)
+        {
+            foreach (StationButton b in UnityEngine.Object.FindObjectsByType<StationButton>(FindObjectsSortMode.None))
+                if (burner != null && b.Station != null && b.Station.Index == burner.StoveIndex
+                    && b.Option == StationRules.StoveOption(burner.Burner, StationRules.StoveSwitch)) return b;
+            return null;
         }
 
         /// <summary>Walks along the lane to the crate and takes one (aims at it, clicks; or sends the request directly).</summary>

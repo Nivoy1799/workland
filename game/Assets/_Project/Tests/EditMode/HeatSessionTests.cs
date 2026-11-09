@@ -204,5 +204,80 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(kitchen.BurnerOf(PanBurner).IsOn);
             Assert.AreEqual(KitchenState.NoBurner, kitchen.BurnerUnder(Pan));
         }
+
+        [Test]
+        public void HeatTimeline_IsBuiltOncePerItemOpAndTemperature()
+        {
+            // Review of spec 027c: the same food on the same heat reuses its timeline (no hundred sim runs per put-on).
+            var kitchen = KitchenState.CreateDemo();
+            kitchen.TryCreateIngredient("potato", out Item first);
+            kitchen.TryCreateIngredient("potato", out Item second);
+            Assert.AreEqual(first.Hash, second.Hash);
+            kitchen.Register(FoodId, first);
+            kitchen.Register(FoodId + 1, second);
+            HeatTestKit.SwitchOn(kitchen, Pot, PotBurner);
+            Assert.AreEqual(0, kitchen.CachedTimelines);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId, Pot, VesselKind.Pot, Start));
+            Assert.AreEqual(1, kitchen.CachedTimelines);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId + 1, Pot, VesselKind.Pot, Start));
+            Assert.AreEqual(1, kitchen.CachedTimelines, "the second, identical food reused it");
+        }
+
+        /// <summary>Two onions sauteed 60 s and 170 s: the same bucket ("medium"), so the same hash, but a different doneness.</summary>
+        private static void SameHashOnions(out KitchenState kitchen, out Item early, out Item late)
+        {
+            kitchen = KitchenState.CreateDemo();
+            ItemFactory factory = NewFactory();
+            kitchen.TryCreateIngredient("onion", out Item onion);
+            OperationResult a = factory.Apply("saute", new[] { onion }, Heat(150f, 60f));
+            OperationResult b = factory.Apply("saute", new[] { onion }, Heat(150f, 170f));
+            Assert.IsTrue(a.Ok && b.Ok, "the sim sautes a raw onion");
+            early = a.Item;
+            late = b.Item;
+            Assert.AreEqual(early.Hash, late.Hash, "precondition: one bucket, one hash");
+            Assert.AreNotEqual(early.Components[0].Doneness, late.Components[0].Doneness, "precondition: different doneness");
+        }
+
+        [Test]
+        public void HeatTimeline_SameHashButDifferentDoneness_GetsItsOwnTimeline()
+        {
+            // Second review: the cache key is the exact state the heat op reads, not the hash alone.
+            SameHashOnions(out KitchenState kitchen, out Item early, out Item late);
+            HeatTimeline freshEarly = kitchen.FreshTimeline(early, "boil", null);
+            HeatTimeline freshLate = kitchen.FreshTimeline(late, "boil", null);
+            Assert.AreNotEqual(freshEarly, freshLate, "precondition: their timelines differ");
+            Assert.AreEqual(freshEarly, kitchen.TimelineFor(early, "boil", null));
+            Assert.AreEqual(freshLate, kitchen.TimelineFor(late, "boil", null), "not the early onion's cached timeline");
+            Assert.AreEqual(2, kitchen.CachedTimelines);
+            Assert.AreNotEqual(KitchenState.TimelineKeyOf(early, "boil", null), KitchenState.TimelineKeyOf(late, "boil", null));
+        }
+
+        [Test]
+        public void HeatTimeline_CachedEqualsFresh_AndEachOpAndTemperatureHasItsOwn()
+        {
+            SameHashOnions(out KitchenState kitchen, out Item early, out _);
+            HeatTimeline first = kitchen.TimelineFor(early, "saute", 150);
+            Assert.AreEqual(kitchen.FreshTimeline(early, "saute", 150), first);
+            Assert.AreEqual(first, kitchen.TimelineFor(early, "saute", 150), "served from the cache");
+            Assert.AreEqual(1, kitchen.CachedTimelines);
+            kitchen.TimelineFor(early, "saute", 200);
+            kitchen.TimelineFor(early, "fry", 150);
+            kitchen.TimelineFor(early, "boil", null);
+            Assert.AreEqual(4, kitchen.CachedTimelines, "another temperature or op is another entry");
+        }
+
+        [Test]
+        public void HeatTimeline_CacheIsClearedAtItsLimit()
+        {
+            SameHashOnions(out KitchenState kitchen, out Item early, out _);
+            kitchen.TimelineCacheCapacity = 3;
+            kitchen.TimelineFor(early, "saute", 130);
+            kitchen.TimelineFor(early, "saute", 140);
+            kitchen.TimelineFor(early, "saute", 150);
+            Assert.AreEqual(3, kitchen.CachedTimelines);
+            HeatTimeline fourth = kitchen.TimelineFor(early, "saute", 160);
+            Assert.AreEqual(1, kitchen.CachedTimelines, "cleared, then the new one kept");
+            Assert.AreEqual(kitchen.FreshTimeline(early, "saute", 160), fourth);
+        }
     }
 }

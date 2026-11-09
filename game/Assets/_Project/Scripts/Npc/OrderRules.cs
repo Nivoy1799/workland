@@ -61,6 +61,20 @@ namespace Worktown.Game.Npc
             }
         }
 
+        /// <summary>
+        /// Spec 027c: the tip inside a customer's payment <paramref name="paid"/> at <paramref name="payPermille"/> (only
+        /// shares above 100 % carry one): <paramref name="paid"/> minus the smallest full price that gives it (the economy
+        /// rounds the share to whole dollars). 0 for no tip or bad input.
+        /// </summary>
+        public static long TipOf(long paid, int payPermille)
+        {
+            if (paid <= 0 || payPermille <= ExactPermille) return 0;
+            long guess = paid * ExactPermille / payPermille;
+            for (long full = Math.Max(1L, guess - 2); full <= guess + 2; full++)
+                if (Worktown.Game.Economy.EconomyRules.ApplyPermille(full, payPermille) == paid) return paid - full;
+            return Math.Max(0L, paid - guess);
+        }
+
         /// <summary>Short text for logs and the serve feed.</summary>
         public static string Describe(OrderMatch match)
         {

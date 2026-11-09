@@ -43,6 +43,13 @@ namespace Worktown.Game.Npc
 
         private MaterialPropertyBlock _block;
 
+        /// <summary>Spec 027d: the order bubble (WorldLabelFade decides when and how it shows).</summary>
+        public TextMesh Label => _label;
+        /// <summary>Spec 027d: the full bubble text as synced (the label may show an icon instead).</summary>
+        public string FullText => Bubble.Value;
+        /// <summary>Spec 027d: still waiting for its order (not leaving with a remark).</summary>
+        public bool Waiting => Mood.Value == CustomerRules.MoodWaiting && !string.IsNullOrEmpty(Bubble.Value);
+
         // Server only.
         private Vector3 _target;
         private Vector3 _facing; // spec 027a: the way to face once at the target (zero: keep the walking direction)

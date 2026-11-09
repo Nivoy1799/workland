@@ -23,6 +23,25 @@ namespace Worktown.Game.Player
         public const float MinRate = 0.6f;
         public const float MaxRate = 1.6f;
 
+        /// <summary>
+        /// Spec 027b: how strongly the legs of the feet-together pose are blended over the idle clip. The library's idle
+        /// stands with the left foot 0.29 m ahead of the right (measured on the player body), which reads as a frozen stride
+        /// from the side, worst while a standing player only turns. At 0.7 the feet end up about 0.09 m apart front to back.
+        /// </summary>
+        public const float StandLegsWeight = 0.7f;
+
+        /// <summary>
+        /// Spec 027b: the weight of the standing-legs layer for the idle's fade weight and the moving clips' weight (walk,
+        /// run and crouch walk together): <see cref="StandLegsWeight"/> times what the idle has over the moving clips, so it
+        /// is 0 outside idle and gone by the middle of an idle-to-walk fade (the first steps keep their own legs).
+        /// </summary>
+        public static float LegsLayerWeight(float idleWeight, float movingWeight)
+        {
+            if (float.IsNaN(idleWeight)) idleWeight = 0f;
+            if (float.IsNaN(movingWeight)) movingWeight = 0f;
+            return StandLegsWeight * Clamp(idleWeight - movingWeight, 0f, 1f);
+        }
+
         /// <summary>Seconds a clip takes to fade in or out.</summary>
         public const float FadeSeconds = 0.15f;
         /// <summary>1/s: how fast the measured speed follows the real one (smooths network jitter).</summary>

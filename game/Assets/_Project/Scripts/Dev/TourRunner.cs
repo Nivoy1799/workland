@@ -247,9 +247,16 @@ namespace Worktown.Game.Dev
             switch (name)
             {
                 case TourRules.ActCook:
-                    yield return CookSequence.Run(_actor, shot => _capture.Shot(shot), 30f);
+                    yield return CookSequence.Run(_actor, new CookCapture(shot => _capture.Shot(shot), StartFrames, SetTweenScale), 30f);
+                    break;
+                case TourRules.ActSlowMotion:
+                    SetTweenScale(TourRules.SlowMotionScale);
+                    break;
+                case TourRules.ActNormalMotion:
+                    SetTweenScale(1f);
                     break;
                 case TourRules.ActPickUpPan:
+                case TourRules.ActPickUpPanFrames:
                     _heldPan = null;
                     _panHome = null;
                     foreach (Vessel v in FindObjectsByType<Vessel>(FindObjectsSortMode.None))
@@ -262,19 +269,57 @@ namespace Worktown.Game.Dev
                     foreach (PlaceSurface s in FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
                         if (s.IsBurner && Vector3.Distance(s.SpotWorldPosition(0), _heldPan.transform.position) <= 0.2f) _panHome = s;
                     var pan = _heldPan;
+                    // Spec 027b: with frames, a shot of the highlight and prompt, then frames from the click's own frame on.
+                    Func<IEnumerator> pickFrames = name == TourRules.ActPickUpPanFrames
+                        ? BeforeClick("pan-highlight" + SlowSuffix, "pan-pickup" + SlowSuffix) : null;
                     yield return _actor.Use("pick up the pan", pan.transform.position + Vector3.up * 0.05f, InteractionAction.PickUp,
-                        () => _actor.Interactor.DevSendPickup(pan.NetworkObject));
+                        () => _actor.Interactor.DevSendPickup(pan.NetworkObject), pickFrames);
                     break;
                 case TourRules.ActPutPanBack:
+                case TourRules.ActPutPanBackFrames:
                     if (_panHome == null) yield break;
                     PlaceSurface home = _panHome;
+                    Func<IEnumerator> placeFrames = name == TourRules.ActPutPanBackFrames
+                        ? BeforeClick("pan-ghost" + SlowSuffix, "pan-place" + SlowSuffix) : null;
                     yield return _actor.Use("put the pan back", home.SpotWorldPosition(0), InteractionAction.Place,
-                        () => _actor.Interactor.DevSendPlace(home.Index, 0));
+                        () => _actor.Interactor.DevSendPlace(home.Index, 0), placeFrames);
                     break;
                 default:
                     _actor.CountTimeout("unknown act '" + name + "'");
                     break;
             }
+        }
+
+        // ---- Spec 027b: frames around a click, slow motion ----
+
+        private float _tweenScale = 1f;
+
+        private string SlowSuffix => _tweenScale > 1f ? "-x" + _tweenScale.ToString("0") : string.Empty;
+
+        /// <summary>For TourActor.Use: a shot of the aimed state, then frames every 0.1 s that start before the click.</summary>
+        private Func<IEnumerator> BeforeClick(string shot, string frames) =>
+            new CookCapture(s => _capture.Shot(s), StartFrames, SetTweenScale).Before(shot, frames, TourRules.ClickFramesSeconds);
+
+        /// <summary>Starts a frame sequence alongside the following steps (the tour waits for it before it ends).</summary>
+        private IEnumerator StartFrames(string name, float seconds)
+        {
+            int count = Mathf.Max(1, Mathf.RoundToInt(seconds / TourRules.FrameInterval));
+            StartCoroutine(TrackFrames(_capture.Frames(name, count, TourRules.FrameInterval)));
+            yield break;
+        }
+
+        /// <summary>Every tween <paramref name="scale"/> times longer (FeelSettings), so the arc shows at 0.1 s frames.</summary>
+        private void SetTweenScale(float scale)
+        {
+            _tweenScale = scale;
+            FeelSettings feel = FeelSettings.PresetA();
+            feel.PickupSeconds *= scale;
+            feel.PlaceSeconds *= scale;
+            feel.DropSeconds *= scale;
+            feel.ConfirmTimeout = Mathf.Max(feel.ConfirmTimeout, feel.PickupSeconds);
+            feel.Preset = scale > 1f ? "slow-motion x" + scale.ToString("0") : FeelSettings.PresetAName;
+            FeelSettings.Use(feel);
+            Debug.Log("[Tour] tweens " + scale.ToString("0") + "x (" + feel.Preset + ")");
         }
 
         // ---- Observer ----
@@ -314,6 +359,7 @@ namespace Worktown.Game.Dev
                 if (!seen) last = other.transform.position;
                 seen = true;
                 goneSince = -1f;
+                WatchAnimation(other);
 
                 float dt = Time.unscaledTime - lastSample;
                 if (dt >= 0.1f)
@@ -345,6 +391,51 @@ namespace Worktown.Game.Dev
             }
             while (capturing) yield return null;
             if (segment < sequences.Count) _actor.CountTimeout("observer saw " + segment + " of " + sequences.Count + " sequences");
+        }
+
+        // Spec 027b: what the observer's copy of the tour player animates, against the old frame-to-frame speed, so the
+        // log shows whether a standing (or only turning) remote body still strides.
+        private CharacterVisual _watched;
+        private Vector3 _watchedLast;
+        private float _legacySpeed;
+        private float _nextWatchLog;
+        private int _strideWhileStill;
+        private int _stillFrames;
+        private Vector3 _anchor;
+        private float _anchorTime;
+
+        private void WatchAnimation(PlayerController other)
+        {
+            if (_watched == null || _watched.gameObject != other.gameObject)
+            {
+                _watched = other.GetComponent<CharacterVisual>();
+                if (_watched == null) return;
+                _watchedLast = _watched.TrackedPosition;
+            }
+            float dt = Time.deltaTime;
+            Vector3 p = _watched.TrackedPosition;
+            Vector3 d = p - _watchedLast;
+            d.y = 0f;
+            _watchedLast = p;
+            if (dt > 0f && d.magnitude / dt < 20f) _legacySpeed = CharacterAnimRules.SmoothSpeed(_legacySpeed, d.magnitude / dt, dt);
+            // Standing still: the networked root has not moved 5 mm for 0.3 s (turning in place counts as standing).
+            Vector3 root = other.transform.position;
+            if ((root - _anchor).sqrMagnitude > 0.005f * 0.005f)
+            {
+                _anchor = root;
+                _anchorTime = Time.unscaledTime;
+            }
+            bool still = Time.unscaledTime - _anchorTime > 0.3f;
+            if (still)
+            {
+                _stillFrames++;
+                if (_watched.State != CharacterAnimState.Idle && _watched.State != CharacterAnimState.Crouch) _strideWhileStill++;
+            }
+            if (Time.unscaledTime < _nextWatchLog) return;
+            _nextWatchLog = Time.unscaledTime + 0.5f;
+            Debug.Log("[Tour] observer anim: state " + _watched.State + ", speed " + _watched.Speed.ToString("0.00") + " m/s (frame-to-frame "
+                      + _legacySpeed.ToString("0.00") + "), yaw " + _watched.Yaw.ToString("0") + ", stride while still " + _strideWhileStill
+                      + " of " + _stillFrames + " frames");
         }
 
         private IEnumerator Capture(TourStep step, Action done)

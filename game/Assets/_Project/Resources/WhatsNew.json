@@ -355,6 +355,62 @@
         "Walk out through the staff gap, around to the street, and look across the counter into the kitchen",
         "Two players in the aisle: try to pass each other (it is 1.3 m wide) and say if it feels too tight"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-027b",
+      "date": "2026-11-09",
+      "title": "Feel pass 1: instant answers, nothing teleports, forgiving aim",
+      "items": [
+        "A click answers at once: the pan arcs into your hand, things settle onto the spot, food drops into the pot, each with its own sound",
+        "If the server says no, the item flies back with a short 'nope'",
+        "Everyone sees the arcs and drops, not only you",
+        "Aim takes the best target near the dot (a pot for the potato in your hand) and does not flicker between two",
+        "Outline and prompt on the target, grey 'Too far' when out of reach, and a see-through copy where the item will land",
+        "Fast double clicks are no longer lost; the third-person camera sits closer and lower",
+        "F2 opens the feel panel (development builds): sliders, Preset A and B, Save writes feel.json; the What's-new banner is Shift+F2 there"
+      ],
+      "test": [
+        "Pick up the pan, put it on a burner, drop a potato into the pot: does anything jump or wait for the server?",
+        "Aim at the free spot right next to the pan with a potato in hand: you get the spot, not the pan",
+        "Press F2, try Preset A and Preset B for a few minutes each and say which one feels better (A or B)",
+        "Third person (V): is the cook readable and the kitchen still visible?",
+        "Watch the other player stand and turn at the stove: legs together, no frozen stride"
+      ]
+    },
+    {
+      "id": "2026-11-09-spec-027c",
+      "date": "2026-11-09",
+      "title": "Feel pass 2: cooking reads at a glance",
+      "items": [
+        "A small ring next to a pan or pot on the heat fills up; the green and yellow rim marks the good window (yellow is perfect)",
+        "The food changes colour as it cooks: raw, golden, brown, and charcoal when it burns, also in the pot",
+        "The sizzle and bubbling grow with the heat and get a little higher when the food is overdone",
+        "A chime at perfect, three beeps 3 s before it overcooks, a hiss and dark smoke when it burns",
+        "Serving at the counter: stars pop over it, a coin sounds and the money and tip float up, for everyone near the counter"
+      ],
+      "test": [
+        "Fry a whole potato and watch the ring and the colour: can you take it out at perfect without reading any label?",
+        "Leave it on: do the beeps come early enough, and do the smoke and hiss read as burnt?",
+        "Serve a dish while the other player watches from the street: do both of you see the stars and the money?",
+        "First person: does the ring ever get in the way when you look at the pan?"
+      ]
+    },
+    {
+      "id": "2026-11-09-spec-027d",
+      "date": "2026-11-09",
+      "title": "Readable world text and a varied crowd",
+      "items": [
+        "Station and crate names are small signs on the front, readable from the cook side only, never through walls or mirrored",
+        "Order bubbles above guests no longer overlap: the first two in the queue show the full order, the others a letter",
+        "Item names and stars show only for the item you aim at or carry; nothing floats across the middle of the first-person view",
+        "Guests come in six looks (shirt, trousers and hair colours), each guest keeps its look"
+      ],
+      "test": [
+        "Stand in the street and look at the queue: can you read the first guest's order, and is nothing overlapping?",
+        "First person at a stove: is there any big text across the view?",
+        "Walk behind the counter and stove row: do the signs face you and stay clear of the knobs?",
+        "Do neighbouring guests in the queue look different?"
+      ]
     }
   ]
 }

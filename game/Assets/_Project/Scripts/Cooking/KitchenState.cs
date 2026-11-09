@@ -20,6 +20,7 @@ namespace Worktown.Game.Cooking
         private readonly Dictionary<int, Item> _items = new Dictionary<int, Item>();
         // Spec 016/021: food cooking in a pan (one) or a pot (up to four, each with its own clock), per vessel id.
         private readonly Dictionary<int, List<HeatSession>> _heat = new Dictionary<int, List<HeatSession>>();
+        private readonly Dictionary<string, HeatTimeline> _timelines = new Dictionary<string, HeatTimeline>();
         // Spec 021: each burner's switch and mode (per burner id), and the burner a pan or pot stands on.
         private readonly Dictionary<int, StoveSettings> _burners = new Dictionary<int, StoveSettings>();
         private readonly Dictionary<int, int> _burnerOf = new Dictionary<int, int>();
@@ -469,7 +470,9 @@ namespace Worktown.Game.Cooking
                 if (!_factory.Apply("mix", inputs, NoParams).Ok) return CookOutcome.SimRefused;
             }
 
-            sessions.Add(new HeatSession(item, opId, tempC, IsCooking(vesselId), tick));
+            var session = new HeatSession(item, opId, tempC, IsCooking(vesselId), tick);
+            session.Timeline = TimelineOf(item, opId, tempC, time);
+            sessions.Add(session);
             _items.Remove(foodObjectId);
             return CookOutcome.Ok;
         }
@@ -569,6 +572,86 @@ namespace Worktown.Game.Cooking
                 looks.Add(FoodLookRules.Cooking(session.Food, session.OperationId, CurrentBucket(session, tick, tickRate)));
             return looks;
         }
+
+        /// <summary>
+        /// Spec 027c: what the pan or pot shows on the heat at <paramref name="tick"/> (zone, progress, warning), from each
+        /// food's time on the heat and its timeline; <see cref="HeatReading.Empty"/> when it is empty. A pure read.
+        /// </summary>
+        public HeatReading HeatReadingOf(int vesselId, uint tick, double tickRate)
+        {
+            if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions)) return HeatReading.Empty;
+            HeatReading reading = HeatReading.Empty;
+            foreach (HeatSession session in sessions)
+            {
+                double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
+                reading = HeatZoneRules.Combine(reading, HeatZoneRules.Read(seconds, session.Timeline));
+            }
+            return reading;
+        }
+
+        /// <summary>
+        /// Spec 027c: the zone timeline of <paramref name="food"/> in the heat op, from the sim op itself. Review of spec 027c:
+        /// building it runs the sim op about a hundred times, so it is cached. The key is everything the heat op reads from
+        /// the food (<see cref="TimelineKeyOf"/>), not only its hash: the hash is made of bucket ids, while the doneness
+        /// inside a bucket comes from the exact seconds (two onions sautéed 60 s and 170 s share a hash). The cache is
+        /// cleared when it reaches <see cref="TimelineCacheCapacity"/> entries.
+        /// </summary>
+        private HeatTimeline TimelineOf(Item food, string opId, int? tempC, ParamDef time)
+        {
+            string key = TimelineKeyOf(food, opId, tempC);
+            if (_timelines.TryGetValue(key, out HeatTimeline cached)) return cached;
+            HeatTimeline built = BuildTimeline(food, opId, tempC, time);
+            if (_timelines.Count >= TimelineCacheCapacity) _timelines.Clear();
+            _timelines[key] = built;
+            return built;
+        }
+
+        private HeatTimeline BuildTimeline(Item food, string opId, int? tempC, ParamDef time)
+        {
+            return HeatZoneRules.Build(time, seconds =>
+            {
+                OperationResult cooked = _factory.Apply(opId, new[] { food }, HeatParams(tempC, seconds));
+                return cooked.Ok && cooked.Item != null ? cooked.Item.Components : null;
+            });
+        }
+
+        /// <summary>Review of spec 027c: the cached timeline for this food, op and temperature (as a put-on gets it).</summary>
+        public HeatTimeline TimelineFor(Item food, string opId, int? tempC)
+        {
+            return food != null && TryGetTimeParam(opId, out ParamDef time) ? TimelineOf(food, opId, tempC, time) : default;
+        }
+
+        /// <summary>Review of spec 027c: the same timeline built fresh, never cached (for tests).</summary>
+        public HeatTimeline FreshTimeline(Item food, string opId, int? tempC)
+        {
+            return food != null && TryGetTimeParam(opId, out ParamDef time) ? BuildTimeline(food, opId, tempC, time) : default;
+        }
+
+        /// <summary>
+        /// Review of spec 027c: the cache key: the item hash, the op, the temperature, and the exact bits of what the heat op
+        /// reads (the surface, the heat tolerance, each component's doneness and ideal window).
+        /// </summary>
+        public static string TimelineKeyOf(Item food, string opId, int? tempC)
+        {
+            var key = new System.Text.StringBuilder(64 + 24 * food.Components.Count);
+            key.Append(food.Hash).Append('|').Append(opId).Append('|').Append(tempC.HasValue ? tempC.Value.ToString() : "-")
+                .Append('|').Append(Bits(food.Surface)).Append('|').Append(Bits(food.Stats.HeatTolerance));
+            foreach (ItemComponent c in food.Components)
+                key.Append('|').Append(c.BaseId).Append(':').Append(Bits(c.Doneness)).Append(':')
+                    .Append(Bits(c.Ideal.Min)).Append(':').Append(Bits(c.Ideal.Max));
+            return key.ToString();
+        }
+
+        private static int Bits(float value) => System.BitConverter.SingleToInt32Bits(value);
+
+        /// <summary>Review of spec 027c: how many timelines are kept at most.</summary>
+        public const int TimelineCacheLimit = 256;
+
+        /// <summary>Review of spec 027c: the cache size actually used (<see cref="TimelineCacheLimit"/>; tests set it lower).</summary>
+        public int TimelineCacheCapacity { get; set; } = TimelineCacheLimit;
+
+        /// <summary>Review of spec 027c: how many heat timelines are cached (for tests).</summary>
+        public int CachedTimelines => _timelines.Count;
 
         /// <summary>The look of the first ingredient in the pan or pot; null if it is empty.</summary>
         public FoodLook? HeatLook(int vesselId, uint tick, double tickRate)

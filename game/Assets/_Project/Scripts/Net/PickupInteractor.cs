@@ -3,6 +3,7 @@ using FishNet.Connection;
 using FishNet.Object;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Worktown.Game.Audio;
 using Worktown.Game.Cooking;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
@@ -20,16 +21,26 @@ namespace Worktown.Game.Net
     /// cookware (put food in, pour, take out, a knife stroke or turn) is the one new request, RequestUse(target,
     /// action): an object and an int, never a value. Crates, the counter, the plate shelf and the stove knobs keep
     /// RequestStation(station, option). Third person keeps E for pickups, crates, the counter and the shelf.
+    /// Spec 027b (docs/feel.md 1–4, client look only; the server checks every request exactly as before): the aim takes
+    /// the best interactable within a small cone around the dot (FeelRules.PickTarget: an exact hit on an object's body
+    /// always wins, cookware that takes what you hold gets a bonus, the current target is sticky, a target shows at least
+    /// FeelSettings.HighlightMinSeconds). A click is never swallowed: inside the request interval it is queued (one at
+    /// most) and sent when allowed (ClickBuffer). A click plays its sound and starts the expected look at once (the item
+    /// flies to the hand, onto the spot or into the pot: Pickup.Predict*); the synced state (holder, position, the pot's
+    /// contents) confirms it (FeelPrediction), and without a confirming change within FeelSettings.ConfirmTimeout of the
+    /// last relevant change the look eases back and "nope" plays. No new RPCs or values.
     /// </summary>
     public sealed class PickupInteractor : NetworkBehaviour
     {
         private const float ClientSearchRadius = 4f;
-        private const float MinRequestInterval = 0.2f;
-        // Spec 019: the client waits a little longer than the server's limit, so no stroke is silently dropped.
-        private const float ClientStrokeInterval = MinRequestInterval + 0.03f;
+        /// <summary>Spec 027b: m (horizontal) from an item's centre within which a ray hit counts as on its body (a pan's
+        /// handle or a wide collider edge does not; then the cone decides).</summary>
+        public const float DirectHitRadius = 0.11f;
+        /// <summary>Spec 027b review: s a spot's occupancy is reused before the physics query runs again.</summary>
+        private const float SpotCacheSeconds = 0.1f;
 
-        // Server only: time of the last accepted request from this player.
-        private float _serverLastRequestTime = float.NegativeInfinity;
+        // Server only: this player's request rate limit (review of spec 027b: a token bucket).
+        private readonly RequestBucket _serverBucket = new RequestBucket();
 
         [SerializeField] private Transform _holdPoint;
 
@@ -43,6 +54,7 @@ namespace Worktown.Game.Net
         private readonly RaycastHit[] _rayHits = new RaycastHit[16];
         private readonly List<AimHit> _aimHits = new List<AimHit>(16);
         private readonly List<Component> _aimSources = new List<Component>(16);
+        private readonly List<Vector3> _aimPoints = new List<Vector3>(16);
         // Spec 019: the knife gesture (owner only).
         private readonly CutGesture _gesture = new CutGesture();
         private HeldItemView _heldView;
@@ -53,6 +65,56 @@ namespace Worktown.Game.Net
         private bool _lockedLastFrame;
         private bool[] _spotTaken = new bool[32];
         private Worktown.Sim.Economy.EconomyCatalog _prices;
+        // Spec 027b: cone aim, stickiness, the shown target, the click buffer, sounds and the predicted look (owner only).
+        // Spec 019 / 027b review: the client keeps its requests one tick plus a margin further apart than the server's
+        // limit (PickupRules.ClientRequestInterval), for clicks, keys and knife strokes alike. Set with the tick on start.
+        private float _clientInterval = PickupRules.ClientRequestInterval(1f / 30f);
+        private ClickBuffer _clicks = new ClickBuffer(PickupRules.ClientRequestInterval(1f / 30f));
+        private QueuedKind _queuedKind;
+        private InteractionAction _queuedAction;
+        private int _queuedTarget;
+        private int _queuedSpot = PlaceSpots.None;
+        private bool _queuedFirstPerson;
+        private StationButton[] _allButtons;
+        private PlaceSurface[] _allSurfaces;
+        private readonly Dictionary<long, SpotState> _spotCache = new Dictionary<long, SpotState>();
+        private readonly List<AimCandidate> _cone = new List<AimCandidate>(32);
+        private readonly List<Component> _coneSources = new List<Component>(32);
+        private readonly List<int> _coneSpots = new List<int>(32);
+        private readonly List<Vector3> _coneAnchors = new List<Vector3>(32);
+        private readonly RaycastHit[] _sightHits = new RaycastHit[16];
+        private Component _sticky;
+        private int _stickySpot = PlaceSpots.None;
+        private Component _shown;
+        private int _shownSpot = PlaceSpots.None;
+        private Vector3 _shownSpotPosition;
+        private bool _shownTooFar;
+        private float _shownLastSeen;
+        private KitchenSounds _sounds;
+        private bool _soundsLooked;
+        private int _lastRequest;
+        // Spec 027b: the predicted looks waiting for the server, and the answers matched to their requests.
+        private readonly PredictionBook<PendingLook> _looks = new PredictionBook<PendingLook>();
+        private readonly List<PredictionBook<PendingLook>.Resolved> _resolved = new List<PredictionBook<PendingLook>.Resolved>();
+        private readonly List<PendingLook> _ending = new List<PendingLook>();
+        private System.Func<PendingLook, ItemSnapshot> _snapshotOf;
+
+        private enum QueuedKind : byte { None, Click, Drop, Key }
+
+        private struct SpotState
+        {
+            public bool Taken;
+            public float Until;
+        }
+
+        /// <summary>One predicted look: the item, the cookware it goes into, when it was clicked.</summary>
+        private sealed class PendingLook
+        {
+            public Pickup Item;
+            public Vessel Vessel;
+            public int ClickFrame;
+            public bool VisualLogged;
+        }
 
         public Transform HoldPoint => _holdPoint;
 
@@ -103,6 +165,10 @@ namespace Worktown.Game.Net
         {
             base.OnStartClient();
             if (!IsOwner) return;
+            // Spec 027b review: requests one tick plus a margin further apart than the server's limit.
+            _clientInterval = PickupRules.ClientRequestInterval((float)TimeManager.TickDelta);
+            _clicks = new ClickBuffer(_clientInterval);
+            _snapshotOf = Snapshot;
             _heldView = GetComponent<HeldItemView>();
             // Spec 020: owner-only highlight and world label fade.
             if (TryGetComponent(out InteractionHighlight highlight)) highlight.Activate(this);
@@ -114,6 +180,13 @@ namespace Worktown.Game.Net
         {
             base.OnStopClient();
             SetLookSuppressed(false);
+            // Spec 027b review: no predicted look outlives its player.
+            _ending.Clear();
+            _looks.Clear(_ending);
+            foreach (PendingLook look in _ending)
+                if (look.Item != null) look.Item.EndPrediction(false);
+            _ending.Clear();
+            ClearQueuedClick();
         }
 
         private void Update()
@@ -122,9 +195,10 @@ namespace Worktown.Game.Net
             if (_rig == null) _rig = FindFirstObjectByType<PlayerCameraRig>();
             bool firstPerson = IsFirstPerson;
             Pickup held = FindHeldPickup();
+            UpdatePrediction();
             // Spec 018: first person aims with the camera centre; third person keeps the nearest station.
             if (!firstPerson) TargetTooFar = false;
-            Target = firstPerson ? FindAimTarget(held != null) : FindNearestStation();
+            Target = firstPerson ? KeepShown(FindAimTarget(held)) : FindNearestStation();
             UpdateInteraction(firstPerson, held);
 
             if (_inputReader == null) _inputReader = FindFirstObjectByType<Worktown.Game.Player.PlayerInputReader>();
@@ -145,20 +219,25 @@ namespace Worktown.Game.Net
                 // A press that the UI or the wheel had never becomes a click.
                 _click.Update(mouse != null && mouse.leftButton.isPressed, 0f, 0f, Time.unscaledTime);
                 _click.Cancel();
+                ClearQueuedClick();
                 if (wheel) _suppressingLook = false;
                 else SetLookSuppressed(false);
             }
             else if (firstPerson)
             {
+                if (_queuedKind != QueuedKind.None && !_queuedFirstPerson) ClearQueuedClick(); // the view changed
                 UpdateFirstPerson(keyboard, gamepad, mouse, locked, held);
+                SendQueuedClick(true);
             }
             else
             {
                 _gesture.Reset();
                 _click.Reset();
+                if (_queuedKind != QueuedKind.None && _queuedFirstPerson) ClearQueuedClick(); // the view changed
                 SetLookSuppressed(false);
-                // Spec 020 AC7: E acts in third person only.
-                if (InteractionRules.KeysActInView(firstPerson)) HandleThirdPersonKeys(keyboard, held != null);
+                // Spec 020 AC7: E acts in third person only. Spec 027b review: through the click buffer as well.
+                if (InteractionRules.KeysActInView(firstPerson) && keyboard.eKey.wasPressedThisFrame) Queue(QueuedKind.Key, false);
+                SendQueuedClick(false);
             }
             _lockedLastFrame = locked;
         }
@@ -208,46 +287,288 @@ namespace Worktown.Game.Net
             }
             else if (click || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame))
             {
-                ExecuteAction();
+                // Spec 027b: inside the request interval the click waits (never swallowed).
+                Queue(QueuedKind.Click, true);
             }
 
             bool drop = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
-            if (drop && InteractionRules.DropKeyActs(true) && held != null) SendDrop();
+            if (drop && InteractionRules.DropKeyActs(true) && held != null) Queue(QueuedKind.Drop, true);
         }
 
-        /// <summary>Spec 020/021: sends the request for <see cref="CurrentAction"/> on <see cref="Target"/>. Nothing for None or Cut.</summary>
+        /// <summary>
+        /// Spec 027b: a click, Q or E. Outside the request interval it acts at once; inside it waits (one at most, the newest
+        /// wins). A click that does nothing now is not queued. What it was aimed at is kept, so a queued click is dropped
+        /// when the target changed before it could go out (FeelRules.KeepQueuedClick).
+        /// </summary>
+        private void Queue(QueuedKind kind, bool firstPerson)
+        {
+            if (kind == QueuedKind.Click && CurrentAction == InteractionAction.None) return;
+            if (_clicks.Click(Time.unscaledTime))
+            {
+                Act(kind);
+                return;
+            }
+            _queuedKind = kind;
+            _queuedFirstPerson = firstPerson;
+            _queuedAction = CurrentAction;
+            _queuedTarget = TargetId(Target);
+            _queuedSpot = TargetSpot;
+        }
+
+        private static int TargetId(Component target) => target != null ? target.GetInstanceID() : 0;
+
+        private void Act(QueuedKind kind)
+        {
+            switch (kind)
+            {
+                case QueuedKind.Click:
+                    ExecuteAction();
+                    break;
+                case QueuedKind.Drop:
+                    Pickup held = FindHeldPickup();
+                    if (held != null) DropWithLook(held);
+                    break;
+                case QueuedKind.Key:
+                    HandleThirdPersonKey(FindHeldPickup() != null);
+                    break;
+            }
+        }
+
+        /// <summary>Spec 027b: sends the queued click, Q or E once the request interval has passed, if still aimed alike.</summary>
+        private void SendQueuedClick(bool firstPerson)
+        {
+            if (_queuedKind == QueuedKind.None || !_clicks.Poll(Time.unscaledTime)) return;
+            QueuedKind kind = _queuedKind;
+            _queuedKind = QueuedKind.None;
+            if (kind == QueuedKind.Click
+                && !FeelRules.KeepQueuedClick(_queuedAction, _queuedTarget, _queuedSpot, CurrentAction, TargetId(Target), TargetSpot))
+                return; // review of spec 027b: the target, the spot or the action changed since the click
+
+            if (kind == QueuedKind.Key && !firstPerson && TargetId(Target) != _queuedTarget) return;
+            Act(kind);
+        }
+
+        private void ClearQueuedClick()
+        {
+            _clicks.Clear();
+            _queuedKind = QueuedKind.None;
+        }
+
+        /// <summary>
+        /// Spec 020/021: sends the request for <see cref="CurrentAction"/> on <see cref="Target"/>. Nothing for None or Cut.
+        /// Spec 027b: plays the action's sound and starts its expected look in the same frame.
+        /// </summary>
         private void ExecuteAction()
         {
             switch (CurrentAction)
             {
                 case InteractionAction.Press:
-                    if (Target is StationButton button && button.Station != null) SendStation(button.Station.Index, button.Option);
+                    if (Target is StationButton button && button.Station != null)
+                    {
+                        PlaySound(SoundKey.Button, button.transform.position);
+                        SendStation(button.Station.Index, button.Option);
+                    }
                     break;
                 case InteractionAction.PutInto:
                 case InteractionAction.Pour:
                 case InteractionAction.Take:
-                    if (Target is Vessel vessel) SendUse(vessel.NetworkObject, VesselRules.ActionUse);
-                    else if (Target is Station shelf) SendStation(shelf.Index, 0); // the plate shelf
+                    if (Target is Vessel vessel)
+                    {
+                        Pickup held = FindHeldPickup();
+                        PlaySound(CurrentAction == InteractionAction.Take ? SoundKey.Pick : SoundKey.PlaceFood, vessel.transform.position);
+                        SendUse(vessel.NetworkObject, VesselRules.ActionUse);
+                        if (CurrentAction == InteractionAction.PutInto && held != null)
+                        {
+                            Predict(PredictionKind.PutInto, held, vessel);
+                            held.PredictInto(IntoPose(held, vessel));
+                        }
+                    }
+                    else if (Target is Station shelf)
+                    {
+                        PlaySound(SoundKey.Pick, shelf.transform.position);
+                        SendStation(shelf.Index, 0); // the plate shelf
+                    }
                     break;
                 case InteractionAction.Sell:
                 case InteractionAction.Buy:
-                    if (Target is Station station) SendStation(station.Index, 0);
+                    if (Target is Station station)
+                    {
+                        PlaySound(CurrentAction == InteractionAction.Buy ? SoundKey.Pick : SoundKey.Button, station.transform.position);
+                        SendStation(station.Index, 0);
+                    }
                     break;
                 case InteractionAction.Place:
-                    if (Target is PlaceSurface surface && TargetSpot >= 0) SendPlace(surface.Index, TargetSpot);
+                    if (Target is PlaceSurface surface && TargetSpot >= 0)
+                    {
+                        Pickup held = FindHeldPickup();
+                        SendPlace(surface.Index, TargetSpot);
+                        if (held != null)
+                        {
+                            Predict(PredictionKind.Place, held, null);
+                            held.PredictRest(PlacePose(held, surface, TargetSpot));
+                            PlaySound(SoundRules.PlaceSound(SoundRules.MaterialOf(held), surface.IsBurner), TargetSpotPosition);
+                        }
+                    }
                     break;
                 case InteractionAction.PickUp:
-                    if (Target is Vessel cookware) SendPickup(cookware.NetworkObject);
-                    else if (Target is Pickup pickup) SendPickup(pickup.NetworkObject);
+                    if (Target is Vessel cookware) PickUpWithLook(cookware.GetComponent<Pickup>());
+                    else if (Target is Pickup pickup) PickUpWithLook(pickup);
                     break;
             }
+        }
+
+        /// <summary>Spec 027b: a pick-up request with its predicted arc into the hands and the pick sound.</summary>
+        private void PickUpWithLook(Pickup pickup)
+        {
+            if (pickup == null) return;
+            PlaySound(SoundKey.Pick, pickup.transform.position);
+            SendPickup(pickup.NetworkObject);
+            if (!pickup.IsHeld)
+            {
+                Predict(PredictionKind.PickUp, pickup, null);
+                pickup.PredictHeld(OwnerId);
+            }
+        }
+
+        /// <summary>Spec 027b: a drop request (Q, or E in third person) with its predicted fall in front of you.</summary>
+        private void DropWithLook(Pickup held)
+        {
+            SendDrop();
+            if (held != null)
+            {
+                Predict(PredictionKind.Drop, held, null);
+                Pose pose = held.PredictedDropPose(transform.position, transform.forward);
+                held.PredictRest(pose);
+                PlaySound(SoundRules.PlaceSound(SoundRules.MaterialOf(held), false), pose.position);
+            }
+        }
+
+        /// <summary>Spec 027b: where an item lands on spot <paramref name="spot"/> of <paramref name="surface"/>, as the
+        /// server places it (PickupService.TryPlace): its bottom on the spot, its resting tilt, the surface's yaw.</summary>
+        private static Pose PlacePose(Pickup item, PlaceSurface surface, int spot)
+        {
+            Vector3 position = surface.SpotWorldPosition(spot) + surface.transform.up * item.BottomOffset;
+            return new Pose(position, PlaceSpots.RestRotation(item.ClientRestTilt, surface.transform.rotation));
+        }
+
+        /// <summary>Spec 027b: just above the cookware's contents, where food is dropped in from.</summary>
+        private static Pose IntoPose(Pickup item, Vessel vessel)
+        {
+            return new Pose(vessel.ContentPoint + Vector3.up * FeelSettings.Current.DropHeight,
+                PlaceSpots.RestRotation(item.ClientRestTilt, vessel.transform.rotation));
+        }
+
+        /// <summary>
+        /// Spec 027b, owner side: where the held item would land with a click now (a place spot, or into cookware), for
+        /// the placement ghost. False when the click does not put it anywhere.
+        /// </summary>
+        public bool TryGetLandingPose(out Pickup held, out Pose pose)
+        {
+            pose = default;
+            held = null;
+            if (CurrentAction != InteractionAction.Place && CurrentAction != InteractionAction.PutInto) return false;
+            held = FindHeldPickup();
+            if (held == null || held.HasPrediction) return false;
+            if (CurrentAction == InteractionAction.Place && Target is PlaceSurface surface && TargetSpot >= 0)
+            {
+                pose = PlacePose(held, surface, TargetSpot);
+                return true;
+            }
+            if (CurrentAction == InteractionAction.PutInto && Target is Vessel vessel)
+            {
+                pose = new Pose(vessel.ContentPoint, PlaceSpots.RestRotation(held.ClientRestTilt, vessel.transform.rotation));
+                return true;
+            }
+            return false;
+        }
+
+        // ---- Spec 027b: the predicted look (state machine in PredictionBook / FeelPrediction / ItemLook) ----
+
+        /// <summary>
+        /// Tracks the look just started for <paramref name="item"/> against the request sent right before it
+        /// (<see cref="_lastRequest"/>). Earlier looks of other items keep going until they resolve (no bounce).
+        /// </summary>
+        private void Predict(PredictionKind kind, Pickup item, Vessel vessel)
+        {
+            float now = Time.unscaledTime;
+            float rtt = RoundTripSeconds();
+            float tick = TimeManager != null ? (float)TimeManager.TickDelta : 0f;
+            float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, rtt, tick);
+            var look = new PendingLook { Item = item, Vessel = vessel, ClickFrame = Time.frameCount };
+            _looks.Add(look, item, new FeelPrediction(kind, OwnerId, Snapshot(look), now, timeout), _lastRequest);
+        }
+
+        /// <summary>The measured round trip in s, or FeelRules.AssumedRoundTrip before the first ping.</summary>
+        private float RoundTripSeconds()
+        {
+            return FeelRules.RoundTrip(TimeManager != null ? TimeManager.RoundTripTime / 1000f : 0f);
+        }
+
+        private static ItemSnapshot Snapshot(PendingLook look)
+        {
+            Pickup item = look.Item;
+            if (item == null || !item.IsSpawned) return ItemSnapshot.Gone;
+            Vessel vessel = look.Vessel;
+            return new ItemSnapshot(true, item.HolderClientId.Value, item.transform.position, vessel != null ? vessel.ContentCount : 0);
+        }
+
+        /// <summary>Every frame: reads the synced state; a confirmed look stays, a denied one eases back with "nope".</summary>
+        private void UpdatePrediction()
+        {
+            if (_looks.Count == 0) return;
+            if (_snapshotOf == null) _snapshotOf = Snapshot;
+            _resolved.Clear();
+            _looks.Update(Time.unscaledTime, _snapshotOf, _resolved);
+            foreach (PredictionBook<PendingLook>.Resolved r in _resolved)
+            {
+                PendingLook look = r.Value;
+                FeelPrediction p = r.Prediction;
+                LogVisual(look, p.Kind);
+                float ms = (p.ResolvedTime - p.StartTime) * 1000f;
+                if (p.Phase == PredictionPhase.Confirmed)
+                {
+                    Debug.Log("[Feel] click to confirm: " + ms.ToString("0") + " ms (" + p.Kind + ")");
+                    if (look.Item != null) look.Item.EndPrediction(true);
+                    continue;
+                }
+                Debug.Log("[Feel] " + p.Kind + " " + (p.TimedOut ? "timed out" : "refused") + " after " + ms.ToString("0")
+                          + " ms: the look goes back, nope");
+                if (look.Item != null) look.Item.EndPrediction(false);
+                PlaySound(SoundKey.Nope, look.Item != null ? look.Item.transform.position : transform.position);
+            }
+            _resolved.Clear();
+        }
+
+        private static void LogVisual(PendingLook look, PredictionKind kind)
+        {
+            if (look.VisualLogged || look.Item == null || look.Item.PredictionDrawnFrame < 0) return;
+            look.VisualLogged = true;
+            int frames = look.Item.PredictionDrawnFrame - look.ClickFrame;
+            Debug.Log("[Feel] click to visual: " + (frames <= 0 ? "same frame" : frames + " frame(s) later") + " (" + kind + ")");
+        }
+
+        /// <summary>The server's next answer: it reaches only the prediction of that very request (PredictionBook).</summary>
+        private void NoteAnswer(AnswerKind kind, bool ok)
+        {
+            _looks.Answer(kind, ok, Time.unscaledTime);
+        }
+
+        private void PlaySound(SoundKey key, Vector3 position)
+        {
+            if (!_soundsLooked)
+            {
+                _soundsLooked = true;
+                _sounds = FindFirstObjectByType<KitchenSounds>();
+            }
+            if (_sounds != null) _sounds.Play(key, position);
         }
 
         private void SendKnife(Vessel board, int action)
         {
             if (board == null) return;
-            // The server ignores requests closer than 0.2 s; skip it here too, so the chop never lies.
-            if (Time.unscaledTime - _lastSendTime < ClientStrokeInterval) return;
+            // The server ignores requests closer than 0.2 s; the client keeps one tick more (spec 027b review), so the chop
+            // never lies.
+            if (Time.unscaledTime - _lastSendTime < _clientInterval) return;
             SendUse(board.NetworkObject, action);
             if (action == VesselRules.ActionStroke && _heldView != null) _heldView.PlayChop();
         }
@@ -296,23 +617,26 @@ namespace Worktown.Game.Net
             return AimTarget.Crate(id, _prices.TryGetGrocerPrice(id, out long price) ? price : -1);
         }
 
-        private void HandleThirdPersonKeys(Keyboard keyboard, bool holding)
+        /// <summary>Third person: what E does (spec 007/021), sent through the click buffer (spec 027b review).</summary>
+        private void HandleThirdPersonKey(bool holding)
         {
-            if (!keyboard.eKey.wasPressedThisFrame) return;
             // Spec 007/021: near a crate, the counter or the plate shelf, E goes to the kitchen.
             Station station = Target as Station;
             if (station != null && TryHandleStationKey(station, holding)) return;
 
             if (holding)
             {
-                SendDrop();
+                DropWithLook(FindHeldPickup());
                 return;
             }
             Pickup nearest = FindNearestFreePickup();
             if (nearest == null)
+            {
                 SetLocalNote("nothing to pick up within " + ClientSearchRadius + " m");
+                PlaySound(SoundKey.Nope, transform.position);
+            }
             else
-                SendPickup(nearest.NetworkObject);
+                PickUpWithLook(nearest);
         }
 
         private void SetLocalNote(string note)
@@ -344,17 +668,51 @@ namespace Worktown.Game.Net
         /// place surface is a target too (with its nearest free spot to the hit point); with full hands pickups do not
         /// block the ray (nothing could be picked up), so the spot or station behind them is found. Spec 021: cookware
         /// lying somewhere is always a target (food goes into it, a pan pours into it).
+        /// Spec 027b (docs/feel.md 3): the exact ray hit wins when it lands on an object's body (a station, button or place
+        /// surface always; an item within <see cref="DirectHitRadius"/> of its centre). Otherwise every interactable whose
+        /// centre (or free spot) lies within FeelSettings.AimCone of the ray, within reach and in sight, competes on
+        /// FeelRules.PickTarget (angle, a bonus for cookware that takes what you hold, the current target sticky); only
+        /// targets a click can act on count there. Without any, the exact ray result stays (with its "Too far" or reason).
         /// </summary>
-        private Component FindAimTarget(bool holding)
+        private Component FindAimTarget(Pickup held)
         {
+            bool holding = held != null;
+            Component exact = FindExactTarget(holding, out bool direct, out Ray ray);
+            int exactSpot = TargetSpot;
+            Vector3 exactSpotPosition = TargetSpotPosition;
+            bool exactTooFar = TargetTooFar;
+
+            // A direct exact hit goes through FeelRules.PickTarget as a Direct candidate (it always wins there).
+            Component coned = FindConeTarget(ray, held, direct ? exact : null, exactSpot, exactSpotPosition);
+            if (coned != null) return Stick(coned);
+            TargetSpot = exactSpot;
+            TargetSpotPosition = exactSpotPosition;
+            TargetTooFar = exactTooFar;
+            return Stick(exact);
+        }
+
+        private Component Stick(Component target)
+        {
+            _sticky = TargetTooFar ? null : target;
+            _stickySpot = target is PlaceSurface ? TargetSpot : PlaceSpots.None;
+            return target;
+        }
+
+        /// <summary>Spec 018–021: the exact camera-centre ray (see <see cref="FindAimTarget"/>); <paramref name="direct"/>
+        /// when it landed on the target's body.</summary>
+        private Component FindExactTarget(bool holding, out bool direct, out Ray ray)
+        {
+            direct = false;
+            ray = default;
             TargetSpot = PlaceSpots.None;
             TargetTooFar = false;
             Camera cam = Camera.main;
             if (cam == null) return null;
-            Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
             int count = Physics.RaycastNonAlloc(ray, _rayHits, ViewRules.AimRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             _aimHits.Clear();
             _aimSources.Clear();
+            _aimPoints.Clear();
             for (int i = 0; i < count; i++)
             {
                 Collider hitCollider = _rayHits[i].collider;
@@ -365,6 +723,7 @@ namespace Worktown.Game.Net
                 {
                     _aimHits.Add(AimHit.Button(distance, button.Station.transform.position, button.Station.Index, button.Option));
                     _aimSources.Add(button);
+                    _aimPoints.Add(_rayHits[i].point);
                     continue;
                 }
                 // Spec 020: a worktop top, the stove top or a burner (checked before its station).
@@ -374,18 +733,22 @@ namespace Worktown.Game.Net
                     int spot = NearestFreeSpot(surface, point, out Vector3 spotPosition);
                     _aimHits.Add(AimHit.Spot(distance, spot >= 0 ? spotPosition : point, surface.Index, spot));
                     _aimSources.Add(surface);
+                    _aimPoints.Add(point);
                     continue;
                 }
                 Station station = hitCollider.GetComponentInParent<Station>();
                 Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
                 if (station != null)
                     AddAimHit(distance, AimKind.Station, station);
+                else if (pickup != null && pickup.HasPrediction)
+                    continue; // spec 027b: flying to its predicted place, not where its collider still is
                 else if (pickup != null && !pickup.IsHeld && pickup.TryGetComponent(out Vessel vessel))
                     AddAimHit(distance, AimKind.Vessel, vessel); // spec 021
                 else if (pickup != null && !pickup.IsHeld)
                     AddAimHit(distance, AimKind.Pickup, pickup);
                 else
                     AddAimHit(distance, AimKind.Other, null);
+                _aimPoints.Add(_rayHits[i].point);
             }
             int picked = AimRules.Pick(_aimHits, transform.position, holding, out int outOfReach);
             // Spec 020: a target the ray sees but the hands cannot reach is shown grey with "Too far".
@@ -397,7 +760,9 @@ namespace Worktown.Game.Net
                 TargetSpot = _aimHits[picked].SpotIndex;
                 TargetSpotPosition = _aimHits[picked].ObjectPosition;
             }
-            return _aimSources[picked];
+            Component source = _aimSources[picked];
+            direct = !TargetTooFar && IsDirectHit(source, _aimPoints[picked]);
+            return source;
         }
 
         /// <summary>
@@ -411,7 +776,7 @@ namespace Worktown.Game.Net
             if (count == 0) return PlaceSpots.None;
             if (_spotTaken.Length < count) _spotTaken = new bool[count];
             for (int i = 0; i < _spotTaken.Length; i++)
-                _spotTaken[i] = i < count && PickupService.IsSpotOccupied(surface.SpotWorldPosition(i), _hits);
+                _spotTaken[i] = i < count && SpotTaken(surface, i);
             int spot = PlaceSpots.NearestFree(surface.Size, surface.ToTopPlane(point), _spotTaken);
             if (spot >= 0) spotPosition = surface.SpotWorldPosition(spot);
             return spot;
@@ -423,6 +788,217 @@ namespace Worktown.Game.Net
             _aimSources.Add(source);
         }
 
+        // ---- Spec 027b: cone aim (docs/feel.md 3) ----
+
+        /// <summary>A station, button or place surface the ray hits is always on target; an item only when the hit lies
+        /// within <see cref="DirectHitRadius"/> of its centre (not on a pan's handle next to a free spot).</summary>
+        private static bool IsDirectHit(Component source, Vector3 point)
+        {
+            if (source == null) return false;
+            if (!(source is Pickup) && !(source is Vessel)) return true;
+            Vector3 offset = point - AimAnchor(source);
+            offset.y = 0f;
+            return offset.sqrMagnitude <= DirectHitRadius * DirectHitRadius;
+        }
+
+        /// <summary>The point an item is aimed at: a vessel's contents, else the centre of its collider.</summary>
+        private static Vector3 AimAnchor(Component source)
+        {
+            if (source is Vessel vessel) return vessel.ContentPoint;
+            if (source.TryGetComponent(out Collider collider) && collider.enabled) return collider.bounds.center;
+            return source.transform.position;
+        }
+
+        /// <summary>
+        /// Spec 027b review: the stove buttons and place surfaces are scene objects that never spawn, so they are looked up
+        /// once (again only if one went away); the pickups come from Pickup.ClientList, kept by the pickups themselves.
+        /// </summary>
+        private void RefreshInteractables()
+        {
+            if (_allButtons == null || HasMissing(_allButtons)) _allButtons = FindObjectsByType<StationButton>(FindObjectsSortMode.None);
+            if (_allSurfaces == null || HasMissing(_allSurfaces)) _allSurfaces = FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None);
+        }
+
+        private static bool HasMissing<TItem>(TItem[] items) where TItem : UnityEngine.Object
+        {
+            foreach (TItem item in items)
+                if (item == null) return true;
+            return false;
+        }
+
+        /// <summary>Spec 027b review: a spot's occupancy (a physics query), reused for <see cref="SpotCacheSeconds"/>.</summary>
+        private bool SpotTaken(PlaceSurface surface, int spot)
+        {
+            long key = ((long)surface.Index << 16) | (uint)spot;
+            float now = Time.unscaledTime;
+            if (_spotCache.TryGetValue(key, out SpotState state) && now < state.Until) return state.Taken;
+            bool taken = PickupService.IsSpotOccupied(surface.SpotWorldPosition(spot), _hits);
+            _spotCache[key] = new SpotState { Taken = taken, Until = now + SpotCacheSeconds };
+            return taken;
+        }
+
+        /// <summary>
+        /// The best actionable interactable within the cone around <paramref name="ray"/>, or null. A <paramref name="direct"/>
+        /// exact hit (with its spot) joins as a Direct candidate and wins.
+        /// </summary>
+        private Component FindConeTarget(Ray ray, Pickup held, Component direct, int directSpot, Vector3 directSpotPosition)
+        {
+            if (ray.direction.sqrMagnitude < 0.5f) return null;
+            RefreshInteractables();
+            FeelSettings feel = FeelSettings.Current;
+            Held hands = Describe(held);
+            _cone.Clear();
+            _coneSources.Clear();
+            _coneSpots.Clear();
+            _coneAnchors.Clear();
+            float range = ViewRules.AimRange;
+            foreach (Pickup pickup in Pickup.ClientList)
+            {
+                if (pickup == null || !pickup.IsSpawned || pickup.IsHeld || pickup.HasPrediction || pickup == held) continue;
+                Component source = pickup.TryGetComponent(out Vessel vessel) ? vessel : (Component)pickup;
+                if (vessel == null && held != null) continue; // full hands: only cookware takes things
+                AddCone(ray, source, PlaceSpots.None, AimAnchor(source), hands, Describe(source), range, feel.AimCone);
+            }
+            foreach (StationButton button in _allButtons)
+            {
+                if (button == null || button.Station == null) continue;
+                AddCone(ray, button, PlaceSpots.None, button.transform.position, hands, Describe(button), range, feel.AimCone,
+                    button.Station.transform.position);
+            }
+            if (held != null)
+            {
+                foreach (PlaceSurface surface in _allSurfaces)
+                {
+                    if (surface == null || surface.SpotCount == 0) continue;
+                    if ((surface.transform.position - transform.position).sqrMagnitude > (PickupRules.MaxReach + 1.5f) * (PickupRules.MaxReach + 1.5f)) continue;
+                    for (int spot = 0; spot < surface.SpotCount; spot++)
+                    {
+                        Vector3 anchor = surface.SpotWorldPosition(spot);
+                        Vector3 to = anchor - ray.origin;
+                        if (FeelRules.AngleTo(ray.direction, to) > feel.AimCone || to.magnitude > range) continue;
+                        if (SpotTaken(surface, spot)) continue;
+                        AddCone(ray, surface, spot, anchor, hands, AimTarget.Spot(spot, surface.IsBurner), range, feel.AimCone);
+                    }
+                }
+            }
+
+            if (direct != null)
+            {
+                bool isSpot = direct is PlaceSurface;
+                Vector3 anchor = isSpot ? directSpotPosition : AimAnchor(direct);
+                _cone.Add(new AimCandidate(FeelRules.AngleTo(ray.direction, anchor - ray.origin), false, true));
+                _coneSources.Add(direct);
+                _coneSpots.Add(isSpot ? directSpot : PlaceSpots.None);
+                _coneAnchors.Add(anchor);
+            }
+
+            int current = PlaceSpots.None;
+            for (int i = 0; i < _coneSources.Count; i++)
+                if (_coneSources[i] == _sticky && _coneSpots[i] == _stickySpot) current = i;
+            // The best one in sight (small items never block the view, the candidate's own station neither).
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                int pick = FeelRules.PickTarget(_cone, current, feel.AimCone, feel.StickMargin, feel.HeldBonus);
+                if (pick == FeelRules.None) return null;
+                if (_cone[pick].Direct || InSight(ray.origin, _coneAnchors[pick], _coneSources[pick]))
+                {
+                    if (_coneSources[pick] is PlaceSurface)
+                    {
+                        TargetSpot = _coneSpots[pick];
+                        TargetSpotPosition = _coneAnchors[pick];
+                    }
+                    else TargetSpot = PlaceSpots.None;
+                    TargetTooFar = false;
+                    return _coneSources[pick];
+                }
+                // Out of sight: push it out of the cone and try the next.
+                _cone[pick] = new AimCandidate(float.PositiveInfinity, false, false);
+                if (pick == current) current = PlaceSpots.None;
+            }
+            return null;
+        }
+
+        private void AddCone(Ray ray, Component source, int spot, Vector3 anchor, Held hands, AimTarget target, float range, float cone,
+            Vector3? reachPoint = null)
+        {
+            Vector3 to = anchor - ray.origin;
+            float angle = FeelRules.AngleTo(ray.direction, to);
+            if (angle > cone || to.magnitude > range) return;
+            if (!PickupRules.IsInReach(transform.position, reachPoint ?? anchor)) return;
+            InteractionAction action = InteractionRules.ActionFor(hands, target);
+            if (action == InteractionAction.None || action == InteractionAction.Cut) return;
+            bool accepts = action == InteractionAction.PutInto || action == InteractionAction.Pour;
+            _cone.Add(new AimCandidate(angle, accepts, false));
+            _coneSources.Add(source);
+            _coneSpots.Add(spot);
+            _coneAnchors.Add(anchor);
+        }
+
+        /// <summary>Nothing solid between the eye and the anchor, except items (they never block), place surfaces, buttons,
+        /// our own body and the candidate's own station.</summary>
+        private bool InSight(Vector3 eye, Vector3 anchor, Component candidate)
+        {
+            Vector3 to = anchor + Vector3.up * 0.02f - eye;
+            float distance = to.magnitude - 0.03f;
+            if (distance <= 0f) return true;
+            Station own = candidate != null ? candidate.GetComponentInParent<Station>() : null;
+            if (candidate is StationButton button) own = button.Station;
+            int count = Physics.RaycastNonAlloc(new Ray(eye, to.normalized), _sightHits, distance, Physics.DefaultRaycastLayers,
+                QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                Collider c = _sightHits[i].collider;
+                if (c == null || c.transform.IsChildOf(transform)) continue;
+                if (c.GetComponentInParent<Pickup>() != null || c.TryGetComponent(out PlaceSurface _) || c.TryGetComponent(out StationButton _)) continue;
+                if (own != null && c.GetComponentInParent<Station>() == own) continue;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>An item that is held or flying (predicted) is no target any more.</summary>
+        private static bool StillTargetable(Component target)
+        {
+            Pickup item = target as Pickup;
+            if (item == null && target is Vessel vessel) item = vessel.GetComponent<Pickup>();
+            return item == null || (item.IsSpawned && !item.IsHeld && !item.HasPrediction);
+        }
+
+        /// <summary>
+        /// docs/feel.md 3: no single-frame flicker. A target lost this frame stays until it has been unseen for
+        /// FeelSettings.HighlightMinSeconds (a one-frame gap never blinks the highlight and prompt off).
+        /// </summary>
+        private Component KeepShown(Component fresh)
+        {
+            float now = Time.unscaledTime;
+            float min = FeelSettings.Current.HighlightMinSeconds;
+            bool shownAlive = _shown != null && StillTargetable(_shown);
+            bool same = fresh == _shown && TargetSpot == _shownSpot;
+            if (same && fresh != null)
+            {
+                _shownLastSeen = now;
+                _shownTooFar = TargetTooFar;
+                _shownSpotPosition = TargetSpotPosition;
+                return fresh;
+            }
+            // Only a lost target is held on: a new one takes over at once, so a click always acts on what the dot is on now
+            // (between two candidates the cone's stickiness prevents flicker).
+            bool keep = shownAlive && fresh == null && FeelRules.KeepShown(_shownLastSeen, now, min);
+            if (keep)
+            {
+                TargetSpot = _shownSpot;
+                TargetSpotPosition = _shownSpotPosition;
+                TargetTooFar = _shownTooFar;
+                return _shown;
+            }
+            _shown = fresh;
+            _shownSpot = TargetSpot;
+            _shownSpotPosition = TargetSpotPosition;
+            _shownTooFar = TargetTooFar;
+            _shownLastSeen = now;
+            return fresh;
+        }
+
         /// <summary>Third person (spec 007/021): E at a crate or the shelf with empty hands, at the counter holding something.</summary>
         private bool TryHandleStationKey(Station station, bool holding)
         {
@@ -431,10 +1007,12 @@ namespace Worktown.Game.Net
                 case StationKind.Crate:
                 case StationKind.PlateShelf:
                     if (holding) return false;
+                    PlaySound(SoundKey.Pick, station.transform.position);
                     SendStation(station.Index, 0);
                     return true;
                 case StationKind.Counter:
                     if (!holding) return false;
+                    PlaySound(SoundKey.Button, station.transform.position);
                     SendStation(station.Index, 0);
                     return true;
                 default:
@@ -502,46 +1080,56 @@ namespace Worktown.Game.Net
         private void SendStation(int stationIndex, int option)
         {
             _lastSendTime = Time.unscaledTime;
+            _clicks.NoteSent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestStation(stationIndex, option);
         }
 
         private void SendPickup(NetworkObject target)
         {
             _lastSendTime = Time.unscaledTime;
+            _clicks.NoteSent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestPickup(target);
         }
 
         private void SendDrop()
         {
             _lastSendTime = Time.unscaledTime;
+            _clicks.NoteSent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestDrop();
         }
 
         private void SendPlace(int surfaceIndex, int spotIndex)
         {
             _lastSendTime = Time.unscaledTime;
+            _clicks.NoteSent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestPlace(surfaceIndex, spotIndex);
         }
 
         private void SendUse(NetworkObject target, int action)
         {
             _lastSendTime = Time.unscaledTime;
+            _clicks.NoteSent(_lastSendTime);
+            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
             RequestUse(target, action);
         }
 
         [ServerRpc]
         private void RequestPickup(NetworkObject target)
         {
-            if (IsRateLimited()) return;
-            PickupOutcome outcome = _service != null ? _service.TryPickup(this, target) : PickupOutcome.NotFound;
+            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+                : _service != null ? _service.TryPickup(this, target) : PickupOutcome.NotFound;
             ReportResult(Owner, outcome, true);
         }
 
         [ServerRpc]
         private void RequestDrop()
         {
-            if (IsRateLimited()) return;
-            PickupOutcome outcome = _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
+            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+                : _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
             ReportResult(Owner, outcome, false);
         }
 
@@ -553,14 +1141,17 @@ namespace Worktown.Game.Net
         [ServerRpc]
         private void RequestPlace(int surfaceIndex, int spotIndex)
         {
-            if (IsRateLimited()) return;
-            PickupOutcome outcome = _service != null ? _service.TryPlace(this, surfaceIndex, spotIndex) : PickupOutcome.NotFound;
+            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+                : _service != null ? _service.TryPlace(this, surfaceIndex, spotIndex) : PickupOutcome.NotFound;
             ReportPlace(Owner, outcome);
         }
 
         [TargetRpc]
         private void ReportPlace(NetworkConnection target, PickupOutcome outcome)
         {
+            // Review of spec 027b: a rate-limited request is answered too (numbering in step) but shows nothing.
+            NoteAnswer(AnswerKind.Place, outcome == PickupOutcome.Ok);
+            if (outcome == PickupOutcome.TooFast) return;
             LastCookOutcome = null;
             LastPickupOutcome = outcome;
             LastPickupWasPlace = true;
@@ -576,8 +1167,8 @@ namespace Worktown.Game.Net
         [ServerRpc]
         private void RequestStation(int stationIndex, int option)
         {
-            if (IsRateLimited()) return;
-            CookOutcome outcome = _kitchen != null ? _kitchen.TryUseStation(this, stationIndex, option) : CookOutcome.UnknownStation;
+            CookOutcome outcome = IsRateLimited() ? CookOutcome.TooFast
+                : _kitchen != null ? _kitchen.TryUseStation(this, stationIndex, option) : CookOutcome.UnknownStation;
             ReportCook(Owner, outcome);
         }
 
@@ -589,14 +1180,16 @@ namespace Worktown.Game.Net
         [ServerRpc]
         private void RequestUse(NetworkObject target, int action)
         {
-            if (IsRateLimited()) return;
-            CookOutcome outcome = _kitchen != null ? _kitchen.TryUseVessel(this, target, action) : CookOutcome.NotAVessel;
+            CookOutcome outcome = IsRateLimited() ? CookOutcome.TooFast
+                : _kitchen != null ? _kitchen.TryUseVessel(this, target, action) : CookOutcome.NotAVessel;
             ReportCook(Owner, outcome);
         }
 
         [TargetRpc]
         private void ReportCook(NetworkConnection target, CookOutcome outcome)
         {
+            NoteAnswer(AnswerKind.Cook, outcome == CookOutcome.Ok);
+            if (outcome == CookOutcome.TooFast) return; // review of spec 027b: answered only to keep the numbering
             LastPickupOutcome = null;
             LastCookOutcome = outcome;
             LastResult = "kitchen: " + outcome;
@@ -604,20 +1197,22 @@ namespace Worktown.Game.Net
                 Debug.Log("[Kitchen] " + LastResult);
         }
 
-        /// <summary>Server: drop requests that come faster than a person can click.
-        /// Spam then costs neither validation work nor reply bandwidth. Spec 019: this also limits knife
-        /// strokes to one per 0.2 s per player; extra strokes are ignored, not errors.</summary>
+        /// <summary>
+        /// Server: refuse requests that come faster than a person can click (spam costs no validation work). Spec 019: this
+        /// also limits knife strokes. Review of spec 027b: a token bucket per player (RequestBucket: burst 2, one token per
+        /// 0.2 s), so requests sent far enough apart but arriving bunched all pass; a refused one is answered with TooFast
+        /// (one small report, the same RPCs) so the client's request numbering never shifts.
+        /// </summary>
         private bool IsRateLimited()
         {
-            float now = Time.unscaledTime;
-            if (now - _serverLastRequestTime < MinRequestInterval) return true;
-            _serverLastRequestTime = now;
-            return false;
+            return !_serverBucket.TryTake(Time.unscaledTimeAsDouble);
         }
 
         [TargetRpc]
         private void ReportResult(NetworkConnection target, PickupOutcome outcome, bool wasPickup)
         {
+            NoteAnswer(wasPickup ? AnswerKind.Pickup : AnswerKind.Drop, outcome == PickupOutcome.Ok);
+            if (outcome == PickupOutcome.TooFast) return; // review of spec 027b: answered only to keep the numbering
             LastCookOutcome = null;
             LastPickupOutcome = outcome;
             LastPickupWasPlace = false;

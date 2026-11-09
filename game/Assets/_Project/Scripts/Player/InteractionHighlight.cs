@@ -19,6 +19,11 @@ namespace Worktown.Game.Player
     /// untouched and are read as the base, so the tint follows them; per-material blocks are owned by this
     /// component. One target at a time; it is re-applied every frame without allocating and cleared when the
     /// target or the colour changes.
+    /// Spec 027b (docs/feel.md 3, 4): plus an outline in the Interact colour (grey when the click does nothing, such as
+    /// "Too far"): a slightly larger copy of each target mesh drawn from the inside (front faces culled), so only its rim
+    /// shows around the silhouette. While a click would put the held item somewhere, a translucent copy of it shows
+    /// exactly where it lands (<see cref="PlacementGhost"/>). The target itself never flickers for single frames
+    /// (PickupInteractor keeps it at least FeelSettings.HighlightMinSeconds).
     /// </summary>
     public sealed class InteractionHighlight : MonoBehaviour
     {
@@ -33,6 +38,13 @@ namespace Worktown.Game.Player
         private const float EmissionAmount = 0.35f;
         private const float MarkerDiameter = 0.22f;
         private const float MarkerLift = 0.006f;
+        /// <summary>Spec 027b: m of outline around a target, as a fraction of its size within the limits below.</summary>
+        public const float OutlineWidth = 0.012f;
+        public const float OutlineMinScale = 0.03f;
+        public const float OutlineMaxScale = 0.25f;
+        private static readonly int CullId = Shader.PropertyToID("_Cull");
+        private const float GhostAlpha = 0.35f;
+        private const float OutlineAlpha = 0.95f;
 
         [Tooltip("Translucent material of the place marker disc.")]
         [SerializeField] private Material _markerMaterial;
@@ -47,6 +59,13 @@ namespace Worktown.Game.Player
         private readonly List<Renderer> _scratch = new List<Renderer>(32);
         private readonly List<Material> _materials = new List<Material>(8);
         private MaterialPropertyBlock _block;
+        // Spec 027b: the outline hulls (one per target mesh, not parented, synced every frame) and the placement ghost.
+        private Material _outline;
+        private readonly List<Renderer> _hullSources = new List<Renderer>(32);
+        private readonly List<Transform> _hulls = new List<Transform>(32);
+        private readonly List<Vector3> _hullCentres = new List<Vector3>(32);
+        private readonly List<float> _hullScales = new List<float>(32);
+        private PlacementGhost _ghost;
 
         public void Activate(PickupInteractor interactor)
         {
@@ -54,6 +73,23 @@ namespace Worktown.Game.Player
             _interactor = interactor;
             _block = new MaterialPropertyBlock();
             _marker = CreateMarker();
+            if (_markerMaterial != null)
+            {
+                _outline = new Material(_markerMaterial) { name = "InteractOutline" };
+                if (_outline.HasProperty(CullId)) _outline.SetFloat(CullId, (float)UnityEngine.Rendering.CullMode.Front);
+                _ghost = new PlacementGhost(_markerMaterial, Palette.WithAlpha(Palette.Interact, GhostAlpha));
+            }
+        }
+
+        /// <summary>Spec 027b: the outline colour: Interact for any action, grey when the click does nothing (a reason).</summary>
+        public static Color OutlineColorFor(InteractionAction action) =>
+            action == InteractionAction.None ? RefuseColor : Palette.Interact;
+
+        /// <summary>Spec 027b: outline scale for a mesh with this bounding radius (m): about <see cref="OutlineWidth"/> wide.</summary>
+        public static float OutlineScaleFor(float radius)
+        {
+            if (!(radius > 0.001f)) return OutlineMaxScale;
+            return Mathf.Clamp(OutlineWidth / radius, OutlineMinScale, OutlineMaxScale);
         }
 
         /// <summary>The glow colour for an action; null for no glow. <paramref name="hasReason"/>: a None with a prompt.</summary>
@@ -94,10 +130,87 @@ namespace Worktown.Game.Player
                 {
                     _color = glow.Value;
                     Collect(target);
+                    BuildOutline(OutlineColorFor(action));
                 }
             }
             Apply();
+            SyncOutline();
             UpdateMarker(active && action == InteractionAction.Place && _interactor.TargetSpot >= 0);
+            UpdateGhost(active);
+        }
+
+        private void BuildOutline(Color color)
+        {
+            if (_outline == null) return;
+            _outline.SetColor(BaseColorId, Palette.WithAlpha(color, OutlineAlpha));
+            foreach (Renderer source in _renderers)
+            {
+                if (!(source is MeshRenderer) || !source.TryGetComponent(out MeshFilter filter) || filter.sharedMesh == null) continue;
+                var hull = new GameObject("InteractOutline");
+                hull.AddComponent<MeshFilter>().sharedMesh = filter.sharedMesh;
+                var renderer = hull.AddComponent<MeshRenderer>();
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                source.GetSharedMaterials(_materials);
+                var materials = new Material[Mathf.Max(1, _materials.Count)];
+                for (int i = 0; i < materials.Length; i++) materials[i] = _outline;
+                renderer.sharedMaterials = materials;
+                _materials.Clear();
+                _hullSources.Add(source);
+                _hulls.Add(hull.transform);
+                _hullCentres.Add(filter.sharedMesh.bounds.center);
+                _hullScales.Add(1f + OutlineScaleFor(source.bounds.extents.magnitude));
+            }
+        }
+
+        /// <summary>Keeps every hull on its mesh, scaled about the mesh centre.</summary>
+        private void SyncOutline()
+        {
+            // An item that is flying (predicted) or carried is drawn elsewhere for the render: no outline left behind.
+            bool moving = TargetMoves();
+            for (int i = 0; i < _hulls.Count; i++)
+            {
+                Renderer source = _hullSources[i];
+                Transform hull = _hulls[i];
+                if (hull == null) continue;
+                bool visible = !moving && source != null && source.enabled && source.gameObject.activeInHierarchy;
+                if (hull.gameObject.activeSelf != visible) hull.gameObject.SetActive(visible);
+                if (!visible) continue;
+                Vector3 c = _hullCentres[i];
+                float s = _hullScales[i];
+                Matrix4x4 m = source.transform.localToWorldMatrix * Matrix4x4.Translate(c) * Matrix4x4.Scale(Vector3.one * s)
+                              * Matrix4x4.Translate(-c);
+                hull.SetPositionAndRotation(m.GetColumn(3), m.rotation);
+                hull.localScale = m.lossyScale;
+            }
+        }
+
+        private bool TargetMoves()
+        {
+            Pickup item = _target as Pickup;
+            if (item == null && _target != null) item = _target.GetComponent<Pickup>();
+            return item != null && (item.IsHeld || item.HasPrediction);
+        }
+
+        private void ClearOutline()
+        {
+            foreach (Transform hull in _hulls)
+            {
+                if (hull == null) continue;
+                hull.gameObject.SetActive(false); // gone this frame (Destroy waits for the end of the update)
+                Destroy(hull.gameObject);
+            }
+            _hulls.Clear();
+            _hullSources.Clear();
+            _hullCentres.Clear();
+            _hullScales.Clear();
+        }
+
+        private void UpdateGhost(bool active)
+        {
+            if (_ghost == null) return;
+            if (active && _interactor.TryGetLandingPose(out Pickup held, out Pose pose)) _ghost.Show(held.transform, pose);
+            else _ghost.Hide();
         }
 
         /// <summary>The target's visible renderers, without labels; a station without its buttons (they light up on their own).</summary>
@@ -149,6 +262,7 @@ namespace Worktown.Game.Player
             _materials.Clear();
             _renderers.Clear();
             _target = null;
+            ClearOutline();
         }
 
         private static Color MaterialBase(Material material)
@@ -186,6 +300,8 @@ namespace Worktown.Game.Player
         {
             Clear();
             if (_marker != null) Destroy(_marker.gameObject);
+            _ghost?.Destroy();
+            if (_outline != null) Destroy(_outline);
         }
     }
 }

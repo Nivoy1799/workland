@@ -57,3 +57,30 @@ Each spec follows docs/art-direction.md (sizes, palette, measured animation), do
 builder, tester, reviewer, visual check, verify.sh. Numbers such as prices, timings and patience are
 **provisional defaults** chosen by the orchestrator, listed in each spec under "Defaults to review", and
 tuned later by the human.
+
+## Follow-ups from reviews (small, do when touching the area)
+- 027: visual-check.sh trap should `exit 130`; derive the WSL path with `wslpath`; tour args parse in release builds.
+- 027a: FloorPlanTests AC4 drives CustomerQueue/OrderRules directly, not CustomerService serving and Customer
+  movement (make it end to end); TourRules duplicates layout constants (take them from the scene or builder).
+- 027b (still feels off): other players see food vanish from the cook's hand before it drops into a pot (no flight,
+  despawn has no destination); other players' put-downs are silent; pressed buttons click but do not sink; the HUD
+  prompt lags the aim by one frame; sprint from standing takes 0.26 s (feel.md wants 0.1-0.15 s); the outline is
+  thick on big stations.
+- 027b review (2026-11-09, CHANGES REQUESTED): fix before merging 027b, as one fix round on top of 027c:
+  (1) client click interval >= server interval + one tick (also the knife stroke); (2) match server answers to the
+  latest request only; (3) confirm timeout scales with round-trip time; (4) never move a networked root (childless
+  items); (5) clear stale settle state; (6) superseded pickup must not bounce; (7) third-person E through the
+  ClickBuffer; (8) drop a queued click when the target or action changed; (9) put-into confirms only for our own
+  item; (10) cache Contents/children, no Find* or allocations per frame; (11) end predictions in OnStopClient;
+  (12) extract the prediction state machine into a pure tested class, remove the unused direct-hit branch, test the
+  legs layer weight outside idle; nits: legs layer during the idle-to-walk fade, AvatarMask lifetime.
+- 027c + 027b-fix review (2026-11-09, CHANGES REQUESTED): must-fix: server rate limit as a token bucket (burst 2,
+  one token per 0.2 s) so bunched requests are not dropped and PredictionBook stays in step; test: a drop inside a
+  burst, then a refusal of n+1 must not deny n. Also: queued click compares the action too; cache the heat timeline
+  per (item hash, op, temperature); surface test for ServeFeed/ServeReward; reset ServeRewardView `_seen` on
+  despawn; destroy the HeatRingView material; HeatRingView rig lookup and Contents via Vessel.ContentsAnchor;
+  cached _BaseColor id; coin after the distance check; no closure per click. Later: RTT 0 before the first ping;
+  tests that copy glue from PickupInteractor/Pickup.
+- Netcode list (spec 004 load test and later): disconnect a client after many TooFast replies in a row; a late
+  refusal after a server hitch over 1 s can bounce one prediction (synced state corrects it); with RTT over about
+  0.24 s two requests are usually in flight, so refusals wait for the full timeout; WSL MTU 1280 path (Tugboat).

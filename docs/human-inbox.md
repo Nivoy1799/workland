@@ -3,12 +3,16 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-09 02:40)
-- **Running:** spec 027a (shop floor plan), builder working.
-- **Next:** 027b feel pass 1 (movement and interaction, F2 panel with presets A/B), 027c feel pass 2 (cooking
+## Status (updated 2026-11-09 05:10)
+- **Running:** spec 027b feel pass 1 (instant feedback, arcs, forgiving aim, F2 panel with presets A/B).
+- **Next:** 027c feel pass 2 (cooking
   feedback), 027d world labels and customer looks. Then the cooking stations (028+). See docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
+  - **Spec 027a, shop floor plan:** back line (crates, board, two stoves, plates), a 1.5 m cook aisle (two cooks
+    can pass; player body radius now 0.3 m), a slim 0.7 m front counter, guests queue on the street side facing
+    the cook, back and side walls with a staff gap. **Your "buttons on the back" was real:** the stove and
+    cabinet models themselves were turned towards the wall; now every knob and door faces the cook.
   - **Spec 027, visual check tool:** `bash scripts/visual-check.sh --tours look,walk,cook` makes contact sheets
     (frames every 0.1 s, walking seen from the side, the kitchen, the cook demo) without window focus. Its first run
     found 9 problems; each one is now in a roadmap spec.
@@ -22,10 +26,20 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+3. **Cooking pace.** Measured with the new rings: a potato in the **pan** is good after 44 s, perfect at 55 s and
+   burnt at 75 s. In the **pot** it is good after 2 min 21 s, perfect at 3 min, burnt at 4 min. Shop games usually
+   aim at 20–60 s per item. Option A: speed everything up about 2x (pan good at ~22 s, pot at ~70 s). Option B:
+   keep it. Option C: tell Claude your target, for example "pan 20 s, pot 45 s". **Default: A**, done in the fryer
+   or griddle spec (028+), when timings are tuned anyway. Blocks nothing.
+4. **FYI, no answer needed:** in development builds (the ones you play) **F2** now opens the feel panel
+   (Preset A / B), and the What's-new banner moved to **Shift+F2**.
 2. **D21 extension for cooking feedback (spec 027c).** D21 says clients only see food looks, names and stars.
-   Progress rings need two small extra values per pot or pan: how far along it is, and which zone (raw, cooking,
-   good, perfect, overdone, burnt). They reveal no recipe stats. Option A: allow it. Option B: keep D21 strict, so
-   rings would have to guess on the client. **Default: A.** Blocks nothing; easy to revert.
+   The cooking feedback needs a little more, all computed by the server:
+   - per pot or pan: how far along it is (0-255) and its zone (raw, cooking, good, perfect, overdone, burnt),
+     plus a warning flag that turns on 3 s before overdone;
+   - after a serve: stars, amount paid and the **tip** (the tip reveals how big the pay share is).
+   No recipe stats are revealed. Option A: allow all of it. Option B: allow the rings but hide the tip.
+   Option C: keep D21 strict (rings would have to guess on the client). **Default: A.** Blocks nothing; easy to revert.
 1. **WSL test server: network MTU is 1280 again** (Tailscale). Clients connect to the WSL dedicated server but
    nothing spawns (the spec 003 issue: FishNet's Tugboat sends packets up to 1350 bytes that must not be split).
    Option A: you run `sudo ip link set dev eth0 mtu 1500` in WSL (or turn Tailscale off) when you want WSL tests.

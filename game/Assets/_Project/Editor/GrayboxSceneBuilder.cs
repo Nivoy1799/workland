@@ -45,6 +45,8 @@ namespace Worktown.Game.Editor
     public static class GrayboxSceneBuilder
     {
         public const string Root = "Assets/_Project";
+        /// <summary>Spec 027b: the clip whose legs are blended over the idle (feet under the hips).</summary>
+        public const string StandLegsClip = "A_TPose";
         public const string ScenePath = Root + "/Scenes/Graybox.unity";
         private const string PlayerPrefabPath = Root + "/Prefabs/Player.prefab";
         private const string PickupPrefabPath = Root + "/Prefabs/PickupCube.prefab";
@@ -147,6 +149,7 @@ namespace Worktown.Game.Editor
             EnsureFolder(Root + "/Prefabs");
             EnsureFolder(Root + "/Scenes");
             EnsureFolder(Root + "/Settings");
+            EnsureLabelMaterials(); // spec 027d
 
             ArtCatalog builtCatalog = ArtCatalogBuilder.Build(); // spec 015: wrappers and catalog first
             // Spec 026: palette colours; graybox fallbacks are Plaster (walls, floors) and Steel (machines).
@@ -358,6 +361,8 @@ namespace Worktown.Game.Editor
             SetField(visual, "_crouch", ArtCatalogBuilder.CharacterClip(ArtCatalogBuilder.CrouchClip));
             SetField(visual, "_crouchWalk", crouchWalk);
             SetField(visual, "_hold", ArtCatalogBuilder.HoldClip());
+            // Spec 027b: the idle stands with one foot well ahead; the legs of the library's A pose pull the feet together.
+            SetField(visual, "_stand", ArtCatalogBuilder.CharacterClip(StandLegsClip));
 
             // Spec 025 amendment: the clip speeds on this body (all variants share it), from the root motion; the feet
             // (StrideRules) are a cross-check.
@@ -1191,7 +1196,7 @@ namespace Worktown.Game.Editor
             body.isStatic = true;
 
             // Spec 015 swap layer: the cube body and its collider stay; the catalog visual is a sibling.
-            float labelY = height * 0.5f + 0.6f;
+            float frontZ = -depth * 0.5f; // spec 027d: the front-most surface (the stove model stands out of its cube)
             if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(kind), out GameObject wrapper))
             {
                 UnityEngine.Object.DestroyImmediate(body.GetComponent<MeshRenderer>());
@@ -1201,13 +1206,22 @@ namespace Worktown.Game.Editor
                 // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules.
                 visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(1f, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
-                // Raise the label only when the model is taller than the cube.
-                float top = ArtCatalogBuilder.TopOf(visual) - height * 0.5f;
-                labelY = Mathf.Max(labelY, top + 0.1f);
+                foreach (Renderer r in visual.GetComponentsInChildren<Renderer>())
+                {
+                    Bounds wb = r.bounds;
+                    for (int c = 0; c < 8; c++)
+                    {
+                        var corner = new Vector3((c & 1) == 0 ? wb.min.x : wb.max.x, (c & 2) == 0 ? wb.min.y : wb.max.y, (c & 4) == 0 ? wb.min.z : wb.max.z);
+                        frontZ = Mathf.Min(frontZ, root.transform.InverseTransformPoint(corner).z);
+                    }
+                }
             }
 
             // Spec 020: no keys on the world labels any more (first person clicks; the prompts say how).
-            TextMesh label = CreateLabel(root.transform, new Vector3(0f, labelY, 0f), 60, 0.05f);
+            // Spec 027d: a small sign on the cook side of the front face (never a name floating above the station).
+            TextMesh label = CreateLabel(root.transform, StationSign.LocalPosition(height, frontZ), 60, 0.05f);
+            label.transform.localScale = Vector3.one * StationSign.BaseScale;
+            label.gameObject.AddComponent<StationSign>();
             string price = string.Empty;
             if (kind == StationKind.Crate
                 && GrocerPrices.TryGetGrocerPrice(DemoIngredients.All[ingredientIndex].Id, out long dollars))
@@ -1235,6 +1249,25 @@ namespace Worktown.Game.Editor
         {
             if (catalog == null || !catalog.TryGet(container, out GameObject prefab)) return 0.02f;
             return ArtCatalogBuilder.HeightOf(prefab) * fill;
+        }
+
+        /// <summary>Spec 027d: the text and panel materials WorldLabelFade copies at run time (in Resources, so the shader is in every build).</summary>
+        private static void EnsureLabelMaterials()
+        {
+            EnsureFolder(Root + "/Resources/Labels");
+            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(Root + "/Resources/Labels/WorldText.shader");
+            if (shader == null) throw new InvalidOperationException("WorldText.shader is missing");
+            foreach (string name in new[] { "WorldText", "WorldPanel" })
+            {
+                string path = Root + "/Resources/Labels/" + name + ".mat";
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null)
+                {
+                    material = new Material(shader);
+                    AssetDatabase.CreateAsset(material, path);
+                }
+                else if (material.shader != shader) material.shader = shader;
+            }
         }
 
         private static TextMesh CreateLabel(Transform parent, Vector3 localPosition, int fontSize, float characterSize)
@@ -1270,18 +1303,22 @@ namespace Worktown.Game.Editor
 
             var orbit = go.AddComponent<CinemachineOrbitalFollow>();
             orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
-            orbit.Radius = 5f;
-            orbit.TargetOffset = new Vector3(0f, 1.6f, 0f);
+            // Spec 027b: closer and lower than before (5 m, 1.6 m, 20 degrees), so the person fills more of the frame and the
+            // kitchen stays visible; less damping (feel.md 5). The numbers live in FeelSettings (preset A); PlayerCameraRig
+            // applies the current ones again on bind and when the F2 panel changes them.
+            FeelSettings feel = FeelSettings.PresetA();
+            orbit.Radius = feel.ThirdPersonDistance;
+            orbit.TargetOffset = new Vector3(0f, feel.ThirdPersonHeight, 0f);
             orbit.VerticalAxis.Range = new Vector2(-30f, 70f);
-            orbit.VerticalAxis.Value = 20f;
-            orbit.VerticalAxis.Center = 20f;
-            orbit.RadialAxis.Range = new Vector2(0.4f, 1.6f); // 2 to 8 m
+            orbit.VerticalAxis.Value = feel.ThirdPersonPitch;
+            orbit.VerticalAxis.Center = feel.ThirdPersonPitch;
+            orbit.RadialAxis.Range = new Vector2(0.5f, 2.2f); // about 1.6 to 7 m with the wheel
             orbit.RadialAxis.Value = 1f;
-            orbit.TrackerSettings.PositionDamping = new Vector3(0.2f, 0.2f, 0.2f);
+            orbit.TrackerSettings.PositionDamping = Vector3.one * feel.ThirdPersonDamping;
 
             var composer = go.AddComponent<CinemachineRotationComposer>();
-            composer.TargetOffset = new Vector3(0f, 1.6f, 0f);
-            composer.Damping = new Vector2(0.1f, 0.1f);
+            composer.TargetOffset = new Vector3(0f, feel.ThirdPersonHeight, 0f);
+            composer.Damping = Vector2.one * feel.ComposerDamping;
 
             var deoccluder = go.AddComponent<CinemachineDeoccluder>();
             deoccluder.IgnoreTag = "Player";

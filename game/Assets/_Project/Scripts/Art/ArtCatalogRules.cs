@@ -57,7 +57,12 @@ namespace Worktown.Game.Art
 
         /// <summary>Spec 024: the customer characters, in variant order (index = <see cref="CharacterVariant"/> of the object id).</summary>
         public static ArtKey[] CustomerCharacterKeys() =>
-            new[] { ArtKey.CharacterCustomerMale, ArtKey.CharacterCustomerFemale };
+            new[]
+            {
+                ArtKey.CharacterCustomerMale, ArtKey.CharacterCustomerFemale,
+                ArtKey.CharacterCustomerMale2, ArtKey.CharacterCustomerFemale2,
+                ArtKey.CharacterCustomerMale3, ArtKey.CharacterCustomerFemale3
+            };
 
         /// <summary>
         /// Spec 024: which of <paramref name="count"/> character variants an id shows (owner client id for players, object
@@ -77,11 +82,55 @@ namespace Worktown.Game.Art
             return keys[CharacterVariant(ownerClientId, keys.Length)];
         }
 
-        /// <summary>Spec 024: the character of the customer with this network object id.</summary>
+        /// <summary>Spec 024: the character of the customer with this network object id (second review: through <see cref="CustomerVariant"/>).</summary>
         public static ArtKey CustomerCharacterKey(int objectId)
         {
             ArtKey[] keys = CustomerCharacterKeys();
-            return keys[CharacterVariant(objectId, keys.Length)];
+            return keys[CustomerVariant(objectId, keys.Length)];
+        }
+
+        /// <summary>
+        /// Spec 027d, second review: which of <paramref name="count"/> looks a customer shows. Object ids do not come one after
+        /// another for customers (other objects spawn in between, so a plain modulo kept giving the same few looks), so the
+        /// id goes through an integer hash first. Spec 027d keeps neighbouring ids different: an even id takes its hashed
+        /// look, an odd id its hashed look unless one of its two even neighbours has it, then the next free one (so every
+        /// pair of neighbours differs without looking further than one id). Pure and the same on every client.
+        /// </summary>
+        public static int CustomerVariant(int objectId, int count)
+        {
+            if (count <= 0) return 0;
+            int raw = HashedVariant(objectId, count);
+            if ((objectId & 1) == 0 || count < 3) return raw;
+            int before, after;
+            unchecked
+            {
+                before = HashedVariant(objectId - 1, count);
+                after = HashedVariant(objectId + 1, count);
+            }
+            int v = raw;
+            for (int i = 0; i < count; i++)
+            {
+                if (v != before && v != after) return v;
+                v = (v + 1) % count;
+            }
+            return raw;
+        }
+
+        private static int HashedVariant(int id, int count) => (int)(MixId(id) % (uint)count);
+
+        /// <summary>A fixed integer hash (the lowbias32 finalizer): every bit of the id moves every bit of the result.</summary>
+        public static uint MixId(int id)
+        {
+            unchecked
+            {
+                uint x = (uint)id;
+                x ^= x >> 16;
+                x *= 0x7feb352dU;
+                x ^= x >> 15;
+                x *= 0x846ca68bU;
+                x ^= x >> 16;
+                return x;
+            }
         }
 
         /// <summary>Keys from <paramref name="required"/> that have no assigned prefab.</summary>

@@ -27,7 +27,15 @@ namespace Worktown.Game.Player
 
         private CinemachineOrbitalFollow _orbit;
         private CinemachinePanTilt _panTilt;
+        private CinemachineRotationComposer _composer;
         private PlayerInputReader _input;
+        // Spec 027b: the feel numbers last applied, and the optional first-person head bob.
+        private int _feelVersion = -1;
+        private CinemachineCameraOffset _bob;
+        private Transform _eyes;
+        private Vector3 _lastEyes;
+        private float _bobPhase;
+        private float _bobSpeed;
 
         /// <summary>The view the local player looks through.</summary>
         public ViewMode Mode { get; private set; } = ViewMode.FirstPerson;
@@ -61,7 +69,10 @@ namespace Worktown.Game.Player
             _firstPerson.Follow = eyes != null ? eyes : followTarget;
             _orbit = _thirdPerson.GetComponent<CinemachineOrbitalFollow>();
             _panTilt = _firstPerson.GetComponent<CinemachinePanTilt>();
+            _composer = _thirdPerson.GetComponent<CinemachineRotationComposer>();
             _input = input;
+            _eyes = eyes;
+            ApplyFeel();
 
             // Start looking where the body faces.
             float yaw = followTarget.eulerAngles.y;
@@ -108,6 +119,8 @@ namespace Worktown.Game.Player
         private void LateUpdate()
         {
             if (_input == null) return;
+            ApplyFeel();
+            UpdateHeadBob();
             Vector2 look;
             float zoom;
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
@@ -144,6 +157,54 @@ namespace Worktown.Game.Player
             // The wheel zooms only in third person.
             _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - zoom * ZoomStep,
                 _orbit.RadialAxis.Range.x, _orbit.RadialAxis.Range.y);
+        }
+
+        /// <summary>
+        /// Spec 027b: the third-person numbers from <see cref="FeelSettings.Current"/> (distance, look height, pitch,
+        /// follow and aim damping), applied on bind and again whenever the F2 panel changes them. Mouse smoothing stays off.
+        /// </summary>
+        private void ApplyFeel()
+        {
+            if (_feelVersion == FeelSettings.Version) return;
+            _feelVersion = FeelSettings.Version;
+            FeelSettings feel = FeelSettings.Current;
+            if (_orbit != null)
+            {
+                _orbit.Radius = feel.ThirdPersonDistance;
+                _orbit.TargetOffset = new Vector3(0f, feel.ThirdPersonHeight, 0f);
+                _orbit.VerticalAxis.Center = feel.ThirdPersonPitch;
+                _orbit.VerticalAxis.Value = Mathf.Clamp(feel.ThirdPersonPitch, _orbit.VerticalAxis.Range.x, _orbit.VerticalAxis.Range.y);
+                _orbit.TrackerSettings.PositionDamping = Vector3.one * feel.ThirdPersonDamping;
+            }
+            if (_composer != null)
+            {
+                _composer.TargetOffset = new Vector3(0f, feel.ThirdPersonHeight, 0f);
+                _composer.Damping = Vector2.one * feel.ComposerDamping;
+            }
+            if (feel.HeadBob && _bob == null && _firstPerson != null)
+            {
+                _bob = _firstPerson.GetComponent<CinemachineCameraOffset>();
+                if (_bob == null) _bob = _firstPerson.gameObject.AddComponent<CinemachineCameraOffset>();
+            }
+        }
+
+        /// <summary>Spec 027b, docs/feel.md 5: an optional, very soft first-person head bob (off by default), one dip per
+        /// step at the walking cadence.</summary>
+        private void UpdateHeadBob()
+        {
+            if (_bob == null) return;
+            FeelSettings feel = FeelSettings.Current;
+            float dt = Time.deltaTime;
+            Vector3 eyes = _eyes != null ? _eyes.position : Vector3.zero;
+            Vector3 delta = eyes - _lastEyes;
+            _lastEyes = eyes;
+            delta.y = 0f;
+            float speed = dt > 0f ? Mathf.Min(delta.magnitude / dt, 10f) : 0f;
+            _bobSpeed = CharacterAnimRules.SmoothSpeed(_bobSpeed, speed, dt);
+            _bobPhase += dt * Mathf.PI * CharacterAnimRules.TargetCadence(_bobSpeed);
+            float strength = Mathf.Clamp01(_bobSpeed / MovementRules.WalkSpeed);
+            bool on = feel.HeadBob && IsFirstPerson && _bobSpeed > CharacterAnimRules.WalkStopSpeed;
+            _bob.Offset = on ? new Vector3(0f, -feel.HeadBobAmount * strength * Mathf.Abs(Mathf.Sin(_bobPhase)), 0f) : Vector3.zero;
         }
 
         private static float Wrap(float value, Vector2 range)

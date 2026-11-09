@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Worktown.Game.Cooking;
+using Worktown.Game.Player;
 
 namespace Worktown.Game.Art
 {
@@ -34,6 +35,38 @@ namespace Worktown.Game.Art
         private readonly List<Renderer> _renderers = new List<Renderer>();
         private Dictionary<ArtKey, GameObject> _prefabs;
         private MaterialPropertyBlock _block;
+        // Spec 027b: parts that just arrived drop in from above (every viewer).
+        private int _shownParts = -1;
+        private readonly List<Transform> _dropping = new List<Transform>();
+        private readonly List<Vector3> _dropRest = new List<Vector3>();
+        private float _dropStart;
+        // Spec 027c: what each active instance shows (for the colour shift on the heat) and the current heat.
+        private readonly List<PieceTint> _tints = new List<PieceTint>();
+        private HeatZone _heatZone = HeatZone.None;
+        private float _heatProgress;
+        private bool _heatBoiled;
+
+        private struct PieceTint
+        {
+            public FoodLook Look;
+            public bool Tinted;
+            public bool Food;
+        }
+
+        /// <summary>
+        /// Spec 027c: the food shown here is on the heat (a pan's or pot's contents): every piece shifts colour with
+        /// <paramref name="progress01"/> and <paramref name="zone"/> (<see cref="FoodArtRules.HeatTint"/>); None returns to
+        /// the bucket colours. Only re-tints, nothing is rebuilt.
+        /// </summary>
+        public void SetHeat(HeatZone zone, float progress01, bool boiled)
+        {
+            if (zone == _heatZone && Mathf.Approximately(progress01, _heatProgress) && boiled == _heatBoiled) return;
+            _heatZone = zone;
+            _heatProgress = progress01;
+            _heatBoiled = boiled;
+            for (int i = 0; i < _active.Count; i++)
+                if (_active[i] != null && _tints[i].Food) ApplyTint(_active[i], _tints[i]);
+        }
 
         /// <summary>A food object: a single pile, or a plate / bowl with up to four parts.</summary>
         public void ShowFood(FoodLook look, IReadOnlyList<FoodLook> parts)
@@ -47,7 +80,7 @@ namespace Worktown.Game.Art
             else
             {
                 bool plated = look.Kind == FoodLook.KindPlated;
-                shown = Add(plated ? ArtKey.FoodPlate : ArtKey.FoodBowl, Vector3.zero, 0f, 1f, Color.white, false);
+                shown = Add(plated ? ArtKey.FoodPlate : ArtKey.FoodBowl, Vector3.zero, 0f, 1f, default, false, false);
                 float height = plated ? _plateContentHeight : _bowlContentHeight;
                 float scale = plated ? _partScale : _bowlPartScale;
                 float radius = plated ? _partRadius : _bowlPartRadius;
@@ -58,14 +91,59 @@ namespace Worktown.Game.Art
             ShowFallback(!shown, look);
         }
 
-        /// <summary>A station's contents (plating table, bowl, pan, pot): up to four parts at this anchor.</summary>
+        /// <summary>
+        /// A station's contents (plating table, bowl, pan, pot): up to four parts at this anchor. Spec 027b: when there are
+        /// more parts than shown before, the new ones drop in from <see cref="FeelSettings.DropHeight"/> above (ease-in over
+        /// <see cref="FeelSettings.DropSeconds"/>), for every viewer; the first contents after a (re)join just appear.
+        /// </summary>
         public void ShowParts(IReadOnlyList<FoodLook> parts)
         {
             ReleaseAll();
             int count = PartCount(parts, FoodLook.MaxParts);
+            int firstNew = -1;
             for (int i = 0; i < count; i++)
+            {
+                if (_shownParts >= 0 && i == _shownParts) firstNew = _active.Count;
                 AddPile(parts[i], FoodArtRules.PartPosition(i, count, _partRadius), _partScale);
+            }
+            _shownParts = count;
+            if (firstNew >= 0) StartDrop(firstNew);
             ShowFallback(false, default);
+        }
+
+        private void StartDrop(int firstInstance)
+        {
+            FeelSettings feel = FeelSettings.Current;
+            if (!(feel.DropSeconds > 0f) || feel.DropHeight <= 0f) return;
+            Vector3 lift = transform.InverseTransformVector(Vector3.up * feel.DropHeight);
+            _dropStart = Time.unscaledTime;
+            for (int i = firstInstance; i < _active.Count; i++)
+            {
+                Transform t = _active[i].transform;
+                _dropping.Add(t);
+                _dropRest.Add(t.localPosition);
+                t.localPosition += lift;
+            }
+        }
+
+        private void Update()
+        {
+            if (_dropping.Count == 0) return;
+            FeelSettings feel = FeelSettings.Current;
+            float t = feel.DropSeconds > 0f ? (Time.unscaledTime - _dropStart) / feel.DropSeconds : 1f;
+            Vector3 lift = transform.InverseTransformVector(Vector3.up * feel.DropHeight);
+            float left = 1f - FeelRules.EaseIn(t);
+            for (int i = 0; i < _dropping.Count; i++)
+                if (_dropping[i] != null) _dropping[i].localPosition = _dropRest[i] + lift * (t >= 1f ? 0f : left);
+            if (t >= 1f) StopDrop();
+        }
+
+        private void StopDrop()
+        {
+            for (int i = 0; i < _dropping.Count; i++)
+                if (_dropping[i] != null) _dropping[i].localPosition = _dropRest[i];
+            _dropping.Clear();
+            _dropRest.Clear();
         }
 
         private static int PartCount(IReadOnlyList<FoodLook> parts, int limit)
@@ -78,17 +156,15 @@ namespace Worktown.Game.Art
         {
             if (!FoodArtRules.TryGetPiece(look, out FoodPiece piece)) return false;
             if (!TryGetPrefab(piece.Key, out _)) return false;
-            Color tint = FoodArtRules.Tint(look, piece.Tinted);
-            bool custom = piece.Tinted || tint != Color.white;
             for (int i = 0; i < piece.Count; i++)
             {
                 Vector3 position = offset + FoodArtRules.PilePosition(i, piece.Count) * scale;
-                Add(piece.Key, position, FoodArtRules.PileYaw(i, piece.Count), scale, tint, custom);
+                Add(piece.Key, position, FoodArtRules.PileYaw(i, piece.Count), scale, look, piece.Tinted, true);
             }
             return true;
         }
 
-        private bool Add(ArtKey key, Vector3 position, float yaw, float scale, Color tint, bool custom)
+        private bool Add(ArtKey key, Vector3 position, float yaw, float scale, FoodLook look, bool tinted, bool food)
         {
             if (!TryGetPrefab(key, out GameObject prefab)) return false;
             GameObject instance = Take(prefab);
@@ -96,8 +172,22 @@ namespace Worktown.Game.Art
             t.localPosition = position;
             t.localRotation = Quaternion.Euler(0f, yaw, 0f);
             t.localScale = Vector3.one * scale;
-            Tint(instance, tint, custom);
+            var info = new PieceTint { Look = look, Tinted = tinted, Food = food };
+            _tints.Add(info);
+            ApplyTint(instance, info);
             return true;
+        }
+
+        /// <summary>A food piece: the bucket colour, or (spec 027c) the heat colour; anything else its own colours.</summary>
+        private void ApplyTint(GameObject instance, PieceTint info)
+        {
+            if (!info.Food)
+            {
+                Tint(instance, Color.white, false);
+                return;
+            }
+            Color tint = FoodArtRules.HeatTint(info.Look, info.Tinted, _heatZone, _heatProgress, _heatBoiled);
+            Tint(instance, tint, info.Tinted || tint != Color.white);
         }
 
         private void Tint(GameObject instance, Color tint, bool custom)
@@ -156,6 +246,7 @@ namespace Worktown.Game.Art
 
         private void ReleaseAll()
         {
+            StopDrop();
             for (int i = 0; i < _active.Count; i++)
             {
                 GameObject instance = _active[i];
@@ -171,6 +262,7 @@ namespace Worktown.Game.Art
             }
             _active.Clear();
             _activePrefabs.Clear();
+            _tints.Clear();
         }
     }
 }

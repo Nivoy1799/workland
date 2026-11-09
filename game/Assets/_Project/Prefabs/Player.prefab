@@ -534,6 +534,7 @@ MonoBehaviour:
   _crouch: {fileID: -7993625790543202706, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
   _crouchWalk: {fileID: 4366774653929184976, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
   _hold: {fileID: 7400000, guid: 72510990fbbee10458e6f8400002904e, type: 2}
+  _stand: {fileID: 4996995007976980875, guid: 71990df670ef8394b947f835f5d2b2fa, type: 3}
   _walkClipSpeed: 0.7089418
   _walkLoopLength: 1.3333334
   _jogClipSpeed: 3.8952515

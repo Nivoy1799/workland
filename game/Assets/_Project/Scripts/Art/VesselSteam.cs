@@ -10,10 +10,14 @@ namespace Worktown.Game.Art
     /// (<see cref="IsHot"/>, from the synced stove flags and the synced contents, so every player sees the same) and
     /// shows a small steam particle system above it while it is. One pooled system per vessel, at most
     /// <see cref="MaxParticles"/> particles, built once. The headless server does nothing.
+    /// Spec 027c: once the food is Burnt (the vessel's synced zone) the steam turns into dark smoke with a puff on entry,
+    /// and this component adds the vessel's <see cref="HeatRingView"/>.
     /// </summary>
     public sealed class VesselSteam : MonoBehaviour
     {
         public const int MaxParticles = 30;
+        /// <summary>Spec 027c: particles in the puff when the food burns.</summary>
+        public const int SmokePuff = 10;
         private const float CheckInterval = 0.25f;
 
         [Tooltip("Transparent URP particle material (generated); a fallback is looked up when empty.")]
@@ -29,6 +33,7 @@ namespace Worktown.Game.Art
         private PlaceSurface[] _burners = new PlaceSurface[0];
         private StationContents[] _stoves = new StationContents[0];
         private float _nextCheck;
+        private bool _smoking;
 
         /// <summary>The vessel holds something and stands on a burner that is on.</summary>
         public bool IsHot { get; private set; }
@@ -66,6 +71,8 @@ namespace Worktown.Game.Art
             _burners = burners.ToArray();
             _stoves = stoves.ToArray();
             BuildParticles();
+            // Spec 027c: the heat ring (its own scene object, see HeatRingView).
+            if (GetComponent<HeatRingView>() == null) gameObject.AddComponent<HeatRingView>().Init(_vessel, this, _material);
         }
 
         private void Update()
@@ -73,11 +80,27 @@ namespace Worktown.Game.Art
             if (_vessel == null || Time.unscaledTime < _nextCheck) return;
             _nextCheck = Time.unscaledTime + CheckInterval;
             bool hot = ComputeHot();
+            bool smoke = hot && _vessel.Zone == HeatZone.Burnt;
+            if (smoke != _smoking) SetSmoke(smoke);
             if (hot == IsHot) return;
             IsHot = hot;
             if (_steam == null) return;
             if (hot) _steam.Play();
             else _steam.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+        }
+
+        /// <summary>Spec 027c: dark, thicker, slower smoke while burnt on the heat (a puff when it starts), else the steam.</summary>
+        private void SetSmoke(bool smoke)
+        {
+            _smoking = smoke;
+            if (_steam == null) return;
+            ParticleSystem.MainModule main = _steam.main;
+            main.startColor = smoke ? Palette.WithAlpha(Palette.Charcoal, 0.6f) : Palette.WithAlpha(Palette.Cream, 0.3f);
+            main.startSize = smoke ? new ParticleSystem.MinMaxCurve(0.12f, 0.2f) : new ParticleSystem.MinMaxCurve(0.07f, 0.12f);
+            main.startLifetime = smoke ? 2.2f : 1.6f;
+            ParticleSystem.EmissionModule emission = _steam.emission;
+            emission.rateOverTime = smoke ? 12f : 14f;
+            if (smoke) _steam.Emit(SmokePuff);
         }
 
         private bool ComputeHot()
