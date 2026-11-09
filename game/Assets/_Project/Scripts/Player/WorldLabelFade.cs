@@ -136,7 +136,7 @@ namespace Worktown.Game.Player
                 float distance = to.magnitude;
                 entry.Distance = distance;
                 bool aimed = target != null && ((entry.Pickup != null && target.transform == entry.Pickup.transform)
-                    || (entry.Pickup == null && entry.Fixed != null && target.transform == entry.Fixed.transform));
+                    || (entry.Pickup == null && entry.Fixed != null && AimsAt(target, entry.Fixed.transform)));
                 bool held = entry.Pickup != null && entry.Pickup.IsHeld && entry.Pickup.IsOwner;
                 float facing = LabelRules.IsOneSided(entry.Kind) && distance > 0.0001f
                     ? Vector3.Dot(-entry.Transform.forward, -to / distance) : 1f;
@@ -213,10 +213,22 @@ namespace Worktown.Game.Player
             {
                 HeatRingView ring = _calm[i];
                 Vessel vessel = ring.Vessel;
-                bool aimed = target != null && vessel != null && target.transform == vessel.transform;
+                bool aimed = target != null && vessel != null && AimsAt(target, vessel.transform);
                 bool alarm = vessel != null && LabelRules.IsAlarm(vessel.Zone, vessel.Warning);
                 ring.ApplyCalm(LabelRules.ShowsRing(aimed, alarm, firstPerson, _calmRanks[i]));
             }
+        }
+
+        /// <summary>
+        /// The aim <paramref name="target"/> means the fixed object <paramref name="fixedObject"/>: it is that object, or (spec 036) the
+        /// spit's cone slot (its station's slot) for the spit's cone vessel, which has no collider of its own.
+        /// </summary>
+        private static bool AimsAt(Component target, Transform fixedObject)
+        {
+            if (target.transform == fixedObject) return true;
+            return target is StockSlot slot && slot.Station != null && slot.Station.Kind == StationKind.Spit
+                && fixedObject.TryGetComponent(out SpitPart part) && part.Spit == slot.Station
+                && fixedObject.TryGetComponent(out Vessel vessel) && vessel.Kind == VesselKind.SpitCone;
         }
 
         // Finds new labels now and then (items spawn and despawn) and drops the destroyed ones.

@@ -131,11 +131,13 @@ namespace Worktown.Game.Tests
                 // Spec 035: the dish return (index 12) on the front counter right of the register (x 13.79), the sink (13) after the plate
                 // shelf (x 12.88, where the bowl's worktop stood), the trash can (14) at the front counter's west end by the staff gap
                 // (x 0.76) and the bin (15) outside the staff gap (x -2.0, z 13.4).
+                // Spec 036: the seitan spit (16) on the front counter opposite the heat block, between the stoves (x 8.10), its body 0.1 m
+                // towards the street (z 11.75) so the catch tray and the knob stand on the counter in front of it.
                 float[] fixedX = { 2.36f, 3.60f, 7.48f, 8.72f, 11.64f, 11.64f, 6.44f, 5.49f, 10.55f, 12.79f, 10.49f, 1.11f, // spec 029b: stove B and the plates moved left
-                    13.79f, 12.88f, 0.76f, -2.0f };
+                    13.79f, 12.88f, 0.76f, -2.0f, 8.10f };
                 StationKind[] kinds = { StationKind.Shelf, StationKind.Fridge, StationKind.Stove, StationKind.Stove, StationKind.Counter, StationKind.PlateShelf,
                     StationKind.Fryer, StationKind.Griddle, StationKind.Assembly, StationKind.Register, StationKind.DrinkDispenser, StationKind.Terminal,
-                    StationKind.DishReturn, StationKind.Sink, StationKind.TrashCan, StationKind.Bin };
+                    StationKind.DishReturn, StationKind.Sink, StationKind.TrashCan, StationKind.Bin, StationKind.Spit };
                 int count = 0;
                 foreach (GameObject root in scene.GetRootGameObjects())
                 {
@@ -150,13 +152,16 @@ namespace Worktown.Game.Tests
                         bool drinks = station.Kind == StationKind.DrinkDispenser; // spec 033: so does the drink dispenser
                         bool terminal = station.Kind == StationKind.Terminal; // spec 034: it hangs on the back wall
                         bool cleaning = Worktown.Game.Shop.CleaningRules.IsCleaningStation(station.Kind); // spec 035
-                        Vector3 clean = CleaningArtRules.SizeOf(station.Kind);
+                        bool spit = station.Kind == StationKind.Spit; // spec 036: on the front counter
+                        Vector3 clean = spit ? new Vector3(SpitArtRules.Width, SpitArtRules.Height, SpitArtRules.Depth)
+                            : CleaningArtRules.SizeOf(station.Kind);
+                        cleaning |= spit; // the spit's box is its own size (above), like the cleaning stations'
                         float height = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
                             : register ? RegisterArtRules.Height : drinks ? DrinkArtRules.Height : terminal ? TerminalArtRules.Height
                             : cleaning ? clean.y : stock ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                         float depth = station.Kind == StationKind.Counter ? 0.7f : register ? RegisterArtRules.Depth : drinks ? DrinkArtRules.Depth
                             : terminal ? TerminalArtRules.Depth : cleaning ? clean.z : stock ? StockArt.DepthOf(station.Kind) : 1.2f;
-                        float z = station.Kind == StationKind.Counter || register || drinks || station.Kind == StationKind.DishReturn
+                        float z = spit ? 11.75f : station.Kind == StationKind.Counter || register || drinks || station.Kind == StationKind.DishReturn
                             || station.Kind == StationKind.TrashCan ? 11.85f : station.Kind == StationKind.Bin ? 13.4f : terminal ? 14.92f - depth * 0.5f
                             : stock ? 14.9f - depth * 0.5f : 14.3f;
                         bool fryer = station.Kind == StationKind.Fryer;
@@ -165,7 +170,7 @@ namespace Worktown.Game.Tests
                             : drinks ? DrinkArtRules.Width : terminal ? TerminalArtRules.Width : cleaning ? clean.x : 1.2f;
                         // Spec 029: the fryer's collider stops under its oil wells (the aim finds a lowered basket).
                         float colliderHeight = fryer ? FryerArt.BodyColliderTop : height;
-                        float bottom = register || drinks ? ArtSizeTable.ServingCounterHeight
+                        float bottom = register || drinks || spit ? ArtSizeTable.ServingCounterHeight
                             : terminal ? TerminalArtRules.CentreHeight - TerminalArtRules.Height * 0.5f
                             : cleaning ? CleaningArtRules.BottomOf(station.Kind) : 0f;
                         var expected = new Vector3(x, bottom + colliderHeight * 0.5f, z);
@@ -197,7 +202,7 @@ namespace Worktown.Game.Tests
                         if (stock) Assert.AreEqual(box.bounds.size.y, b.size.y, 0.01f, station.name + " cabinet as high as its body");
                     }
                 }
-                Assert.AreEqual(16, count, "the twelve before and (spec 035) the dish return, the sink, the trash can and the bin");
+                Assert.AreEqual(17, count, "the twelve before, (spec 035) the dish return, the sink, the trash can and the bin, (spec 036) the spit");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

@@ -49,7 +49,7 @@ namespace Worktown.Game.Shop
         public bool CanAfford(int owner, string grocerId, int percent)
         {
             int line = LineOf(grocerId);
-            return line >= 0 && (percent >= 100 ? _room.CanTake(line) : _room.CanDraw(line));
+            return line >= 0 && (percent >= 100 ? _room.CanTake(line) : _room.CanDraw(line, percent));
         }
 
         public void Refund(int owner, string grocerId, int percent, long cost)
@@ -73,7 +73,7 @@ namespace Worktown.Game.Shop
         public bool CanAfford(int owner, string drinkId, int percent, bool withCup)
         {
             int line = LineOf(drinkId);
-            return line >= 0 && _room.CanDraw(line);
+            return line >= 0 && _room.CanDraw(line, percent);
         }
 
         public void Refund(int owner, string drinkId, int percent, bool withCup, long cost)

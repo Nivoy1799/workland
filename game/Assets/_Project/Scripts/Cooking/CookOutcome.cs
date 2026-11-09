@@ -109,6 +109,12 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 035: wiping needs the cloth in the hands.</summary>
         NoCloth,
         /// <summary>Spec 035: there is nothing to wipe here.</summary>
-        NoSpill
+        NoSpill,
+        /// <summary>035 review: this player still holds another timed hold (a wipe, a scrub, a shave): finish that first.</summary>
+        StillHolding,
+        /// <summary>Spec 036: the spit has no cone (or it ran out): load a new one from stock.</summary>
+        NoCone,
+        /// <summary>Spec 036: the spit still has a cone with seitan on it.</summary>
+        ConeLoaded
     }
 }

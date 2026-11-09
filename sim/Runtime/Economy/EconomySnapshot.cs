@@ -6,13 +6,16 @@ using System.Text;
 
 namespace Worktown.Sim.Economy
 {
-    /// <summary>Test/debug form of a state: versioned canonical text (integers only) and its SHA-256.</summary>
+    /// <summary>
+    /// Test/debug form of a state: versioned canonical text (integers only) and its SHA-256. v2 (035 review): each account also
+    /// carries what it has paid the grocer (<see cref="Account.GrocerPaid"/>, the refund bound), so the digest covers it.
+    /// </summary>
     public static class EconomySnapshot
     {
         public static string Canonical(EconomyState state)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            var sb = new StringBuilder("v1");
+            var sb = new StringBuilder("v2");
             Add(sb, "tick", state.Tick);
 
             var markets = new List<MarketState>(state.Markets);
@@ -32,7 +35,7 @@ namespace Worktown.Sim.Economy
             foreach (var a in accounts)
             {
                 sb.Append("|a:").Append(a.Id);
-                Nums(sb, a.Balance);
+                Nums(sb, a.Balance, a.GrocerPaid);
                 var goods = new List<GoodAmount>(a.Goods);
                 goods.Sort((x, y) => string.CompareOrdinal(x.GoodId, y.GoodId));
                 foreach (var g in goods) sb.Append(",g:").Append(g.GoodId).Append('=').Append(g.Units.ToString(CultureInfo.InvariantCulture));

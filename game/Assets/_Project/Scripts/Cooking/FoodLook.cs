@@ -29,6 +29,8 @@ namespace Worktown.Game.Cooking
         public const byte HeatDeepFried = 3;
         /// <summary>Spec 031b: from the griddle (grilled or toasted); golden like fried, with grill marks once done (also on a plate).</summary>
         public const byte HeatGrilled = 4;
+        /// <summary>Spec 036: shaved off the spit; golden like fried, drawn as a pile of thin slices (curls).</summary>
+        public const byte HeatShaved = 5;
 
         public const byte KindSingle = 0;
         public const byte KindPlated = 1;

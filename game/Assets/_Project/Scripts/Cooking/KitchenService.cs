@@ -79,6 +79,15 @@ namespace Worktown.Game.Cooking
         // 030 review: the cooked-ticks stamp of each heat vessel at its last periodic label refresh.
         private readonly Dictionary<Vessel, long> _labelStamps = new Dictionary<Vessel, long>();
         private bool _heatChecked;
+        // Spec 036: the seitan spits (pure SpitDesk, keyed by station index), their cone and tray vessels, who shaves which spit.
+        private SpitDesk _spitDeskField;
+        private SpitDesk Spits => _spitDeskField ??= new SpitDesk(_kitchen);
+        private readonly Dictionary<int, Vessel> _spitCones = new Dictionary<int, Vessel>();
+        private readonly Dictionary<int, Vessel> _spitTrays = new Dictionary<int, Vessel>();
+        private readonly Dictionary<Vessel, int> _spitOf = new Dictionary<Vessel, int>();
+        private readonly Dictionary<int, PickupInteractor> _shavers = new Dictionary<int, PickupInteractor>();
+        private readonly List<int> _spitScratch = new List<int>();
+        private System.Func<int, bool> _shaverPresent;
 
         private sealed class HomeSlot
         {
@@ -123,10 +132,16 @@ namespace Worktown.Game.Cooking
                 _heatChecked = false;
                 _baskets.Clear();
                 _basketList.Clear();
+                _burningCount = 0; // 035 review: nothing burns on a stopped server
                 _griddleSpots.Clear();
                 _assemblySpots.Clear(); // spec 031
                 _squeezers.Clear();
                 _pourers.Clear(); // spec 033
+                Spits.Clear(); // spec 036
+                _spitCones.Clear();
+                _spitTrays.Clear();
+                _spitOf.Clear();
+                _shavers.Clear();
             }
         }
 
@@ -174,6 +189,12 @@ namespace Worktown.Game.Cooking
                 EnsureInitialized();
                 return UseDrinks(player, station, option);
             }
+            // Spec 036: so does the shave's release at the spit.
+            if (!SpitRules.NeedsReach(station.Kind, option))
+            {
+                EnsureInitialized();
+                return UseSpit(player, station, option);
+            }
             if (!StationRules.IsInReach(player.transform.position, station.transform.position))
                 return CookOutcome.TooFar;
             EnsureInitialized();
@@ -186,6 +207,7 @@ namespace Worktown.Game.Cooking
                 case StationKind.Griddle: return UseGriddle(station, option); // spec 030
                 case StationKind.Assembly: return UseAssembly(player, station, option); // spec 031
                 case StationKind.DrinkDispenser: return UseDrinks(player, station, option); // spec 033
+                case StationKind.Spit: return UseSpit(player, station, option); // spec 036
                 case StationKind.PlateShelf: return TakePlate(player);
                 // Spec 032: the register's slots (the change tray, take back, hand over, the card terminal); the guests' service decides.
                 case StationKind.Register: return _customers != null ? _customers.UseRegister(player, option) : CookOutcome.NoPayment;
@@ -532,10 +554,7 @@ namespace Worktown.Game.Cooking
             {
                 // 034 review: the pour may be gone already (its cup was put down, sold or discarded: CancelPoursOfCup): the server's table
                 // forgets it too and the tap's bit goes off.
-                long key = DrinkDesk.KeyOf(dispenser.Index, tap);
-                if (!_kitchen.IsPouring(dispenser.Index, tap, out _, out _, out _) && _pourers.TryGetValue(key, out PickupInteractor was)
-                    && was == player)
-                    _pourers.Remove(key);
+                DrinkSteps.ForgetGonePour(_pourers, dispenser.Index, tap, player); // 035 review: the pure step (tested)
                 RefreshDrinks(dispenser);
                 return CookOutcome.Ok;
             }
@@ -733,13 +752,14 @@ namespace Worktown.Game.Cooking
             if (held.TryGetComponent(out Vessel vessel))
             {
                 what = "the food from the " + VesselRules.Name(vessel.Kind);
-                _kitchen.ClearContents(vessel.ObjectId, vessel.Kind);
+                CookOutcome cleared = _kitchen.TryDiscard(vessel.ObjectId, vessel.Kind); // 035 review: the pure step
                 RefreshVessel(vessel);
-                return CookOutcome.Ok;
+                return cleared;
             }
             Food food = held.GetComponent<Food>();
             what = food != null && food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food";
-            _kitchen.TryRemove(held.ObjectId, out _);
+            CookOutcome removed = _kitchen.TryDiscard(held.ObjectId, null);
+            if (removed != CookOutcome.Ok) return removed;
             _pickups.TakeAway(player, out _);
             _networkManager.ServerManager.Despawn(held);
             return CookOutcome.Ok;
@@ -777,6 +797,175 @@ namespace Worktown.Game.Cooking
             }
         }
 
+        // ---- Spec 036: the seitan spit ----
+
+        private bool HoldsKnife(PickupInteractor player) =>
+            player != null && _pickups.TryGetHeld(player, out NetworkObject held) && held != null && held.TryGetComponent(out Knife _);
+
+        /// <summary>
+        /// Spec 036: the spit's options (SpitRules): the heat knob, loading a cone from stock (empty hands at a bare spit; one unit of the
+        /// cone line, paid at the terminal; a refusal takes nothing), the shave's press (the knife in the hands; reach was checked) and
+        /// release (anywhere). The server measures the hold in its own ticks.
+        /// </summary>
+        private CookOutcome UseSpit(PickupInteractor player, Station spit, int option)
+        {
+            if (spit.Kind != StationKind.Spit || !Spits.IsSpit(spit.Index)) return CookOutcome.UnknownStation;
+            int s = spit.Index;
+            CookOutcome outcome;
+            switch (option)
+            {
+                case SpitRules.KnobOption:
+                    outcome = Spits.TurnKnob(s, Tick, TickRate);
+                    Debug.Log("[Kitchen] " + spit.DisplayName + " heat " + SpitRules.LevelName(Spits.LevelOf(s)));
+                    break;
+                case SpitRules.LoadOption:
+                {
+                    Worktown.Game.Shop.StockRoom stock = _supply != null ? _supply.Room : null;
+                    int line = Worktown.Game.Shop.StockCatalog.ConeLine;
+                    outcome = Spits.LoadCone(s, _pickups.TryGetHeld(player, out _), Tick,
+                        () => stock != null ? stock.Take(line) : CookOutcome.Ok, () => stock?.Return(line, 1));
+                    if (outcome == CookOutcome.Ok)
+                        Debug.Log("[Kitchen] player " + player.OwnerId + " loaded a seitan cone on the " + spit.DisplayName
+                            + (stock != null ? " (" + stock.LineOf(line).Count + " cone(s) left in stock)" : " (no stock: free)"));
+                    if (_supply != null) _supply.PublishIfChanged();
+                    break;
+                }
+                case SpitRules.ShaveStartOption:
+                    outcome = Spits.Press(s, player.OwnerId, HoldsKnife(player), Tick);
+                    if (outcome == CookOutcome.Ok) _shavers[s] = player;
+                    break;
+                case SpitRules.ShaveStopOption:
+                    outcome = EndShave(s, player.OwnerId, player);
+                    break;
+                default:
+                    outcome = CookOutcome.InvalidOption;
+                    break;
+            }
+            RefreshSpit(s);
+            return outcome;
+        }
+
+        /// <summary>The shave of <paramref name="owner"/> at spit <paramref name="s"/> ends now (its release, or the server's auto-stop).</summary>
+        private CookOutcome EndShave(int s, int owner, PickupInteractor player)
+        {
+            bool held = Spits.IsHeld(s, out int holder, out uint start) && holder == owner;
+            double seconds = held ? SpitDesk.HeldSeconds(start, Tick, TickRate) : 0d;
+            bool knife = player != null && player.IsSpawned && HoldsKnife(player);
+            CookOutcome released = Spits.Release(s, owner, knife, Tick, TickRate, out int portions);
+            if (!Spits.IsHeld(s, out _, out _)) _shavers.Remove(s);
+            if (held)
+            {
+                IReadOnlyList<Item> tray = Spits.TrayOf(s);
+                Item last = tray.Count > 0 ? tray[tray.Count - 1] : null;
+                Debug.Log("[Kitchen] player " + owner + " shaved for " + seconds.ToString("0.00") + " s: " + portions + " portion(s)"
+                    + (knife ? string.Empty : " (the knife was put down)") + ", tray " + tray.Count + "/" + SpitRules.TrayCapacity
+                    + (portions > 0 && last != null ? ": " + KitchenState.NameOf(last) + " q=" + KitchenState.QualityOf(last).ToString("0.00") : string.Empty));
+            }
+            return released;
+        }
+
+        /// <summary>Spec 036: the auto-stop at Spit.MaxShaveSeconds, and a shaver who left is freed (no shave).</summary>
+        private void StopOverdueShaves(uint tick, double tickRate)
+        {
+            if (_shavers.Count == 0) return;
+            Spits.DueHolds(tick, tickRate, _spitScratch);
+            foreach (int s in _spitScratch)
+            {
+                _shavers.TryGetValue(s, out PickupInteractor player);
+                if (Spits.IsHeld(s, out int owner, out _)) EndShave(s, owner, player);
+                RefreshSpit(s);
+            }
+            _shaverPresent ??= ShaverPresent;
+            Spits.DropLeft(_shaverPresent, _spitScratch);
+            foreach (int s in _spitScratch)
+            {
+                _shavers.Remove(s);
+                RefreshSpit(s);
+                Debug.Log("[Kitchen] the shave of a player who left was dropped (spit " + s + ")");
+            }
+        }
+
+        private bool ShaverPresent(int owner)
+        {
+            foreach (KeyValuePair<int, PickupInteractor> kv in _shavers)
+                if (kv.Value != null && kv.Value.IsSpawned && kv.Value.OwnerId == owner) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Spec 036: a scoop from the catch tray: empty hands take one portion; an open build in the hands gets one as its next layer.
+        /// TrayEmpty, HandsFull; refusals change nothing (a failed hand-over puts the portion back).
+        /// </summary>
+        private CookOutcome Scoop(PickupInteractor player, Vessel tray)
+        {
+            if (!_spitOf.TryGetValue(tray, out int s)) return CookOutcome.NotAVessel;
+            CookOutcome outcome;
+            Item made;
+            bool holding = _pickups.TryGetHeld(player, out NetworkObject held);
+            if (holding)
+            {
+                if (!held.TryGetComponent(out Food food)) return CookOutcome.HandsFull;
+                outcome = Spits.ScoopOntoBuild(s, held.ObjectId, out made);
+                if (outcome == CookOutcome.Ok) Publish(food, made);
+            }
+            else outcome = Spits.ScoopIntoHands(s, false, portion => SpawnFoodInHands(player, portion), out made);
+            RefreshSpit(s);
+            if (outcome == CookOutcome.Ok)
+                Debug.Log("[Kitchen] player " + player.OwnerId + " scooped shaved seitan " + (holding ? "onto the build: " : "into the hands: ")
+                    + KitchenState.NameOf(made) + " (tray " + Spits.TrayCount(s) + ")");
+            return outcome;
+        }
+
+        /// <summary>Spec 036: the spit's byte, its cone and its tray.</summary>
+        private void RefreshSpit(int s)
+        {
+            if (s >= 0 && s < _stations.Length && _stations[s] != null && _stations[s].TryGetComponent(out StationContents contents)
+                && contents.IsServerInitialized)
+                contents.ServerSetStoveFlags(Spits.Flags(s));
+            if (_spitCones.TryGetValue(s, out Vessel cone)) RefreshSpitVessel(cone, s);
+            if (_spitTrays.TryGetValue(s, out Vessel tray)) RefreshSpitVessel(tray, s);
+        }
+
+        private static readonly IReadOnlyList<FoodLook> NoLooks = new FoodLook[0];
+        private static readonly IReadOnlyList<string> NoNames = new string[0];
+
+        private void RefreshSpitVessel(Vessel vessel, int s)
+        {
+            if (vessel == null || !vessel.IsServerInitialized) return;
+            if (vessel.Kind == VesselKind.SpitCone)
+            {
+                string name = Spits.TakeName(s, Tick, TickRate); // the label is the take name (030)
+                vessel.ServerSet(name != null ? new[] { name } : NoNames, NoLooks, name, Spits.ConeMode(s));
+                return;
+            }
+            IReadOnlyList<Item> tray = Spits.TrayOf(s);
+            var names = new string[tray.Count];
+            var looks = new FoodLook[tray.Count];
+            for (int i = 0; i < tray.Count; i++)
+            {
+                names[i] = KitchenState.NameOf(tray[i]);
+                looks[i] = FoodLookRules.From(tray[i]);
+            }
+            vessel.ServerSet(names, looks, tray.Count > 0 ? names[tray.Count - 1] : null, 0);
+        }
+
+        /// <summary>Spec 036: the cone's outer layer as heat bytes (027c, through its HeatSync: only changes, at most 4 a second).</summary>
+        private void PublishConeHeat(Vessel cone, uint tick, double tickRate)
+        {
+            if (!cone.IsServerInitialized || !_spitOf.TryGetValue(cone, out int s)) return;
+            if (!_heatSync.TryGetValue(cone, out HeatSync sync))
+            {
+                sync = new HeatSync();
+                _heatSync[cone] = sync;
+            }
+            HeatReading reading = Spits.Reading(s, tick, tickRate);
+            byte zone = HeatZoneRules.Encode(reading);
+            byte zoneBefore = sync.Zone;
+            if (!sync.ShouldSend(tick, tickRate, reading.Progress, zone)) return;
+            cone.ServerSetHeat(reading.Progress, zone);
+            if (HeatZoneRules.ZoneOf(zone) != HeatZoneRules.ZoneOf(zoneBefore)) RefreshSpitVessel(cone, s); // the take name with the ring
+        }
+
         // ---- cookware (RequestUse) ----
 
         /// <summary>
@@ -800,6 +989,8 @@ namespace Worktown.Game.Cooking
             if (action == VesselRules.ActionFlip) return Flip(player, vessel); // spec 030
             if (action == VesselRules.ActionFold) return Fold(player, vessel); // spec 031
             if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
+            if (vessel.Kind == VesselKind.SpitTray) return Scoop(player, vessel); // spec 036
+            if (vessel.Kind == VesselKind.SpitCone) return CookOutcome.InvalidOption; // the cone is worked through its station slot
 
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
             if (held.TryGetComponent(out Vessel source))
@@ -918,6 +1109,11 @@ namespace Worktown.Game.Cooking
         private void RefreshVessel(Vessel vessel)
         {
             if (vessel == null || !vessel.IsServerInitialized) return;
+            if (_spitOf.TryGetValue(vessel, out int spit)) // spec 036: the spit's cone and tray come from the SpitDesk
+            {
+                RefreshSpitVessel(vessel, spit);
+                return;
+            }
             uint tick = Tick;
             double rate = TickRate;
             int id = vessel.ObjectId;
@@ -1010,8 +1206,23 @@ namespace Worktown.Game.Cooking
                 _basketList.Add(basket);
                 RefreshVessel(basket);
             }
+            // Spec 036: the spits, their cones and trays (fixed scene objects).
+            _spitCones.Clear();
+            _spitTrays.Clear();
+            _spitOf.Clear();
+            foreach (Station station in _stations)
+                if (station != null && station.Kind == StationKind.Spit) Spits.Register(station.Index);
+            foreach (SpitPart part in FindObjectsByType<SpitPart>(FindObjectsSortMode.None))
+            {
+                if (part.Spit == null || !part.TryGetComponent(out Vessel v) || !v.IsSpawned) continue;
+                Spits.Register(part.Spit.Index);
+                if (v.Kind == VesselKind.SpitCone) _spitCones[part.Spit.Index] = v;
+                else if (v.Kind == VesselKind.SpitTray) _spitTrays[part.Spit.Index] = v;
+                _spitOf[v] = part.Spit.Index;
+            }
             foreach (Station station in _stations)
             {
+                if (station != null && station.Kind == StationKind.Spit) RefreshSpit(station.Index);
                 if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
                 else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
                 else if (station != null && station.Kind == StationKind.Griddle) RefreshGriddle(station); // spec 030
@@ -1152,6 +1363,7 @@ namespace Worktown.Game.Cooking
                 PublishHeat(tick, tickRate);
                 StopOverdueSqueezes(tick, tickRate); // spec 031
                 StopOverduePours(tick, tickRate); // spec 033
+                StopOverdueShaves(tick, tickRate); // spec 036
             }
             WatchHomes();
         }
@@ -1168,7 +1380,8 @@ namespace Worktown.Game.Cooking
                 if (vessel == null) continue;
                 PublishHeatOf(vessel, tick, tickRate);
                 // Spec 035: the burnt smell (a hygiene source) while anything on the heat is in the Burnt zone.
-                if (vessel.IsServerInitialized && VesselRules.IsHeat(vessel.Kind) && HeatZoneRules.ZoneOf(vessel.HeatZone.Value) == HeatZone.Burnt)
+                if (vessel.IsServerInitialized && (VesselRules.IsHeat(vessel.Kind) || vessel.Kind == VesselKind.SpitCone) // spec 036: a burnt cone smells too
+                    && HeatZoneRules.ZoneOf(vessel.HeatZone.Value) == HeatZone.Burnt)
                     burning++;
             }
             _burningCount = burning;
@@ -1176,6 +1389,11 @@ namespace Worktown.Game.Cooking
 
         private void PublishHeatOf(Vessel vessel, uint tick, double tickRate)
         {
+            if (vessel.Kind == VesselKind.SpitCone)
+            {
+                PublishConeHeat(vessel, tick, tickRate); // spec 036
+                return;
+            }
             if (!vessel.IsServerInitialized || !VesselRules.IsHeat(vessel.Kind)) return;
             if (!_heatSync.TryGetValue(vessel, out HeatSync sync))
             {

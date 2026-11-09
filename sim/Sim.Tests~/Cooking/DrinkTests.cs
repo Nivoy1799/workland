@@ -179,7 +179,7 @@ namespace Worktown.Sim.Tests.Cooking
             Assert.Equal(a.CanonicalTree, b.CanonicalTree);
             Assert.Equal(Quality(a), Quality(b));
             // The ops are appended: the catalog's earlier ops keep their place and the old items their hashes (AssemblyTests pins).
-            Assert.Equal(15, OperationCatalog.CreateDefault().Count);
+            Assert.Equal(16, OperationCatalog.CreateDefault().Count);
         }
 
         [Fact]

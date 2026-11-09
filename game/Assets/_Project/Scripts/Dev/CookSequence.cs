@@ -97,6 +97,8 @@ namespace Worktown.Game.Dev
             if (capture != null) yield return BuildFalafelWrap(actor, capture, laneZ);
             // Spec 030 (AC5, AC6): then "Grilled veggies" with seitan strips on the griddle (flips, grill marks), to the counter.
             if (capture != null) yield return GrillVeggies(actor, capture, laneZ);
+            // Spec 036 (AC4): then a seitan wrap with seitan shaved off the spit (load a cone, heat, shave at Perfect, scoop onto the wrap).
+            if (capture != null) yield return ShaveSeitanWrap(actor, capture, laneZ);
             Debug.Log("[Demo] walking to the first stove (" + Time.time.ToString("0.0") + " s)");
             yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(new Vector3(atA.x, 0f, laneZ), false, false);
@@ -799,6 +801,264 @@ namespace Worktown.Game.Dev
             // 7. Spec 031b item 5: box packing: a lettuce on the empty board (no bread: a box needs no fold), into a box, served.
             yield return PackABox(actor, capture, laneZ, board, spot, lettuceSlot);
         }
+
+        /// <summary>Spec 036: how long the tour holds the knife on the cone (s): two portions (1.5-2.5 s is two).</summary>
+        public const float ShaveSeconds = 2.0f;
+        /// <summary>Spec 036: the longest the tour waits for the cone's outer layer to reach Perfect (high heat: 55 s).</summary>
+        public const float SpitWait = 120f;
+        public const float SpitShotEvery = 10f;
+        /// <summary>Spec 036: the right amount of chili (0.5-1.5 s; the falafel wrap's 1.8 s is its order's extra garlic).</summary>
+        public const float ChiliSeconds = 1.0f;
+
+        /// <summary>
+        /// Spec 036 AC4: a seitan wrap with shaved seitan from the spit. At the bare spit (on the front counter across from the stoves) a
+        /// cone is loaded from stock (frames of it appearing) and the knob turned to high (the panel glows, the cone turns); while its
+        /// outside browns a wrap goes on the assembly board and lettuce is cut into slices on the cutting board; the knife comes along to the
+        /// spit, which is watched browning (a shot every <see cref="SpitShotEvery"/> s with its zone); at Perfect the knife is held on the
+        /// cone for <see cref="ShaveSeconds"/> (frames of the curls and the knife's saw); the knife goes back, the bare wrap is taken off the
+        /// board and a portion is scooped straight onto it at the tray (frames), back on the board, the lettuce slices on top, the chili
+        /// squeezed, folded, wrapped in paper and served (frames of the reward; the review, when the guest pays, says which seitan).
+        /// </summary>
+        private static IEnumerator ShaveSeitanWrap(TourActor actor, CookCapture capture, float laneZ)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            Station spit = null, counter = null;
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+            {
+                if (s.Kind == StationKind.Spit) spit = s;
+                else if (s.Kind == StationKind.Counter) counter = s;
+            }
+            StockSlot cone = null, chili = null, paper = null;
+            if (spit != null) spit.TryGetSlot(SpitRules.ConeTool, out cone);
+            Worktown.Game.Art.SpitView view = cone != null ? cone.GetComponent<Worktown.Game.Art.SpitView>() : null;
+            StationButton knob = null;
+            foreach (StationButton b in UnityEngine.Object.FindObjectsByType<StationButton>(FindObjectsSortMode.None))
+                if (spit != null && b.Station == spit && b.Option == SpitRules.KnobOption) knob = b;
+            AssemblySpot assemblySpot = UnityEngine.Object.FindFirstObjectByType<AssemblySpot>();
+            Station board = assemblySpot != null ? assemblySpot.Board : null;
+            Vessel spot = assemblySpot != null ? assemblySpot.GetComponent<Vessel>() : null;
+            if (board != null)
+            {
+                board.TryGetSlot(1, out chili);
+                board.TryGetSlot(BuildRules.DispenserCount + BuildRules.Paper, out paper);
+            }
+            Vessel cutting = null;
+            foreach (Vessel v in UnityEngine.Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+                if (v.Kind == VesselKind.Board) cutting = v;
+            Knife knife = UnityEngine.Object.FindFirstObjectByType<Knife>();
+            StockSlot wrapSlot = FindSlot("wrap"), lettuceSlot = FindSlot("lettuce");
+            if (spit == null || cone == null || view == null || view.Cone == null || view.Tray == null || knob == null || spot == null || board == null
+                || chili == null || paper == null || cutting == null || knife == null || wrapSlot == null || lettuceSlot == null || counter == null)
+            {
+                Debug.LogWarning("[Demo] spit: the spit, its cone, tray or knob, the assembly board, the cutting board, the knife or a slot is missing");
+                actor.CountTimeout("cook: spit setup missing");
+                yield break;
+            }
+            Vessel coneVessel = view.Cone, tray = view.Tray;
+            NetworkObject spotObject = spot.NetworkObject, cuttingObject = cutting.NetworkObject, trayObject = tray.NetworkObject;
+            NetworkObject knifeObject = knife.GetComponent<NetworkObject>();
+            Vector3 knifeHome = knife.transform.position;
+            Vector3 atSpit = new Vector3(spit.transform.position.x, 0f, laneZ);
+            Vector3 atBoard = new Vector3(board.transform.position.x, 0f, laneZ);
+            Debug.Log("[Demo] spit: start (" + Time.time.ToString("0.0") + " s); the spit at x " + spit.transform.position.x.ToString("0.00")
+                + ", " + TourActor.FlatDistance(spit.transform.position, spot.transform.position).ToString("0.00") + " m from the build spot");
+
+            // 1. Load a cone from stock and turn the heat to high.
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
+            yield return actor.WalkTo(atSpit, false, false);
+            yield return actor.AimAt(cone.Anchor, 0.8f);
+            yield return capture.Shot("spit-bare");
+            Debug.Log("[Demo] spit: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
+            yield return actor.Use("load a seitan cone", cone.Anchor, InteractionAction.Load,
+                () => me.DevSendStation(spit.Index, SpitRules.LoadOption), capture.Before("cone-aim", "cone-load", frames));
+            float until = Time.unscaledTime + 3f;
+            while (!SpitRules.HasCone(StationFlags(spit)) && Time.unscaledTime < until) yield return null;
+            if (!SpitRules.HasCone(StationFlags(spit))) actor.CountTimeout("cook: no cone on the spit");
+            for (int i = 0; i < 2; i++)
+                yield return actor.Use("turn the spit's knob", knob.transform.position, InteractionAction.Press,
+                    () => me.DevSendStation(spit.Index, SpitRules.KnobOption), i == 1 ? capture.Before("knob-aim", "knob-high", frames) : null);
+            float heated = Time.unscaledTime;
+            Debug.Log("[Demo] spit: heat " + SpitRules.LevelName(SpitRules.LevelOf(StationFlags(spit))) + ", cone " + SpitRules.PortionsOf(coneVessel.Mode.Value)
+                + " portions, '" + coneVessel.Title.Value + "'");
+            yield return actor.AimAt(cone.Anchor + Vector3.up * 0.1f, 0.6f);
+            yield return capture.Shot("spit-high");
+
+            // 2. Meanwhile: a wrap on the board and lettuce slices on it (the board is cleared first: the box of 031b waits there).
+            if (spot.ContentCount > 0) yield return ClearTheBoard(actor, capture, laneZ, spot, atBoard);
+            yield return TakeFrom(actor, wrapSlot, laneZ);
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return actor.Use("put the wrap on the board", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return TakeFrom(actor, lettuceSlot, laneZ);
+            yield return actor.WalkTo(new Vector3(cutting.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("put the lettuce on the cutting board", ContentPoint(cutting), InteractionAction.PutInto,
+                () => me.DevSendUse(cuttingObject, VesselRules.ActionUse));
+            yield return actor.Use("pick up the knife", knife.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(knifeObject));
+            yield return actor.AimAt(ContentPoint(cutting), 0.6f);
+            foreach (int action in new[] { VesselRules.ActionStroke, VesselRules.ActionStroke })
+            {
+                me.DevSendUse(cuttingObject, action);
+                yield return new WaitForSeconds(0.7f);
+            }
+            // The slices wait on the cutting board (they go on after the seitan); the knife comes along to the spit.
+            Debug.Log("[Demo] spit: the cutting board holds '" + cutting.Title.Value + "'; the knife comes along");
+            PlaceSurface prep = SurfaceUnder(knifeHome);
+
+            // 3. Watch the cone brown, then shave at Perfect.
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atSpit, false, false);
+            yield return actor.AimAt(cone.Anchor, 0.8f);
+            float nextShot = 0f;
+            while (Time.unscaledTime - heated < SpitWait && coneVessel.Zone != HeatZone.Perfect)
+            {
+                float at = Time.unscaledTime - heated;
+                if (at >= nextShot)
+                {
+                    Debug.Log("[Spit] cone at " + at.ToString("0.0") + " s on high: " + Describe(coneVessel) + " '" + coneVessel.Title.Value + "', "
+                        + RingCount());
+                    yield return capture.Shot("spit-" + Mathf.RoundToInt(at).ToString("00") + "s-" + coneVessel.Zone.ToString().ToLowerInvariant());
+                    nextShot += SpitShotEvery;
+                }
+                yield return null;
+            }
+            Debug.Log("[Spit] Perfect at " + (Time.unscaledTime - heated).ToString("0.0") + " s on high: " + Describe(coneVessel) + " '"
+                + coneVessel.Title.Value + "'");
+            if (coneVessel.Zone != HeatZone.Perfect) actor.CountTimeout("cook: the cone did not reach Perfect (" + coneVessel.Zone + ")");
+            yield return actor.AimAt(cone.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Shave);
+            yield return capture.Shot("shave-aim");
+            if (me.CurrentAction != InteractionAction.Shave) Debug.LogWarning("[Demo] spit: the cone offers " + me.CurrentAction);
+            Debug.Log("[Demo] spit: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
+            me.DevSqueezePress(cone);
+            float pressed = Time.unscaledTime;
+            int drawnAt = -1;
+            if (capture.Frames != null) yield return capture.Frames("shave", ShaveSeconds + 0.4f);
+            while (Time.unscaledTime - pressed < ShaveSeconds)
+            {
+                if (drawnAt < 0 && view.PredictionDrawnFrame >= 0) drawnAt = view.PredictionDrawnFrame;
+                yield return null;
+            }
+            me.DevSqueezeRelease();
+            float released = Time.unscaledTime;
+            while ((me.DevSqueezeBusy || tray.ContentCount < 2) && Time.unscaledTime - released < 3f) yield return null;
+            Debug.Log("[Demo] spit: held the knife " + (released - pressed).ToString("0.00") + " s (curls drawn " + (view.PredictionDrawnFrame >= 0 ? "from the press" : "never")
+                + "); the tray holds " + tray.ContentCount + " ('" + string.Join(" + ", tray.Names) + "'), the cone " + SpitRules.PortionsOf(coneVessel.Mode.Value)
+                + " portions, next layer '" + coneVessel.Title.Value + "'");
+            if (tray.ContentCount < 1) actor.CountTimeout("cook: no shaved seitan in the tray");
+            yield return capture.WaitForFrames();
+            yield return actor.AimAt(tray.ContentPoint, 0.6f);
+            yield return capture.Shot("shaved-in-tray");
+
+            // 4. The knife back; the bare wrap off the board (an open build with one layer is taken, not folded), a scoop onto it at the
+            //    tray, back on the board, then the lettuce slices.
+            if (prep != null)
+            {
+                yield return actor.LevelView();
+                yield return actor.WalkTo(new Vector3(knifeHome.x, 0f, laneZ), false, false);
+                int knifeSpot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
+                yield return actor.Use("put the knife back", prep.SpotWorldPosition(knifeSpot), InteractionAction.Place,
+                    () => me.DevSendPlace(prep.Index, knifeSpot));
+            }
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return actor.Use("take the wrap off the board", ContentPoint(spot), InteractionAction.Take,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atSpit, false, false);
+            yield return actor.Use("scoop the seitan onto the wrap", tray.ContentPoint, InteractionAction.Take,
+                () => me.DevSendUse(trayObject, VesselRules.ActionUse), capture.Before("scoop-aim", "scoop", frames));
+            yield return new WaitForSecondsRealtime(0.4f);
+            Debug.Log("[Demo] spit: the hands hold '" + HeldName(me) + "', the tray " + tray.ContentCount);
+            if (!HeldName(me).Contains("seitan")) actor.CountTimeout("cook: the scoop did not put the seitan on the wrap (" + HeldName(me) + ")");
+            yield return actor.Look(0f, -35f, 0.6f);
+            yield return capture.Shot("seitan-on-held-wrap");
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return actor.Use("put the build back on the board", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return StackShot(actor, capture, spot, "spit-wrap-seitan");
+            yield return actor.WalkTo(new Vector3(cutting.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("take the lettuce slices", ContentPoint(cutting), InteractionAction.Take,
+                () => me.DevSendUse(cuttingObject, VesselRules.ActionUse));
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atBoard, false, false);
+            yield return actor.Use("put the lettuce on the seitan", ContentPoint(spot), InteractionAction.PutInto,
+                () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return StackShot(actor, capture, spot, "spit-wrap-lettuce");
+
+            // 5. Chili, fold, paper, serve.
+            yield return actor.AimAt(chili.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Squeeze);
+            me.DevSqueezePress(chili);
+            float squeezed = Time.unscaledTime;
+            while (Time.unscaledTime - squeezed < ChiliSeconds) yield return null;
+            me.DevSqueezeRelease();
+            float letGo = Time.unscaledTime;
+            while ((me.DevSqueezeBusy || spot.ContentCount < 4) && Time.unscaledTime - letGo < 3f) yield return null;
+            yield return actor.Use("fold the wrap", ContentPoint(spot), InteractionAction.Fold, () => me.DevSendUse(spotObject, VesselRules.ActionFold));
+            yield return actor.Use("wrap it in paper", paper.Anchor, InteractionAction.Pack,
+                () => me.DevSendStation(board.Index, BuildRules.PackagingOption(BuildRules.Paper)));
+            yield return StackShot(actor, capture, spot, "spit-wrap-wrapped");
+            yield return actor.Use("take the seitan wrap", ContentPoint(spot), InteractionAction.Take, () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
+            LogOrders();
+            Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
+            yield return actor.Use("serve the seitan wrap at the counter", counterTop, InteractionAction.Sell,
+                () => me.DevSendStation(counter.Index, 0), capture.Before("spit-wrap-serve-aim", "spit-wrap-served", RewardFramesSeconds));
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            yield return new WaitForSecondsRealtime(0.5f);
+            string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
+            Debug.Log("[Demo] spit: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
+            if (!latest.Contains("seitan")) actor.CountTimeout("cook: the seitan wrap was not sold");
+            if (capture.Frames != null) yield return capture.Frames("spit-wrap-handoff", 0.8f);
+            yield return PayAtRegister(actor, capture, laneZ, "spit-wrap");
+            Debug.Log("[Demo] spit: the feed after paying: " + (feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?"));
+        }
+
+        /// <summary>
+        /// Spec 036: what still lies on the assembly board (the 031b tour's boxed lettuce) goes onto the nearest free worktop spot, so the
+        /// board is empty for the next build.
+        /// </summary>
+        private static IEnumerator ClearTheBoard(TourActor actor, CookCapture capture, float laneZ, Vessel spot, Vector3 atBoard)
+        {
+            PickupInteractor me = actor.Interactor;
+            NetworkObject spotObject = spot.NetworkObject;
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
+            yield return actor.WalkTo(atBoard, false, false);
+            Debug.Log("[Demo] spit: the board holds '" + spot.Title.Value + "': it goes onto a worktop first");
+            yield return actor.Use("take it off the board", ContentPoint(spot), InteractionAction.Take, () => me.DevSendUse(spotObject, VesselRules.ActionUse));
+            PlaceSurface best = null;
+            float bestDistance = float.MaxValue;
+            foreach (PlaceSurface s in UnityEngine.Object.FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
+            {
+                if (s.IsBurner || s.GetComponentInParent<Station>() != null) continue;
+                float d = TourActor.FlatDistance(s.transform.position, spot.transform.position);
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = s;
+                }
+            }
+            if (best == null) yield break;
+            for (int i = 0; i < best.SpotCount && me.IsHoldingSomething(); i++)
+            {
+                Vector3 at = best.SpotWorldPosition(i);
+                yield return actor.WalkTo(new Vector3(at.x, 0f, laneZ), false, false);
+                yield return actor.AimAt(at, 0.6f, () => me.CurrentAction == InteractionAction.Place);
+                if (me.CurrentAction != InteractionAction.Place) continue;
+                me.DevClick();
+                float until = Time.unscaledTime + 2f;
+                while (me.IsHoldingSomething() && Time.unscaledTime < until) yield return null;
+            }
+            Debug.Log("[Demo] spit: the board is " + (spot.ContentCount == 0 ? "empty" : "still holding '" + spot.Title.Value + "'")
+                + ", the hands " + (me.IsHoldingSomething() ? "hold '" + HeldName(me) + "'" : "are free"));
+            if (me.IsHoldingSomething()) actor.CountTimeout("cook: could not put the board's build down");
+            yield return actor.LevelView();
+        }
+
+        private static byte StationFlags(Station station) =>
+            station != null && station.TryGetComponent(out StationContents contents) ? contents.StoveFlags.Value : (byte)0;
 
         /// <summary>Spec 033: how long the tour holds the lemonade tap (s): 360 ml at 200 ml/s, the middle of the fill line.</summary>
         public const float PourSeconds = 1.8f;

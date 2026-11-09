@@ -54,12 +54,17 @@ namespace Worktown.Game.Shop
             Version++;
         }
 
-        /// <summary>The server stopped (FishNet despawned the dishes and bags): what was carried comes back (dishes to the return, bags into the can).</summary>
+        /// <summary>
+        /// The server stopped (FishNet despawned the dishes and bags): what was carried comes back (dishes to the return, bags into the
+        /// can). 035 review: the plates are counted again for the restart (<see cref="DishRoom.Restarted"/>: the scene's two plates come
+        /// back on the worktop, the pooled ones are gone), so the shop keeps exactly its plates.
+        /// </summary>
         public void EndSession(List<int> scratch)
         {
             _holds.Clear();
             Dishes.CarriedIds(scratch);
             foreach (int id in scratch) Dishes.CarriedLost(id);
+            Dishes.Restarted();
             scratch.Clear();
             foreach (int id in _bags.Keys) scratch.Add(id);
             foreach (int id in scratch) BagLost(id);
@@ -115,6 +120,17 @@ namespace Worktown.Game.Shop
 
         public bool IsBag(int objectId) => _bags.ContainsKey(objectId);
 
+        /// <summary>035 review: a full bag not taken out yet (a half-full bag carried out is no "full trash" for the hygiene).</summary>
+        public bool HasFullBag
+        {
+            get
+            {
+                foreach (int size in _bags.Values)
+                    if (HygieneRules.IsTrashFull(size)) return true;
+                return false;
+            }
+        }
+
         /// <summary>Bag <paramref name="objectId"/> goes into the bin outside: it is gone (the trash is out). NotABag.</summary>
         public CookOutcome Binned(int objectId)
         {
@@ -169,7 +185,7 @@ namespace Worktown.Game.Shop
             long key = KeyOf(station, kind);
             if (_holds.TryGetValue(key, out Hold h)) return h.Owner == owner ? CookOutcome.Ok : CookOutcome.DispenserBusy;
             foreach (KeyValuePair<long, Hold> kv in _holds)
-                if (kv.Value.Owner == owner) return CookOutcome.DispenserBusy;
+                if (kv.Value.Owner == owner) return CookOutcome.StillHolding; // 035 review: your own other hold, not "someone"
             _holds[key] = new Hold { Owner = owner, StartTick = tick };
             Version++;
             return CookOutcome.Ok;
@@ -238,10 +254,8 @@ namespace Worktown.Game.Shop
         public HygieneSources Sources(long minute, int spills, bool burning)
         {
             IReadOnlyList<long> since = Dishes.DirtySince();
-            int overdue = 0;
-            for (int i = 0; i < since.Count; i++)
-                if (minute - since[i] > HygieneRules.DishGraceMinutes) overdue++;
-            return new HygieneSources(since.Count, overdue, TrashIsFull || _bags.Count > 0, spills, burning);
+            int overdue = HygieneRules.OverdueDishes(since, minute);
+            return new HygieneSources(since.Count, overdue, TrashIsFull || HasFullBag, spills, burning);
         }
 
         /// <summary>The meter moves to <paramref name="minute"/> with what is dirty now; true when the score changed.</summary>

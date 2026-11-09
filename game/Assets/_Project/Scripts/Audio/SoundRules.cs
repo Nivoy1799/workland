@@ -127,6 +127,12 @@ namespace Worktown.Game.Audio
         public static SoundKey ScrubLoop => SoundKey.Scrub;
 
         /// <summary>Spec 035: the scrub loop's pitch: a little higher while the plate is nearly clean (share 0..1 of the scrub).</summary>
+        /// <summary>Spec 036: the spit's sizzle by its heat: low 0.6 of the high level, off silent.</summary>
+        public static float SpitSizzleScale(int level) => level >= Worktown.Sim.Cooking.Spit.High ? 1f : level == Worktown.Sim.Cooking.Spit.Low ? 0.6f : 0f;
+
+        /// <summary>Spec 036: the knife's rasp a little higher as the hold goes on (0..1 of the longest shave).</summary>
+        public static float ShavePitch(float share) => 0.95f + 0.2f * (share < 0f ? 0f : share > 1f ? 1f : share);
+
         public static float ScrubPitch(float share) => 0.95f + 0.15f * (share < 0f ? 0f : share > 1f ? 1f : share);
 
         /// <summary>The place tock: the item's material, else the surface's (metal on a burner, wood elsewhere).</summary>

@@ -449,6 +449,9 @@ namespace Worktown.Game.UI
                 case CookOutcome.NotABag: return "Only the trash bag goes in the bin";
                 case CookOutcome.NoCloth: return "Take the cloth to wipe";
                 case CookOutcome.NoSpill: return "Nothing to wipe";
+                case CookOutcome.StillHolding: return "Finish the other one first"; // 035 review
+                case CookOutcome.NoCone: return "Load a seitan cone first"; // spec 036
+                case CookOutcome.ConeLoaded: return "The cone still has seitan on it";
                 default: return outcome.ToString();
             }
         }

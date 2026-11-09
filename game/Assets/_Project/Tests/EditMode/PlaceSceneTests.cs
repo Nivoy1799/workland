@@ -109,6 +109,8 @@ namespace Worktown.Game.Tests
                 // Spec 030: the six griddle spots lie on the griddle's plate (fixed, no spot); the spatula on the griddle's deck.
                 Assert.AreEqual(Worktown.Game.Cooking.GriddleRules.SpotsPerGriddle, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Griddle), "six griddle spots");
                 Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Assembly), "spec 031: one build spot on the assembly board");
+                Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.SpitCone), "spec 036: the spit's cone (fixed)");
+                Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.SpitTray), "spec 036: the spit's catch tray (fixed)");
                 items.AddRange(All<Spatula>(scene));
                 items.AddRange(vessels);
                 Assert.AreEqual(1 + 1 + 6, items.Count, "knife, spatula, board, pan, pot, bowl and two plates");

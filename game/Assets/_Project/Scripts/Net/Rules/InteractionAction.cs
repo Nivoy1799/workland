@@ -49,6 +49,10 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 035: hold left click on the sink with empty hands to scrub the dish in it (server-timed).</summary>
         Scrub,
         /// <summary>Spec 035: hold left click on a spill with the cloth in the hands to wipe it (server-timed).</summary>
-        Wipe
+        Wipe,
+        /// <summary>Spec 036: hold left click on the spit's cone with the knife in the hands to shave it (server-timed: a second a portion).</summary>
+        Shave,
+        /// <summary>Spec 036: empty hands at a bare spit load a new seitan cone from the stock.</summary>
+        Load
     }
 }

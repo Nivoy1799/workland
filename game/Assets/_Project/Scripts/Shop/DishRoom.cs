@@ -45,6 +45,35 @@ namespace Worktown.Game.Shop
             Version++;
         }
 
+        /// <summary>
+        /// 035 review: the server restarted. FishNet despawned every plate it spawned (those from the shelf, for good) and set the scene's
+        /// <see cref="CleaningRules.ScenePlates"/> plates up again on the plating worktop, whatever happened to them. So after the restart
+        /// exactly those are in use; the carried dirty dishes are back at the return already (<see cref="CarriedLost"/>). The shelf gets
+        /// the rest: <c>Clean = TotalPlates - ScenePlates - Eating - AtReturn - InBasin</c>. Should more be dirty or eaten than that leaves
+        /// room for, the newest go (eating first, then the return, then the basin), so the shop still owns exactly
+        /// <see cref="CleaningRules.TotalPlates"/>.
+        /// </summary>
+        public void Restarted()
+        {
+            int room = CleaningRules.TotalPlates - CleaningRules.ScenePlates;
+            int excess = _eatingDue.Count + _atReturn.Count + _basin.Count - room;
+            excess = DropNewest(_eatingDue, excess);
+            excess = DropNewest(_atReturn, excess);
+            DropNewest(_basin, excess);
+            Clean = room - _eatingDue.Count - _atReturn.Count - _basin.Count;
+            Version++;
+        }
+
+        private static int DropNewest(List<long> list, int excess)
+        {
+            while (excess > 0 && list.Count > 0)
+            {
+                list.RemoveAt(list.Count - 1);
+                excess--;
+            }
+            return excess;
+        }
+
         // ---- clean plates ----
 
         /// <summary>A clean plate leaves the shelf (into the hands): NoCleanPlates when none is left.</summary>

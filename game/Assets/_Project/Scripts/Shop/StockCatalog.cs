@@ -17,6 +17,9 @@ namespace Worktown.Game.Shop
     /// squeeze's portion (10 to 30 % of a bottle) from the opened bottle of that sauce, opening the next bottle from the dry shelf when
     /// it runs out; a tap draws its pour (a percent of a cup per 4 ml) from the opened keg; the cup stack gives one cup (its lid
     /// included, the lid stack is free). Money moves only when ordering at the terminal.
+    /// Spec 036: the seitan cones of the spit, last (so every earlier line keeps its index): <see cref="ConeCapacity"/>, a unit is one cone
+    /// of <see cref="Spit.PortionsPerCone"/> portions, sold by the supplier as that many seitan blocks' worth (one cone per box), so a
+    /// portion costs what a seitan block costs in bulk (the wholesaler's cap counts shaved seitan as seitan: no faucet).
     /// </summary>
     public static class StockCatalog
     {
@@ -28,6 +31,10 @@ namespace Worktown.Game.Shop
         /// <summary>% of one grocer item in a unit: 100 (one item), a keg 20 cups.</summary>
         public const int ItemPercent = 100;
         public const int KegPercent = Supplier.CupsPerKeg * ItemPercent;
+        /// <summary>Spec 036: the stock line of the spit's cones (its id; no grocer item of its own).</summary>
+        public const string ConeId = "seitan_cone";
+        /// <summary>Spec 036 default to review: two cones fit (one on the spit at a time; a new game starts with one).</summary>
+        public const int ConeCapacity = 2;
 
         /// <summary>One stocked good.</summary>
         public readonly struct Good
@@ -62,6 +69,7 @@ namespace Worktown.Game.Shop
                 list.Add(new Good(BuildRules.PackagingId(p), PackagingName(p), PackagingCapacity, 1));
             list.Add(new Good(Drinks.CupId, "cups", PackagingCapacity, 1));
             foreach (BaseItemDef drink in Drinks.All) list.Add(new Good(drink.Id, drink.DisplayName, KegCapacity, Supplier.CupsPerKeg));
+            list.Add(new Good(ConeId, "seitan cone", ConeCapacity, 1)); // spec 036: taken whole, one unit per cone
             return list.ToArray();
         }
 
@@ -103,8 +111,25 @@ namespace Worktown.Game.Shop
         public static bool TryOffer(EconomyCatalog catalog, int line, out SupplierOffer offer)
         {
             offer = null;
-            return IsValid(line) && Supplier.TryOffer(catalog, Goods[line].Id, Goods[line].GrocerItemsPerUnit, out offer);
+            if (!IsValid(line)) return false;
+            if (Goods[line].Id == ConeId) return TryConeOffer(catalog, out offer);
+            return Supplier.TryOffer(catalog, Goods[line].Id, Goods[line].GrocerItemsPerUnit, out offer);
         }
+
+        /// <summary>
+        /// Spec 036: a cone is <see cref="Spit.PortionsPerCone"/> seitan blocks' worth at the seitan's grocer price (one cone per box, the
+        /// supplier's delay): at the bulk discount a portion costs exactly what a seitan block does. False when seitan has no price.
+        /// </summary>
+        public static bool TryConeOffer(EconomyCatalog catalog, out SupplierOffer offer)
+        {
+            offer = null;
+            if (catalog == null || !catalog.TryGetGrocerPrice(Spit.MeatId, out long price)) return false;
+            offer = new SupplierOffer(ConeId, price, Spit.PortionsPerCone, Supplier.KegPackSize, Supplier.DelayMinutes);
+            return true;
+        }
+
+        /// <summary>Spec 036: the cone line.</summary>
+        public static int ConeLine => IndexOf(ConeId);
 
         /// <summary>
         /// The line a stock slot shows and a delivery box is unpacked into: a fridge or shelf slot's good; the rack's packaging; the cup
@@ -123,6 +148,8 @@ namespace Worktown.Game.Shop
                 case StationKind.DrinkDispenser:
                     if (DrinkRules.IsTap(slot)) return IndexOf(DrinkRules.DrinkOf(slot));
                     return slot == DrinkRules.CupTool ? IndexOf(Drinks.CupId) : -1;
+                case StationKind.Spit: // spec 036: the cone slot shows the cones in stock and takes a box of them
+                    return slot == SpitRules.ConeTool ? IndexOf(ConeId) : -1;
                 default:
                     return -1;
             }
@@ -144,6 +171,8 @@ namespace Worktown.Game.Shop
                 case StationKind.DrinkDispenser:
                     if (DrinkRules.TryParsePour(option, out int tap, out bool start) && start) return tap;
                     return option == DrinkRules.CupOption ? DrinkRules.CupTool : -1;
+                case StationKind.Spit: // spec 036: the load option on the cone slot
+                    return option == SpitRules.LoadOption ? SpitRules.ConeTool : -1;
                 default:
                     return -1;
             }
@@ -162,6 +191,8 @@ namespace Worktown.Game.Shop
                 case StationKind.DrinkDispenser:
                     if (DrinkRules.IsTap(slot)) return DrinkRules.PourStartOption(slot);
                     return slot == DrinkRules.CupTool ? DrinkRules.CupOption : -1;
+                case StationKind.Spit:
+                    return slot == SpitRules.ConeTool ? SpitRules.LoadOption : -1;
                 default:
                     return -1;
             }

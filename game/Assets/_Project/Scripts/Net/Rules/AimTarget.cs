@@ -86,6 +86,17 @@ namespace Worktown.Game.Net.Rules
             return new AimTarget(AimKind.Station, kind, default, 0, null, option, flags, null, -1, PlaceSpots.None, false, false, 0, -1, -1, known);
         }
 
+        /// <summary>
+        /// Spec 036: a slot of the seitan spit (SpitRules: the cone): <see cref="StoveFlags"/> the spit's byte as this client sees it (the
+        /// level, someone shaving: the interactor clears its own, a cone), <see cref="Mode"/> the cone's mode byte (portions left),
+        /// <see cref="ContentCount"/> the portions in the catch tray, <see cref="ContentName"/> and <see cref="Name"/> what a shave gives now.
+        /// </summary>
+        public static AimTarget SpitTool(int slot, byte flags, byte coneMode, int tray, string takeName)
+        {
+            return new AimTarget(AimKind.Station, StationKind.Spit, VesselKind.SpitCone, tray, takeName, slot, flags, takeName, -1,
+                PlaceSpots.None, false, false, coneMode);
+        }
+
         /// <summary>Spec 034: the same target showing stock line <paramref name="line"/> at <paramref name="count"/> (-1: unknown).</summary>
         public AimTarget WithStock(int line, int count)
         {

@@ -169,6 +169,7 @@ namespace Worktown.Game.Dev
         // Spec 033: the drink dispenser on the front counter, left of the serving counter (GrayboxSceneBuilder.DrinkDispenserX), and the
         // front counter's middle line.
         private const float DrinksX = 10.49f;
+        private const float SpitX = 8.10f; // spec 036: the spit on the front counter, between the stoves across the aisle
         /// <summary>Spec 034: the ordering terminal's x (the middle of the landing worktop, GrayboxSceneBuilder.TerminalX).</summary>
         private const float TerminalX = 1.11f;
         private const float FrontCounterZ = 11.85f;
@@ -249,6 +250,9 @@ namespace Worktown.Game.Dev
                 // Spec 033: the drink dispenser on the front counter from the aisle (first person): the taps, the cup and lid stacks.
                 TourStep.WalkTo(DrinksX, AisleZ), TourStep.LookAt(DrinksX, 1.25f, FrontCounterZ), TourStep.Wait(0.6f),
                 TourStep.Shot("drinks-first"),
+                // Spec 036: the seitan spit on the front counter from the aisle (first person): the cone, the heat panel, the tray, the knob.
+                TourStep.WalkTo(SpitX, AisleZ), TourStep.LookAt(SpitX, 1.35f, FrontCounterZ), TourStep.Wait(0.6f),
+                TourStep.Shot("spit-first"),
                 // Spec 034: the ordering terminal on the back wall over the landing worktop, and the back door (first person).
                 TourStep.WalkTo(TerminalX + 0.3f, AisleZ), TourStep.LookAt(TerminalX, 1.3f, 14.9f), TourStep.Wait(0.6f),
                 TourStep.Shot("terminal-first"),

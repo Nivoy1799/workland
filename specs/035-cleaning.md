@@ -160,7 +160,7 @@ unstocked good is no longer free). New DefaultPrefabObjects entries: DirtyDish, 
    economy (`EconomyService.Game`), not to a server start. Test.
 4. `StockWallet`: an unstocked good is OutOfStock (never free); test pins every board sauce, packaging and `Drinks.All` id (and the cups) to
    a stock line. The 034 assertion "a good the shop does not stock is free" is inverted accordingly.
-5. `ForgetBox` is used: `SupplyService.WatchLostBoxes` (every 0.25 s) returns a box below the world or despawned without its unpack to the
+5. Lost boxes (corrected in the 036 round: `ForgetBox` was never called; both `ForgetBox` methods are deleted): `SupplyService.WatchLostBoxes` (every 0.25 s) returns a box below the world or despawned without its unpack to the
    back door with its contents (`StockRoom.ReturnLostBox`, tested); an emptied box is forgotten as before.
 6. `KitchenService.StopPour`: when the pour is already gone (`CancelPoursOfCup`), its `_pourers` key goes and the dispenser byte is refreshed.
 7. `EconomyEngine.Refund` is bounded by what the account paid: new `Account.GrocerPaid` (init-only, not in the snapshot hash) rises in

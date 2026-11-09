@@ -49,6 +49,8 @@ namespace Worktown.Game.Net.Rules
             if (target.Vessel == VesselKind.Basket) return BasketAction(held, target, hasFood);
             if (target.Vessel == VesselKind.Griddle) return GriddleAction(held, target, hasFood); // spec 030
             if (target.Vessel == VesselKind.Assembly) return BuildAction(held, target); // spec 031
+            if (target.Vessel == VesselKind.SpitTray) return TrayAction(held, target); // spec 036
+            if (target.Vessel == VesselKind.SpitCone) return InteractionAction.None; // its station slot is the target
             if (held.IsKnife)
                 return target.Vessel == VesselKind.Board && hasFood ? InteractionAction.Cut : InteractionAction.None;
             if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
@@ -87,6 +89,9 @@ namespace Worktown.Game.Net.Rules
 
         /// <summary>Spec 034: the grey reason of an empty slot, rack, cup stack or tap.</summary>
         public const string OutOfStockText = "Out of stock: order more at the terminal";
+
+        /// <summary>035 review: a tap whose kegs show no whole cup left: the server refuses a press below the smallest share.</summary>
+        public const string AlmostEmptyText = "Almost empty: order more at the terminal";
 
         /// <summary>Spec 034: a slot that shows its stock and has none left (as this client sees it).</summary>
         public static bool IsOutOfStock(AimTarget target) => target.StockLine >= 0 && target.StockCount == 0;
@@ -253,7 +258,7 @@ namespace Worktown.Game.Net.Rules
                 case CookOutcome.CupFull: return "The cup is full";
                 case CookOutcome.NotFilled: return "Fill the cup first";
                 case CookOutcome.DispenserBusy: return "Someone is using that tap";
-                case CookOutcome.OutOfStock: return OutOfStockText; // spec 034
+                case CookOutcome.OutOfStock: return DrinkRules.IsTap(target.Option) ? AlmostEmptyText : OutOfStockText; // spec 034; 035 review
                 case CookOutcome.HandsFull: return null; // the cup stack with full hands: nothing to say
                 default: return null;
             }
@@ -334,6 +339,8 @@ namespace Worktown.Game.Net.Rules
                 case StationKind.Counter: return SellsAtCounter(held) ? InteractionAction.Sell : InteractionAction.None;
                 case StationKind.Assembly: // spec 031: a dispenser or the packaging rack; the board's body itself does nothing
                     return target.Vessel == VesselKind.Assembly ? ToolAction(held, target) : InteractionAction.None;
+                case StationKind.Spit: // spec 036: the cone (its knob is a button); the body itself does nothing
+                    return target.Option == SpitRules.ConeTool && target.Vessel == VesselKind.SpitCone ? SpitAction(held, target) : InteractionAction.None;
                 case StationKind.DrinkDispenser: // spec 033: a tap, the cup stack or the lid stack; the body itself does nothing
                     if (target.Option == Worktown.Game.Shop.CleaningRules.SpillTool) return WipeAction(held, target); // spec 035: the spill
                     return target.Option >= 0 && target.Option < DrinkRules.ToolCount ? DrinkToolAction(held, target) : InteractionAction.None;
@@ -342,6 +349,73 @@ namespace Worktown.Game.Net.Rules
                         ? InteractionAction.Pay : InteractionAction.None;
                 default: return InteractionAction.None; // the stove's body: its knobs, buttons and burners do the work
             }
+        }
+
+        // ---- Spec 036: the seitan spit ----
+
+        /// <summary>
+        /// Spec 036, the spit's cone: the knife shaves it (a hold: a cone with seitan, room in the tray, nobody else shaving); empty hands at
+        /// a bare spit load a cone while the stock has one. Anything else does nothing here (the tray is scooped from, the knob pressed).
+        /// </summary>
+        private static InteractionAction SpitAction(Held held, AimTarget target)
+        {
+            if (held.IsPending) return InteractionAction.None;
+            byte b = target.StoveFlags;
+            bool cone = SpitRules.HasCone(b);
+            if (held.IsKnife)
+                return SpitRules.CanShave(cone, true, target.ContentCount, SpitRules.IsShaving(b)) == CookOutcome.Ok
+                    ? InteractionAction.Shave : InteractionAction.None;
+            if (held.IsHolding) return InteractionAction.None;
+            return SpitRules.CanLoad(false, cone, SpitRules.IsShaving(b)) == CookOutcome.Ok && !IsOutOfStock(target)
+                ? InteractionAction.Load : InteractionAction.None;
+        }
+
+        /// <summary>Spec 036, the catch tray: empty hands take a portion, an open build in the hands gets one (the 031 layer).</summary>
+        private static InteractionAction TrayAction(Held held, AimTarget target)
+        {
+            if (held.IsPending || held.IsCup) return InteractionAction.None;
+            bool openBuild = held.IsBuild && !held.IsPlated;
+            return SpitRules.CanScoop(target.ContentCount, held.IsHolding, openBuild) == CookOutcome.Ok ? InteractionAction.Take : InteractionAction.None;
+        }
+
+        /// <summary>Spec 036: why the spit's cone does nothing now (grey), or null.</summary>
+        public static string SpitReason(Held held, AimTarget target)
+        {
+            byte b = target.StoveFlags;
+            bool cone = SpitRules.HasCone(b);
+            if (held.IsKnife)
+            {
+                switch (SpitRules.CanShave(cone, true, target.ContentCount, SpitRules.IsShaving(b)))
+                {
+                    case CookOutcome.NoCone: return "Load a seitan cone first";
+                    case CookOutcome.TrayFull: return "The tray is full: scoop it first";
+                    case CookOutcome.DispenserBusy: return "Someone is shaving";
+                    default: return null;
+                }
+            }
+            if (cone) return "Take the knife to shave";
+            if (held.IsHolding) return "Put that down to load a cone";
+            if (SpitRules.IsShaving(b)) return null;
+            return IsOutOfStock(target) ? OutOfStockText : null;
+        }
+
+        /// <summary>Spec 036: why the catch tray does nothing now, or null.</summary>
+        public static string TrayReason(Held held, AimTarget target)
+        {
+            if (target.ContentCount <= 0) return "Shave the cone with the knife";
+            if (held.IsBuild) return "It is closed";
+            return held.IsHolding ? "Scoop with empty hands or onto a wrap" : null;
+        }
+
+        /// <summary>"Hold · shave the cone: shaved seitan (1/3 in the tray)" or "Click · load a seitan cone (1 left)".</summary>
+        public static string SpitPrompt(InteractionAction action, AimTarget target)
+        {
+            if (action == InteractionAction.Shave)
+                return HoldKey + " · shave the cone" + (string.IsNullOrEmpty(target.Name) ? string.Empty : ": " + target.Name)
+                    + (target.ContentCount > 0 ? " (" + target.ContentCount + "/" + SpitRules.TrayCapacity + " in the tray)" : string.Empty);
+            if (action == InteractionAction.Load)
+                return Click("load a seitan cone" + (target.StockCount > 0 ? " (" + target.StockCount + " left)" : string.Empty));
+            return null;
         }
 
         // ---- Spec 035: cleaning ----
@@ -508,6 +582,7 @@ namespace Worktown.Game.Net.Rules
                         || (target.Station == StationKind.DrinkDispenser && target.Option == Worktown.Game.Shop.CleaningRules.SpillTool))
                         return CleaningReason(held, target); // spec 035
                     if (target.Station == StationKind.Assembly) return target.Vessel == VesselKind.Assembly ? ToolReason(target) : null; // spec 031
+                    if (target.Station == StationKind.Spit) return target.Vessel == VesselKind.SpitCone ? SpitReason(held, target) : null; // spec 036
                     if (target.Station == StationKind.Register) return RegisterReason(target); // spec 032
                     if (target.Station == StationKind.DrinkDispenser) // spec 033
                         return target.Option >= 0 && target.Option < DrinkRules.ToolCount ? DrinkToolReason(held, target) : null;
@@ -522,6 +597,8 @@ namespace Worktown.Game.Net.Rules
         private static string VesselReason(Held held, AimTarget target)
         {
             if (held.IsCup) return null; // spec 033: a cup goes into no cookware (nothing to explain)
+            if (target.Vessel == VesselKind.SpitTray) return TrayReason(held, target); // spec 036
+            if (target.Vessel == VesselKind.SpitCone) return null;
             if (target.Vessel == VesselKind.Assembly) // spec 031
             {
                 if (!held.IsFood) return null;
@@ -548,10 +625,13 @@ namespace Worktown.Game.Net.Rules
             InteractionAction action = ActionFor(held, target);
             string cleaning = CleaningPrompt(action, held, target); // spec 035
             if (cleaning != null) return cleaning;
+            string spit = target.Station == StationKind.Spit && target.Kind == AimKind.Station ? SpitPrompt(action, target) : null; // spec 036
+            if (spit != null) return spit;
             switch (action)
             {
                 case InteractionAction.Press:
                     if (target.Station == StationKind.Griddle) return Click(GriddleRules.PowerText(GriddleRules.IsOn(target.StoveFlags))); // spec 030
+                    if (target.Station == StationKind.Spit) return Click(SpitRules.KnobText(target.StoveFlags)); // spec 036
                     return target.Station == StationKind.Fryer
                         ? FryerButtonPrompt(target.Option, target.StoveFlags)
                         : ButtonPrompt(target.Option, target.StoveFlags);
@@ -587,6 +667,9 @@ namespace Worktown.Game.Net.Rules
                     bool dripping = target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Draining;
                     string drip = dripping ? " (still dripping)" : string.Empty;
                     bool griddle = target.Vessel == VesselKind.Griddle && target.Kind == AimKind.Vessel; // spec 030
+                    if (target.Vessel == VesselKind.SpitTray && target.Kind == AimKind.Vessel) // spec 036: the catch tray
+                        return Click(held.IsBuild ? "scoop " + TakeWhat(target) + " onto the " + (string.IsNullOrEmpty(held.Name) ? "build" : held.Name)
+                            : "take " + TakeWhat(target));
                     if (held.IsVessel) return Click((griddle ? "slide " : "tip ") + TakeWhat(target) + " " + IntoWhat(held.Vessel) + drip); // spec 029b
                     return Click("take " + TakeWhat(target) + drip) + (griddle ? "   Flip: " + UseTheSpatula.ToLowerInvariant() : string.Empty);
                 default: return Reason(held, target);

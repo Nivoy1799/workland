@@ -629,6 +629,26 @@
         "Overfill a cup, then wipe the puddle with the cloth: does it shrink away?",
         "Leave dishes and a spill: does the hygiene meter drop and turn yellow, then red? Clean up: does it climb again?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-036",
+      "date": "2026-11-09",
+      "title": "The seitan spit: a turning cone, shaved with the knife",
+      "items": [
+        "A seitan spit stands on the front counter, across the aisle from the stoves: a cone of seitan turns in front of a heat panel",
+        "Empty hands at the bare spit load a cone from stock (one cone is about 30 portions; order more at the terminal, a cone comes in its own box)",
+        "The knob turns the heat off, low or high. Only the outside cooks: it browns (the ring shows it), good at 40 s, perfect at 55 s, burnt at 90 s on high",
+        "Hold the knife on the cone to shave: one second is one portion. The curls fall into the catch tray (it holds 3), and the next layer starts half-way",
+        "Take a portion from the tray, or scoop it straight onto the wrap in your hands. Seitan wraps and flatbreads take shaved seitan or grilled strips, and the review says which",
+        "Hygiene now changes ten times slower (a spill costs 0.2 % a game minute)"
+      ],
+      "test": [
+        "Load a cone and switch the knob to high: does the cone turn and brown, the panel glow, the sizzle and the motor hum play?",
+        "Shave at about 55 s with the knife: do curls fall into the tray and the knife saw in your view? Is the tray at 1 after a 1 s hold, 3 after a long one?",
+        "Shave right after a shave: is the new seitan pale? Leave it on high for 90 s: does it char and smoke?",
+        "Build a seitan wrap with shaved seitan (scoop onto the wrap in your hands or put it on the board), wrap it and serve: does the review mention the spit?",
+        "Make a spill and watch the hygiene meter: does it fall slowly now (about 1 % every 5 s)?"
+      ]
     }
   ]
 }

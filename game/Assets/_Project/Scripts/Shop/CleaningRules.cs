@@ -85,6 +85,12 @@ namespace Worktown.Game.Shop
         public static int BasinOf(byte sink) => sink & 0x07;
         public static bool IsScrubbing(byte sink) => (sink & ScrubbingBit) != 0;
 
+        /// <summary>
+        /// 035 review (F8): the plate shelf's byte is known (counted clean plates) only when its station is spawned and the scene has a
+        /// cleaning service; without one the shelf gives plates as before (endless), so "No clean plates" must never show.
+        /// </summary>
+        public static bool ShelfKnown(bool spawned, bool hasCleaningService) => spawned && hasCleaningService;
+
         /// <summary>A count as a byte (clamped).</summary>
         public static byte CountByte(int count) => (byte)(count < 0 ? 0 : count > 255 ? 255 : count);
 

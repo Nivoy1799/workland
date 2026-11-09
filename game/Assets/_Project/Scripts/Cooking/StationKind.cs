@@ -46,6 +46,9 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 035: the trash can by the staff gap: discard food and empty packaging; empty hands take the bag out.</summary>
         TrashCan,
         /// <summary>Spec 035: the bin outside the staff gap, where the trash bag goes.</summary>
-        Bin
+        Bin,
+        /// <summary>Spec 036: the seitan spit on the front counter opposite the heat block: a heat knob, the turning cone (the knife is
+        /// held on it to shave; empty hands load a new cone from stock) and the catch tray (<see cref="SpitRules"/>).</summary>
+        Spit
     }
 }

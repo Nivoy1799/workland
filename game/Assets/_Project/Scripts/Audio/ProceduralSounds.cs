@@ -639,6 +639,45 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>
+        /// Spec 036: the knife shaving the cone (a loop): a dry rasp of bright noise in quick strokes (about six a second, one loop is whole
+        /// strokes) over a little crackle of the browned crust. The ends fade so the loop has no click.
+        /// </summary>
+        public static float[] ShaveRasp()
+        {
+            var rng = new System.Random(3601);
+            var s = new float[(int)(SampleRate * 1.0f)];
+            float previous = 0f, band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                band += (high - band) * 0.6f;
+                float stroke = (float)Math.Pow(0.5 + 0.5 * Math.Sin(2.0 * Math.PI * 6.0 * t), 2.0);
+                float crackle = rng.NextDouble() < 0.01 ? 0.6f : 0f;
+                float edge = Math.Min(1f, Math.Min(t, 1f - t) / 0.02f);
+                s[i] = (band * 0.25f * stroke + crackle * high * 0.4f) * edge;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 036: the spit's motor (a loop): a low 50 Hz hum with its harmonics and a slow wobble of the gear, very quiet.</summary>
+        public static float[] MotorHum()
+        {
+            var s = new float[SampleRate]; // one second: whole periods of every partial
+            for (int i = 0; i < s.Length; i++)
+            {
+                double t = i / (double)SampleRate;
+                double wobble = 1.0 + 0.15 * Math.Sin(2.0 * Math.PI * 2.0 * t);
+                double hum = Math.Sin(2.0 * Math.PI * 50.0 * t) * 0.5 + Math.Sin(2.0 * Math.PI * 100.0 * t) * 0.25
+                    + Math.Sin(2.0 * Math.PI * 150.0 * t) * 0.1;
+                s[i] = (float)(hum * wobble * 0.35);
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -682,13 +721,16 @@ namespace Worktown.Game.Audio
                 case SoundKey.Scrub: return Scrub(); // spec 035
                 case SoundKey.TrashRustle: return TrashRustle();
                 case SoundKey.LidThump: return LidThump();
+                case SoundKey.ShaveRasp: return ShaveRasp(); // spec 036
+                case SoundKey.MotorHum: return MotorHum();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }
 
         public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer || key == SoundKey.Squeeze
             || key == SoundKey.Pour // spec 033
-            || key == SoundKey.Scrub; // spec 035
+            || key == SoundKey.Scrub // spec 035
+            || key == SoundKey.ShaveRasp || key == SoundKey.MotorHum; // spec 036
 
         public static AudioClip CreateClip(SoundKey key)
         {

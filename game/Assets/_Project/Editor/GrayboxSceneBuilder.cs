@@ -1455,6 +1455,218 @@ namespace Worktown.Game.Editor
             return station;
         }
 
+        // ---- Spec 036: the seitan spit ----
+
+        public const string SpitName = "Spit";
+        public const string SpitConeName = "Spit cone";
+        public const string SpitTrayName = "Spit tray";
+        /// <summary>
+        /// Spec 036: on the front counter's cook side opposite the heat block (between the two stoves across the aisle), its cone and knob
+        /// facing the cook; its body stands 0.1 m towards the street so the catch tray and the knob fit on the counter in front of it.
+        /// </summary>
+        public const float SpitX = (StoveAX + StoveBX) * 0.5f;
+        public const float SpitZ = FrontCounterZ - 0.1f;
+
+        /// <summary>
+        /// Spec 036: the seitan spit, built like the drink dispenser: the root at the middle of its "Body" (the cone and the heat panel; a
+        /// box collider, no renderer, on the counter top), the catalog's graybox frame (Art_StationSpit), the sign, a scene NetworkObject
+        /// with the spit's byte (StationContents). The scene adds what moves: the heat knob (a StationButton, SpitRules.KnobOption), the
+        /// panel's glowing face, the cone slot (the station's one slot: the hold's target, with the SpitView) with the turning cone of
+        /// stacked discs, the curls and the onlookers' knife; and two fixed vessels of their own (NetworkObjects that never move, no
+        /// Pickup): the cone (no collider: its heat bytes, mode, label, steam and ring) and the catch tray (an aim collider, its portions
+        /// drawn by a FoodVisual).
+        /// </summary>
+        private static Station CreateSpit(ArtCatalog catalog, Transform parent, int index)
+        {
+            float top = ArtSizeTable.ServingCounterHeight;
+            float h = SpitArtRules.Height;
+            var root = new GameObject(SpitName);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(new Vector3(SpitX, top + h * 0.5f, SpitZ), Quaternion.Euler(0f, 180f, 0f));
+            var station = root.AddComponent<Station>();
+            SetField(station, "_index", index);
+            SetField(station, "_kind", (int)StationKind.Spit);
+            SetField(station, "_displayName", SpitName);
+            SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(root.transform, false);
+            body.transform.localScale = new Vector3(SpitArtRules.Width, h, SpitArtRules.Depth);
+            body.AddComponent<BoxCollider>(); // size one: the body's scale is the spit's box (aim)
+            if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(StationKind.Spit), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = ArtFrontRotation; // the model's front (+Z) on the cook side
+            }
+            else Debug.LogError("[Graybox] no spit model in the catalog");
+            Vector3 down = new Vector3(0f, -h * 0.5f, 0f); // SpitArtRules' positions start at the counter top
+            TextMesh sign = CreateLabel(root.transform, StationSign.LocalPosition(h, -SpitArtRules.Depth * 0.5f), 60, 0.05f);
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = SpitName;
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            root.AddComponent<StationContents>();
+
+            // The heat knob in front of the body, on the base's right, and its label.
+            Renderer knob = CreateButton(station, "Heat knob", SpitArtRules.KnobCentre + down, SpitRules.KnobOption,
+                CreateMaterial(StoveButtonMaterialPath, Color.white));
+            knob.transform.localScale = SpitArtRules.KnobSize;
+            CreateButtonLabel(station, "HeatLabel", SpitArtRules.KnobCentre + down + new Vector3(0f, 0.035f, -0.025f), "heat").characterSize = 0.012f;
+
+            // The steel plate in front of the body, under the catch tray and the knob.
+            GameObject plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            plate.name = "Front plate";
+            UnityEngine.Object.DestroyImmediate(plate.GetComponent<Collider>());
+            plate.transform.SetParent(root.transform, false);
+            plate.transform.localPosition = SpitArtRules.FrontPlateCentre + down;
+            plate.transform.localScale = SpitArtRules.FrontPlateSize;
+            plate.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Steel);
+
+            // The panel's glowing face.
+            Material glowMaterial = CreateMaterial(Root + "/Settings/SpitGlow.mat", Palette.Charcoal);
+            glowMaterial.EnableKeyword("_EMISSION");
+            glowMaterial.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            GameObject glow = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            glow.name = "Panel glow";
+            UnityEngine.Object.DestroyImmediate(glow.GetComponent<Collider>());
+            glow.transform.SetParent(root.transform, false);
+            glow.transform.localPosition = SpitArtRules.GlowCentre + down;
+            glow.transform.localScale = SpitArtRules.GlowSize;
+            glow.GetComponent<MeshRenderer>().sharedMaterial = glowMaterial;
+
+            // The cone slot (the hold's target) with the turning cone, the curls and the onlookers' knife.
+            var slotObject = new GameObject("Spit cone slot");
+            slotObject.transform.SetParent(root.transform, false);
+            slotObject.transform.localPosition = SpitArtRules.ConeAnchor + down;
+            var slot = slotObject.AddComponent<StockSlot>();
+            SetField(slot, "_station", station);
+            SetField(slot, "_option", SpitRules.ConeTool);
+            SetField(slot, "_ingredientIndex", -1);
+            SetField(station, "_slots", new List<StockSlot> { slot });
+            var turn = new GameObject("Turn");
+            turn.transform.SetParent(root.transform, false);
+            turn.transform.localPosition = new Vector3(SpitArtRules.ConeAxis.x, 0f, SpitArtRules.ConeAxis.y) + down;
+            Material coneMaterial = CreateMaterial(Root + "/Settings/SpitCone.mat", Palette.WoodLight);
+            var discs = new Renderer[SpitArtRules.Discs];
+            for (int i = 0; i < SpitArtRules.Discs; i++)
+            {
+                GameObject disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                disc.name = "Disc " + i;
+                UnityEngine.Object.DestroyImmediate(disc.GetComponent<Collider>());
+                disc.transform.SetParent(turn.transform, false);
+                disc.transform.localPosition = new Vector3(0f, SpitArtRules.DiscY(i), 0f);
+                float d = 2f * SpitArtRules.DiscRadius(i, 1f);
+                disc.transform.localScale = new Vector3(d, SpitArtRules.DiscHeight * 0.5f, d); // Unity's cylinder is 2 m high
+                discs[i] = disc.GetComponent<MeshRenderer>();
+                discs[i].sharedMaterial = coneMaterial;
+            }
+            Material curlMaterial = CreateMaterial(Root + "/Settings/SpitCurl.mat", Palette.FoodSeitan);
+            var curls = new Renderer[SpitArtRules.MaxCurls];
+            for (int i = 0; i < curls.Length; i++)
+            {
+                GameObject curl = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                curl.name = "Curl " + i;
+                UnityEngine.Object.DestroyImmediate(curl.GetComponent<Collider>());
+                curl.transform.SetParent(slotObject.transform, false);
+                curl.transform.localScale = new Vector3(0.045f, 0.005f, 0.022f);
+                curls[i] = curl.GetComponent<MeshRenderer>();
+                curls[i].sharedMaterial = curlMaterial;
+                curl.SetActive(false);
+            }
+            var knife = new GameObject("Knife look");
+            knife.transform.SetParent(slotObject.transform, false);
+            GameObject blade = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            blade.name = "Blade";
+            UnityEngine.Object.DestroyImmediate(blade.GetComponent<Collider>());
+            blade.transform.SetParent(knife.transform, false);
+            blade.transform.localPosition = new Vector3(0.1f, 0f, 0f);
+            blade.transform.localScale = new Vector3(0.2f, 0.035f, 0.004f);
+            blade.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitKnife.mat", Palette.Steel);
+            GameObject handle = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            handle.name = "Handle";
+            UnityEngine.Object.DestroyImmediate(handle.GetComponent<Collider>());
+            handle.transform.SetParent(knife.transform, false);
+            handle.transform.localPosition = new Vector3(0.25f, 0f, 0f);
+            handle.transform.localScale = new Vector3(0.1f, 0.025f, 0.02f);
+            handle.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitHandle.mat", Palette.WoodDark);
+            knife.SetActive(false);
+
+            Material steam = CreateSteamMaterial();
+            Vessel cone = CreateSpitVessel(catalog, station, parent, SpitConeName, VesselKind.SpitCone,
+                new Vector3(SpitArtRules.ConeAxis.x, SpitArtRules.ConeAnchor.y, SpitArtRules.ConeAxis.y - SpitArtRules.RadiusTop) + down, steam);
+            Vessel tray = CreateSpitVessel(catalog, station, parent, SpitTrayName, VesselKind.SpitTray,
+                SpitArtRules.TrayCentre + down + new Vector3(0f, SpitArtRules.TraySize.y * 0.5f, 0f), steam);
+
+            var view = slotObject.AddComponent<SpitView>();
+            SetField(view, "_spit", station);
+            SetField(view, "_cone", cone);
+            SetField(view, "_tray", tray);
+            SetField(view, "_turn", turn.transform);
+            SetField(view, "_discs", discs);
+            SetField(view, "_glow", glow.GetComponent<MeshRenderer>());
+            SetField(view, "_curls", curls);
+            SetField(view, "_knife", knife.transform);
+            SetField(view, "_knob", knob);
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t != root.transform && t.GetComponentInParent<SpitView>() == null && !t.IsChildOf(turn.transform) && t != glow.transform
+                    && t != knob.transform)
+                    t.gameObject.isStatic = true; // the cone turns, the curls fly, the glow and the knob light up
+            return station;
+        }
+
+        /// <summary>
+        /// Spec 036: one of the spit's fixed vessels (the cone or the catch tray), its own scene NetworkObject at <paramref name="local"/>
+        /// of the spit (never moves; no Pickup): a Vessel with its SpitPart, a label, the "Contents" anchor; the tray an aim collider, its
+        /// steel tray and a FoodVisual for the portions; the cone its steam and ring (VesselSteam) and no collider (its slot is aimed at).
+        /// </summary>
+        private static Vessel CreateSpitVessel(ArtCatalog catalog, Station spit, Transform parent, string name, VesselKind kind, Vector3 local,
+            Material steam)
+        {
+            bool tray = kind == VesselKind.SpitTray;
+            var root = new GameObject(name);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(spit.transform.TransformPoint(local), spit.transform.rotation);
+            var anchor = new GameObject(Vessel.ContentsName);
+            anchor.transform.SetParent(root.transform, false);
+            anchor.transform.localPosition = new Vector3(0f, tray ? 0.002f : 0f, 0f);
+            FoodVisual food = null;
+            if (tray)
+            {
+                var collider = root.AddComponent<BoxCollider>();
+                collider.size = new Vector3(SpitArtRules.TraySize.x, 0.08f, SpitArtRules.TraySize.z);
+                collider.center = new Vector3(0f, 0.02f, 0f);
+                GameObject pan = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                pan.name = "Tray";
+                UnityEngine.Object.DestroyImmediate(pan.GetComponent<Collider>());
+                pan.transform.SetParent(root.transform, false);
+                pan.transform.localPosition = new Vector3(0f, -SpitArtRules.TraySize.y * 0.5f, 0f);
+                pan.transform.localScale = SpitArtRules.TraySize;
+                pan.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Steel);
+                food = anchor.AddComponent<FoodVisual>();
+                SetField(food, "_catalog", catalog);
+                SetField(food, "_partScale", 0.6f);
+                SetField(food, "_partRadius", 0.06f);
+            }
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, tray ? 0.22f : 0.36f, 0f), 40, 0.03f);
+            label.text = string.Empty;
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            var vessel = root.AddComponent<Vessel>();
+            SetField(vessel, "_kind", (int)kind);
+            SetField(vessel, "_label", label);
+            if (food != null) SetField(vessel, "_visual", food);
+            SetField(root.AddComponent<SpitPart>(), "_spit", spit);
+            if (!tray)
+            {
+                var steamView = root.AddComponent<VesselSteam>();
+                SetField(steamView, "_material", steam);
+                SetField(steamView, "_steamHeight", 0.3f);
+            }
+            return vessel;
+        }
+
         /// <summary>Spec 031: the assembly board's name (its sign and the server log) and its parts' object names.</summary>
         public const string AssemblyName = "Assembly";
         public const string AssemblySpotName = "Build spot";
@@ -1733,6 +1945,8 @@ namespace Worktown.Game.Editor
             stations.Add(trash);
             Station bin = CreateBin(catalog, parent.transform, stations.Count);
             stations.Add(bin);
+            // Spec 036: the seitan spit on the front counter opposite the heat block (appended last, so the earlier indices stay).
+            stations.Add(CreateSpit(catalog, parent.transform, stations.Count));
             NetworkObject shelfNob = shelf.gameObject.AddComponent<NetworkObject>(); // spec 035: the clean plates' byte
             SetField(shelfNob, "_preventDespawnOnDisconnect", true);
             shelf.gameObject.AddComponent<StationContents>();

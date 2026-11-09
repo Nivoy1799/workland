@@ -71,8 +71,12 @@ namespace Worktown.Game.Player
             {
                 // Spec 019: on its edge, tip forward; a short dip while chopping.
                 float chop = ChopAmount(Time.unscaledTime - _chopStart);
-                pose = new Pose(anchor.TransformPoint(KnifeHoldOffset + new Vector3(0f, -ChopDrop * chop, 0.02f * chop)),
-                    anchor.rotation * Quaternion.Euler(ChopAngle * chop, 0f, 0f) * KnifeHoldRotation);
+                // Spec 036: while shaving the spit's cone the knife reaches forward and saws down and up the cone.
+                float shave = _shaving ? Worktown.Game.Art.SpitArtRules.KnifeStroke(Time.unscaledTimeAsDouble - _shaveStart) : 0f;
+                float reach = _shaving ? ShaveReach : 0f;
+                pose = new Pose(anchor.TransformPoint(KnifeHoldOffset + new Vector3(_shaving ? -0.04f : 0f,
+                        -ChopDrop * chop - ShaveDrop * shave, 0.02f * chop + reach)),
+                    anchor.rotation * Quaternion.Euler(ChopAngle * chop + ShaveAngle * shave, 0f, _shaving ? ShaveRoll : 0f) * KnifeHoldRotation);
                 return true;
             }
             Bounds local = LocalBounds(item);
@@ -196,6 +200,24 @@ namespace Worktown.Game.Player
             _bounds = any ? result : new Bounds(Vector3.zero, Vector3.one * 0.1f);
             return _bounds;
         }
+
+        // Spec 036: the knife's shave in view.
+        private const float ShaveReach = 0.2f;
+        private const float ShaveDrop = 0.1f;
+        private const float ShaveAngle = 18f;
+        private const float ShaveRoll = -25f;
+        private bool _shaving;
+        private double _shaveStart;
+
+        /// <summary>Spec 036: the knife saws down the spit's cone while the owner holds the shave (first person; others see the spit's knife).</summary>
+        public void SetShaving(bool on)
+        {
+            if (on && !_shaving) _shaveStart = Time.unscaledTimeAsDouble;
+            _shaving = on;
+        }
+
+        /// <summary>Spec 036: whether the knife in view is shaving now.</summary>
+        public bool IsShaving => _shaving;
 
         /// <summary>Spec 019: one chop of the knife in view (the owner sent a stroke).</summary>
         public void PlayChop()

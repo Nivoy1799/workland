@@ -69,6 +69,8 @@ namespace Worktown.Game.Art
             World(ArtKey.StationDishReturn, CleaningArtRules.ReturnHeight, SizeAxis.Height, "Dish return"),
             World(ArtKey.StationTrash, CleaningArtRules.TrashHeight, SizeAxis.Height, "Kitchen trash can"),
             World(ArtKey.StationBin, CleaningArtRules.BinHeight, SizeAxis.Height, "Bin (outside)"),
+            // Spec 036: the seitan spit stands on the front counter (its own height above the counter top).
+            World(ArtKey.StationSpit, SpitArtRules.Height, SizeAxis.Height, "Seitan spit"),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).

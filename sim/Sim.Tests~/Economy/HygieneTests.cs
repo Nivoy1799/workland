@@ -7,7 +7,8 @@ namespace Worktown.Sim.Tests.Economy
 {
     /// <summary>
     /// Spec 035 AC2: the hygiene model: its sources (dirty dishes after the grace, a full trash, spills, burning), the decay and the
-    /// recovery per game minute, the effects on reviews and patience, the eat-in draw, and determinism.
+    /// recovery per game minute, the effects on reviews and patience, the eat-in draw, and determinism. Since spec 036 every rate is ten
+    /// times slower (the score is kept in tenths of a percent).
     /// </summary>
     public class HygieneTests
     {
@@ -20,7 +21,7 @@ namespace Worktown.Sim.Tests.Economy
         }
 
         [Fact]
-        public void ADirtyDish_CountsOnlyAfterTwoGameMinutes_ThenCostsOnePercentAMinute()
+        public void ADirtyDish_CountsOnlyAfterTwoGameMinutes_ThenCostsATenthOfAPercentAMinute()
         {
             var since = new List<long> { 100 };
             Assert.Equal(0, HygieneRules.OverdueDishes(since, 101));
@@ -28,13 +29,15 @@ namespace Worktown.Sim.Tests.Economy
             Assert.Equal(1, HygieneRules.OverdueDishes(since, 103));
             // A fresh dish costs nothing yet, but stops the recovery (nothing dirty at all is needed for it).
             var fresh = new HygieneSources(1, 0, false, 0, false);
-            Assert.Equal(90, HygieneRules.Step(90, fresh));
-            Assert.Equal(89, HygieneRules.Step(90, new HygieneSources(1, 1, false, 0, false)));
-            Assert.Equal(87, HygieneRules.Step(90, new HygieneSources(3, 3, false, 0, false)));
+            Assert.Equal(900, HygieneRules.Step(900, fresh));
+            Assert.Equal(899, HygieneRules.Step(900, new HygieneSources(1, 1, false, 0, false)));
+            Assert.Equal(897, HygieneRules.Step(900, new HygieneSources(3, 3, false, 0, false)));
+            // Ten minutes with one overdue dish cost one whole percent (the spec's 1 % a minute, ten times slower).
+            Assert.Equal(890, HygieneRules.Advance(900, new HygieneSources(1, 1, false, 0, false), 10));
         }
 
         [Fact]
-        public void AFullTrash_CostsTwo_EverySpillTwo_BurningOne_AndTheyAddUp()
+        public void AFullTrash_CostsTwoTenths_EverySpillTwo_BurningOne_AndTheyAddUp()
         {
             Assert.Equal(2, HygieneRules.DecayPerMinute(new HygieneSources(0, 0, true, 0, false)));
             Assert.Equal(2, HygieneRules.DecayPerMinute(new HygieneSources(0, 0, false, 1, false)));
@@ -46,13 +49,31 @@ namespace Worktown.Sim.Tests.Economy
         }
 
         [Fact]
-        public void Recovery_IsOnePercentAMinute_UpTo100_AndTheScoreNeverLeaves0To100()
+        public void Recovery_IsATenthOfAPercentAMinute_UpTo100_AndTheScoreNeverLeaves0To100()
         {
-            Assert.Equal(51, HygieneRules.Step(50, HygieneSources.Clean));
-            Assert.Equal(100, HygieneRules.Step(100, HygieneSources.Clean));
+            Assert.Equal(501, HygieneRules.Step(500, HygieneSources.Clean));
+            Assert.Equal(1000, HygieneRules.Step(1000, HygieneSources.Clean));
             Assert.Equal(0, HygieneRules.Step(1, new HygieneSources(5, 5, true, 3, true)));
             Assert.Equal(0, HygieneRules.Step(-20, new HygieneSources(0, 0, true, 0, false)));
-            Assert.Equal(100, HygieneRules.Step(250, HygieneSources.Clean));
+            Assert.Equal(1000, HygieneRules.Step(2500, HygieneSources.Clean));
+            // The shown percent rounds down: 49.9 % is 49 % (below the review threshold).
+            Assert.Equal(49, HygieneRules.PercentOf(499));
+            Assert.Equal(50, HygieneRules.PercentOf(500));
+            Assert.Equal(100, HygieneRules.PercentOf(5000));
+            Assert.Equal(0, HygieneRules.PercentOf(-3));
+        }
+
+        [Fact]
+        public void OneOpenSpill_TakesFortyGameMinutesToCostEightPercent_NotHalfTheScore()
+        {
+            // The 035 tour: one spill took the score from 100 to 49 % in about 40 s (a game minute is a real second). Now 40 minutes of
+            // a spill cost 8 %, and the same 40 clean minutes win back 4 %.
+            var spill = new HygieneSources(0, 0, false, 1, false);
+            HygieneMeter m = HygieneMeter.Start(0);
+            for (long minute = 1; minute <= 40; minute++) m = m.Advance(minute, spill);
+            Assert.Equal(92, m.Percent);
+            for (long minute = 41; minute <= 80; minute++) m = m.Advance(minute, HygieneSources.Clean);
+            Assert.Equal(96, m.Percent);
         }
 
         [Fact]
@@ -60,14 +81,15 @@ namespace Worktown.Sim.Tests.Economy
         {
             var spill = new HygieneSources(0, 0, false, 1, false);
             HygieneMeter m = HygieneMeter.Start(0).Advance(5, spill);
-            Assert.Equal(90, m.Percent);
+            Assert.Equal(990, m.Tenths);
+            Assert.Equal(99, m.Percent);
             Assert.Equal(5, m.Minute);
             Assert.Same(m, m.Advance(5, spill)); // the same minute: nothing
             HygieneMeter back = m.Advance(3, spill);
-            Assert.Equal(90, back.Percent); // a clock that went back changes no score
+            Assert.Equal(990, back.Tenths); // a clock that went back changes no score
             Assert.Equal(3, back.Minute);
             // The night skipped after a shift (18 hours) counts at most ten minutes.
-            Assert.Equal(90 - 2 * HygieneRules.MaxCatchUpMinutes, m.Advance(5 + 18 * 60, spill).Percent);
+            Assert.Equal(990 - 2 * HygieneRules.MaxCatchUpMinutes, m.Advance(5 + 18 * 60, spill).Tenths);
         }
 
         [Fact]
@@ -132,7 +154,7 @@ namespace Worktown.Sim.Tests.Economy
                         minute % 90 < 5 ? 1 : 0, minute % 60 == 0);
                     m = m.Advance(minute, s);
                 }
-                return m.Percent;
+                return m.Tenths;
             }
             Assert.Equal(Run(), Run());
         }

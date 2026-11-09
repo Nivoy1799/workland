@@ -27,6 +27,7 @@ namespace Worktown.Game.Npc
             public OrderMatch Worst = OrderMatch.Exact;
             public byte Dish;
             public int Payee = -1;
+            public string Note; // spec 036: the dish line's review note
         }
 
         private readonly Dictionary<int, Entry> _entries = new Dictionary<int, Entry>();
@@ -89,6 +90,7 @@ namespace Worktown.Game.Npc
             {
                 e.FoodServed = true;
                 e.Dish = line.Dish;
+                e.Note = line.Fit.Note;
             }
             e.Bill += Math.Max(0L, lineBill);
             e.Misses += line.Fit.Misses;
@@ -100,7 +102,7 @@ namespace Worktown.Game.Npc
             if (!e.FoodServed || (e.Drink != null && !e.DrinkServed)) return false;
             _entries.Remove(line.CustomerId);
             int stars = (2 * e.StarsSum + e.Lines) / (2 * e.Lines); // the mean, rounded half up
-            var fit = new OrderFit(e.Worst, e.Misses, e.QualitySum / e.Lines, stars);
+            var fit = new OrderFit(e.Worst, e.Misses, e.QualitySum / e.Lines, stars, e.Note);
             whole = new GuestPick(line.CustomerId, e.Dish, fit, OrderRules.ExactPermille, line.WaitedTenths, line.PatienceTenths);
             wholeBill = e.Bill;
             _completed[line.CustomerId] = e.Bill;

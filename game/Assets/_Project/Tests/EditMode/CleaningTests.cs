@@ -132,7 +132,7 @@ namespace Worktown.Game.Tests
             var room = new CleaningRoom();
             const int sink = 13, dispenser = 10;
             room.Press(sink, CleaningRules.HoldScrub, Cook, 100);
-            Assert.AreEqual(CookOutcome.DispenserBusy, room.Press(dispenser, CleaningRules.HoldWipe, Cook, 100), "one hold per player");
+            Assert.AreEqual(CookOutcome.StillHolding, room.Press(dispenser, CleaningRules.HoldWipe, Cook, 100), "one hold per player (035 review: its own reason)");
             room.Press(dispenser, CleaningRules.HoldWipe, Other, 100);
             var due = new List<long>();
             room.DueHolds(100 + Ticks(0.9), Rate, due);
@@ -243,10 +243,11 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(room.Tick(481, 0, false), "a fresh dirty dish costs nothing, but nothing recovers either");
             Assert.AreEqual(100, room.Hygiene);
             Assert.IsFalse(room.Tick(482, 0, false));
-            Assert.IsTrue(room.Tick(483, 0, false), "after two game minutes: -1 % a minute");
+            Assert.IsTrue(room.Tick(483, 0, false), "after two game minutes: -0.1 % a minute (036 tuning), so the shown 100 % drops to 99 %");
             Assert.AreEqual(99, room.Hygiene);
-            Assert.IsTrue(room.Tick(484, 1, false));
-            Assert.AreEqual(96, room.Hygiene, "and a spill -2 %");
+            Assert.AreEqual(999, room.Meter.Tenths);
+            Assert.IsFalse(room.Tick(484, 1, false), "and a spill -0.2 %: 99.6 % still shows 99 %");
+            Assert.AreEqual(996, room.Meter.Tenths);
             for (int i = 0; i < HygieneRules.TrashCapacity; i++) room.Discarded();
             HygieneSources s = room.Sources(485, 0, true);
             Assert.IsTrue(s.TrashFull);
@@ -262,7 +263,8 @@ namespace Worktown.Game.Tests
             room.Dishes.Scrubbed();
             Assert.IsTrue(room.Sources(486, 0, false).IsClean);
             room.Tick(486, 0, false);
-            Assert.AreEqual(98, room.Hygiene, "two minutes since the last tick, now all clean: +1 % a minute");
+            Assert.AreEqual(998, room.Meter.Tenths, "two minutes since the last tick, now all clean: +0.1 % a minute");
+            Assert.AreEqual(99, room.Hygiene);
         }
 
         private sealed class PayAll : IRegisterWallet
@@ -472,14 +474,13 @@ namespace Worktown.Game.Tests
             var used = new bool[3];
             var spots = new List<int>();
             int id = 900;
-            while (room.TryPeekWaiting(out _))
+            // 035 review: the service's own pass (SupplyService.SpawnWaitingBoxes runs StockRoom.SpawnWaiting), not a copy of it.
+            Assert.AreEqual(3, room.SpawnWaiting(occupied, used, (box, spot) =>
             {
-                int s = StockRoom.FreeSpot(occupied, used);
-                if (s < 0) break;
-                used[s] = true;
-                spots.Add(s);
-                room.ConfirmSpawned(id++);
-            }
+                spots.Add(spot);
+                return id++;
+            }));
+            Assert.AreEqual(3, room.BoxesInShop);
             CollectionAssert.AreEqual(new[] { 0, 1, 2 }, spots, "one box per spot");
             Assert.AreEqual(-1, StockRoom.FreeSpot(occupied, used), "a fourth waits");
             Assert.AreEqual(1, StockRoom.FreeSpot(new[] { true, false, false }, new bool[3]), "an occupied spot is skipped");
@@ -516,13 +517,31 @@ namespace Worktown.Game.Tests
             room.ConfirmSpawned(50);
             room.Order(StockCatalog.IndexOf("lettuce"), 2, "player-2", 10, catalog, wallet, out SupplyOrder second);
             var refunds = new List<(string, long)>();
-            Assert.AreEqual(1, room.EndSession((who, amount) => refunds.Add((who, amount))));
+            Assert.AreEqual(1, room.EndSession((who, amount) => { refunds.Add((who, amount)); return true; }));
             CollectionAssert.AreEqual(new[] { ("player-2", second.Cost) }, refunds, "the order still on its way, to its payer, once");
             Assert.AreEqual(0, room.Book.Pending.Count);
             Assert.AreEqual(count, room.LineOf(tomato).Count, "the stock stays (the game goes on)");
             Assert.AreEqual(0, room.BoxesInShop);
             Assert.AreEqual(1, room.WaitingBoxes, "the delivered box comes back at the back door");
-            Assert.AreEqual(0, room.EndSession((who, amount) => refunds.Add((who, amount))), "nothing twice");
+            Assert.AreEqual(0, room.EndSession((who, amount) => { refunds.Add((who, amount)); return true; }), "nothing twice");
+        }
+
+        [Test]
+        public void AServerStop_WhoseRefundFails_KeepsTheOrder_ItStillArrives()
+        {
+            // 035 review: an order is never lost without its money: a refused refund keeps it in the book.
+            var room = new StockRoom();
+            var catalog = Worktown.Sim.Economy.EconomyCatalog.CreateDefault();
+            int lettuce = StockCatalog.IndexOf("lettuce");
+            room.Order(lettuce, 1, "gone", 0, catalog, new SupplyWallet(), out SupplyOrder order);
+            int before = room.LineOf(lettuce).Count;
+            Assert.AreEqual(0, room.EndSession((who, amount) => false));
+            Assert.AreEqual(1, room.Book.Pending.Count, "kept");
+            room.Deliver(order.DueMinute, null);
+            Assert.AreEqual(1, room.WaitingBoxes, "and it still comes to the back door");
+            Assert.AreEqual(before, room.LineOf(lettuce).Count);
+            Assert.AreEqual(0, room.EndSession((who, amount) => true), "delivered: nothing left to refund");
+            Assert.AreEqual(0, room.Book.Pending.Count);
         }
 
         private sealed class SupplyWallet : ISupplyWallet

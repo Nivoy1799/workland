@@ -78,12 +78,14 @@ namespace Worktown.Game.Shop
             _publishedVersion = -1;
         }
 
-        private void RefundAccount(string accountId, long amount)
+        private bool RefundAccount(string accountId, long amount)
         {
-            if (_economy == null) return;
+            if (_economy == null) return false;
             Worktown.Sim.Economy.EconomyError back = _economy.RefundAccount(accountId, amount);
-            if (back != Worktown.Sim.Economy.EconomyError.None)
-                Debug.LogError("[Supply] could not refund " + EconomyRules.Money(amount) + " to " + accountId + ": " + back);
+            if (back == Worktown.Sim.Economy.EconomyError.None) return true;
+            // 035 review: the order stays in the book (it still arrives), so nothing is lost without its money.
+            Debug.LogError("[Supply] could not refund " + EconomyRules.Money(amount) + " to " + accountId + ": " + back + "; the order still comes");
+            return false;
         }
 
         /// <summary>034 review: a new economy is a new game: the starting stock (and the tour's), no orders, no boxes.</summary>
@@ -153,31 +155,26 @@ namespace Worktown.Game.Shop
                 _occupied = new bool[n];
                 _used = new bool[n];
             }
-            bool probed = false;
-            while (_room.TryPeekWaiting(out BoxContents box))
-            {
-                if (!probed)
-                {
-                    probed = true;
-                    for (int i = 0; i < n; i++)
-                    {
-                        _occupied[i] = _deliverySpots[i] == null || PickupService.IsSpotOccupied(_deliverySpots[i].position, _probe);
-                        _used[i] = false;
-                    }
-                }
-                int s = StockRoom.FreeSpot(_occupied, _used);
-                if (s < 0) return; // the rest waits for a free spot
-                _used[s] = true;
-                Transform spot = _deliverySpots[s];
-                NetworkObject nob = _networkManager.GetPooledInstantiated(_boxPrefab, true);
-                float lift = nob.TryGetComponent(out Pickup pickup) ? pickup.BottomOffset : 0f;
-                nob.transform.SetPositionAndRotation(spot.position + Vector3.up * lift, spot.rotation);
-                if (nob.TryGetComponent(out SupplyBox supplyBox)) supplyBox.ServerSet(box);
-                _networkManager.ServerManager.Spawn(nob);
-                _room.ConfirmSpawned(nob.ObjectId);
-                _boxObjects[nob.ObjectId] = nob;
-                Debug.Log("[Supply] a box of " + StockCatalog.Describe(box.Line, box.Units) + " at the back door (" + spot.name + ")");
-            }
+            if (!_room.TryPeekWaiting(out _)) return;
+            for (int i = 0; i < n; i++)
+                _occupied[i] = _deliverySpots[i] == null || PickupService.IsSpotOccupied(_deliverySpots[i].position, _probe);
+            _spawnBox ??= SpawnBox;
+            _room.SpawnWaiting(_occupied, _used, _spawnBox); // 035 review: the pure pass (tested)
+        }
+
+        private System.Func<BoxContents, int, int> _spawnBox;
+
+        private int SpawnBox(BoxContents box, int s)
+        {
+            Transform spot = _deliverySpots[s];
+            NetworkObject nob = _networkManager.GetPooledInstantiated(_boxPrefab, true);
+            float lift = nob.TryGetComponent(out Pickup pickup) ? pickup.BottomOffset : 0f;
+            nob.transform.SetPositionAndRotation(spot.position + Vector3.up * lift, spot.rotation);
+            if (nob.TryGetComponent(out SupplyBox supplyBox)) supplyBox.ServerSet(box);
+            _networkManager.ServerManager.Spawn(nob);
+            _boxObjects[nob.ObjectId] = nob;
+            Debug.Log("[Supply] a box of " + StockCatalog.Describe(box.Line, box.Units) + " at the back door (" + spot.name + ")");
+            return nob.ObjectId;
         }
 
         /// <summary>
@@ -287,13 +284,5 @@ namespace Worktown.Game.Shop
         }
 
         private string Presented(int line) => StockCatalog.Presented(_room.LineOf(line)) + "/" + StockCatalog.PresentedCapacity(line);
-
-        /// <summary>Server: a box object is gone with its contents used up: forget it (never comes back).</summary>
-        public void ForgetBox(NetworkObject box)
-        {
-            if (box == null) return;
-            _room.ForgetBox(box.ObjectId);
-            _boxObjects.Remove(box.ObjectId);
-        }
     }
 }

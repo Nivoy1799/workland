@@ -136,6 +136,19 @@ namespace Worktown.Game.Cooking
             }
         }
 
+        /// <summary>
+        /// 034 review, extracted in the 035 review (pure, tested): a release of a pour that is gone already (its cup was put down, sold or
+        /// discarded: KitchenState.CancelPoursOfCup) forgets <paramref name="player"/>'s entry in <paramref name="pourers"/>, so the tap's
+        /// bit goes off. True when an entry went; false while the pour still runs or belongs to someone else.
+        /// </summary>
+        public bool ForgetGonePour<T>(System.Collections.Generic.Dictionary<long, T> pourers, int station, int tap, T player) where T : class
+        {
+            if (pourers == null || _kitchen.IsPouring(station, tap, out _, out _, out _)) return false;
+            long key = KeyOf(station, tap);
+            if (!pourers.TryGetValue(key, out T was) || !ReferenceEquals(was, player)) return false;
+            return pourers.Remove(key);
+        }
+
         /// <summary>The lid on the cup in the hands (<paramref name="heldCupId"/>): checked in the sim, then applied. Free.</summary>
         public CookOutcome Lid(int heldCupId, out Item lidded)
         {

@@ -95,7 +95,8 @@ namespace Worktown.Game.Npc
             int misses = check.Misses;
             OrderMatch match = misses == 0 ? OrderMatch.Exact : misses == 1 ? OrderMatch.Close : OrderMatch.Wrong;
             float quality = check.Score.Quality;
-            return new OrderFit(match, misses, quality, Worktown.Game.Cooking.StarRating.Stars(quality));
+            // Spec 036: the seitan wrap and flatbread take shaved or grilled seitan alike; the review says which.
+            return new OrderFit(match, misses, quality, Worktown.Game.Cooking.StarRating.Stars(quality), Spit.ReviewNote(served));
         }
 
         /// <summary>

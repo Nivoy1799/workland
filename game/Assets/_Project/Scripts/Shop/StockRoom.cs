@@ -76,15 +76,16 @@ namespace Worktown.Game.Shop
         /// <summary>Whether line <paramref name="line"/> has a sealed unit to take (no change).</summary>
         public bool CanTake(int line) => LineOf(line) is StockLine l && l.Count > 0;
 
-        /// <summary>Whether line <paramref name="line"/> has anything left to draw a portion from (no change).</summary>
-        public bool CanDraw(int line) => LineOf(line) is StockLine l && !l.IsEmpty;
-
-        /// <summary>A portion of <paramref name="percent"/> % of one grocer item from line <paramref name="line"/> (a squeeze, a pour). OutOfStock when empty.</summary>
-        public CookOutcome Draw(int line, int percent, out int drawn) => Draw(line, percent, 1, out drawn);
+        /// <summary>
+        /// Whether line <paramref name="line"/> has at least <paramref name="minPercent"/> % of a grocer item left to draw a portion from
+        /// (no change). 035 review: a squeeze press needs its smallest step (10 %), a pour its smallest share (1 %), so a press is never
+        /// taken on last drops the release cannot draw.
+        /// </summary>
+        public bool CanDraw(int line, int minPercent) => LineOf(line) is StockLine l && !l.IsEmpty && l.AvailablePercent >= System.Math.Max(1, minPercent);
 
         /// <summary>
-        /// 034 review (last drops): as <see cref="Draw(int, int, out int)"/>, refused (OutOfStock, nothing changes) when less than
-        /// <paramref name="minPercent"/> is left (ShopStock.TryDraw).
+        /// A portion of <paramref name="percent"/> % of one grocer item from line <paramref name="line"/> (a squeeze, a pour), refused
+        /// (OutOfStock, nothing changes) when less than <paramref name="minPercent"/> is left (034 review, last drops: ShopStock.TryDraw).
         /// </summary>
         public CookOutcome Draw(int line, int percent, int minPercent, out int drawn)
         {
@@ -181,9 +182,6 @@ namespace Worktown.Game.Shop
 
         public bool TryGetBox(int boxId, out BoxContents box) => _boxes.TryGetValue(boxId, out box);
 
-        /// <summary>A box object is gone (despawned): its contents go with it.</summary>
-        public void ForgetBox(int boxId) => _boxes.Remove(boxId);
-
         /// <summary>The ids of the boxes lying in the shop, into <paramref name="ids"/> (cleared first).</summary>
         public void BoxIds(List<int> ids)
         {
@@ -210,17 +208,20 @@ namespace Worktown.Game.Shop
         /// 034 review: the server stops but the game (the economy) goes on. Every order still on its way is refunded to its payer through
         /// <paramref name="refund"/> (account id, amount), once, and leaves the book; the boxes lying in the shop (FishNet despawns
         /// them) wait for the back door again with their contents. The stock itself is kept: it belongs to the game, not to the server
-        /// run (<see cref="Reset"/> is a new game). Returns the number of orders refunded.
+        /// run (<see cref="Reset"/> is a new game). Returns the number of orders refunded. 035 review: an order whose refund fails
+        /// (<paramref name="refund"/> returns false) is never lost: it stays in the book and still arrives later.
         /// </summary>
-        public int EndSession(System.Action<string, long> refund)
+        public int EndSession(System.Func<string, long, bool> refund)
         {
             int refunded = 0;
+            SupplyBook book = Book;
             foreach (SupplyOrder o in Book.Pending)
             {
-                if (o.Cost > 0) refund?.Invoke(o.PayerId, o.Cost);
+                if (o.Cost > 0 && (refund == null || !refund(o.PayerId, o.Cost))) continue; // kept: it still arrives
+                book = book.Cancel(o.Id);
                 refunded++;
             }
-            Book = SupplyBook.Empty;
+            Book = book;
             var ids = new List<int>(_boxes.Keys);
             ids.Sort();
             for (int i = ids.Count - 1; i >= 0; i--) _waiting.Insert(0, _boxes[ids[i]]);
@@ -240,6 +241,30 @@ namespace Worktown.Game.Shop
             for (int i = 0; i < occupied.Count; i++)
                 if (!occupied[i] && (usedThisPass == null || i >= usedThisPass.Count || !usedThisPass[i])) return i;
             return -1;
+        }
+
+        /// <summary>
+        /// 035 review: one spawn pass of the waiting boxes (SupplyService runs exactly this): each next box gets the next
+        /// <see cref="FreeSpot"/> (the spots used in this pass count as taken; <paramref name="used"/> is cleared first), is spawned by
+        /// <paramref name="spawn"/> (box, spot) which returns its object id (or -1: stop, the box keeps waiting) and is confirmed. Returns
+        /// how many boxes were spawned.
+        /// </summary>
+        public int SpawnWaiting(IReadOnlyList<bool> occupied, bool[] used, System.Func<BoxContents, int, int> spawn)
+        {
+            if (occupied == null || used == null || spawn == null) return 0;
+            for (int i = 0; i < used.Length; i++) used[i] = false;
+            int spawned = 0;
+            while (TryPeekWaiting(out BoxContents box))
+            {
+                int s = FreeSpot(occupied, used);
+                if (s < 0) break; // the rest waits for a free spot
+                used[s] = true;
+                int id = spawn(box, s);
+                if (id < 0) break;
+                ConfirmSpawned(id);
+                spawned++;
+            }
+            return spawned;
         }
 
         /// <summary>

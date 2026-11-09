@@ -244,8 +244,15 @@ namespace Worktown.Game.Npc
             card ? "Thanks! Card, please." : "Thanks! Here's " + EconomyRules.Money(handed) + ".";
 
         /// <summary>The review a guest leaves with: "★★★★☆ Tasty, I'd come back."</summary>
-        public static string ReviewText(GuestReview review) =>
-            review == null ? string.Empty : Worktown.Game.Cooking.StarRating.Format(review.Stars) + " " + review.Text;
+        public static string ReviewText(GuestReview review) => ReviewText(review, null);
+
+        /// <summary>Spec 036: the review with the dish's note after it ("★★★★☆ Tasty, I'd come back. The seitan was shaved fresh off the spit.").</summary>
+        public static string ReviewText(GuestReview review, string note) =>
+            review == null ? string.Empty : Worktown.Game.Cooking.StarRating.Format(review.Stars) + " " + ReviewWords(review, note);
+
+        /// <summary>Spec 036: the review's words and the dish's note (when there is one).</summary>
+        public static string ReviewWords(GuestReview review, string note) =>
+            review == null ? string.Empty : string.IsNullOrEmpty(note) ? review.Text : review.Text + " " + note;
 
         /// <summary>The review's mood colour: 4-5 stars happy, 3 ok, less unhappy.</summary>
         public static byte MoodOf(GuestReview review) =>

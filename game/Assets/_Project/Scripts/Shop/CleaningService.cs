@@ -263,12 +263,24 @@ namespace Worktown.Game.Shop
             long key = CleaningRoom.KeyOf(sink.Index, CleaningRules.HoldScrub);
             CookOutcome released = _room.Release(sink.Index, CleaningRules.HoldScrub, player.OwnerId, Tick, TickRate, out bool done);
             if (_room.OwnerOf(key) < 0) _holders.Remove(key);
-            if (released == CookOutcome.Ok && done) FinishScrub(player.OwnerId);
+            if (released == CookOutcome.Ok && done) FinishScrub(player);
             return released;
         }
 
-        private void FinishScrub(int owner)
+        /// <summary>
+        /// 035 review: a scrub counts only for a scrubber still there with empty hands (like the wipe's cloth check): a player who left or
+        /// picked something up meanwhile scrubs nothing.
+        /// </summary>
+        public static bool ScrubCounts(bool present, bool holding) => present && !holding;
+
+        /// <summary>A wipe counts only for a wiper still there with the cloth in the hands (put down meanwhile: no wipe).</summary>
+        public static bool WipeCounts(bool present, bool holdsCloth) => present && holdsCloth;
+
+        private void FinishScrub(PickupInteractor player)
         {
+            bool present = player != null && player.IsSpawned;
+            if (!ScrubCounts(present, present && _pickups.TryGetHeld(player, out _))) return;
+            int owner = player.OwnerId;
             if (_room.Dishes.Scrubbed() != CookOutcome.Ok) return;
             Debug.Log("[Cleaning] player " + owner + " scrubbed a plate clean (" + _room.Dishes.Clean + " clean on the shelf, "
                 + _room.Dishes.InBasin + " left in the sink)");
@@ -352,7 +364,7 @@ namespace Worktown.Game.Shop
 
         private void FinishWipe(PickupInteractor player, int station)
         {
-            if (player == null || !_kitchen.HoldsCloth(player)) return; // the cloth was put down: no wipe
+            if (!WipeCounts(player != null && player.IsSpawned, player != null && _kitchen.HoldsCloth(player))) return; // the cloth was put down: no wipe
             if (_kitchen.ClearSpill(station)) Debug.Log("[Cleaning] player " + player.OwnerId + " wiped the spill at the drink dispenser");
         }
 
@@ -365,11 +377,10 @@ namespace Worktown.Game.Shop
             foreach (long key in _due)
             {
                 _holders.TryGetValue(key, out PickupInteractor player);
-                int owner = _room.OwnerOf(key);
                 if (!_room.Complete(key)) continue;
                 _holders.Remove(key);
                 int station = CleaningRoom.StationOfKey(key);
-                if (CleaningRoom.KindOfKey(key) == CleaningRules.HoldScrub) FinishScrub(owner);
+                if (CleaningRoom.KindOfKey(key) == CleaningRules.HoldScrub) FinishScrub(player); // 035 review: re-checks the scrubber
                 else
                 {
                     FinishWipe(player, station);

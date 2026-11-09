@@ -157,6 +157,7 @@ namespace Worktown.Game.Cooking
         {
             if (operationId == BoilOp) return FoodLook.HeatBoiled;
             if (operationId == Griddle.OperationId || operationId == Griddle.ToastOperationId) return FoodLook.HeatGrilled;
+            if (operationId == Spit.OperationId) return FoodLook.HeatShaved; // spec 036
             return operationId == DeepFryOp ? FoodLook.HeatDeepFried : FoodLook.HeatFried;
         }
 
@@ -214,6 +215,12 @@ namespace Worktown.Game.Cooking
                     look.Doneness = DonenessOf(time);
                     look.Heat = HeatOf(current.OperationId);
                     hasHeat = true;
+                    // Spec 036: shaved seitan is thin slices (the cone's curls), never a whole block.
+                    if (!hasShape && current.OperationId == Spit.OperationId)
+                    {
+                        look.Shape = FoodLook.ShapeSlices;
+                        hasShape = true;
+                    }
                 }
                 if (IsAssembly(current))
                 {

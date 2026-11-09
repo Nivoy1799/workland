@@ -78,7 +78,7 @@ namespace Worktown.Sim.Tests.Economy
         {
             // 5 markets sorted by id; each: price then 11 zero counters (7 own fields + 5 Last fields - price)
             string Zeros = ",0,0,0,0,0,0,0,0,0,0,0";
-            string expected = "v1|tick=0|markets=5"
+            string expected = "v2|tick=0|markets=5"
                 + "|m:drink,250" + Zeros.Substring(0)
                 + "|m:food_scraps,3" + Zeros
                 + "|m:meal,1200" + Zeros
@@ -96,8 +96,18 @@ namespace Worktown.Sim.Tests.Economy
             s = E.AddGoods(s, "alice", new[] { new GoodAmount("food_scraps", 2) }).State;
             s = E.Discard(s, "alice", 11, TestEconomy.PlatedRaw()).State; // +1 scraps, consumed (11, tick 0)
             string c = EconomySnapshot.Canonical(s);
-            Assert.Contains("|accounts=2|a:alice,5,g:food_scraps=3|a:bob,7|", c);
+            Assert.Contains("|accounts=2|a:alice,5,0,g:food_scraps=3|a:bob,7,0|", c);
             Assert.Contains("|consumed=1|c:11,0|", c);
+        }
+
+        [Fact]
+        public void Canonical_CoversWhatAnAccountPaidTheGrocer()
+        {
+            // 035 review: GrocerPaid (the refund bound) is part of the canonical form, so two states that differ only there differ.
+            var s = TestEconomy.Open(E, E.Initial(), "alice", 5);
+            var paid = s with { Accounts = new[] { s.Accounts[0] with { GrocerPaid = 40 } }.ToList().AsReadOnly() };
+            Assert.Contains("|a:alice,5,40", EconomySnapshot.Canonical(paid));
+            Assert.NotEqual(EconomySnapshot.Digest(s), EconomySnapshot.Digest(paid));
         }
 
         [Fact]

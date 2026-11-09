@@ -84,7 +84,10 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(StockCatalog.Count, StockCatalog.Goods.Select(g => g.Id).Distinct().Count());
             Assert.LessOrEqual(StockCatalog.Count, TerminalRules.Pages * TerminalRules.Rows);
             foreach (StockCatalog.Good g in StockCatalog.Goods)
-                Assert.IsTrue(Catalog.TryGetGrocerPrice(g.Id, out _), g.Id + " has a grocer price (the supplier's offer)");
+                Assert.IsTrue(g.Id == StockCatalog.ConeId ? Catalog.TryGetGrocerPrice(Worktown.Sim.Cooking.Spit.MeatId, out _)
+                    : Catalog.TryGetGrocerPrice(g.Id, out _), g.Id + " has a grocer price (the supplier's offer; spec 036: a cone is priced as seitan)");
+            for (int line = 0; line < StockCatalog.Count; line++)
+                Assert.IsTrue(StockCatalog.TryOffer(Catalog, line, out _), StockCatalog.Goods[line].Id + " has a supplier offer");
         }
 
         [Test]
@@ -258,12 +261,12 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(6, bytes[Line("tomato")]);
             Assert.AreEqual(10, bytes[Line(Drinks.CupId)]);
             Assert.AreEqual(20, bytes[Line("soda")], "cups left in the soda kegs");
-            room.Draw(Line("soda"), 90, out int drawn);
+            room.Draw(Line("soda"), 90, 1, out int drawn);
             Assert.AreEqual(90, drawn);
             room.WriteCounts(bytes);
             Assert.AreEqual(19, bytes[Line("soda")], "19.1 cups");
             Assert.AreEqual(3, bytes[Line("garlic_herb_sauce")], "sealed bottles");
-            room.Draw(Line("garlic_herb_sauce"), 10, out _);
+            room.Draw(Line("garlic_herb_sauce"), 10, 1, out _);
             room.WriteCounts(bytes);
             Assert.AreEqual(2, bytes[Line("garlic_herb_sauce")], "the opened bottle is in the dispenser");
         }
@@ -293,7 +296,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(1910, room.LineOf(lemonade).AvailablePercent);
             drinks.Refund(Owner, "lemonade", 90, true, 0);
             Assert.AreEqual(2000, room.LineOf(lemonade).AvailablePercent);
-            while (room.CanDraw(lemonade)) room.Draw(lemonade, 100, out _);
+            while (room.CanDraw(lemonade, 1)) room.Draw(lemonade, 100, 1, out _);
             Assert.IsFalse(drinks.CanAfford(Owner, "lemonade", 1, false), "the kegs are empty");
             Assert.AreEqual(CookOutcome.OutOfStock, drinks.Charge(Owner, "lemonade", 50, false, out _));
             Assert.IsFalse(wallet.CanAfford(Owner, "basil", 10), "034 review: a good the shop does not stock is never free");
@@ -309,7 +312,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(40, 90, VesselKind.Assembly, Start));
             var room = new StockRoom();
             int garlic = Line("garlic_herb_sauce");
-            while (room.CanDraw(garlic)) room.Draw(garlic, 30, out _);
+            while (room.CanDraw(garlic, 1)) room.Draw(garlic, 30, 1, out _);
             var desk = new AssemblyDesk(kitchen);
             Assert.AreEqual(CookOutcome.OutOfStock, desk.Press(8, 0, Owner, Start, new StockWallet(room)));
             Assert.AreEqual(0, kitchen.AssemblyFlags(8), "the dispenser is not taken");
@@ -517,7 +520,7 @@ namespace Worktown.Game.Tests
             for (int slot = 0; slot < TerminalRules.SlotCount; slot++) Assert.IsFalse(TerminalRules.TryParseOrder(slot, out _, out _));
             Assert.IsFalse(TerminalRules.TryParseOrder(TerminalRules.OrderOption(0, 0), out _, out _));
             Assert.IsFalse(TerminalRules.TryParseOrder(TerminalRules.OrderOption(StockCatalog.Count, 1), out _, out _));
-            Assert.AreEqual(4, TerminalRules.Pages);
+            Assert.AreEqual(5, TerminalRules.Pages); // spec 036: the cones are the 25th line
             Assert.AreEqual(TerminalRules.PageOf(Line("tomato")), Line("tomato") / TerminalRules.Rows);
             Assert.AreEqual(Line("tomato"), TerminalRules.LineAt(TerminalRules.PageOf(Line("tomato")), Line("tomato") % TerminalRules.Rows));
             Assert.AreEqual(-1, TerminalRules.LineAt(TerminalRules.Pages - 1, TerminalRules.Rows), "no row past the list");

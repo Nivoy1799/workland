@@ -96,6 +96,8 @@ namespace Worktown.Sim.Cooking
                 DeepFryOperation(platedOrBuild, none),
                 GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, platedOrBuild, none),
                 GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, platedOrBuild, none),
+                // Spec 036: the seitan spit (item hashes use the op id, so its place in the list changes no old item).
+                SpitOperation(platedOrBuild, none),
                 // Spec 031: the assembly board.
                 new OperationDef(Assembly.SqueezeOperationId, "dispenser", OperationKind.Portion, false, 1, 1, new[]
                 {
@@ -161,6 +163,24 @@ namespace Worktown.Sim.Cooking
             string done = profile.Toasts ? "toasted" : "grilled";
             return new OperationDef(id, Griddle.Station, OperationKind.Heat, false, 1, 1, new[] { shortSide, longSide },
                 new HeatProfile(Griddle.PlateTempC, 0.1f, -0.3f, 0.4f, 0.25f, 0f, null, profile), plated, none, done + " {in}");
+        }
+
+        /// <summary>
+        /// Spec 036: the spit's <c>shave</c> heat op at the station "spit": the panel's fixed temperature, "time" = the outer layer's
+        /// heat time (sim seconds at high heat, 0..<see cref="Spit.MaxLayerSeconds"/>) in the buckets pale (short), shaved (medium, from
+        /// the good level) and charred (long, from the window's end). Doneness follows <see cref="Spit.OuterCurve"/>.
+        /// </summary>
+        private static OperationDef SpitOperation(string[] plated, string[] none)
+        {
+            var layer = new ParamDef("time", ParamKind.Number, 0f, Spit.MaxLayerSeconds, new[]
+            {
+                new BucketDef("short", 0f, "pale"),
+                new BucketDef("medium", Spit.OuterCurve.WindowMinAt, ""),
+                new BucketDef("long", Spit.OuterCurve.WindowMaxAt, "charred"),
+            });
+            return new OperationDef(Spit.OperationId, Spit.Station, OperationKind.Heat, false, 1, 1, new[] { layer },
+                new HeatProfile(Spit.PanelTempC, 0.2f, -0.3f, 0.35f, 0.25f, 0f, null, null, Spit.OuterCurve), plated, none,
+                "{time} shaved {in}");
         }
 
         /// <summary>
@@ -280,6 +300,14 @@ namespace Worktown.Sim.Cooking
                 bool hasTemp = temp != null && temp.Kind == ParamKind.Number;
                 if (hasTemp == op.Heat.FixedTemperatureC.HasValue)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs exactly one of a 'temp' param or a fixed temperature.", p);
+                if (h.Spit != null)
+                {
+                    // Spec 036: a spit op has one finite, ordered curve and no fryer or griddle part.
+                    var c = h.Spit;
+                    if (h.Fry != null || h.Grill != null || !(c.WindowMinAt > 0f && c.WindowMaxAt > c.WindowMinAt && c.BurntAt > c.WindowMaxAt)
+                        || !Fin(c.BurntAt))
+                        throw new ArgumentException($"Spit operation '{op.Id}' has an invalid curve.", p);
+                }
                 if (h.Grill != null)
                 {
                     // Spec 030: a griddle op has the long side next to "time", in the same range, and finite, ordered curves.

@@ -116,6 +116,8 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationDishReturn, Mode = Fit.Graybox },
             new Def { Key = ArtKey.StationTrash, Mode = Fit.Graybox },
             new Def { Key = ArtKey.StationBin, Mode = Fit.Graybox },
+            // Spec 036: no doner spit in the packs: a graybox (a Steel base, a Charcoal heat panel frame, the skewer, the motor housing).
+            new Def { Key = ArtKey.StationSpit, Mode = Fit.Graybox },
             // Spec 034: the delivery box is the Furniture Kit's cardboard box (the crate's model), 0.40 m.
             Fitted(ArtKey.PropDeliveryBox, Furniture + "cardboardBoxOpen.fbx", Fit.Max),
 
@@ -913,6 +915,7 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationDishReturn) return BuildDishReturn(parent);
             if (key == ArtKey.StationTrash) return BuildTrash(parent);
             if (key == ArtKey.StationBin) return BuildBin(parent);
+            if (key == ArtKey.StationSpit) return BuildSpit(parent); // spec 036
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -1388,6 +1391,26 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>Spec 028b: one graybox part, a cube without its collider.</summary>
+        /// <summary>
+        /// Spec 036: the graybox seitan spit as the wrapper's "Model" (SpitArtRules, the base on the counter top at the origin): a Steel
+        /// base plate reaching forward under the tray, the heat panel's Charcoal frame at the back, the skewer and the motor housing on
+        /// top. The cone, the panel's glowing face, the tray and the knob are the scene's (they turn, glow or are aimed at). Front on +Z like
+        /// the kit (the scene turns it to the cook).
+        /// </summary>
+        private static GameObject BuildSpit(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("SpitSteel", Palette.Steel);
+            Material frame = GrayboxMaterial("SpitFrame", Palette.Charcoal);
+            Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
+            Box(model, "Base", F(SpitArtRules.BaseCentre), SpitArtRules.BaseSize, steel);
+            Box(model, "Panel", F(SpitArtRules.PanelCentre), SpitArtRules.PanelSize, frame);
+            Box(model, "Housing", F(SpitArtRules.HousingCentre), SpitArtRules.HousingSize, steel);
+            Box(model, "Skewer", F(SpitArtRules.SkewerCentre), SpitArtRules.SkewerSize, steel);
+            return model;
+        }
+
         private static GameObject Box(GameObject parent, string name, Vector3 centre, Vector3 size, Material material)
         {
             GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);

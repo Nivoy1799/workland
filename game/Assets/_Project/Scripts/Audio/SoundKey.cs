@@ -46,6 +46,9 @@ namespace Worktown.Game.Audio
         /// <summary>Spec 035: scrubbing a plate in the sink (loop while held), a trash bag's rustle, the trash can's lid thump.</summary>
         Scrub,
         TrashRustle,
-        LidThump
+        LidThump,
+        /// <summary>Spec 036: the knife shaving the spit's cone (a rasp, loop while held) and the spit's motor turning the cone (a hum, loop).</summary>
+        ShaveRasp,
+        MotorHum
     }
 }

@@ -62,12 +62,14 @@ namespace Worktown.Game.Tests
                     bool drinks = station.Kind == StationKind.DrinkDispenser; // spec 033: on the front counter too
                     bool terminal = station.Kind == StationKind.Terminal; // spec 034: a screen hanging on the back wall
                     bool cleaning = Worktown.Game.Shop.CleaningRules.IsCleaningStation(station.Kind); // spec 035
-                    bool onCounter = register || drinks || station.Kind == StationKind.DishReturn;
+                    bool spit = station.Kind == StationKind.Spit; // spec 036: on the front counter too
+                    bool onCounter = register || drinks || station.Kind == StationKind.DishReturn || spit;
                     float floor = onCounter ? ArtSizeTable.ServingCounterHeight
                         : terminal ? TerminalArtRules.CentreHeight - TerminalArtRules.Height * 0.5f : 0f;
                     float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
                         : register ? floor + RegisterArtRules.Height
                         : drinks ? floor + DrinkArtRules.Height
+                        : spit ? floor + SpitArtRules.Height
                         : terminal ? floor + TerminalArtRules.Height
                         : cleaning ? floor + CleaningArtRules.SizeOf(station.Kind).y
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
@@ -167,6 +169,7 @@ namespace Worktown.Game.Tests
                 // Spec 030: the six griddle spots lie on the griddle's plate.
                 Assert.AreEqual(Worktown.Game.Cooking.GriddleRules.SpotsPerGriddle, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Griddle));
                 Assert.AreEqual(1, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Assembly)); // spec 031: the build spot on its board
+                Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.SpitCone || VesselTestKit.KindOf(v) == VesselKind.SpitTray)); // spec 036
                 Assert.AreEqual(6, vessels.Count);
                 foreach (Component vessel in vessels)
                 {

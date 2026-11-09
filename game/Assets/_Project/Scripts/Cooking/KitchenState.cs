@@ -1720,6 +1720,81 @@ namespace Worktown.Game.Cooking
             return DrinkRules.WithSpill(flags, HasSpill(station));
         }
 
+        // ---- Spec 036: the seitan spit ----
+
+        private Item _coneMeat;
+
+        /// <summary>The cone's meat (a base seitan item: the shave op's one input), made once.</summary>
+        public Item ConeMeat
+        {
+            get
+            {
+                if (_coneMeat == null && TryCreateIngredient(Spit.MeatId, out Item meat) == CookOutcome.Ok) _coneMeat = meat;
+                return _coneMeat;
+            }
+        }
+
+        /// <summary>
+        /// One portion shaved off an outer layer that had <paramref name="outerSimSeconds"/> of high heat (the sim's <c>shave</c> op).
+        /// SimRefused when the sim says no. Changes nothing: the caller puts the portion in the tray.
+        /// </summary>
+        public CookOutcome TryShave(float outerSimSeconds, out Item portion)
+        {
+            portion = null;
+            Item meat = ConeMeat;
+            if (meat == null) return CookOutcome.SimRefused;
+            OperationResult made = _factory.Apply(Spit.OperationId, new[] { meat }, Spit.ShaveParams(outerSimSeconds));
+            if (!made.Ok || made.Item == null) return CookOutcome.SimRefused;
+            portion = made.Item;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>The 027c zone timeline of the cone's outer layer (the shave op on the cone's meat; cached under the 027c key).</summary>
+        public HeatTimeline SpitTimeline() => TimelineFor(ConeMeat, Spit.OperationId, null);
+
+        /// <summary>
+        /// Spec 036: <paramref name="layer"/> goes on the open build held as food object <paramref name="foodObjectId"/> as its next layer
+        /// (the scoop from the spit's tray onto a build in the hands). NotFood (no such food, or it is no build), BuildClosed (folded,
+        /// wrapped or packed), VesselFull (<see cref="CookingLimits.MaxBuildLayers"/>), SimRefused; nothing changes then. On success the
+        /// held food is the new build (the caller publishes it).
+        /// </summary>
+        public CookOutcome TryAddLayerToHeld(int foodObjectId, Item layer, out Item build)
+        {
+            build = null;
+            if (layer == null || !_items.TryGetValue(foodObjectId, out Item held) || !Assembly.IsBuild(held)) return CookOutcome.NotFood;
+            if (held.OperationId != Assembly.AssembleOperationId) return CookOutcome.BuildClosed;
+            var layers = new List<Item>(Assembly.LayersOf(held));
+            if (layers.Count >= CookingLimits.MaxBuildLayers) return CookOutcome.VesselFull;
+            layers.Add(layer);
+            OperationResult made = _factory.Apply(Assembly.AssembleOperationId, layers, NoParams);
+            if (!made.Ok || made.Item == null) return CookOutcome.SimRefused;
+            build = made.Item;
+            _items[foodObjectId] = build;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Whether food object <paramref name="foodObjectId"/> is an open build (a scoop from the spit's tray goes onto it).</summary>
+        public bool IsOpenBuild(int foodObjectId) =>
+            _items.TryGetValue(foodObjectId, out Item held) && held.OperationId == Assembly.AssembleOperationId;
+
+        // ---- Spec 035 (review): the discard step ----
+
+        /// <summary>
+        /// 035 review, the kitchen's part of a discard (pure, tested with real stock and wallet counters): held cookware
+        /// (<paramref name="vesselKind"/> set) loses its food and stays; held food (<paramref name="vesselKind"/> null) is no item any more.
+        /// CannotDiscard when there is nothing to throw away. Never touches money or stock (the anti-faucet rule).
+        /// </summary>
+        public CookOutcome TryDiscard(int heldId, VesselKind? vesselKind)
+        {
+            if (vesselKind.HasValue)
+            {
+                if (ContentCount(heldId, vesselKind.Value) <= 0) return CookOutcome.CannotDiscard;
+                ClearContents(heldId, vesselKind.Value);
+                return CookOutcome.Ok;
+            }
+            return TryRemove(heldId, out _) ? CookOutcome.Ok : CookOutcome.CannotDiscard;
+        }
+
         // ---- Spec 013/021: plate and bowl ----
 
         /// <summary>
