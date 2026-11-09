@@ -243,8 +243,9 @@ namespace Worktown.Game.Player
         /// confirmed when nobody holds it any more, denied when someone else holds it or it is gone. PutInto is confirmed
         /// only when our own food is gone (the server despawns what it put in; a content count that changes can be another
         /// player's put-in or a pot that went away, so it only restarts the timeout), denied when you no longer hold it. Spec 028b: Take
-        /// (the snapshot is the hands) is confirmed when you hold something; a refusal or the timeout denies it. Anything else
-        /// is still <see cref="PredictionPhase.Pending"/>.
+        /// (the snapshot is the hands, <see cref="HandsSnapshot"/>) is confirmed when you hold food; spec 029b: only food that
+        /// was not in the hands at the click (a knife or anything else arriving from a pending pick-up never confirms it); a
+        /// refusal or the timeout denies it. Anything else is still <see cref="PredictionPhase.Pending"/>.
         /// </summary>
         public static PredictionPhase Judge(PredictionKind kind, int me, ItemSnapshot start, ItemSnapshot now)
         {
@@ -261,7 +262,9 @@ namespace Worktown.Game.Player
                     if (now.Holder == noHolder) return PredictionPhase.Confirmed;
                     return now.Holder != me ? PredictionPhase.Denied : PredictionPhase.Pending;
                 case PredictionKind.Take:
-                    return now.Exists && now.Holder == me ? PredictionPhase.Confirmed : PredictionPhase.Pending;
+                    return now.Exists && now.Holder == me && now.HeldId >= 0 && now.HeldId != start.HeldId
+                        ? PredictionPhase.Confirmed
+                        : PredictionPhase.Pending;
                 case PredictionKind.PutInto:
                     if (!now.Exists) return PredictionPhase.Confirmed;
                     return now.Holder != me ? PredictionPhase.Denied : PredictionPhase.Pending;
@@ -275,6 +278,16 @@ namespace Worktown.Game.Player
         }
 
         /// <summary>
+        /// Spec 029b: the hands as a Take prediction sees them: <paramref name="heldId"/> is the held object's id;
+        /// <see cref="ItemSnapshot.Exists"/> says it is food. Nothing held is <see cref="ItemSnapshot.Gone"/>.
+        /// </summary>
+        public static ItemSnapshot HandsSnapshot(int me, int heldId, bool isFood)
+        {
+            if (heldId < 0) return ItemSnapshot.Gone;
+            return new ItemSnapshot(isFood, me, Vector3.zero, 0, heldId);
+        }
+
+        /// <summary>
         /// True when the synced state changed in a way that matters to the prediction (it changed hands, appeared or went,
         /// the cookware changed, or a lying item moved): the timeout then counts from now. A held item follows its holder
         /// all the time, so its position never counts.
@@ -282,7 +295,8 @@ namespace Worktown.Game.Player
         public static bool IsRelevantChange(ItemSnapshot before, ItemSnapshot now)
         {
             const int noHolder = -1;
-            if (before.Exists != now.Exists || before.Holder != now.Holder || before.VesselCount != now.VesselCount) return true;
+            if (before.Exists != now.Exists || before.Holder != now.Holder || before.VesselCount != now.VesselCount
+                || before.HeldId != now.HeldId) return true;
             bool lying = before.Holder == noHolder && now.Holder == noHolder;
             return lying && (before.Position - now.Position).sqrMagnitude > MoveEpsilon * MoveEpsilon;
         }

@@ -144,8 +144,9 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
-        /// Spec 029: the fryer's front: the power knob (FryerRules.PowerOption) or a basket's lower/raise button
-        /// (FryerRules.BasketOption). Lowering needs food in the basket and the fryer on; raising is always allowed.
+        /// Spec 029: the fryer's front: the power knob (FryerRules.PowerOption) or a basket's button, sent as the intent
+        /// FryerRules.LowerOption / RaiseOption (spec 029b). Lowering needs food in the basket and the fryer on; raising works
+        /// for any basket in the oil.
         /// </summary>
         private CookOutcome UseFryer(Station fryer, int option)
         {
@@ -159,10 +160,11 @@ namespace Worktown.Game.Cooking
                 Debug.Log("[Kitchen] " + fryer.DisplayName + " " + (_kitchen.FryerIsOn(fryer.Index) ? "on" : "off"));
                 return CookOutcome.Ok;
             }
-            if (!FryerRules.TryParseBasketOption(option, out int basket)
+            if (!FryerRules.TryParseBasketOption(option, out int basket, out bool lower)
                 || !_baskets.TryGetValue(BurnerKey(fryer.Index, basket), out Vessel vessel) || vessel == null)
                 return CookOutcome.InvalidOption;
-            CookOutcome moved = _kitchen.TryToggleBasket(vessel.ObjectId, tick, TickRate);
+            // Spec 029b: the option says lower or raise; a request for where the basket already is is refused.
+            CookOutcome moved = lower ? _kitchen.TryLowerBasket(vessel.ObjectId, tick) : _kitchen.TryRaiseBasket(vessel.ObjectId, tick, TickRate);
             if (moved != CookOutcome.Ok) return moved;
             RefreshVessel(vessel);
             RefreshFryer(fryer);
@@ -180,8 +182,8 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 029: a shake of a lowered basket, with empty hands.</summary>
         private CookOutcome Shake(PickupInteractor player, Vessel basket)
         {
-            if (basket.Kind != VesselKind.Basket) return CookOutcome.InvalidOption;
-            if (_pickups.TryGetHeld(player, out _)) return CookOutcome.HandsFull;
+            CookOutcome can = VesselRules.CheckShake(basket.Kind, _pickups.TryGetHeld(player, out _));
+            if (can != CookOutcome.Ok) return can;
             CookOutcome shaken = _kitchen.TryShake(basket.ObjectId, Tick, TickRate);
             if (shaken != CookOutcome.Ok) return shaken;
             RefreshVessel(basket);
@@ -201,9 +203,10 @@ namespace Worktown.Game.Cooking
         {
             if (target == null || !target.IsSpawned || !target.TryGetComponent(out Vessel vessel)) return CookOutcome.NotAVessel;
             // Spec 029: a fryer basket has no Pickup (it never leaves its fryer); all other cookware must lie free.
-            if (vessel.Kind != VesselKind.Basket && (!target.TryGetComponent(out Pickup pickup) || pickup.IsHeld))
-                return CookOutcome.NotAVessel;
-            if (!StationRules.IsInReach(player.transform.position, target.transform.position)) return CookOutcome.TooFar;
+            bool hasPickup = target.TryGetComponent(out Pickup pickup);
+            CookOutcome reach = VesselRules.CheckUseTarget(vessel.Kind, hasPickup, hasPickup && pickup.IsHeld,
+                player.transform.position, target.transform.position);
+            if (reach != CookOutcome.Ok) return reach;
             EnsureInitialized();
 
             if (action == VesselRules.ActionStroke || action == VesselRules.ActionTurn) return Cut(player, vessel, action);
@@ -211,7 +214,12 @@ namespace Worktown.Game.Cooking
             if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
 
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
-            if (held.TryGetComponent(out Vessel source)) return Pour(player, source, vessel);
+            if (held.TryGetComponent(out Vessel source))
+            {
+                // Spec 029b: holding a plate or bowl, a click on a raised basket tips its food onto it (no new RPC).
+                if (vessel.Kind == VesselKind.Basket && VesselRules.TipsFromBasket(source.Kind)) return TipBasket(player, vessel, source);
+                return Pour(player, source, vessel);
+            }
             if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
 
             CookOutcome put = _kitchen.TryPutInto(held.ObjectId, vessel.ObjectId, vessel.Kind, Tick);
@@ -248,6 +256,18 @@ namespace Worktown.Game.Cooking
             Debug.Log("[Kitchen] player " + player.OwnerId + " took " + KitchenState.NameOf(result) + " from the "
                 + VesselRules.Name(vessel.Kind) + (taken == CookOutcome.TooShort ? " (too short, unchanged)" : " q=" + KitchenState.QualityOf(result).ToString("0.00")));
             return taken;
+        }
+
+        /// <summary>Spec 029b: the raised basket's food goes onto the plate (or into the bowl) the player holds.</summary>
+        private CookOutcome TipBasket(PickupInteractor player, Vessel basket, Vessel plate)
+        {
+            CookOutcome tipped = _kitchen.TryTipBasket(basket.ObjectId, plate.ObjectId, plate.Kind, Tick, TickRate, out Item result);
+            if (tipped != CookOutcome.Ok && tipped != CookOutcome.TooShort) return tipped;
+            RefreshVessel(basket);
+            RefreshVessel(plate);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " tipped " + KitchenState.NameOf(result) + " from the basket onto the "
+                + VesselRules.Name(plate.Kind) + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
+            return tipped;
         }
 
         /// <summary>Holding a pan, pot or bowl: pour its finished food onto the plate or into the bowl.</summary>
@@ -507,7 +527,11 @@ namespace Worktown.Game.Cooking
                 }
                 HeatReading reading = _kitchen.HeatReadingOf(vessel.ObjectId, tick, tickRate);
                 byte zone = HeatZoneRules.Encode(reading);
-                if (sync.ShouldSend(tick, tickRate, reading.Progress, zone)) vessel.ServerSetHeat(reading.Progress, zone);
+                byte zoneBefore = sync.Zone;
+                if (!sync.ShouldSend(tick, tickRate, reading.Progress, zone)) continue;
+                vessel.ServerSetHeat(reading.Progress, zone);
+                // Spec 029b: the label's words follow the zone, so they change with the ring, not up to a second later.
+                if (HeatZoneRules.ZoneOf(zone) != HeatZoneRules.ZoneOf(zoneBefore)) RefreshVessel(vessel);
             }
         }
 
@@ -520,25 +544,64 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome TakeIngredient(PickupInteractor player, Station stock, int option)
         {
-            CookOutcome check = StockRules.CheckTake(stock, option, player.transform.position, _pickups.TryGetHeld(player, out _),
-                out string baseId);
-            if (check != CookOutcome.Ok) return check;
-            EnsureInitialized();
+            var take = new StockTake(this, player, stock, option);
+            CookOutcome outcome = StockTakeSequence.Run(take); // spec 029b: never paid without the item
+            if (outcome == CookOutcome.Ok)
+                Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(take.Item) + " from the "
+                    + stock.DisplayName + " (option " + option + ") for " + EconomyRules.Money(take.Cost));
+            else if (take.Paid)
+                Debug.LogError("[Kitchen] paid but could not hand " + KitchenState.NameOf(take.Item) + " to player " + player.OwnerId);
+            return outcome;
+        }
 
-            CookOutcome created = _kitchen.TryCreateIngredient(baseId, out Item item);
-            if (created != CookOutcome.Ok) return created;
+        /// <summary>Spec 029b: the server's steps of one stock take (<see cref="StockTakeSequence"/>).</summary>
+        private sealed class StockTake : IStockTakeSteps
+        {
+            private readonly KitchenService _service;
+            private readonly PickupInteractor _player;
+            private readonly Station _stock;
+            private readonly int _option;
+            private string _baseId;
 
-            long cost = 0;
-            if (_economy != null)
+            public StockTake(KitchenService service, PickupInteractor player, Station stock, int option)
             {
-                CookOutcome paid = StockRules.PaidOutcome(_economy.TryBuy(player.NetworkObject, baseId, out cost));
-                if (paid != CookOutcome.Ok) return paid;
+                _service = service;
+                _player = player;
+                _stock = stock;
+                _option = option;
             }
 
-            if (!SpawnFoodInHands(player, item)) return CookOutcome.SimRefused;
-            Debug.Log("[Kitchen] player " + player.OwnerId + " bought " + KitchenState.NameOf(item) + " from the "
-                + stock.DisplayName + " (option " + option + ") for " + EconomyRules.Money(cost));
-            return CookOutcome.Ok;
+            public Item Item { get; private set; }
+            public long Cost { get; private set; }
+            public bool Paid { get; private set; }
+
+            public CookOutcome Check()
+            {
+                CookOutcome check = StockRules.CheckTake(_stock, _option, _player.transform.position,
+                    _service._pickups.TryGetHeld(_player, out _), out _baseId);
+                if (check == CookOutcome.Ok) _service.EnsureInitialized();
+                return check;
+            }
+
+            public CookOutcome Create()
+            {
+                CookOutcome created = _service._kitchen.TryCreateIngredient(_baseId, out Item item);
+                Item = item;
+                return created;
+            }
+
+            public bool CanHandOver() => _service._foodPrefab != null && _service._pickups.CanHandTo(_player, _service._foodPrefab);
+
+            public CookOutcome Pay()
+            {
+                if (_service._economy == null) return CookOutcome.Ok;
+                CookOutcome paid = StockRules.PaidOutcome(_service._economy.TryBuy(_player.NetworkObject, _baseId, out long cost));
+                Cost = cost;
+                Paid = paid == CookOutcome.Ok;
+                return paid;
+            }
+
+            public bool HandOver() => _service.SpawnFoodInHands(_player, Item);
         }
 
         /// <summary>Spawns a food object for a sim item directly in the player's hands.</summary>

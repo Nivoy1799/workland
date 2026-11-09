@@ -1,3 +1,4 @@
+using UnityEngine;
 using Worktown.Sim.Cooking;
 
 namespace Worktown.Game.Cooking
@@ -75,6 +76,30 @@ namespace Worktown.Game.Cooking
 
         /// <summary>Plates do not come back when lost (the shelf gives new ones); all other cookware has a home spot.</summary>
         public static bool RespawnsAtHome(VesselKind kind) => kind != VesselKind.Plate && kind != VesselKind.Basket; // spec 029: fixed
+
+        /// <summary>
+        /// Spec 029b: the target checks of a RequestUse before anything changes (KitchenService.TryUseVessel). Cookware must
+        /// lie free (a Pickup nobody holds); a fryer basket has no Pickup and is never carried. Reach is measured to the
+        /// target's pivot (a basket's networked root, which never moves). NotAVessel or TooFar, else Ok.
+        /// </summary>
+        public static CookOutcome CheckUseTarget(VesselKind kind, bool hasPickup, bool isHeld, Vector3 player, Vector3 pivot)
+        {
+            if (kind != VesselKind.Basket && (!hasPickup || isHeld)) return CookOutcome.NotAVessel;
+            if (!StationRules.IsInReach(player, pivot)) return CookOutcome.TooFar;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 029b: a shake is for a basket (InvalidOption otherwise), with empty hands (HandsFull), else Ok.</summary>
+        public static CookOutcome CheckShake(VesselKind kind, bool handsFull)
+        {
+            if (kind != VesselKind.Basket) return CookOutcome.InvalidOption;
+            return handsFull ? CookOutcome.HandsFull : CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 029b: holding <paramref name="held"/> over a fryer basket tips the basket's food onto it: a plate or a bowl.
+        /// </summary>
+        public static bool TipsFromBasket(VesselKind held) => IsAssembly(held);
 
         /// <summary>Lower-case name for prompts: "board", "pan", "pot", "plate", "bowl".</summary>
         public static string Name(VesselKind kind)

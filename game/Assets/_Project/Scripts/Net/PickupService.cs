@@ -162,6 +162,16 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>
+        /// Spec 029b: whether <see cref="HandTo"/> would accept a fresh object made from <paramref name="prefab"/> for the
+        /// player now (it can be held, the hands are empty). Changes nothing.
+        /// </summary>
+        public bool CanHandTo(PickupInteractor player, NetworkObject prefab)
+        {
+            if (player == null || player.Owner == null || prefab == null || !prefab.TryGetComponent(out Pickup _)) return false;
+            return _registry.CanClaim(player.Owner.ClientId);
+        }
+
+        /// <summary>
         /// Server: puts an object the server just spawned (e.g. an ingredient from a crate) into
         /// the player's hands. No reach check: the server chose the object, not the client.
         /// </summary>

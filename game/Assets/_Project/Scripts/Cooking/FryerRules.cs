@@ -2,8 +2,8 @@ namespace Worktown.Game.Cooking
 {
     /// <summary>
     /// Spec 029, pure: the fryer's controls and the basket's synced bytes, shared by the server (KitchenState) and clients
-    /// (prompts, lights, the basket's arc). Station options: <see cref="PowerOption"/> switches the fryer, <see cref="BasketOption"/>
-    /// lowers or raises basket b (RequestStation). The fryer's StationContents byte: <see cref="FlagOn"/> plus a lowered bit per
+    /// (prompts, lights, the basket's arc). Station options: <see cref="PowerOption"/> switches the fryer, <see cref="LowerOption"/> and
+    /// <see cref="RaiseOption"/> lower or raise basket b (RequestStation; spec 029b: an intent, not a toggle). The fryer's StationContents byte: <see cref="FlagOn"/> plus a lowered bit per
     /// basket. A basket's Vessel.Mode byte: its <see cref="BasketState"/> in the low two bits and a shake counter (mod 4) above,
     /// so every viewer sees each shake. Times, oil temperature and the shake bonus never leave the server.
     /// </summary>
@@ -22,15 +22,35 @@ namespace Worktown.Game.Cooking
         private const int ShakeShift = 2;
         private const int ShakeMask = 0x03;
 
-        /// <summary>Station option of basket <paramref name="basket"/>'s lower/raise button: 2 and 3.</summary>
-        public static int BasketOption(int basket) => 2 + basket;
+        /// <summary>
+        /// The scene option of basket <paramref name="basket"/>'s lower/raise button: 2 and 3 (its identity; what a click sends
+        /// is <see cref="IntentOption"/>).
+        /// </summary>
+        public static int BasketOption(int basket) => LowerOption(basket);
 
-        /// <summary>Reads a basket button option back; false for the power knob and anything else.</summary>
-        public static bool TryParseBasketOption(int option, out int basket)
+        /// <summary>Spec 029b: the request "lower basket b" (2 and 3). Refused when it is already in the oil.</summary>
+        public static int LowerOption(int basket) => 2 + basket;
+
+        /// <summary>Spec 029b: the request "raise basket b" (4 and 5). Refused when it is not in the oil.</summary>
+        public static int RaiseOption(int basket) => 2 + BasketsPerFryer + basket;
+
+        /// <summary>
+        /// Spec 029b: what a click on basket b's button asks for, from where the clicker sees the basket: up when it is in the
+        /// oil, else down. An intent, not a toggle, so two players clicking at once never cancel each other.
+        /// </summary>
+        public static int IntentOption(int basket, bool seenLowered) => seenLowered ? RaiseOption(basket) : LowerOption(basket);
+
+        /// <summary>Reads any basket option back (lower or raise); false for the power knob and anything else.</summary>
+        public static bool TryParseBasketOption(int option, out int basket) => TryParseBasketOption(option, out basket, out _);
+
+        /// <summary>Spec 029b: reads a basket request back: which basket, and whether it asks to lower it.</summary>
+        public static bool TryParseBasketOption(int option, out int basket, out bool lower)
         {
-            basket = option - 2;
-            if (basket >= 0 && basket < BasketsPerFryer) return true;
+            lower = option < 2 + BasketsPerFryer;
+            basket = lower ? option - 2 : option - 2 - BasketsPerFryer;
+            if (option >= 2 && basket >= 0 && basket < BasketsPerFryer) return true;
             basket = -1;
+            lower = false;
             return false;
         }
 

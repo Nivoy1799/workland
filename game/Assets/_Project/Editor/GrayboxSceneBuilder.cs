@@ -86,10 +86,13 @@ namespace Worktown.Game.Editor
         // Spec 029: the deep fryer joins the back line between prep and the stoves (dish flow: stock, prep, fryer, stoves, plates).
         private const float FryerHalfGap = FryerArt.Width * 0.5f + WorktopGapMargin;
         private const float FryerX = PrepStartX + PrepWidth + FryerHalfGap;
+        // Spec 029b: the two stoves stand side by side (the worktop that stood between them moved to the right end), so the
+        // plating worktop and the plate shelf come 1.26 m closer to the fryer: fryer to the first plate about 3.2 m (was 4.5).
+        // The kitchen keeps its length; the serving counter, the queue and the rail move with the plate shelf.
         private const float StoveAX = FryerX + FryerHalfGap + StationHalfGap;
-        private const float StoveBX = StoveAX + 2f * StationHalfGap + BetweenWidth;
+        private const float StoveBX = StoveAX + 2f * StationHalfGap;
         private const float PlateShelfX = StoveBX + 2f * StationHalfGap + BetweenWidth;
-        private const float KitchenMaxX = PlateShelfX + StationHalfGap + BetweenWidth;
+        private const float KitchenMaxX = PlateShelfX + StationHalfGap + 2f * BetweenWidth;
         /// <summary>Spec 027a: the serving counter stands in the front counter, opposite the plate shelf.</summary>
         private const float CounterX = PlateShelfX;
         /// <summary>Spec 027a: clear floor between the back line's bodies and the front counter (feel.md 6: at least 1.2 m).</summary>
@@ -1122,8 +1125,9 @@ namespace Worktown.Game.Editor
                 FryerArt.Width);
             stations.Add(fryer);
 
-            // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, between the
-            // stoves, between the second stove and the plate shelf, after the shelf.
+            // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, the pass at the
+            // right end (spec 029b: it stood between the stoves; created in the same order, so the surface indices stay),
+            // between the second stove and the plate shelf (plating), after the shelf (the bowl).
             float height = stoveA.transform.position.y + StationTop(stoveA);
             const float half = StationHalfGap;
             Material worktopMat = CreateMaterial(WorktopMaterialPath, Palette.WoodLight);
@@ -1132,11 +1136,12 @@ namespace Worktown.Game.Editor
             PlaceSurface prep = CreateWorktop(parent.transform, PrepStartX, PrepStartX + PrepWidth, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(prep);
             PlaceSurface[] burnersA = CreateStoveSurfaces(stoveA, surfaces);
-            surfaces.Add(CreateWorktop(parent.transform, StoveAX + half, StoveBX - half, height, surfaces.Count, worktopMat, catalog));
+            surfaces.Add(CreateWorktop(parent.transform, PlateShelfX + half + BetweenWidth, KitchenMaxX, height, surfaces.Count, worktopMat, catalog));
             PlaceSurface[] burnersB = CreateStoveSurfaces(stoveB, surfaces);
             PlaceSurface plating = CreateWorktop(parent.transform, StoveBX + half, PlateShelfX - half, height, surfaces.Count, worktopMat, catalog);
             surfaces.Add(plating);
-            PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, KitchenMaxX, height, surfaces.Count, worktopMat, catalog);
+            PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, PlateShelfX + half + BetweenWidth, height, surfaces.Count,
+                worktopMat, catalog);
             surfaces.Add(last);
             CreateFrontCounter(parent.transform, catalog);
             CreateShopWalls(parent.transform);

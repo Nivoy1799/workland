@@ -106,8 +106,8 @@ namespace Worktown.Sim.Cooking
                 if ((c = p.Ideal.Min.CompareTo(q.Ideal.Min)) != 0) return c;
                 if ((c = p.Ideal.Max.CompareTo(q.Ideal.Max)) != 0) return c;
             }
-            if ((c = a.Components.Count.CompareTo(b.Components.Count)) != 0) return c;
-            return a.QualityFactor.CompareTo(b.QualityFactor); // spec 029 (equal for everything not deep-fried)
+            // No QualityFactor tie-break (029b): it is a function of the canonical tree, so equal hashes have equal factors.
+            return a.Components.Count.CompareTo(b.Components.Count);
         }
 
         internal static int CompareComponents(ItemComponent a, ItemComponent b)

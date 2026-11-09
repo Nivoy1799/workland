@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEngine;
 using Worktown.Game.Art;
 using Worktown.Game.Cooking;
 using Worktown.Game.Net.Rules;
@@ -51,7 +52,7 @@ namespace Worktown.Game.Tests
             (food ?? ((k, id) => Sticks(k, id)))(kitchen, Food);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(Food, Basket0, VesselKind.Basket, Start));
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryToggleFryer(Fryer, Start));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryToggleBasket(Basket0, Start, Rate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryLowerBasket(Basket0, Start));
             Assert.AreEqual(BasketState.Lowered, kitchen.BasketStateOf(Basket0, Start));
             return kitchen;
         }
@@ -62,28 +63,28 @@ namespace Worktown.Game.Tests
         public void Lowering_NeedsFood_AndTheFryerOn_RaisingIsAlwaysAllowed()
         {
             KitchenState kitchen = Kitchen();
-            Assert.AreEqual(CookOutcome.StationEmpty, kitchen.TryToggleBasket(Basket0, Start, Rate), "an empty basket stays up");
+            Assert.AreEqual(CookOutcome.StationEmpty, kitchen.TryLowerBasket(Basket0, Start), "an empty basket stays up");
             Sticks(kitchen);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(Food, Basket0, VesselKind.Basket, Start));
-            Assert.AreEqual(CookOutcome.FryerOff, kitchen.TryToggleBasket(Basket0, Start, Rate), "cold oil");
+            Assert.AreEqual(CookOutcome.FryerOff, kitchen.TryLowerBasket(Basket0, Start), "cold oil");
             kitchen.TryToggleFryer(Fryer, Start);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryToggleBasket(Basket0, Start, Rate));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryLowerBasket(Basket0, Start));
             Assert.AreEqual(BasketState.Lowered, kitchen.BasketStateOf(Basket0, Start));
             kitchen.TryToggleFryer(Fryer, Start + 10); // off with the basket down: still down, cooking paused
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryToggleBasket(Basket0, Start + 20, Rate), "raising works with the fryer off");
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryRaiseBasket(Basket0, Start + 20, Rate), "raising works with the fryer off");
             Assert.AreEqual(BasketState.Draining, kitchen.BasketStateOf(Basket0, Start + 20));
-            Assert.AreEqual(CookOutcome.NotAVessel, kitchen.TryToggleBasket(999, Start, Rate));
+            Assert.AreEqual(CookOutcome.NotAVessel, kitchen.TryRaiseBasket(999, Start, Rate));
         }
 
         [Test]
         public void TheFood_FriesOnlyWhileLoweredInHotOil()
         {
             KitchenState kitchen = Frying();
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryToggleBasket(Basket0, Start + Real(10), Rate)); // up after 10 s
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryRaiseBasket(Basket0, Start + Real(10), Rate)); // up after 10 s
             kitchen.TryGetHeat(Basket0, 0, out HeatSession session);
             uint cooked = session.CookedTicks(Start + Real(40));
             Assert.AreEqual(Real(10), cooked, "nothing fries on the hook");
-            kitchen.TryToggleBasket(Basket0, Start + Real(40), Rate); // down again
+            kitchen.TryLowerBasket(Basket0, Start + Real(40)); // down again
             kitchen.TryToggleFryer(Fryer, Start + Real(45));          // fryer off: paused
             Assert.AreEqual(Real(15), session.CookedTicks(Start + Real(90)));
         }
@@ -93,7 +94,7 @@ namespace Worktown.Game.Tests
         {
             KitchenState kitchen = Frying();
             uint up = Start + Real(28);
-            kitchen.TryToggleBasket(Basket0, up, Rate);
+            kitchen.TryRaiseBasket(Basket0, up, Rate);
             Assert.AreEqual(BasketState.Draining, kitchen.BasketStateOf(Basket0, up + Real(1.9)));
             Assert.IsFalse(kitchen.SettleDrain(Basket0, up + Real(1.9)));
             Assert.AreEqual(BasketState.Raised, kitchen.BasketStateOf(Basket0, up + Real(FryerRules.DrainSeconds)));
@@ -112,7 +113,7 @@ namespace Worktown.Game.Tests
             Sticks(kitchen, 43);
             Assert.AreEqual(CookOutcome.BasketLowered, kitchen.TryPutInto(43, Basket0, VesselKind.Basket, Start + 5));
             Assert.AreEqual(CookOutcome.BasketLowered, kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, Start + 5, Rate, out _));
-            kitchen.TryToggleBasket(Basket0, Start + 10, Rate);
+            kitchen.TryRaiseBasket(Basket0, Start + 10, Rate);
             Assert.AreEqual(CookOutcome.VesselFull, kitchen.TryPutInto(43, Basket0, VesselKind.Basket, Start + 10), "one portion");
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(43, Basket1, VesselKind.Basket, Start + 10), "the other basket has room");
             Assert.AreEqual(1, VesselRules.Capacity(VesselKind.Basket));
@@ -131,7 +132,7 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(kitchen.BasketShaken(Basket0), "27 s: in the good window");
             Assert.AreEqual(2, FryerRules.ShakesOf(kitchen.BasketMode(Basket0, Start + Real(27))));
             kitchen.TryShake(Basket0, Start + Real(29), Rate);
-            kitchen.TryToggleBasket(Basket0, Start + Real(30), Rate);
+            kitchen.TryRaiseBasket(Basket0, Start + Real(30), Rate);
             uint drained = Start + Real(33);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, drained, Rate, out Item shaken));
             Assert.AreEqual(1f + DeepFry.ShakeBonus, shaken.QualityFactor, 1e-5f, "one bonus, however often it was shaken");
@@ -150,10 +151,116 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CookOutcome.NotLowered, kitchen.TryShake(Basket0, Start, Rate));
             kitchen = Frying();
             kitchen.TryShake(Basket0, Start + Real(26), Rate);
-            kitchen.TryToggleBasket(Basket0, Start + Real(30), Rate);
+            kitchen.TryRaiseBasket(Basket0, Start + Real(30), Rate);
             Assert.AreEqual(CookOutcome.NotLowered, kitchen.TryShake(Basket0, Start + Real(31), Rate), "on the hook");
             kitchen.ClearContents(Basket0, VesselKind.Basket);
             Assert.IsFalse(kitchen.BasketShaken(Basket0), "taken out: the next portion has no bonus yet");
+        }
+
+        [Test]
+        public void ReloadingFries_AndShakingAgain_NeverStacksTheBonus()
+        {
+            // Spec 029b 9.0: the fries come out, go back into the basket, are shaken again: still one bonus (x1.1).
+            KitchenState kitchen = Frying();
+            kitchen.TryShake(Basket0, Start + Real(27), Rate);
+            kitchen.TryRaiseBasket(Basket0, Start + Real(28), Rate);
+            uint t = Start + Real(31);
+            for (int round = 0; round < 3; round++)
+            {
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, t, Rate, out Item fries));
+                kitchen.ClearContents(Basket0, VesselKind.Basket);
+                Assert.AreEqual(1f + DeepFry.ShakeBonus, fries.QualityFactor, 1e-5f, "round " + round + ": one bonus");
+                int id = 100 + round;
+                kitchen.Register(id, fries);
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(id, Basket0, VesselKind.Basket, t), "the fries go back in");
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryLowerBasket(Basket0, t));
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryShake(Basket0, t + Real(1.2), Rate)); // past the op minimum (1 s): in the window
+                Assert.IsTrue(kitchen.BasketShaken(Basket0), "re-loaded fries are in the window at once: the shake counts again");
+                kitchen.TryRaiseBasket(Basket0, t + Real(2), Rate); // 12 sim s: longer than the op minimum
+                t += Real(5);
+            }
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, t, Rate, out Item last));
+            Assert.AreEqual(1f + DeepFry.ShakeBonus, last.QualityFactor, 1e-5f, "still x1.1 after three re-fries");
+        }
+
+        // ---- spec 029b: the basket button is an intent, not a toggle ----
+
+        [Test]
+        public void TheBasketIntent_LowerOrRaise_RefusesANoOp_SoTwoPlayersNeverCancel()
+        {
+            KitchenState kitchen = Kitchen();
+            Sticks(kitchen);
+            kitchen.TryPutInto(Food, Basket0, VesselKind.Basket, Start);
+            kitchen.TryToggleFryer(Fryer, Start);
+            Assert.AreEqual(CookOutcome.NotLowered, kitchen.TryRaiseBasket(Basket0, Start, Rate), "raising a raised basket does nothing");
+            // Two players press "lower" at once: the first lowers it, the second is refused, the basket stays down.
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryLowerBasket(Basket0, Start + 1));
+            Assert.AreEqual(CookOutcome.BasketLowered, kitchen.TryLowerBasket(Basket0, Start + 2));
+            Assert.AreEqual(BasketState.Lowered, kitchen.BasketStateOf(Basket0, Start + 3));
+            // Two players press "raise" at once: the first raises it, the second is refused, it drains.
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryRaiseBasket(Basket0, Start + Real(10), Rate));
+            Assert.AreEqual(CookOutcome.NotLowered, kitchen.TryRaiseBasket(Basket0, Start + Real(10) + 1, Rate));
+            Assert.AreEqual(BasketState.Draining, kitchen.BasketStateOf(Basket0, Start + Real(11)));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryLowerBasket(Basket0, Start + Real(11)), "a draining basket may go back in");
+            Assert.AreEqual(CookOutcome.NotAVessel, kitchen.TryLowerBasket(999, Start));
+        }
+
+        [Test]
+        public void TheIntentOptions_AreSeparateValues_TheButtonsKeepTheirSceneOption()
+        {
+            Assert.AreEqual(2, FryerRules.LowerOption(0));
+            Assert.AreEqual(3, FryerRules.LowerOption(1));
+            Assert.AreEqual(4, FryerRules.RaiseOption(0));
+            Assert.AreEqual(5, FryerRules.RaiseOption(1));
+            Assert.AreEqual(FryerRules.LowerOption(1), FryerRules.BasketOption(1), "the scene button keeps its option");
+            Assert.AreEqual(FryerRules.RaiseOption(1), FryerRules.IntentOption(1, true), "seen in the oil: raise");
+            Assert.AreEqual(FryerRules.LowerOption(1), FryerRules.IntentOption(1, false), "seen up: lower");
+            for (int b = 0; b < FryerRules.BasketsPerFryer; b++)
+            {
+                Assert.IsTrue(FryerRules.TryParseBasketOption(FryerRules.LowerOption(b), out int lb, out bool lower) && lb == b && lower);
+                Assert.IsTrue(FryerRules.TryParseBasketOption(FryerRules.RaiseOption(b), out int rb, out bool raise) && rb == b && !raise);
+            }
+            foreach (int bad in new[] { -1, 0, FryerRules.PowerOption, 6, 99 })
+                Assert.IsFalse(FryerRules.TryParseBasketOption(bad, out _, out _), "option " + bad);
+            Assert.AreEqual("Click · lower the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(0), FryerRules.FryerFlags(true, false, false)));
+        }
+
+        // ---- spec 029b: the use request on a basket, the answer kind, the tip ----
+
+        [Test]
+        public void TheUseRequest_OnABasket_NeedsNoPickup_ReachIsToThePivot_AShakeNeedsEmptyHands()
+        {
+            Vector3 pivot = new Vector3(6.44f, 0.9f, 14.3f);
+            Vector3 cook = new Vector3(6.44f, 0f, 12.95f);
+            Assert.AreEqual(CookOutcome.Ok, VesselRules.CheckUseTarget(VesselKind.Basket, false, false, cook, pivot), "no Pickup, fixed to its fryer");
+            Assert.AreEqual(CookOutcome.NotAVessel, VesselRules.CheckUseTarget(VesselKind.Pan, false, false, cook, pivot), "a pan needs its Pickup");
+            Assert.AreEqual(CookOutcome.NotAVessel, VesselRules.CheckUseTarget(VesselKind.Pan, true, true, cook, pivot), "a held pan");
+            Assert.AreEqual(CookOutcome.Ok, VesselRules.CheckUseTarget(VesselKind.Pan, true, false, cook, pivot));
+            Vector3 far = pivot + new Vector3(0f, 0f, -(PickupRules.MaxReach + 0.1f));
+            Assert.AreEqual(CookOutcome.TooFar, VesselRules.CheckUseTarget(VesselKind.Basket, false, false, far, pivot), "reach to the pivot");
+            Assert.AreEqual(CookOutcome.HandsFull, VesselRules.CheckShake(VesselKind.Basket, true));
+            Assert.AreEqual(CookOutcome.Ok, VesselRules.CheckShake(VesselKind.Basket, false));
+            Assert.AreEqual(CookOutcome.InvalidOption, VesselRules.CheckShake(VesselKind.Pan, false), "only a basket shakes");
+            Assert.AreEqual(AnswerKind.Cook, PredictionBook<object>.AnswerFor(PredictionKind.Basket), "a basket button is answered by ReportCook");
+        }
+
+        [Test]
+        public void TippingTheBasket_OntoAPlate_KeepsTheBonusAndRefusesWhileInTheOil()
+        {
+            const int plate = 80;
+            KitchenState kitchen = Frying();
+            kitchen.TryShake(Basket0, Start + Real(27), Rate);
+            Assert.AreEqual(CookOutcome.BasketLowered, kitchen.TryTipBasket(Basket0, plate, VesselKind.Plate, Start + Real(29), Rate, out _));
+            kitchen.TryRaiseBasket(Basket0, Start + Real(30), Rate);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryTipBasket(Basket0, plate, VesselKind.Plate, Start + Real(33), Rate, out Item tipped));
+            Assert.AreEqual("golden fries", KitchenState.NameOf(tipped));
+            Assert.AreEqual(1f + DeepFry.ShakeBonus, tipped.QualityFactor, 1e-5f);
+            Assert.AreEqual(0, kitchen.HeatCount(Basket0), "the basket is empty");
+            Assert.IsFalse(kitchen.BasketShaken(Basket0), "the next fry starts fresh");
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTake(plate, VesselKind.Plate, out Item dish));
+            Assert.AreEqual(OrderMatch.Exact, OrderRules.Match(dish, Menu.ById(Menu.Fries)), "a Fries order");
+            Assert.AreEqual(CookOutcome.StationEmpty, kitchen.TryTipBasket(Basket0, plate, VesselKind.Plate, Start + Real(34), Rate, out _));
+            Assert.AreEqual(CookOutcome.NotAVessel, kitchen.TryTipBasket(999, plate, VesselKind.Plate, Start, Rate, out _));
         }
 
         // ---- the drain penalty ----
@@ -163,7 +270,7 @@ namespace Worktown.Game.Tests
         {
             KitchenState kitchen = Frying();
             uint up = Start + Real(30);
-            kitchen.TryToggleBasket(Basket0, up, Rate);
+            kitchen.TryRaiseBasket(Basket0, up, Rate);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, up + Real(1), Rate, out Item greasy));
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, up + Real(2.5), Rate, out Item drained));
             Assert.AreEqual(1f - DeepFry.GreasyPenalty, greasy.QualityFactor, 1e-5f);
@@ -217,7 +324,7 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(FryerRules.IsLowered(flags, 0));
             Assert.IsFalse(FryerRules.IsLowered(flags, 1));
             Assert.AreEqual(BasketState.Lowered, FryerRules.StateOf(kitchen.BasketMode(Basket0, Start)));
-            kitchen.TryToggleBasket(Basket0, Start + Real(30), Rate);
+            kitchen.TryRaiseBasket(Basket0, Start + Real(30), Rate);
             Assert.AreEqual(BasketState.Draining, FryerRules.StateOf(kitchen.BasketMode(Basket0, Start + Real(31))));
             Assert.IsFalse(FryerRules.IsLowered(kitchen.FryerFlags(Fryer, Start + Real(31)), 0));
             // The ring holds where it was while the basket hangs on the hook.
@@ -228,7 +335,7 @@ namespace Worktown.Game.Tests
         public void Falafel_FromTheBasket_IsFourBalls_AndMatchesItsOrder()
         {
             KitchenState kitchen = Frying(Falafel);
-            kitchen.TryToggleBasket(Basket0, Start + Real(24), Rate);
+            kitchen.TryRaiseBasket(Basket0, Start + Real(24), Rate);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, Start + Real(27), Rate, out Item balls));
             Assert.AreEqual("golden falafel balls", KitchenState.NameOf(balls));
             FoodLook look = FoodLookRules.From(balls);
@@ -244,7 +351,7 @@ namespace Worktown.Game.Tests
         public void Fries_FromTheBasket_AreExactFries_LooseInTheBasket_InABoxElsewhere()
         {
             KitchenState kitchen = Frying();
-            kitchen.TryToggleBasket(Basket0, Start + Real(30), Rate);
+            kitchen.TryRaiseBasket(Basket0, Start + Real(30), Rate);
             kitchen.TryPreviewTakeOut(Basket0, VesselKind.Basket, Start + Real(33), Rate, out Item fries);
             Assert.AreEqual(OrderMatch.Exact, OrderRules.Match(fries, Menu.ById(Menu.Fries)));
             FoodLook look = FoodLookRules.From(fries);
@@ -287,7 +394,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("Click · raise the basket", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Fryer, 2, on)));
             Assert.IsTrue(FryerRules.TryParseBasketOption(3, out int b) && b == 1);
             Assert.IsFalse(FryerRules.TryParseBasketOption(FryerRules.PowerOption, out _));
-            Assert.IsFalse(FryerRules.TryParseBasketOption(4, out _));
+            Assert.IsTrue(FryerRules.TryParseBasketOption(4, out int r, out bool lower) && r == 0 && !lower, "4 raises basket 0");
+            Assert.IsFalse(FryerRules.TryParseBasketOption(6, out _));
         }
 
         [Test]

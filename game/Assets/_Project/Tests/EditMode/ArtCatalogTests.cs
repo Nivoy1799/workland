@@ -122,7 +122,7 @@ namespace Worktown.Game.Tests
                 // stoves, the serving counter (in the front counter at z 11.85, 0.7 m deep, opposite the plate shelf) and the plate
                 // shelf; the back line at z 14.3.
                 // Spec 029: the fryer (index 6, 0.8 m wide) after the prep run moved the stoves, the counter and the shelf 0.84 m right.
-                float[] fixedX = { 2.36f, 3.60f, 7.48f, 9.98f, 12.48f, 12.48f, 6.44f };
+                float[] fixedX = { 2.36f, 3.60f, 7.48f, 8.72f, 11.22f, 11.22f, 6.44f }; // spec 029b: stove B and the plates moved left
                 StationKind[] kinds = { StationKind.Shelf, StationKind.Fridge, StationKind.Stove, StationKind.Stove, StationKind.Counter, StationKind.PlateShelf,
                     StationKind.Fryer };
                 int count = 0;

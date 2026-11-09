@@ -356,6 +356,20 @@ namespace Worktown.Game.Tests
                 Assert.Less(fryer, stoveA, "the fryer before the stoves");
                 Assert.LessOrEqual(fryer - boardV, 3f, "board to the fryer");
                 Assert.LessOrEqual(stoveA - fryer, 1.5f, "the fryer next to stove A");
+                // Spec 029b: the fries path. The plates (their home spots on the plating worktop) at most 3.5 m from the fryer
+                // (029 had 4.5 m), and still after the stoves, so the pan's path keeps its order and limits above.
+                var plates = VesselTestKit.AllOf(plan.Scene, VesselTestKit.VesselType).FindAll(v => VesselTestKit.KindOf(v) == VesselKind.Plate);
+                Assert.Greater(plates.Count, 0, "plates on the plating worktop");
+                Vector3 f = fryers[0].transform.position;
+                float nearestPlate = float.MaxValue;
+                foreach (Component p in plates)
+                {
+                    Assert.Greater(plan.V(p.transform.position), stoveB, p.name + " after the stoves");
+                    Assert.Less(plan.V(p.transform.position), shelf, p.name + " before the plate shelf");
+                    nearestPlate = Mathf.Min(nearestPlate, new Vector2(p.transform.position.x - f.x, p.transform.position.z - f.z).magnitude);
+                }
+                TestContext.WriteLine("fryer to the nearest plate: " + nearestPlate.ToString("0.00") + " m");
+                Assert.LessOrEqual(nearestPlate, 3.5f, "fryer to the plates, centre to centre");
 
                 Vector3 serving = plan.Serving.transform.position;
                 Assert.LessOrEqual(Vector3.Distance(plan.AislePointNear(plan.Shelf.transform.position), plan.AislePointNear(serving)), 2.5f,
@@ -468,6 +482,13 @@ namespace Worktown.Game.Tests
                         Assert.Greater(slot.transform.childCount, 0, slot.name + " shows its item");
                         Assert.IsEmpty(slot.GetComponentsInChildren<Collider>(true), slot.name + ": the items never block a ray");
                         Assert.AreSame(slot, station.NearestSlot(slot.Anchor), slot.name + ": a ray on it means it");
+                        // Spec 029b (028b nit): a hit between this slot and the next one means the nearer of the two.
+                        if (option + 1 < station.SlotCount && station.TryGetSlot(option + 1, out StockSlot next)
+                            && Mathf.Abs(next.Anchor.y - slot.Anchor.y) < 0.01f) // its neighbour on the same board
+                        {
+                            Assert.AreSame(slot, station.NearestSlot(Vector3.Lerp(slot.Anchor, next.Anchor, 0.4f)), slot.name + ": nearer than " + next.name);
+                            Assert.AreSame(next, station.NearestSlot(Vector3.Lerp(slot.Anchor, next.Anchor, 0.6f)), next.name + ": nearer than " + slot.name);
+                        }
                         // The open side faces the aisle: the items stand just inside the body's aisle-side face.
                         Vector3 a = slot.Anchor;
                         Assert.IsTrue(body.Contains(a), slot.name + " stands inside " + station.name);

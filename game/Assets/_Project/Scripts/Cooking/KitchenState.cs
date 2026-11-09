@@ -227,6 +227,19 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
+        /// Spec 029b: tips a raised (or draining) basket's food onto the plate or into the bowl <paramref name="targetId"/>
+        /// that the player holds: the basket's take (shake bonus, greasy while it drains) poured like a pan. BasketLowered
+        /// while it is in the oil; otherwise as <see cref="TryPour"/>.
+        /// </summary>
+        public CookOutcome TryTipBasket(int basketId, int targetId, VesselKind targetKind, uint tick, double tickRate, out Item poured)
+        {
+            poured = null;
+            if (!_baskets.ContainsKey(basketId)) return CookOutcome.NotAVessel;
+            if (BasketStateOf(basketId, tick) == BasketState.Lowered) return CookOutcome.BasketLowered;
+            return TryPour(basketId, VesselKind.Basket, targetId, targetKind, tick, tickRate, out poured);
+        }
+
+        /// <summary>
         /// Name of what taking, pouring or selling the contents gives now ("crispy fried potato sticks", the plated
         /// dish's name); null when empty or when the sim would refuse.
         /// </summary>
@@ -578,8 +591,8 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
-        /// Label lines for what is in the pan or pot, e.g. "potato sticks · medium". Before the first doneness bucket:
-        /// "warming up" while it cooks, "raw" while it does not.
+        /// Label lines for what is in the pan, pot or basket. Spec 029b: in player words from each food's 027c zone
+        /// (<see cref="HeatLabelRules"/>): "potato sticks · cooked", "golden fries".
         /// </summary>
         public IReadOnlyList<string> HeatNames(int vesselId, uint tick, double tickRate)
         {
@@ -587,9 +600,9 @@ namespace Worktown.Game.Cooking
             var names = new List<string>(sessions.Count);
             foreach (HeatSession session in sessions)
             {
-                string bucket = CurrentBucket(session, tick, tickRate);
-                if (bucket.Length == 0) bucket = session.IsRunning ? "warming up" : "raw";
-                names.Add(NameOf(session.Food) + " · " + bucket);
+                double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
+                HeatZone zone = HeatZoneRules.Zone(seconds, session.Timeline);
+                names.Add(HeatLabelRules.Label(session.Food, NameOf(session.Food), session.OperationId, zone));
             }
             return names;
         }
@@ -738,16 +751,6 @@ namespace Worktown.Game.Cooking
             _baskets[vesselId] = new BasketRecord { Fryer = fryer, Index = basket, State = BasketState.Raised };
         }
 
-        public bool IsBasket(int vesselId) => _baskets.ContainsKey(vesselId);
-
-        /// <summary>The vessel id of basket <paramref name="basket"/> of fryer <paramref name="fryer"/>, or -1.</summary>
-        public int BasketVessel(int fryer, int basket)
-        {
-            foreach (KeyValuePair<int, BasketRecord> b in _baskets)
-                if (b.Value.Fryer == fryer && b.Value.Index == basket) return b.Key;
-            return -1;
-        }
-
         /// <summary>The fryer's switch (fryers start off).</summary>
         public bool FryerIsOn(int fryer) => _fryerOn.TryGetValue(fryer, out bool on) && on;
 
@@ -762,25 +765,33 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
-        /// The basket's button: a lowered basket is raised (always allowed) and drains for <see cref="FryerRules.DrainSeconds"/>; a
-        /// raised or draining one is lowered, only with food in it (StationEmpty) and the fryer on (FryerOff). Its food fries
-        /// while it is lowered and the fryer is on.
+        /// Spec 029b: "lower the basket" (an intent, not a toggle): only with food in it (StationEmpty) and the fryer on
+        /// (FryerOff); a basket already in the oil refuses it (BasketLowered), so two players clicking at once never cancel each
+        /// other. A draining basket may go back in. Its food fries while it is lowered and the fryer is on.
         /// </summary>
-        public CookOutcome TryToggleBasket(int vesselId, uint tick, double tickRate)
+        public CookOutcome TryLowerBasket(int vesselId, uint tick)
         {
             if (!_baskets.TryGetValue(vesselId, out BasketRecord basket)) return CookOutcome.NotAVessel;
-            if (basket.State == BasketState.Lowered)
-            {
-                basket.State = BasketState.Draining;
-                basket.DrainStart = tick;
-                basket.DrainTicks = FryerRules.DrainTicks(tickRate);
-                SetRunning(vesselId, false, tick);
-                return CookOutcome.Ok;
-            }
+            if (basket.State == BasketState.Lowered) return CookOutcome.BasketLowered;
             if (HeatCount(vesselId) == 0) return CookOutcome.StationEmpty;
             if (!FryerIsOn(basket.Fryer)) return CookOutcome.FryerOff;
             basket.State = BasketState.Lowered;
             SetRunning(vesselId, true, tick);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 029b: "raise the basket": always allowed for a basket in the oil; it then drains for
+        /// <see cref="FryerRules.DrainSeconds"/>. A basket that is not in the oil refuses it (NotLowered).
+        /// </summary>
+        public CookOutcome TryRaiseBasket(int vesselId, uint tick, double tickRate)
+        {
+            if (!_baskets.TryGetValue(vesselId, out BasketRecord basket)) return CookOutcome.NotAVessel;
+            if (basket.State != BasketState.Lowered) return CookOutcome.NotLowered;
+            basket.State = BasketState.Draining;
+            basket.DrainStart = tick;
+            basket.DrainTicks = FryerRules.DrainTicks(tickRate);
+            SetRunning(vesselId, false, tick);
             return CookOutcome.Ok;
         }
 

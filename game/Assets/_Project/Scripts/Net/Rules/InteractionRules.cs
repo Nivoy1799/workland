@@ -58,8 +58,25 @@ namespace Worktown.Game.Net.Rules
             if (FryerRules.StateOf(target.Mode) == BasketState.Lowered)
                 return !held.IsHolding && hasFood ? InteractionAction.Shake : InteractionAction.None;
             if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
+            if (held.IsVessel) return TipsInto(held, hasFood) ? InteractionAction.Take : InteractionAction.None;
             return !held.IsHolding && hasFood ? InteractionAction.Take : InteractionAction.None;
         }
+
+        /// <summary>
+        /// Spec 029b: holding a plate or bowl with room, a click on a raised basket with food tips the food onto it (the
+        /// basket's Take, sent as the same RequestUse action; the server pours the basket into what you hold).
+        /// </summary>
+        public static bool TipsInto(Held held, bool basketHasFood)
+        {
+            return basketHasFood && held.IsVessel && VesselRules.IsAssembly(held.Vessel)
+                && held.ContentCount < VesselRules.Capacity(held.Vessel);
+        }
+
+        /// <summary>
+        /// Spec 029b: while a take from stock is on its way and nothing is really in the hands yet, no click does anything
+        /// (no Place, PutInto or Sell of food that is not there).
+        /// </summary>
+        public static bool WaitsForTake(bool takePending, bool reallyHolding) => takePending && !reallyHolding;
 
         private static InteractionAction StationAction(Held held, AimTarget target)
         {
@@ -163,7 +180,9 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Take:
                     // Spec 029: a basket that still drips gives greasy food; the prompt says so.
                     bool dripping = target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Draining;
-                    return Click("take " + TakeWhat(target) + (dripping ? " (still dripping)" : string.Empty));
+                    string drip = dripping ? " (still dripping)" : string.Empty;
+                    if (held.IsVessel) return Click("tip " + TakeWhat(target) + " " + IntoWhat(held.Vessel) + drip); // spec 029b
+                    return Click("take " + TakeWhat(target) + drip);
                 default: return Reason(held, target);
             }
         }

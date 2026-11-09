@@ -60,7 +60,9 @@ namespace Worktown.Sim.Cooking
         internal IReadOnlyDictionary<string, string> BucketLabels { get; }
         /// <summary>
         /// Spec 029: multiplies the rated quality (1 for everything but deep-fried food: the shake bonus, the greasy penalty).
-        /// Cut and heat keep it, mix and plate take the weight-weighted mean of their inputs'.
+        /// Cut and heat keep it, mix and plate take the weight-weighted mean of their inputs'. Re-frying caps it at
+        /// 1 - GreasyPenalty .. 1 + ShakeBonus (<see cref="DeepFry.FactorAfter"/>). A plate's or mix's factor already includes
+        /// its inputs' factors: rate an item by its own factor only, never multiply its inputs' factors in again.
         /// </summary>
         public float QualityFactor { get; }
     }

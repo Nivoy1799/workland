@@ -869,7 +869,7 @@ namespace Worktown.Game.Editor
                 Box(cabinet, "Side right", new Vector3(w * 0.5f - t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, d), wood);
                 Box(cabinet, "Header", new Vector3(0f, (StockArt.FridgeHeaderBottom + h) * 0.5f, 0f), new Vector3(w, h - StockArt.FridgeHeaderBottom, d), wood);
                 Box(cabinet, "Plinth", new Vector3(0f, 0.04f, 0f), new Vector3(w, 0.08f, d), wood);
-                for (int b = 0; b < StockArt.ShelfRowHeights.Length; b++)
+                for (int b = 0; b < StockArt.ShelfRowHeights.Count; b++)
                     Box(cabinet, "Board " + (b + 1), new Vector3(0f, StockArt.ShelfRowHeights[b] - t * 0.5f, t * 0.5f), new Vector3(w - 2f * t, t, d - t), wood);
             }
             return model;

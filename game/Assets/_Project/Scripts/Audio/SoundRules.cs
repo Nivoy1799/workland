@@ -65,6 +65,22 @@ namespace Worktown.Game.Audio
             }
         }
 
+        /// <summary>Spec 029b: the idle oil hum's level (the fryer loop, quiet) and pitch (lower than a basket frying).</summary>
+        public const float FryerIdleLevel = 0.22f;
+        public const float FryerIdlePitch = 0.7f;
+
+        /// <summary>
+        /// Spec 029b: the idle oil hum (0..1) from the fryer's synced byte: quiet while the fryer is on and both baskets are up
+        /// (a lowered basket plays its own fryer loop instead), silent when it is off.
+        /// </summary>
+        public static float FryerIdleHum(byte fryerFlags)
+        {
+            if (!FryerRules.IsOn(fryerFlags)) return 0f;
+            for (int b = 0; b < FryerRules.BasketsPerFryer; b++)
+                if (FryerRules.IsLowered(fryerFlags, b)) return 0f;
+            return FryerIdleLevel;
+        }
+
         /// <summary>Spec 029: the fryer loop sits lower than the pan's sizzle (deep oil), and rises with the zone like it.</summary>
         public static float LoopPitchOf(VesselKind kind, HeatZone zone) => (kind == VesselKind.Basket ? 0.85f : 1f) * LoopPitch(zone);
 

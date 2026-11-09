@@ -18,7 +18,10 @@ namespace Worktown.Game.Art
         public const float ShakeAmplitude = 0.025f;
         public const int ShakeJolts = 3;
         /// <summary>Drops per second while a raised basket drains.</summary>
-        public const float DripRate = 20f;
+        public const float DripRate = 36f;
+        /// <summary>Spec 029b: drop sizes (m), large enough to see from the aisle (029's 0.014–0.022 were lost in the frame).</summary>
+        public const float DripSizeMin = 0.022f;
+        public const float DripSizeMax = 0.04f;
 
         /// <summary>
         /// Bubbles per second in one basket's well: none while the fryer is off; a light shimmer of hot oil without food in it;

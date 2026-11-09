@@ -25,6 +25,9 @@ namespace Worktown.Game.Net.Rules
             return true;
         }
 
+        /// <summary>Spec 029b: whether the client could claim a fresh (unclaimed) item now: a valid client with empty hands.</summary>
+        public bool CanClaim(int clientId) => clientId >= 0 && !_itemByClient.ContainsKey(clientId);
+
         /// <summary>Frees the item. Only its current holder can release it.</summary>
         public bool TryRelease(int itemId, int clientId)
         {

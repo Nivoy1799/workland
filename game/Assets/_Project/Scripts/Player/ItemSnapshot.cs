@@ -8,12 +8,13 @@ namespace Worktown.Game.Player
     /// </summary>
     public readonly struct ItemSnapshot
     {
-        public ItemSnapshot(bool exists, int holder, Vector3 position, int vesselCount)
+        public ItemSnapshot(bool exists, int holder, Vector3 position, int vesselCount, int heldId = -1)
         {
             Exists = exists;
             Holder = holder;
             Position = position;
             VesselCount = vesselCount;
+            HeldId = heldId;
         }
 
         /// <summary>False once the item is despawned (food put into a pot).</summary>
@@ -23,6 +24,9 @@ namespace Worktown.Game.Player
         public Vector3 Position { get; }
         /// <summary>Content count of the cookware it is put into (PutInto only, else 0).</summary>
         public int VesselCount { get; }
+        /// <summary>Spec 029b, Take only: the object id of what the hands hold (-1 for nothing), so a take is confirmed by a
+        /// new item only.</summary>
+        public int HeldId { get; }
 
         public static ItemSnapshot Gone => new ItemSnapshot(false, -1, Vector3.zero, 0);
     }

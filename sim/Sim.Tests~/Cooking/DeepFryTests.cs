@@ -157,6 +157,63 @@ namespace Worktown.Sim.Tests.Cooking
         }
 
         [Fact]
+        public void FryFryAgain_ShakeTwice_IsStillOnePointOne()
+        {
+            // Spec 029b 9.0: putting fries back into the basket and shaking again must not stack the bonus.
+            Item once = TestItems.Ok(Fry(Sticks(), 60f, shaken: true));
+            Item twice = TestItems.Ok(Fry(once, 60f, shaken: true));
+            Item thrice = TestItems.Ok(Fry(twice, 30f, shaken: true));
+            Assert.Equal(1f + DeepFry.ShakeBonus, once.QualityFactor, 5);
+            Assert.Equal(1f + DeepFry.ShakeBonus, twice.QualityFactor, 5);
+            Assert.Equal(1f + DeepFry.ShakeBonus, thrice.QualityFactor, 5);
+            Item plain = TestItems.Ok(Fry(TestItems.Ok(Fry(TestItems.Ok(Fry(Sticks(), 60f)), 60f)), 30f));
+            Assert.Equal(Math.Min(1f, ItemRater.Rate(plain).Quality * (1f + DeepFry.ShakeBonus)), ItemRater.Rate(thrice).Quality, 4);
+            // Greasy twice does not stack the penalty either; shaken after greasy still recovers.
+            Item greasy2 = TestItems.Ok(Fry(TestItems.Ok(Fry(Sticks(), 60f, greasy: true)), 60f, greasy: true));
+            Assert.Equal(1f - DeepFry.GreasyPenalty, greasy2.QualityFactor, 5);
+            Item recovered = TestItems.Ok(Fry(TestItems.Ok(Fry(Sticks(), 60f, greasy: true)), 60f, shaken: true));
+            Assert.Equal((1f - DeepFry.GreasyPenalty) * (1f + DeepFry.ShakeBonus), recovered.QualityFactor, 5);
+        }
+
+        [Fact]
+        public void FactorAfter_CapsAtTheBonusAndThePenalty_AndKeepsEverySingleFry()
+        {
+            Assert.Equal(1f, DeepFry.FactorAfter(1f, false, false));
+            Assert.Equal(DeepFry.FactorOf(true, false), DeepFry.FactorAfter(1f, true, false));
+            Assert.Equal(DeepFry.FactorOf(false, true), DeepFry.FactorAfter(1f, false, true));
+            Assert.Equal(DeepFry.FactorOf(true, true), DeepFry.FactorAfter(1f, true, true));
+            Assert.Equal(1f + DeepFry.ShakeBonus, DeepFry.FactorAfter(1f + DeepFry.ShakeBonus, true, false));
+            Assert.Equal(1f - DeepFry.GreasyPenalty, DeepFry.FactorAfter(1f - DeepFry.GreasyPenalty, false, true));
+        }
+
+        [Fact]
+        public void DonenessAt_FollowsTheCurve_AndDoneness_NeverGoesBack()
+        {
+            DonenessWindow w = TestItems.Potato.IdealDoneness;
+            FryCurve c = DeepFry.Fries;
+            Assert.Equal(0f, DeepFry.DonenessAt(c, w, 0f));
+            Assert.Equal(0f, DeepFry.DonenessAt(c, w, -5f));
+            Assert.Equal(w.Min * 0.5f, DeepFry.DonenessAt(c, w, c.WindowMinAt * 0.5f), 4);
+            Assert.Equal((w.Min + w.Max) * 0.5f, DeepFry.DonenessAt(c, w, (c.WindowMinAt + c.WindowMaxAt) * 0.5f), 4);
+            Assert.Equal(w.Max + DeepFry.BurnMargin, DeepFry.DonenessAt(c, w, c.BurntAt), 4);
+            Assert.Equal(1f, DeepFry.DonenessAt(c, w, 100000f));
+            // Doneness: from a start it continues along the curve, and a start past the curve never decreases.
+            float half = DeepFry.DonenessAt(c, w, c.WindowMinAt * 0.5f);
+            Assert.Equal(w.Min, DeepFry.Doneness(c, w, half, c.WindowMinAt * 0.5f), 3);
+            Assert.Equal(half, DeepFry.Doneness(c, w, half, 0f), 4);
+            Assert.Equal(1f, DeepFry.Doneness(c, w, 1f, 30f));
+            Assert.Equal(0f, DeepFry.Doneness(c, w, 0f, 0f));
+        }
+
+        [Fact]
+        public void CurveFor_PicksTheIngredientsCurve_ElseTheFallback()
+        {
+            Assert.Same(DeepFry.Fries, DeepFry.DefaultProfile.CurveFor("potato"));
+            Assert.Same(DeepFry.Falafel, DeepFry.DefaultProfile.CurveFor("falafel_mix"));
+            Assert.Same(DeepFry.Fries, DeepFry.DefaultProfile.CurveFor("tomato"));
+        }
+
+        [Fact]
         public void PreCookedFood_ContinuesAlongTheCurve()
         {
             Item once = TestItems.Ok(Fry(Sticks(), 90f));

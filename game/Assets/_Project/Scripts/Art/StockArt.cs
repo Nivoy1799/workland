@@ -29,9 +29,9 @@ namespace Worktown.Game.Art
         public const float ItemSetback = 0.17f;
 
         /// <summary>Where the items of each fridge row stand (m above the floor), top row first.</summary>
-        public static readonly float[] FridgeRowHeights = { 1.30f, FridgeDrawerTop };
+        public static readonly System.Collections.Generic.IReadOnlyList<float> FridgeRowHeights = System.Array.AsReadOnly(new[] { 1.30f, FridgeDrawerTop });
         /// <summary>Where the items of each shelf board stand (m above the floor), top board first.</summary>
-        public static readonly float[] ShelfRowHeights = { 1.32f, 0.88f, 0.44f };
+        public static readonly System.Collections.Generic.IReadOnlyList<float> ShelfRowHeights = System.Array.AsReadOnly(new[] { 1.32f, 0.88f, 0.44f });
 
         public static float DepthOf(StationKind kind) => kind == StationKind.Fridge ? FridgeDepth : ShelfDepth;
 
@@ -55,7 +55,7 @@ namespace Worktown.Game.Art
             int count = StockLayout.SlotsOf(kind).Count;
             if (columns == 0 || slot < 0 || slot >= count) return Vector3.zero;
             int row = slot / columns, column = slot % columns;
-            float[] heights = kind == StationKind.Fridge ? FridgeRowHeights : ShelfRowHeights;
+            System.Collections.Generic.IReadOnlyList<float> heights = kind == StationKind.Fridge ? FridgeRowHeights : ShelfRowHeights;
             float x = (column - (columns - 1) * 0.5f) * Pitch(kind);
             return new Vector3(x, heights[row], ItemSetback);
         }

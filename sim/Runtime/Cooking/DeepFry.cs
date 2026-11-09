@@ -116,6 +116,19 @@ namespace Worktown.Sim.Cooking
             return (shaken ? 1f + ShakeBonus : 1f) * (greasy ? 1f - GreasyPenalty : 1f);
         }
 
+        /// <summary>
+        /// Spec 029b: the quality factor of food fried once more. The input's factor times this fry's choices, capped to
+        /// 1 - <see cref="GreasyPenalty"/> .. 1 + <see cref="ShakeBonus"/>, so re-frying and shaking again never stacks the
+        /// bonus (and greasy twice never stacks the penalty). Every single fry is inside the cap, so it rates as before.
+        /// </summary>
+        public static float FactorAfter(float inputFactor, bool shaken, bool greasy)
+        {
+            float f = inputFactor * FactorOf(shaken, greasy);
+            if (f > 1f + ShakeBonus) return 1f + ShakeBonus;
+            if (f < 1f - GreasyPenalty) return 1f - GreasyPenalty;
+            return f;
+        }
+
         private static float Lerp(float a, float b, float t)
         {
             if (!(t > 0f)) return a;

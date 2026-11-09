@@ -37,6 +37,7 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Bowl | 0.18 | 0.21 | x1.15 |
 | Chef's knife | 0.30 | 0.35 | x1.15 |
 | Cutting board | 0.40 | 0.46 | x1.15 |
+| Fryer basket (with handle) | 0.45 | 0.52 | x1.15; added in spec 029b (the basket model of spec 029) |
 | Apple / onion | 0.08 | 0.12 | x1.5 |
 | Potato | 0.09 | 0.135 | x1.5 |
 | Tomato | 0.07 | 0.105 | x1.5 |
@@ -46,6 +47,7 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Wrap | 0.25 | same | over 15 cm: real size (the hand footprint is 0.25); added in spec 028 |
 | Seitan block | 0.12 | 0.18 | x1.5; added in spec 028 |
 | Falafel mix | 0.10 | 0.15 | x1.5; added in spec 028 |
+| Falafel ball | 0.035 | 0.0525 | x1.5; four to a portion; added in spec 029b (the ball of spec 029) |
 | Lettuce | 0.18 | same | over 15 cm: real size; added in spec 028 |
 | Cucumber | 0.20 | same | over 15 cm: real size; added in spec 028 |
 | Red cabbage | 0.16 | same | over 15 cm: real size; added in spec 028 |

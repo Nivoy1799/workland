@@ -43,7 +43,7 @@ namespace Worktown.Game.Tests
         public void Judge_Take_ConfirmsWhenTheHandsHoldSomething()
         {
             var empty = ItemSnapshot.Gone;
-            var holding = new ItemSnapshot(true, 3, Vector3.zero, 0);
+            var holding = FeelRules.HandsSnapshot(3, 50, true); // spec 029b: the hands with the new food's object id
             Assert.AreEqual(PredictionPhase.Pending, FeelRules.Judge(PredictionKind.Take, 3, empty, empty));
             Assert.AreEqual(PredictionPhase.Confirmed, FeelRules.Judge(PredictionKind.Take, 3, empty, holding));
             Assert.IsTrue(FeelRules.IsRelevantChange(empty, holding));
@@ -100,7 +100,10 @@ namespace Worktown.Game.Tests
             look.Confirm(_real, 0.05f);
             Assert.IsTrue(renderer.forceRenderingOff, "no second item in the hand while the copy is still flying");
             Assert.IsFalse(look.HasLanded(0.05f), "the copy keeps flying");
-            look.Confirm(_real, 0.2f); // landed (what its LateUpdate does then)
+            look.Step(0.1f); // spec 029b: the real frame path (LateUpdate), still on the arc
+            Assert.IsFalse(look == null, "the copy keeps flying until it lands");
+            Assert.IsTrue(renderer.forceRenderingOff);
+            look.Step(0.2f); // landed: LateUpdate's Finish
             Assert.IsTrue(look == null, "the copy goes once it has landed");
             _look = null;
             Assert.IsFalse(renderer.forceRenderingOff, "the real item shows again when the copy goes");

@@ -192,7 +192,7 @@ namespace Worktown.Sim.Cooking
                     g += Math.Min(1f, seconds / curve.WindowMaxAt);
                 }
                 g /= Math.Max(1, src.Components.Count);
-                factor = src.QualityFactor * DeepFry.FactorOf(shaken, greasy);
+                factor = DeepFry.FactorAfter(src.QualityFactor, shaken, greasy); // capped: re-frying never stacks the bonus (029b)
             }
             else
             {

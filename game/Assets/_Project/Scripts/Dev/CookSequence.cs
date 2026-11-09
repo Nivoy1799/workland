@@ -38,7 +38,7 @@ namespace Worktown.Game.Dev
             const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
             // Spec 028b: the potato and the onion come from the dry shelf's slots.
-            StockSlot potatoCrate = FindSlot("potato"), onionCrate = FindSlot("onion");
+            StockSlot potatoSlot = FindSlot("potato"), onionSlot = FindSlot("onion");
             var stoves = new List<Station>();
             foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
                 if (s.Kind == StationKind.Stove) stoves.Add(s);
@@ -51,7 +51,7 @@ namespace Worktown.Game.Dev
                 if (v.Kind == VesselKind.Pan) pan = v;
                 else if (v.Kind == VesselKind.Pot) pot = v;
             }
-            if (potatoCrate == null || onionCrate == null || stoveA == null || stoveB == null || pan == null || pot == null)
+            if (potatoSlot == null || onionSlot == null || stoveA == null || stoveB == null || pan == null || pot == null)
             {
                 Debug.LogWarning("[Demo] the potato or onion slot, two stoves, the pan or the pot not found");
                 actor.CountTimeout("cook: scene objects missing");
@@ -105,7 +105,7 @@ namespace Worktown.Game.Dev
             if (shot != null) yield return shot("pan-on-burner");
 
             // Spec 028b: the shelf slot's highlight and prompt before the click, then frames of the potato flying into the hand.
-            yield return Buy(actor, "take a potato", potatoCrate, laneZ, capture?.Before("potato-slot-highlight", "potato-take", frames));
+            yield return Buy(actor, "take a potato", potatoSlot, laneZ, capture?.Before("potato-slot-highlight", "potato-take", frames));
             if (shot != null) yield return shot("potato-in-hand");
             yield return actor.WalkTo(new Vector3(atB.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(atB, false, false);
@@ -116,14 +116,14 @@ namespace Worktown.Game.Dev
             if (shot != null) yield return shot("potato-next-to-pan");
 
             NetworkObject potObject = pot.NetworkObject;
-            foreach (StockSlot crate in new[] { potatoCrate, onionCrate })
+            foreach (StockSlot slot in new[] { potatoSlot, onionSlot })
             {
-                string id = crate.IngredientId;
-                yield return Buy(actor, "take " + id, crate, laneZ);
+                string id = slot.IngredientId;
+                yield return Buy(actor, "take " + id, slot, laneZ);
                 yield return actor.WalkTo(new Vector3(atB.x, 0f, laneZ), false, false);
                 yield return actor.WalkTo(atB, false, false);
                 // Spec 027b: the potato at normal speed, the onion in slow motion (the drop shows at 0.1 s frames).
-                bool slow = capture != null && crate == onionCrate;
+                bool slow = capture != null && slot == onionSlot;
                 if (slow) capture.TweenScale?.Invoke(TourRules.SlowMotionScale);
                 yield return actor.Use("put it into the pot", ContentPoint(pot), InteractionAction.PutInto,
                     () => me.DevSendUse(potObject, VesselRules.ActionUse),
@@ -229,6 +229,8 @@ namespace Worktown.Game.Dev
             }
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
+            yield return TakeWhileKnifeFliesIn(actor, capture, slot, knife, laneZ);
+            yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(slot.Anchor.x, 0f, laneZ), false, false);
             yield return capture.Shot("cucumber-fridge");
             yield return actor.Use("take a cucumber", slot.Anchor, InteractionAction.Buy, () => me.DevSendStation(slot.Station.Index, slot.Option),
@@ -255,6 +257,45 @@ namespace Worktown.Game.Dev
             if (!board.Title.Value.Contains("slice")) actor.CountTimeout("cook: the cucumber is not sliced (" + board.Title.Value + ")");
         }
 
+        /// <summary>
+        /// Spec 029b AC3 (028b review 1): a stock take clicked while the knife's pick-up is still pending. The knife click starts
+        /// its predicted arc; in the same frame the take starts as the old rules allowed (the rule now offers no take: the knife
+        /// counts as held, logged). The knife arrives first, which must not confirm the take: the server refuses the take
+        /// (hands full, nothing charged) and the cucumber copy settles back into its slot. Frames of it, then the knife goes
+        /// back to the prep worktop.
+        /// </summary>
+        private static IEnumerator TakeWhileKnifeFliesIn(TourActor actor, CookCapture capture, StockSlot slot, Knife knife, float laneZ)
+        {
+            PickupInteractor me = actor.Interactor;
+            Vector3 knifeHome = knife.transform.position;
+            yield return actor.WalkTo(new Vector3((slot.Anchor.x + knifeHome.x) * 0.5f, 0f, laneZ), false, false);
+            yield return actor.AimAt(knife.transform.position, 3f, () => me.CurrentAction == InteractionAction.PickUp);
+            if (me.CurrentAction != InteractionAction.PickUp)
+            {
+                actor.CountTimeout("cook: no knife pick-up to race the take against (" + me.CurrentAction + ")");
+                yield break;
+            }
+            if (capture.Frames != null) yield return capture.Frames("knife-pending-take", 1.2f);
+            me.DevClick(); // the knife's predicted pick-up
+            InteractionAction offered = InteractionRules.ActionFor(me.DevHands(), AimTarget.Crate(slot.IngredientId, 50));
+            Debug.Log("[Demo] take while the knife flies in: the hands read '" + me.DevHands().Name + "', a stock slot offers " + offered);
+            if (offered != InteractionAction.None) actor.CountTimeout("cook: a take was offered while the knife pick-up was pending");
+            me.DevTake(slot); // the take as the old rules let it go out
+            yield return new WaitForSecondsRealtime(1.5f);
+            string held = me.FindHeldPickup() != null ? me.FindHeldPickup().name : "nothing";
+            bool knifeHeld = me.FindHeldPickup() != null && me.FindHeldPickup().TryGetComponent(out Knife _);
+            Debug.Log("[Demo] take while the knife flies in: the hands hold " + held + (knifeHeld ? " (the knife, no swap)" : " (SWAP)"));
+            if (!knifeHeld) actor.CountTimeout("cook: the take swapped the knife's identity (" + held + ")");
+            yield return capture.Shot("knife-pending-take-after");
+            PlaceSurface prep = SurfaceUnder(knifeHome);
+            if (prep != null && knifeHeld)
+            {
+                int spot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
+                yield return actor.Use("put the knife back", prep.SpotWorldPosition(spot), InteractionAction.Place,
+                    () => me.DevSendPlace(prep.Index, spot));
+            }
+        }
+
         /// <summary>Spec 029: seconds between the shots while the basket fries, and the longest it waits for a zone.</summary>
         public const float FryShotEvery = 5f;
         public const float FryWait = 60f;
@@ -264,8 +305,9 @@ namespace Worktown.Game.Dev
         /// Spec 029 AC5/AC6: fries from potato to the counter. A potato from the shelf onto the board, the knife cuts sticks (two
         /// strokes, a turn, a stroke), the knife goes back, the sticks go into basket 0, the fryer goes on, the basket goes down
         /// (frames of the arc), the ring fills (a shot every <see cref="FryShotEvery"/> s with the zone), one shake in the good
-        /// window, the basket comes up at Perfect (frames of the arc and the drips), the fries come out once drained, onto a plate
-        /// on the plating worktop (the fries box), and the plate is served at the counter (the orders waiting are logged first).
+        /// window, the basket comes up at Perfect (frames of the arc and the drips); spec 029b: once drained the cook fetches a
+        /// plate and tips the fries from the basket onto it (the fries box on the held plate), and the plate is served at the
+        /// counter (the orders waiting are logged first).
         /// </summary>
         private static IEnumerator FryFries(TourActor actor, CookCapture capture, float laneZ)
         {
@@ -342,7 +384,7 @@ namespace Worktown.Game.Dev
             yield return actor.Use("put the sticks into the basket", ContentPoint(basket), InteractionAction.PutInto,
                 () => me.DevSendUse(basketObject, VesselRules.ActionUse), capture.Before("basket-aim", "basket-in", frames));
             yield return actor.Use("lower the basket", lower.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(fryer.Index, FryerRules.BasketOption(0)), capture.Before("basket-button-aim", "basket-lower", frames));
+                () => me.DevSendStation(fryer.Index, FryerRules.LowerOption(0)), capture.Before("basket-button-aim", "basket-lower", frames));
             float start = Time.unscaledTime;
             Debug.Log("[Demo] fries: the basket is down (" + Time.time.ToString("0.0") + " s)");
             yield return actor.AimAt(ContentPoint(basket) + Vector3.up * WatchAbove, 0.8f);
@@ -379,26 +421,28 @@ namespace Worktown.Game.Dev
             }
             if (!shaken || basket.Zone != HeatZone.Perfect) actor.CountTimeout("cook: the basket did not reach Perfect with a shake (" + basket.Zone + ")");
             yield return actor.Use("raise the basket", lower.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(fryer.Index, FryerRules.BasketOption(0)), capture.Before("raise-aim", "basket-raise", frames));
+                () => me.DevSendStation(fryer.Index, FryerRules.RaiseOption(0)), capture.Before("raise-aim", "basket-raise", frames));
             yield return actor.AimAt(ContentPoint(basket), 0.2f);
             if (capture.Frames != null) yield return capture.Frames("drain-drips", DrainFramesSeconds);
             float drainStart = Time.unscaledTime;
             while (FryerRules.StateOf(basket.Mode.Value) != BasketState.Raised && Time.unscaledTime - drainStart < 5f) yield return null;
             yield return new WaitForSecondsRealtime(0.3f);
             yield return capture.Shot("drained");
-            yield return actor.Use("take the fries out", ContentPoint(basket), InteractionAction.Take,
-                () => me.DevSendUse(basketObject, VesselRules.ActionUse));
-            Debug.Log("[Demo] fries: in the hands: " + HeldName(me));
-            yield return capture.Shot("fries-in-hand");
+            Debug.Log("[Demo] fries: the basket's label reads '" + string.Join(" + ", basket.Names) + "'");
 
-            // Onto a plate at the plating table (the fries box), then to the counter.
+            // Spec 029b: fetch a plate from the plating worktop, and tip the fries from the raised basket onto the held plate.
             yield return actor.LevelView();
+            Debug.Log("[Demo] fries: fryer to the nearest plate " + TourActor.FlatDistance(fryer.transform.position, plate.transform.position).ToString("0.00") + " m");
             yield return actor.WalkTo(new Vector3(plate.transform.position.x, 0f, laneZ), false, false);
-            yield return actor.Use("put the fries on the plate", ContentPoint(plate), InteractionAction.PutInto,
-                () => me.DevSendUse(plateObject, VesselRules.ActionUse), capture.Before("plate-aim", "fries-onto-plate", frames));
-            yield return actor.AimAt(ContentPoint(plate), 0.6f);
-            yield return capture.Shot("fries-box-on-plate");
-            yield return actor.Use("pick up the plate", ContentPoint(plate), InteractionAction.PickUp, () => me.DevSendPickup(plateObject));
+            yield return actor.Use("pick up a plate", ContentPoint(plate), InteractionAction.PickUp, () => me.DevSendPickup(plateObject));
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atFryer, false, false);
+            yield return actor.Use("tip the fries onto the plate", ContentPoint(basket), InteractionAction.Take,
+                () => me.DevSendUse(basketObject, VesselRules.ActionUse), capture.Before("tip-aim", "fries-tipped-onto-plate", frames));
+            Debug.Log("[Demo] fries: the held plate holds '" + plate.Title.Value + "', the basket " + basket.ContentCount + " portions");
+            if (basket.ContentCount != 0 || plate.ContentCount == 0) actor.CountTimeout("cook: the fries were not tipped onto the plate");
+            yield return actor.Look(0f, -35f, 0.6f);
+            yield return capture.Shot("fries-box-on-held-plate");
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
             LogOrders();
@@ -440,13 +484,15 @@ namespace Worktown.Game.Dev
             var bubbles = basket.GetComponent<Worktown.Game.Art.FryerBubbles>();
             var view = basket.GetComponent<Worktown.Game.Art.BasketView>();
             Debug.Log("[Fry] " + what + " at " + at.ToString("0.0") + " s: " + Describe(basket) + ", " + FryerRules.StateOf(basket.Mode.Value)
-                + ", bubbles " + (bubbles != null ? bubbles.Rate.ToString("0") : "-") + "/s, pose " + (view != null ? view.Pose.ToString("0.00") : "-"));
+                + ", bubbles " + (bubbles != null ? bubbles.Rate.ToString("0") : "-") + "/s, pose " + (view != null ? view.Pose.ToString("0.00") : "-")
+                + ", label '" + string.Join(" + ", basket.Names) + "'");
         }
 
         /// <summary>Spec 027c: the zone, progress and ring of the pan and pot, for the tour log.</summary>
         private static void LogHeat(string what, float at, Vessel pan, Vessel pot)
         {
-            Debug.Log("[Heat] " + what + " at " + at.ToString("0.0") + " s: pan " + Describe(pan) + "; pot " + Describe(pot));
+            Debug.Log("[Heat] " + what + " at " + at.ToString("0.0") + " s: pan " + Describe(pan) + " '" + string.Join(" + ", pan.Names)
+                + "'; pot " + Describe(pot) + " '" + string.Join(" + ", pot.Names) + "'");
         }
 
         private static string Describe(Vessel v)

@@ -83,7 +83,7 @@ namespace Worktown.Game.Art
             Small(ArtKey.FoodPieceStick, 0.09f),
             Small(ArtKey.FoodPieceCube, 0.03f),
             // Spec 029: a falafel ball (3.5 cm) and the empty fries box (the same box as the fries portion).
-            Small(ArtKey.FoodFalafelBall, 0.035f),
+            Small(ArtKey.FoodFalafelBall, 0.035f, "Falafel ball"), // spec 029b: the guide row
             Small(ArtKey.PropFriesBox, 0.14f, "Fries (portion)"),
 
             // Spec 028: the street-food stock. Small things are x1.5; the bigger ones (over 15 cm) stay at their real size, because
@@ -108,7 +108,7 @@ namespace Worktown.Game.Art
             Cookware(ArtKey.ToolCuttingBoard, 0.40f, "Cutting board"),
             Cookware(ArtKey.ToolKnife, 0.30f, "Chef's knife"),
             // Spec 029: a fryer basket with its handle (no guide row yet).
-            Cookware(ArtKey.ToolFryerBasket, BasketReal, null),
+            Cookware(ArtKey.ToolFryerBasket, BasketReal, "Fryer basket (with handle)"), // spec 029b: the guide row
 
             // People.
             World(ArtKey.CharacterPlayerMale, 1.75f, SizeAxis.Height, Person),
