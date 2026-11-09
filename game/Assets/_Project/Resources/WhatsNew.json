@@ -565,6 +565,27 @@
         "Take a card payment with one click: does it beep?",
         "Open the summary (F3): do you see tips, reviews and the missed guests?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-033",
+      "date": "2026-11-09",
+      "title": "Drinks: cups, the dispenser and a fill line",
+      "items": [
+        "A drink dispenser on the front counter, left of the serving counter: lemonade, iced tea and soda",
+        "Click the cup stack for a cup, then hold left click on a tap: the cup goes under it and fills while you hold",
+        "Stop at the line on the cup (about 1.8 s). Too little is half-full, over the brim it spills on the counter",
+        "Click the lid stack to put a lid on; a drink is sold with its lid on",
+        "About half the guests order a drink with their food ('+ lemonade' in the bubble and on the rail); hand over both, in any order, then they pay for both at once",
+        "A cup and its drink are charged once, when you let go of the tap; a top-up of the same drink pays no second cup",
+        "Third person: tap E at the dispenser for a cup or a lid, hold E to pour from the nearest tap"
+      ],
+      "test": [
+        "Fill a lemonade to the line: does the level rise from the moment you press, and stop where you let go?",
+        "Hold too long: does it splash and leave a puddle? Is the drink worth less?",
+        "Put a lid on an empty cup: is it refused? Lid a filled one: does it click?",
+        "Serve a wrap to a guest who wants a lemonade: does it wait for the drink, then go to the register with one bill?",
+        "Watch your money: is a pour charged once, cup plus drink, when you let go?"
+      ]
     }
   ]
 }

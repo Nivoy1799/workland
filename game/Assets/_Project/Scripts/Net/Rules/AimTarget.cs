@@ -97,6 +97,17 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>
+        /// Spec 033: a tool of the drink dispenser (<see cref="DrinkRules"/>: a tap, the cup stack or the lid stack): <see cref="Option"/>
+        /// the tool, <see cref="StoveFlags"/> the dispenser's byte (who pours, the spill; the interactor clears its own pour's bit),
+        /// <see cref="Name"/> the tap's drink, <see cref="Price"/> the price shown (a cup with a full pour of the drink, or -1).
+        /// </summary>
+        public static AimTarget DrinkTool(int tool, byte flags, string name, long price)
+        {
+            return new AimTarget(AimKind.Station, StationKind.DrinkDispenser, default, 0, null, tool, flags, name, price, PlaceSpots.None,
+                false, false);
+        }
+
+        /// <summary>
         /// Spec 032: a slot of the register (Shop.RegisterRules: <see cref="Option"/> the slot), with what clients see of the payment:
         /// the head payer's packed short in <see cref="Price"/> (RegisterRules.PackPayment) and the change tray's sum in
         /// <see cref="ContentCount"/> (as this player sees it, its own clicks first).

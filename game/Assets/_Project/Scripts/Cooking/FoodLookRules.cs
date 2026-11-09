@@ -25,6 +25,7 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static FoodLook From(Item item)
         {
+            if (Drinks.IsCup(item)) return CupLook(item); // spec 033
             if (IsBuildTop(item)) return BuildLook(item); // spec 031
             FoodLook look = Walk(item, out Item node, out bool hasShape);
             if (node != null && look.Kind == FoodLook.KindMixed && !hasShape && node.Inputs.Count > 0)
@@ -39,6 +40,7 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static IReadOnlyList<FoodLook> PartsOf(Item item)
         {
+            if (Drinks.IsCup(item)) return System.Array.Empty<FoodLook>(); // spec 033: a cup has no parts
             if (IsBuildTop(item)) return BuildParts(item); // spec 031: the first layers of an open build
             FoodLook outer = Walk(item, out Item node, out _);
             if (node == null) return System.Array.Empty<FoodLook>();
@@ -79,9 +81,23 @@ namespace Worktown.Game.Cooking
             return parts;
         }
 
+        /// <summary>
+        /// Spec 033: the look of a cup: <see cref="FoodLook.KindLidded"/> with its lid, else <see cref="FoodLook.KindCup"/>; the drink in
+        /// the ingredient byte (<see cref="DrinkRules.DrinkByte"/>), the fill bucket in the shape byte (<see cref="DrinkRules.LevelOf(string)"/>).
+        /// </summary>
+        public static FoodLook CupLook(Item cup)
+        {
+            return new FoodLook(DrinkRules.DrinkByte(Drinks.DrinkOf(cup)), DrinkRules.LevelOf(Drinks.LevelOf(cup)), 0, 0,
+                Drinks.IsLidded(cup) ? FoodLook.KindLidded : FoodLook.KindCup, 0);
+        }
+
+        /// <summary>Spec 033: a cup's look (open or lidded).</summary>
+        public static bool IsCup(FoodLook look) => look.Kind == FoodLook.KindCup || look.Kind == FoodLook.KindLidded;
+
         /// <summary>Spec 031: a look that is finished (a plate, or a build in paper, a box or a bag): it goes on nothing but the counter.</summary>
         public static bool IsFinished(FoodLook look) =>
-            look.Kind == FoodLook.KindPlated || look.Kind == FoodLook.KindWrapped || look.Kind == FoodLook.KindBoxed || look.Kind == FoodLook.KindBagged;
+            look.Kind == FoodLook.KindPlated || look.Kind == FoodLook.KindWrapped || look.Kind == FoodLook.KindBoxed || look.Kind == FoodLook.KindBagged
+            || look.Kind == FoodLook.KindLidded; // spec 033: a lidded drink goes only to the counter
 
         /// <summary>Spec 031: a look of a build (open, folded, wrapped, boxed or bagged).</summary>
         public static bool IsBuild(FoodLook look) => look.Kind >= FoodLook.KindBuild && look.Kind <= FoodLook.KindBagged;

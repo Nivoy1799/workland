@@ -81,6 +81,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Fryer: return stationName + ": fry in first person (V)";
                 // Spec 030: the griddle's knob and spots are aimed at.
                 case StationKind.Griddle: return stationName + ": grill in first person (V)";
+                // Spec 033: E takes a cup or lids one, holding E pours from the nearest tap.
+                case StationKind.DrinkDispenser: return stationName + ": E take a cup or a lid, hold E to pour";
                 default: return stationName;
             }
         }

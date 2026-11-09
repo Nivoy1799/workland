@@ -158,6 +158,8 @@ namespace Worktown.Game.UI
         private string CardText(int ticket, int card)
         {
             string text = Menu.NameOf(CustomerRules.TicketDish(ticket));
+            // Spec 033: a dish handed over already is shown done (Sage); the open drink line follows the modifiers.
+            if (CustomerRules.TicketDishServed(ticket)) text = "<color=#" + DoneColour + ">" + text + "</color>";
             for (int j = 0; j < ModLines; j++)
             {
                 int k = card * ModLines + j;
@@ -165,8 +167,13 @@ namespace Worktown.Game.UI
                 if (mod == null) continue;
                 text += "\n<color=#" + (_struck[k] ? NoColour : ExtraColour) + ">" + mod + "</color>";
             }
+            string drink = CustomerRules.DrinkLine(CustomerRules.TicketDrink(ticket));
+            if (drink.Length > 0) text += "\n<color=#" + DrinkColour + ">" + drink + "</color>";
             return text + "\n" + CustomerRules.TicketMinutes(ticket) + " min";
         }
+
+        private static readonly string DoneColour = ColorUtility.ToHtmlStringRGB(Palette.Sage);
+        private static readonly string DrinkColour = ColorUtility.ToHtmlStringRGB(Palette.DeepBlue);
 
         private static readonly string ExtraColour = ColorUtility.ToHtmlStringRGB(Palette.Leaf);
         private static readonly string NoColour = ColorUtility.ToHtmlStringRGB(Palette.Terracotta);

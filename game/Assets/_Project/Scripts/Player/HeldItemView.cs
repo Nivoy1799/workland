@@ -94,7 +94,44 @@ namespace Worktown.Game.Player
             }
             Vector3 middle = eye.TransformPoint(inView);
             pose = new Pose(middle - rotation * (centre * scale), rotation);
+            // Spec 033: while pouring, the cup moves from the hand to under the tap (an ease-out, feel.md 2) and back after the release.
+            float share = PourShare(Time.unscaledTime);
+            if (share > 0f)
+            {
+                Vector3 bottom = new Vector3(local.center.x, local.min.y, local.center.z);
+                Vector3 lossyBottom = Vector3.Scale(lossy, bottom);
+                var under = new Pose(_pourPose.position - _pourPose.rotation * lossyBottom, _pourPose.rotation);
+                pose = new Pose(Vector3.Lerp(pose.position, under.position, share), Quaternion.Slerp(pose.rotation, under.rotation, share));
+                scale = Mathf.Lerp(scale, 1f, share);
+            }
             return true;
+        }
+
+        // Spec 033: the cup under a tap while pouring (first person; others see it in the hand).
+        private bool _pouring;
+        private Pose _pourPose;
+        private float _pourChanged = float.NegativeInfinity;
+        private float _pourShareAtChange;
+
+        /// <summary>
+        /// Spec 033: the held cup goes under a tap (<paramref name="on"/>, its bottom at <paramref name="under"/>) and comes back on the
+        /// release; the move takes <see cref="Worktown.Game.Art.DrinkArtRules.UnderTapSeconds"/> and starts where it is.
+        /// </summary>
+        public void SetPourPose(bool on, Pose under)
+        {
+            if (on) _pourPose = under;
+            if (on == _pouring) return;
+            float now = Time.unscaledTime;
+            _pourShareAtChange = PourShare(now);
+            _pouring = on;
+            _pourChanged = now;
+        }
+
+        /// <summary>Spec 033: how far (0..1) the held cup is drawn towards the tap now.</summary>
+        public float PourShare(float now)
+        {
+            float t = Worktown.Game.Art.DrinkArtRules.UnderTapShare(now - _pourChanged, Worktown.Game.Art.DrinkArtRules.UnderTapSeconds);
+            return _pouring ? Mathf.Lerp(_pourShareAtChange, 1f, t) : Mathf.Lerp(_pourShareAtChange, 0f, t);
         }
 
         /// <summary>Spec 031b: the held item's size (m, its model's diagonal) and drawn scale in the view pose asked last (tour log).</summary>

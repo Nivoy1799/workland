@@ -30,6 +30,9 @@ namespace Worktown.Game.Cooking
         Assembly,
         /// <summary>Spec 032: the register on the counter: the change tray's coins and notes, take back, hand over and the card
         /// terminal are its slots (Shop.RegisterRules).</summary>
-        Register
+        Register,
+        /// <summary>Spec 033: the drink dispenser on the front counter: three taps held to pour into the cup in the hands, the cup
+        /// stack and the lid stack are its slots (<see cref="DrinkRules"/>).</summary>
+        DrinkDispenser
     }
 }

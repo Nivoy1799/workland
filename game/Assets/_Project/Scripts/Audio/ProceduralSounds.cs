@@ -459,6 +459,71 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>
+        /// Spec 033: a tap pouring into a cup (loop, 1 s): a bright, gurgling band noise (the stream) over a low bubbling body, faded at
+        /// the ends so the loop has no click.
+        /// </summary>
+        public static float[] Pour()
+        {
+            var rng = new System.Random(3301);
+            var s = new float[SampleRate];
+            float band = 0f, low = 0f, previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                band += (high - band) * 0.35f;
+                low += (noise - low) * 0.05f;
+                float gurgle = 0.75f + 0.25f * (float)Math.Sin(2.0 * Math.PI * 11.0 * t) * (float)Math.Sin(2.0 * Math.PI * 3.0 * t);
+                float edge = Math.Min(1f, Math.Min(t, 1f - t) / 0.03f);
+                s[i] = (band * 0.28f + low * 0.6f) * gurgle * edge;
+            }
+            return s;
+        }
+
+        /// <summary>Spec 033: a plastic lid snapping onto a cup: a short, dry click with a hollow body.</summary>
+        public static float[] LidClick()
+        {
+            var rng = new System.Random(3302);
+            var s = new float[(int)(SampleRate * 0.09f)];
+            float previous = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                float snap = high * 0.3f * (float)Math.Exp(-t / 0.004f);
+                float body = (float)Math.Sin(2.0 * Math.PI * 820.0 * t) * 0.25f * (float)Math.Exp(-t / 0.018f);
+                s[i] = (snap + body) * Math.Min(1f, t / 0.0008f);
+            }
+            return s;
+        }
+
+        /// <summary>Spec 033: a cup running over: a wet splash (a noise burst falling in pitch) and a few drops after it.</summary>
+        public static float[] Splash()
+        {
+            var rng = new System.Random(3303);
+            var s = new float[(int)(SampleRate * 0.45f)];
+            float band = 0f;
+            float[] dropsAt = { 0.18f, 0.27f, 0.36f };
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float k = 0.6f - 0.5f * Math.Min(1f, t / 0.25f); // the splash darkens as it falls
+                band += (noise - band) * k;
+                float env = (float)Math.Exp(-t / 0.09f) * Math.Min(1f, t / 0.003f);
+                float drops = 0f;
+                foreach (float at in dropsAt)
+                    if (t >= at) drops += (float)Math.Sin(2.0 * Math.PI * 1300.0 * (t - at)) * 0.12f * (float)Math.Exp(-(t - at) / 0.012f);
+                s[i] = band * 0.5f * env + drops;
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -494,11 +559,15 @@ namespace Worktown.Game.Audio
                 case SoundKey.Paper: return Paper();
                 case SoundKey.Clink: return Clink(); // spec 032
                 case SoundKey.Beep: return Beep();
+                case SoundKey.Pour: return Pour(); // spec 033
+                case SoundKey.LidClick: return LidClick();
+                case SoundKey.Splash: return Splash();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }
 
-        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer || key == SoundKey.Squeeze;
+        public static bool IsLoop(SoundKey key) => key == SoundKey.Sizzle || key == SoundKey.Bubble || key == SoundKey.Fryer || key == SoundKey.Squeeze
+            || key == SoundKey.Pour; // spec 033
 
         public static AudioClip CreateClip(SoundKey key)
         {

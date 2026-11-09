@@ -41,6 +41,7 @@ namespace Worktown.Game.Net.Rules
         private static InteractionAction VesselAction(Held held, AimTarget target)
         {
             bool hasFood = target.ContentCount > 0;
+            if (held.IsCup) return InteractionAction.None; // spec 033: a cup goes into no cookware (the sim's ops refuse it)
             if (target.Vessel == VesselKind.Basket) return BasketAction(held, target, hasFood);
             if (target.Vessel == VesselKind.Griddle) return GriddleAction(held, target, hasFood); // spec 030
             if (target.Vessel == VesselKind.Assembly) return BuildAction(held, target); // spec 031
@@ -153,6 +154,53 @@ namespace Worktown.Game.Net.Rules
             }
         }
 
+        // ---- Spec 033: the drink dispenser ----
+
+        /// <summary>
+        /// Spec 033, a tool of the drink dispenser: a tap fills the cup in the hands (an empty cup, or an open cup of its drink with room;
+        /// the tap free), the cup stack gives empty hands a cup, the lid stack lids a filled open cup. A pick-up in flight gets nothing.
+        /// </summary>
+        private static InteractionAction DrinkToolAction(Held held, AimTarget target)
+        {
+            if (held.IsPending) return InteractionAction.None;
+            CookOutcome why = DrinkCheck(held, target);
+            if (why != CookOutcome.Ok) return InteractionAction.None;
+            if (DrinkRules.IsTap(target.Option)) return InteractionAction.Fill;
+            if (target.Option == DrinkRules.CupTool) return InteractionAction.Take;
+            return target.Option == DrinkRules.LidTool ? InteractionAction.Lid : InteractionAction.None;
+        }
+
+        /// <summary>Spec 033: a dispenser tool as the server would answer it now, or Ok.</summary>
+        private static CookOutcome DrinkCheck(Held held, AimTarget target)
+        {
+            int tool = target.Option;
+            if (DrinkRules.IsTap(tool))
+                return DrinkRules.CanPour(held.IsCup, held.CupLidded, held.CupTap, held.CupLevel, tool, target.StoveFlags);
+            if (tool == DrinkRules.CupTool) return DrinkRules.CanTakeCup(held.IsHolding);
+            if (tool == DrinkRules.LidTool) return DrinkRules.CanLid(held.IsCup, held.CupLidded, held.CupLevel);
+            return CookOutcome.InvalidOption;
+        }
+
+        /// <summary>Spec 033: why a dispenser tool does nothing now (shown grey), or null.</summary>
+        public static string DrinkToolReason(Held held, AimTarget target)
+        {
+            if (held.IsPending) return null;
+            switch (DrinkCheck(held, target))
+            {
+                case CookOutcome.NeedsCup: return held.IsHolding ? "That needs a cup" : "Take a cup first";
+                case CookOutcome.CupClosed: return "It has its lid";
+                case CookOutcome.OtherDrink: return "That cup has another drink";
+                case CookOutcome.CupFull: return "The cup is full";
+                case CookOutcome.NotFilled: return "Fill the cup first";
+                case CookOutcome.DispenserBusy: return "Someone is using that tap";
+                case CookOutcome.HandsFull: return null; // the cup stack with full hands: nothing to say
+                default: return null;
+            }
+        }
+
+        /// <summary>Spec 033: "Hold · fill lemonade" (like the sauce's squeeze; what it costs is charged on the release).</summary>
+        public static string FillPrompt(string drink) => HoldKey + " · fill " + (string.IsNullOrEmpty(drink) ? "the cup" : drink);
+
         /// <summary>Spec 032: why a register slot does nothing now (RegisterRules.Reason), or null when it acts.</summary>
         private static string RegisterReason(AimTarget target) =>
             Worktown.Game.Shop.RegisterRules.Reason(target.Option, (ushort)(target.Price < 0 ? 0 : target.Price), target.ContentCount);
@@ -218,6 +266,8 @@ namespace Worktown.Game.Net.Rules
                 case StationKind.Counter: return SellsAtCounter(held) ? InteractionAction.Sell : InteractionAction.None;
                 case StationKind.Assembly: // spec 031: a dispenser or the packaging rack; the board's body itself does nothing
                     return target.Vessel == VesselKind.Assembly ? ToolAction(held, target) : InteractionAction.None;
+                case StationKind.DrinkDispenser: // spec 033: a tap, the cup stack or the lid stack; the body itself does nothing
+                    return target.Option >= 0 && target.Option < DrinkRules.ToolCount ? DrinkToolAction(held, target) : InteractionAction.None;
                 case StationKind.Register: // spec 032: a slot of the register (any hands: the food is already handed over)
                     return target.Option >= 0 && target.Option < Worktown.Game.Shop.RegisterRules.SlotCount && RegisterReason(target) == null
                         ? InteractionAction.Pay : InteractionAction.None;
@@ -231,6 +281,7 @@ namespace Worktown.Game.Net.Rules
         /// </summary>
         public static bool SellsAtCounter(Held held)
         {
+            if (held.IsCup) return held.CupLidded; // spec 033: a drink is sold with its lid on
             if (held.IsFood) return true;
             return held.IsVessel && held.Vessel == VesselKind.Plate && held.ContentCount > 0;
         }
@@ -243,6 +294,7 @@ namespace Worktown.Game.Net.Rules
         public static bool Fits(Held held, AimTarget target)
         {
             if (!held.IsFood) return false;
+            if (held.IsCup) return target.Kind == AimKind.Station && target.Station == StationKind.Counter && held.CupLidded; // spec 033
             if (target.Kind == AimKind.Station) return target.Station == StationKind.Counter;
             if (target.Kind != AimKind.Vessel) return false;
             // 031b review: a build goes into no pan, pot, basket, griddle, cutting board or bowl (the sim's ops forbid builds); only
@@ -277,6 +329,9 @@ namespace Worktown.Game.Net.Rules
                 case AimKind.Station:
                     if (target.Station == StationKind.Assembly) return target.Vessel == VesselKind.Assembly ? ToolReason(target) : null; // spec 031
                     if (target.Station == StationKind.Register) return RegisterReason(target); // spec 032
+                    if (target.Station == StationKind.DrinkDispenser) // spec 033
+                        return target.Option >= 0 && target.Option < DrinkRules.ToolCount ? DrinkToolReason(held, target) : null;
+                    if (target.Station == StationKind.Counter && held.IsCup) return "Put a lid on it first"; // spec 033
                     if (target.Station != StationKind.Counter || !held.IsVessel) return null;
                     if (held.Vessel == VesselKind.Plate) return "Put food on the plate first";
                     return held.HasContents ? "Pour it onto a plate first" : null;
@@ -286,6 +341,7 @@ namespace Worktown.Game.Net.Rules
 
         private static string VesselReason(Held held, AimTarget target)
         {
+            if (held.IsCup) return null; // spec 033: a cup goes into no cookware (nothing to explain)
             if (target.Vessel == VesselKind.Assembly) // spec 031
             {
                 if (!held.IsFood) return null;
@@ -321,6 +377,8 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Fold: return Click("fold " + TakeWhat(target));
                 case InteractionAction.Pack: return PackPrompt(BuildRules.PackagingOf(target.Option), target.Price);
                 case InteractionAction.Pay: return Click(Worktown.Game.Shop.RegisterRules.ActionWords(target.Option, target.ContentCount)); // spec 032
+                case InteractionAction.Fill: return FillPrompt(target.Name); // spec 033
+                case InteractionAction.Lid: return Click("put a lid on it");
                 case InteractionAction.Flip: return Click("flip " + TakeWhat(target)); // spec 030
                 case InteractionAction.Cut: return "Drag down · cut   Right click · turn";
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));
@@ -332,6 +390,8 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Buy:
                     string what = string.IsNullOrEmpty(target.Name) ? "one" : target.Name;
                     return Click("take " + what + (target.Price >= 0 ? " (" + EconomyRules.Money(target.Price) + ")" : string.Empty));
+                case InteractionAction.Take when target.Kind == AimKind.Station && target.Station == StationKind.DrinkDispenser:
+                    return Click("take a cup"); // spec 033: the cup stack (its price comes with the first pour)
                 case InteractionAction.Take:
                     // Spec 029: a basket that still drips gives greasy food; the prompt says so.
                     bool dripping = target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Draining;

@@ -783,12 +783,108 @@ namespace Worktown.Game.Dev
             Debug.Log("[Demo] wrap: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("falafel wrap")) actor.CountTimeout("cook: the falafel wrap was not sold");
             if (!latest.Contains("Falafel wrap order: exact order")) Debug.LogWarning("[Demo] wrap: no exact Falafel wrap order was served");
-            // Spec 032: the guest takes the wrap (frames of the hand-off), then pays cash with change.
+            // Spec 033: the guest ordered a lemonade with it: fill it to the line, lid it and serve it; then the guest takes both.
+            yield return PourLemonade(actor, capture, laneZ, counter);
+            // Spec 032: the guest takes its order (frames of the hand-off), then pays cash with change.
             if (capture.Frames != null) yield return capture.Frames("wrap-handoff", 0.8f);
             yield return PayAtRegister(actor, capture, laneZ, "wrap");
 
             // 7. Spec 031b item 5: box packing: a lettuce on the empty board (no bread: a box needs no fold), into a box, served.
             yield return PackABox(actor, capture, laneZ, board, spot, lettuceSlot);
+        }
+
+        /// <summary>Spec 033: how long the tour holds the lemonade tap (s): 360 ml at 200 ml/s, the middle of the fill line.</summary>
+        public const float PourSeconds = 1.8f;
+
+        /// <summary>
+        /// Spec 033 AC4: the wrap guest's lemonade. A cup from the stack (frames of it flying into the hand), the lemonade tap held for
+        /// <see cref="PourSeconds"/> (frames of the cup under the tap, the stream and the level rising to the line), the lid from the lid
+        /// stack (frames), a shot of the lidded cup in the hand, then served at the counter (frames of the reward). The observer sees the
+        /// stream from the guests' side.
+        /// </summary>
+        private static IEnumerator PourLemonade(TourActor actor, CookCapture capture, float laneZ, Station counter)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            Station drinks = null;
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+                if (s.Kind == StationKind.DrinkDispenser) drinks = s;
+            StockSlot cups = null, lemonade = null, lids = null;
+            if (drinks != null)
+            {
+                drinks.TryGetSlot(DrinkRules.CupTool, out cups);
+                drinks.TryGetSlot(0, out lemonade);
+                drinks.TryGetSlot(DrinkRules.LidTool, out lids);
+            }
+            if (drinks == null || cups == null || lemonade == null || lids == null)
+            {
+                Debug.LogWarning("[Demo] drinks: the dispenser or its tools are missing");
+                actor.CountTimeout("cook: drink dispenser missing");
+                yield break;
+            }
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(drinks.transform.position.x, 0f, laneZ), false, false);
+            yield return capture.Shot("drinks-dispenser");
+            yield return actor.Use("take a cup", cups.Anchor, InteractionAction.Take, () => me.DevTakeCup(drinks),
+                capture.Before("cup-aim", "cup-take", frames));
+            float until = Time.unscaledTime + 3f;
+            while (HeldCup(me) == null && Time.unscaledTime < until) yield return null;
+            if (HeldCup(me) == null) actor.CountTimeout("cook: no cup in the hands");
+            yield return actor.LevelView();
+            yield return capture.Shot("cup-in-hand");
+
+            // The tap: hold it, the cup goes under it and the lemonade rises to the line.
+            yield return actor.AimAt(lemonade.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Fill);
+            yield return capture.Shot("lemonade-aim");
+            if (me.CurrentAction != InteractionAction.Fill) Debug.LogWarning("[Demo] drinks: the tap offers " + me.CurrentAction);
+            Debug.Log("[Demo] drinks: press the lemonade tap: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
+            me.DevSqueezePress(lemonade);
+            float pressed = Time.unscaledTime;
+            var tap = lemonade.GetComponent<Worktown.Game.Art.DrinkTapView>();
+            if (capture.Frames != null) yield return capture.Frames("lemonade-pour", PourSeconds + 0.4f);
+            while (Time.unscaledTime - pressed < PourSeconds) yield return null;
+            Food cup = HeldCup(me);
+            float drawn = cup != null && cup.Visual != null ? cup.Visual.DrawnFill : -1f;
+            me.DevSqueezeRelease();
+            float released = Time.unscaledTime;
+            while ((me.DevSqueezeBusy || (cup != null && cup.Look.Value.Shape == DrinkRules.LevelEmpty)) && Time.unscaledTime - released < 3f)
+                yield return null;
+            Debug.Log("[Demo] drinks: held the tap " + (released - pressed).ToString("0.00") + " s (drawn level " + drawn.ToString("0.00")
+                + ", the tap drew its stream from frame " + (tap != null ? tap.PredictionDrawnFrame : -1) + "); the cup is '" + HeldName(me)
+                + "', level " + (cup != null ? cup.Look.Value.Shape : 0));
+            if (cup == null || cup.Look.Value.Shape != DrinkRules.LevelRight) actor.CountTimeout("cook: the lemonade is not at the line");
+            yield return capture.WaitForFrames();
+            yield return actor.Look(0f, -30f, 0.6f);
+            yield return capture.Shot("lemonade-filled");
+            yield return actor.LevelView();
+
+            // The lid.
+            yield return actor.Use("put a lid on it", lids.Anchor, InteractionAction.Lid, () => me.DevLid(drinks), capture.Before("lid-aim", "lid", frames));
+            until = Time.unscaledTime + 3f;
+            while ((cup == null || cup.Look.Value.Kind != FoodLook.KindLidded) && Time.unscaledTime < until) yield return null;
+            if (cup == null || cup.Look.Value.Kind != FoodLook.KindLidded) actor.CountTimeout("cook: no lid on the lemonade");
+            yield return actor.LevelView();
+            yield return capture.Shot("lemonade-held-level");
+            LogHold(me, "lemonade");
+
+            // Served with the wrap: the guest has both and goes to pay.
+            yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
+            Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
+            yield return actor.Use("serve the lemonade at the counter", counterTop, InteractionAction.Sell,
+                () => me.DevSendStation(counter.Index, 0), capture.Before("lemonade-serve-aim", "lemonade-served", RewardFramesSeconds));
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            yield return new WaitForSecondsRealtime(0.5f);
+            string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
+            Debug.Log("[Demo] drinks: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
+            if (!latest.Contains("lemonade")) actor.CountTimeout("cook: the lemonade was not served");
+            if (!latest.Contains("drink order: exact order")) Debug.LogWarning("[Demo] drinks: no exact lemonade order was served");
+        }
+
+        /// <summary>Spec 033: the cup the player holds, or null.</summary>
+        private static Food HeldCup(PickupInteractor me)
+        {
+            Pickup held = me.FindHeldPickup();
+            return held != null && held.TryGetComponent(out Food food) && FoodLookRules.IsCup(food.Look.Value) ? food : null;
         }
 
         /// <summary>

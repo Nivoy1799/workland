@@ -118,8 +118,52 @@ namespace Worktown.Sim.Economy
             return amountBucket == Assembly.Lots ? Math.Max(0L, cost - LotsRoundingMargin) : cost;
         }
 
+        // ---- Spec 033: a cup of a drink ----
+
+        /// <summary>
+        /// The share (%) of a drink's grocer price (one full cup, <see cref="Drinks.CupMl"/>) a pour of <paramref name="ml"/> costs:
+        /// a started percent per 4 ml, at least 1 %, at most 100 % (a spill pours more than the cup, the cup is the most charged).
+        /// NaN or negative counts as nothing poured (1 %).
+        /// </summary>
+        public static int FillPercent(float ml)
+        {
+            if (float.IsNaN(ml) || ml < 0f) ml = 0f;
+            int percent = (int)Math.Ceiling(ml * 100f / Drinks.CupMl - 1e-4);
+            return Math.Clamp(percent, 1, 100);
+        }
+
+        /// <summary>
+        /// What one pour costs, charged once (spec 033): the cup's price when it was empty (<paramref name="withCup"/>; a top-up of the
+        /// same drink pays no second cup) plus <paramref name="percent"/> % of the drink's price (<see cref="PortionCost"/>).
+        /// </summary>
+        public static long FillCost(long cupPrice, long drinkPrice, int percent, bool withCup) =>
+            (withCup ? Math.Max(0L, cupPrice) : 0L) + PortionCost(drinkPrice, Math.Clamp(percent, 1, 100));
+
+        /// <summary>The least share (%) any pour that made the fill bucket <paramref name="bucket"/> was charged (its lower bound).</summary>
+        public static int FillPercentOf(string? bucket)
+        {
+            switch (bucket)
+            {
+                case Drinks.Right: return FillPercent(Drinks.RightFrom);
+                case Drinks.Full: return FillPercent(Drinks.FullFrom);
+                case Drinks.Spilled: return 100;
+                default: return 1;
+            }
+        }
+
         private static long PortionDiscount(EconomyCatalog c, Item item)
         {
+            if (item.Kind == OperationKind.Fill)
+            {
+                // Spec 033: a cup of a drink counts its drink at the least share its bucket was charged, $1 less (top-ups round each
+                // pour; the cup's own price, always paid with the first pour, is not counted at all), never above what was spent.
+                item.Buckets.TryGetValue(Drinks.MlParam, out string? level);
+                long discount = 0;
+                foreach (var comp in item.Components)
+                    if (c.TryGetGrocerPrice(comp.BaseId, out var p))
+                        discount += p - Math.Max(0L, PortionCost(p, FillPercentOf(level)) - LotsRoundingMargin);
+                return discount;
+            }
             if (item.Kind == OperationKind.Portion)
             {
                 item.Buckets.TryGetValue(Assembly.AmountParam, out string? bucket);

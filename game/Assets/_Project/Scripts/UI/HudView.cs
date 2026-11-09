@@ -310,13 +310,19 @@ namespace Worktown.Game.UI
                 case CookOutcome.NoSpatula: return Worktown.Game.Net.Rules.InteractionRules.UseTheSpatula; // spec 030
                 case CookOutcome.BuildClosed: return "It is closed already"; // spec 031
                 case CookOutcome.FoldFirst: return "Fold it first";
-                case CookOutcome.DispenserBusy: return "Someone is using that sauce";
+                case CookOutcome.DispenserBusy: return "Someone is using that"; // the sauce (031) or the tap (033)
                 case CookOutcome.NothingToFold: return "Only a wrap or a flatbread folds";
                 case CookOutcome.NoPayment: return "Nobody is paying"; // spec 032
                 case CookOutcome.PaysByCard: return "They pay by card";
                 case CookOutcome.PaysCash: return "They pay cash";
                 case CookOutcome.TrayFull: return "The tray is full";
                 case CookOutcome.TrayEmpty: return "The tray is empty";
+                case CookOutcome.NeedsCup: return "Take a cup first"; // spec 033
+                case CookOutcome.CupClosed: return "It has its lid";
+                case CookOutcome.OtherDrink: return "That cup has another drink";
+                case CookOutcome.CupFull: return "The cup is full";
+                case CookOutcome.NotFilled: return "Fill the cup first";
+                case CookOutcome.NoCupsLeft: return "Enough empty cups about: use one first";
                 default: return outcome.ToString();
             }
         }

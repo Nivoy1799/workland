@@ -82,6 +82,18 @@ namespace Worktown.Game.Economy
             return result.Error;
         }
 
+        /// <summary>
+        /// Spec 033: one pour at the drink dispenser, charged once: <paramref name="percent"/> % of the drink and the cup when
+        /// <paramref name="withCup"/>. On failure nothing changes.
+        /// </summary>
+        public EconomyError TryBuyFill(string accountId, string drinkId, int percent, bool withCup, out long cost)
+        {
+            PurchaseResult result = _engine.TryBuyFill(_state, accountId, drinkId, percent, withCup);
+            cost = result.Cost;
+            if (result.Ok) _state = result.State;
+            return result.Error;
+        }
+
         /// <summary>Sells a plated item. On failure nothing changes.</summary>
         public SaleResult TrySell(string accountId, Item platedItem)
         {

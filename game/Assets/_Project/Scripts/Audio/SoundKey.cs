@@ -35,6 +35,10 @@ namespace Worktown.Game.Audio
         /// <summary>Spec 032: a coin or note into the register's change tray.</summary>
         Clink,
         /// <summary>Spec 032: the card terminal.</summary>
-        Beep
+        Beep,
+        /// <summary>Spec 033: a tap pouring into a cup (loop while held), the lid clicking on, a spill splashing on the counter.</summary>
+        Pour,
+        LidClick,
+        Splash
     }
 }

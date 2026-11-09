@@ -34,11 +34,23 @@ namespace Worktown.Game.Net.Rules
         /// <summary>031b: food that is a build (open, folded, in paper, boxed or bagged; FoodLookRules.IsBuild): it goes back only
         /// on an empty board.</summary>
         public readonly bool IsBuild;
+        /// <summary>Spec 033: a cup from the drink dispenser (empty, filled or lidded; FoodLookRules.IsCup).</summary>
+        public readonly bool IsCup;
+        /// <summary>Spec 033, a cup: it has its lid (finished: it goes only to the counter).</summary>
+        public readonly bool CupLidded;
+        /// <summary>Spec 033, a cup: the tap of its drink (DrinkRules), -1 for an empty cup.</summary>
+        public readonly int CupTap;
+        /// <summary>Spec 033, a cup: its level (DrinkRules.LevelEmpty .. LevelSpilled), as this client sees it.</summary>
+        public readonly byte CupLevel;
 
         private Held(bool holding, bool food, bool knife, bool plated, string name, bool vessel = false,
             VesselKind kind = default, int count = 0, string contentName = null, bool spatula = false, bool pending = false,
-            bool build = false)
+            bool build = false, bool cup = false, bool lidded = false, int cupTap = -1, byte cupLevel = 0)
         {
+            IsCup = cup;
+            CupLidded = cup && lidded;
+            CupTap = cup ? cupTap : -1;
+            CupLevel = cup ? cupLevel : (byte)0;
             IsBuild = build;
             IsSpatula = spatula;
             IsPending = pending;
@@ -69,7 +81,17 @@ namespace Worktown.Game.Net.Rules
         public static Held Pending(Held item)
         {
             return new Held(true, item.IsFood, item.IsKnife, item.IsPlated, item.Name, item.IsVessel, item.Vessel, item.ContentCount,
-                item.ContentName, item.IsSpatula, true, item.IsBuild);
+                item.ContentName, item.IsSpatula, true, item.IsBuild, item.IsCup, item.CupLidded, item.CupTap, item.CupLevel);
+        }
+
+        /// <summary>
+        /// Spec 033: a cup from the drink dispenser: its drink's tap (-1 empty), level and lid, from its coarse look. A lidded cup is
+        /// finished (<see cref="IsPlated"/>): it goes only to the counter.
+        /// </summary>
+        public static Held Cup(string name, int tap, byte level, bool lidded)
+        {
+            return new Held(true, true, false, lidded, string.IsNullOrEmpty(name) ? "cup" : name, cup: true, lidded: lidded,
+                cupTap: tap, cupLevel: level);
         }
 
         /// <summary>Spec 021: a board, pan, pot, plate or bowl with <paramref name="count"/> things in it.</summary>

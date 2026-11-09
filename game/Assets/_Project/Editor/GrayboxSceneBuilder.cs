@@ -1293,6 +1293,129 @@ namespace Worktown.Game.Editor
             return station;
         }
 
+        // ---- Spec 033: the drink dispenser ----
+
+        /// <summary>Spec 033: the dispenser's name (its sign and the server log) and its parts' object names.</summary>
+        public const string DrinkDispenserName = "Drinks";
+        public const string DrinkToolName = "Drink tool";
+        /// <summary>Spec 033: on the front counter, left of the serving counter (away from the register and its pay line), its controls
+        /// facing the cook: a step from the assembly board across the aisle and from the serving point.</summary>
+        public const float DrinkDispenserX = CounterX - 1.15f;
+
+        /// <summary>
+        /// Spec 033: the drink dispenser on the front counter, turned like the register so its taps face the cook. Built like the
+        /// register: the root at the middle of its "Body" (a box collider of DrinkArtRules' size, no renderer, standing on the counter
+        /// top), the catalog's graybox model (Art_StationDrinkDispenser), the sign. The scene adds what moves or is taken: the five tools
+        /// as the station's slots (slot option = tool, DrinkRules): three taps (each a lever in its drink's colour and a DrinkTapView), the
+        /// cup stack (Kenney cups, the top one first: a take copies it into the hand) and the lid stack. A scene NetworkObject with the
+        /// dispenser's byte (StationContents) and the spill's DrinkDispenserView.
+        /// </summary>
+        private static Station CreateDrinkDispenser(ArtCatalog catalog, Transform parent, int index)
+        {
+            float top = ArtSizeTable.ServingCounterHeight;
+            float h = DrinkArtRules.Height;
+            var root = new GameObject(DrinkDispenserName);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(new Vector3(DrinkDispenserX, top + h * 0.5f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
+            var station = root.AddComponent<Station>();
+            SetField(station, "_index", index);
+            SetField(station, "_kind", (int)StationKind.DrinkDispenser);
+            SetField(station, "_displayName", DrinkDispenserName);
+            SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(root.transform, false);
+            body.transform.localScale = new Vector3(DrinkArtRules.Width, h, DrinkArtRules.Depth);
+            body.AddComponent<BoxCollider>(); // size one: the body's scale is the dispenser's box (aim)
+            if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(StationKind.DrinkDispenser), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = ArtFrontRotation; // the model's front (+Z) on the cook side
+            }
+            else Debug.LogError("[Graybox] no drink dispenser model in the catalog");
+            Vector3 down = new Vector3(0f, -h * 0.5f, 0f); // DrinkArtRules' positions start at the counter top
+            TextMesh sign = CreateLabel(root.transform, StationSign.LocalPosition(h, -DrinkArtRules.Depth * 0.5f), 60, 0.05f);
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = DrinkDispenserName;
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            root.AddComponent<StationContents>();
+            var dispenserView = root.AddComponent<DrinkDispenserView>();
+            SetField(dispenserView, "_dispenser", station);
+            SetField(dispenserView, "_puddleMaterial", CreateMaterial(Root + "/Settings/DrinkSpill.mat", Palette.SoftBlue));
+
+            Material stream = CreateMaterial(Root + "/Settings/DrinkStream.mat", Palette.Cream);
+            Material lidMaterial = CreateMaterial(Root + "/Settings/DrinkLid.mat", Palette.Cream);
+            GameObject cupPrefab = null;
+            if (catalog == null || !catalog.TryGet(ArtKey.PropCup, out cupPrefab)) Debug.LogError("[Graybox] no cup model in the catalog");
+            float cupHeight = cupPrefab != null ? ArtCatalogBuilder.HeightOf(cupPrefab) : ArtSizeTable.TargetSize(ArtKey.PropCup);
+            var slots = new List<StockSlot>(DrinkRules.ToolCount);
+            for (int tool = 0; tool < DrinkRules.ToolCount; tool++)
+            {
+                var slotObject = new GameObject(DrinkToolName + " " + tool);
+                slotObject.transform.SetParent(root.transform, false);
+                Vector3 anchor = DrinkArtRules.ToolAnchor(tool, cupHeight);
+                slotObject.transform.localPosition = anchor + down;
+                var slot = slotObject.AddComponent<StockSlot>();
+                SetField(slot, "_station", station);
+                SetField(slot, "_option", tool);
+                SetField(slot, "_ingredientIndex", -1);
+                slots.Add(slot);
+                if (DrinkRules.IsTap(tool))
+                {
+                    GameObject lever = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    lever.name = "Lever";
+                    UnityEngine.Object.DestroyImmediate(lever.GetComponent<Collider>());
+                    lever.transform.SetParent(slotObject.transform, false);
+                    lever.transform.localPosition = DrinkArtRules.LeverCentre(tool) - anchor;
+                    lever.transform.localScale = DrinkArtRules.LeverSize;
+                    lever.GetComponent<MeshRenderer>().sharedMaterial =
+                        CreateMaterial(Root + "/Settings/DrinkLever_" + DrinkRules.DrinkOf(tool) + ".mat", DrinkArtRules.DrinkColour(tool));
+                    TextMesh tag = CreateLabel(root.transform, DrinkArtRules.PanelCentre(tool) + new Vector3(0f, 0f, -DrinkArtRules.PanelSize.z) + down,
+                        48, 0.0056f);
+                    tag.name = "DrinkLabel " + tool;
+                    tag.text = DrinkRules.DrinkName(tool).ToUpperInvariant();
+                    var tap = slotObject.AddComponent<DrinkTapView>();
+                    SetField(tap, "_dispenser", station);
+                    SetField(tap, "_tap", tool);
+                    SetField(tap, "_lever", lever.transform);
+                    SetField(tap, "_streamMaterial", stream);
+                    SetField(tap, "_station", dispenserView);
+                    continue;
+                }
+                if (tool == DrinkRules.CupTool)
+                {
+                    // The top cup first (a take copies the slot's first child into the hand), the nested ones under it.
+                    for (int n = DrinkArtRules.StackedCups - 1; n >= 0; n--)
+                    {
+                        if (cupPrefab == null) break;
+                        var cup = (GameObject)PrefabUtility.InstantiatePrefab(cupPrefab, slotObject.transform);
+                        cup.name = "Cup " + n;
+                        cup.transform.localPosition = DrinkArtRules.CupStackCentre + new Vector3(0f, n * DrinkArtRules.CupNest, 0f) - anchor;
+                        cup.transform.localRotation = Quaternion.Euler(0f, n * 23f, 0f);
+                    }
+                    continue;
+                }
+                for (int n = DrinkArtRules.StackedLids - 1; n >= 0; n--)
+                {
+                    GameObject lid = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    lid.name = "Lid " + n;
+                    UnityEngine.Object.DestroyImmediate(lid.GetComponent<Collider>());
+                    lid.transform.SetParent(slotObject.transform, false);
+                    float d = 2f * (DrinkArtRules.CupTopRadius + DrinkArtRules.CupWall) * 1.05f;
+                    lid.transform.localPosition = DrinkArtRules.LidStackCentre + new Vector3(0f, (n + 0.5f) * DrinkArtRules.LidThickness, 0f) - anchor;
+                    lid.transform.localScale = new Vector3(d, DrinkArtRules.LidThickness * 0.45f, d); // Unity's cylinder is 2 m high
+                    lid.GetComponent<MeshRenderer>().sharedMaterial = lidMaterial;
+                }
+            }
+            SetField(station, "_slots", slots);
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t != root.transform && t.GetComponentInParent<DrinkTapView>() == null) t.gameObject.isStatic = true; // the levers move
+            return station;
+        }
+
         /// <summary>Spec 031: the assembly board's name (its sign and the server log) and its parts' object names.</summary>
         public const string AssemblyName = "Assembly";
         public const string AssemblySpotName = "Build spot";
@@ -1556,6 +1679,8 @@ namespace Worktown.Game.Editor
             stations.Add(assembly);
             // Spec 032: the register on the front counter next to the serving counter (appended last, so the earlier indices stay).
             stations.Add(CreateRegister(catalog, parent.transform, stations.Count));
+            // Spec 033: the drink dispenser on the front counter, left of the serving counter (appended last, so the earlier indices stay).
+            stations.Add(CreateDrinkDispenser(catalog, parent.transform, stations.Count));
 
             // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, the pass at the
             // right end (spec 029b: it stood between the stoves; created in the same order, so the surface indices stay),

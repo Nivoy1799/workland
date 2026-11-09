@@ -61,6 +61,10 @@ namespace Worktown.Sim.Cooking
                 foreach (var input in flat)
                     if (Assembly.IsBuild(input)) return Fail(OperationError.ForbiddenInput);
 
+            // Spec 033: a fill pours a drink (a drink base item) into a cup; a lid goes only on a filled cup.
+            if (op.Kind == OperationKind.Fill && !Drinks.IsDrinkBase(flat[0])) return Fail(OperationError.ForbiddenInput);
+            if (op.Kind == OperationKind.Lid && !Drinks.IsFill(flat[0])) return Fail(OperationError.StepOrder);
+
             // 3. params
             if (!TryResolve(op, parameters, out var resolved)) return Fail(OperationError.InvalidParam);
             // Spec 030: a griddle op's "time" is the shorter side (Griddle.Params), so one item has one hash whichever side went first.
@@ -99,6 +103,17 @@ namespace Worktown.Sim.Cooking
                     factor = src.QualityFactor;
                     break;
                 }
+                case OperationKind.Fill:
+                {
+                    // Spec 033: a cup of the drink: its stats; the exact millilitres only set the quality (Drinks.FillFactor).
+                    var src = flat[0];
+                    stats = src.Stats;
+                    surface = src.Surface;
+                    components = new List<ItemComponent>(src.Components);
+                    factor = src.QualityFactor * Drinks.FillFactor(NumberOf(resolved, Drinks.MlParam));
+                    break;
+                }
+                case OperationKind.Lid:
                 case OperationKind.Portion:
                 case OperationKind.Close:
                 case OperationKind.Pack:

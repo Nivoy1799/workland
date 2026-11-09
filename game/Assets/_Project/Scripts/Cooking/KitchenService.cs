@@ -64,6 +64,11 @@ namespace Worktown.Game.Cooking
         private readonly List<long> _leftSqueezes = new List<long>(); // 031b
         private AssemblyDesk _deskField; // 031b: the board's charging steps (pure, tested)
         private AssemblyDesk Desk => _deskField ??= new AssemblyDesk(_kitchen);
+        // Spec 033: who pours which tap of which drink dispenser (key: DrinkDesk.KeyOf), and the dispenser's steps (pure, tested).
+        private readonly Dictionary<long, PickupInteractor> _pourers = new Dictionary<long, PickupInteractor>();
+        private readonly List<long> _leftPours = new List<long>();
+        private DrinkDesk _drinkDeskField;
+        private DrinkDesk DrinkSteps => _drinkDeskField ??= new DrinkDesk(_kitchen);
         private uint _lastHeatTick;
         // 030 review: the cooked-ticks stamp of each heat vessel at its last periodic label refresh.
         private readonly Dictionary<Vessel, long> _labelStamps = new Dictionary<Vessel, long>();
@@ -114,6 +119,7 @@ namespace Worktown.Game.Cooking
                 _griddleSpots.Clear();
                 _assemblySpots.Clear(); // spec 031
                 _squeezers.Clear();
+                _pourers.Clear(); // spec 033
             }
         }
 
@@ -135,6 +141,12 @@ namespace Worktown.Game.Cooking
                 EnsureInitialized();
                 return UseAssembly(player, station, option);
             }
+            // Spec 033: a tap's release ends the pour wherever the player is now (the press was in reach).
+            if (!DrinkDesk.NeedsReach(station.Kind, option))
+            {
+                EnsureInitialized();
+                return UseDrinks(player, station, option);
+            }
             if (!StationRules.IsInReach(player.transform.position, station.transform.position))
                 return CookOutcome.TooFar;
             EnsureInitialized();
@@ -146,6 +158,7 @@ namespace Worktown.Game.Cooking
                 case StationKind.Fryer: return UseFryer(station, option);
                 case StationKind.Griddle: return UseGriddle(station, option); // spec 030
                 case StationKind.Assembly: return UseAssembly(player, station, option); // spec 031
+                case StationKind.DrinkDispenser: return UseDrinks(player, station, option); // spec 033
                 case StationKind.PlateShelf: return TakePlate(player);
                 // Spec 032: the register's slots (the change tray, take back, hand over, the card terminal); the guests' service decides.
                 case StationKind.Register: return _customers != null ? _customers.UseRegister(player, option) : CookOutcome.NoPayment;
@@ -412,6 +425,155 @@ namespace Worktown.Game.Cooking
             }
         }
 
+        // ---- Spec 033: the drink dispenser ----
+
+        /// <summary>
+        /// Spec 033: the dispenser's tools (RequestStation; reach was checked but for a release): a tap's press and release
+        /// (<see cref="DrinkRules.PourStartOption"/> / <see cref="DrinkRules.PourStopOption"/>), the server measuring the time between
+        /// their arrivals in its own ticks and filling the cup in the hands; the cup stack (<see cref="DrinkRules.CupOption"/>) and the lid
+        /// stack (<see cref="DrinkRules.LidOption"/>).
+        /// </summary>
+        private CookOutcome UseDrinks(PickupInteractor player, Station dispenser, int option)
+        {
+            if (dispenser.Kind != StationKind.DrinkDispenser) return CookOutcome.UnknownStation;
+            if (DrinkRules.TryParsePour(option, out int tap, out bool start))
+                return start ? StartPour(player, dispenser, tap) : StopPour(player, dispenser, tap);
+            if (option == DrinkRules.CupOption) return TakeCup(player);
+            if (option == DrinkRules.LidOption) return PutLid(player);
+            return CookOutcome.InvalidOption;
+        }
+
+        /// <summary>The object id of the food the player holds, or -1.</summary>
+        private int HeldFoodId(PickupInteractor player, out Food food)
+        {
+            food = null;
+            if (player == null || !_pickups.TryGetHeld(player, out NetworkObject held) || held == null || !held.TryGetComponent(out food)) return -1;
+            return held.ObjectId;
+        }
+
+        private CookOutcome StartPour(PickupInteractor player, Station dispenser, int tap)
+        {
+            int cup = HeldFoodId(player, out _);
+            CookOutcome started = DrinkSteps.Press(dispenser.Index, tap, player.OwnerId, cup, Tick, DrinkWalletOf(player));
+            if (started != CookOutcome.Ok) return started;
+            _pourers[DrinkDesk.KeyOf(dispenser.Index, tap)] = player;
+            RefreshDrinks(dispenser);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// The release: the cup in the hands gets the drink for the time held (or its top-up), the pour is charged once first (the cup when
+        /// it was empty plus the drink's share; DrinkDesk); a refused step changes nothing and charges nothing. A release with no pour of
+        /// this player (refused at the press, or already stopped by the server) is harmless: Ok, nothing happens.
+        /// </summary>
+        private CookOutcome StopPour(PickupInteractor player, Station dispenser, int tap)
+        {
+            if (!_kitchen.IsPouring(dispenser.Index, tap, out int owner, out _, out _) || owner != player.OwnerId) return CookOutcome.Ok;
+            return EndPour(player, dispenser, tap);
+        }
+
+        private CookOutcome EndPour(PickupInteractor player, Station dispenser, int tap)
+        {
+            _pourers.Remove(DrinkDesk.KeyOf(dispenser.Index, tap));
+            int cup = HeldFoodId(player, out Food food);
+            CookOutcome made = DrinkSteps.End(dispenser.Index, tap, player.OwnerId, Tick, TickRate, cup, DrinkWalletOf(player), out DrinkDesk.PourResult r);
+            RefreshDrinks(dispenser);
+            if (made != CookOutcome.Ok) return made;
+            if (food != null) Publish(food, r.Cup);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " poured " + DrinkRules.DrinkOf(tap) + ": " + r.Poured.ToString("0") + " ml ("
+                + EconomyRules.Money(r.Cost) + "), the cup holds " + r.Total.ToString("0") + " ml: " + KitchenState.NameOf(r.Cup) + " q="
+                + KitchenState.QualityOf(r.Cup).ToString("0.00") + (r.Spilled ? " (spilled on the counter)" : string.Empty));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 033: empty hands at the cup stack take an empty cup (free: its price comes with its first pour).</summary>
+        private CookOutcome TakeCup(PickupInteractor player)
+        {
+            CookOutcome can = DrinkSteps.CanTakeCup(_pickups.TryGetHeld(player, out _));
+            if (can != CookOutcome.Ok) return can;
+            if (_foodPrefab == null || !_pickups.CanHandTo(player, _foodPrefab)) return CookOutcome.HandsFull;
+            if (_kitchen.TryCreateCup(out Item cup) != CookOutcome.Ok) return CookOutcome.SimRefused;
+            if (!SpawnFoodInHands(player, cup)) return CookOutcome.SimRefused;
+            Debug.Log("[Kitchen] player " + player.OwnerId + " took an empty cup");
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 033: the lid stack puts a lid on the filled cup in the hands (free; a lid only on a filled cup, once).</summary>
+        private CookOutcome PutLid(PickupInteractor player)
+        {
+            int cup = HeldFoodId(player, out Food food);
+            CookOutcome lidded = DrinkSteps.Lid(cup, out Item item);
+            if (lidded != CookOutcome.Ok) return lidded;
+            if (food != null) Publish(food, item);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " put a lid on " + KitchenState.NameOf(item) + " q=" + KitchenState.QualityOf(item).ToString("0.00"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 033: the player's wallet for a pour (free without an economy).</summary>
+        private IDrinkWallet DrinkWalletOf(PickupInteractor player) => _economy != null ? new PlayerDrinkWallet(_economy, player) : null;
+
+        /// <summary>Spec 033: <see cref="IDrinkWallet"/> through the economy service: one debit per pour.</summary>
+        private sealed class PlayerDrinkWallet : IDrinkWallet
+        {
+            private readonly EconomyService _economy;
+            private readonly PickupInteractor _player;
+
+            public PlayerDrinkWallet(EconomyService economy, PickupInteractor player)
+            {
+                _economy = economy;
+                _player = player;
+            }
+
+            public CookOutcome Charge(int owner, string drinkId, int percent, bool withCup, out long cost)
+            {
+                cost = 0;
+                if (_player == null || _player.OwnerId != owner) return CookOutcome.SimRefused;
+                return StockRules.PaidOutcome(_economy.TryBuyFill(_player.NetworkObject, drinkId, percent, withCup, out cost));
+            }
+
+            public bool CanAfford(int owner, string drinkId, int percent, bool withCup) =>
+                _player != null && _player.OwnerId == owner && _economy.CanAffordFill(_player.NetworkObject, drinkId, percent, withCup);
+        }
+
+        /// <summary>Spec 033: the dispenser's byte (who pours, the spill).</summary>
+        private void RefreshDrinks(Station dispenser)
+        {
+            if (dispenser == null || !dispenser.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            contents.ServerSetStoveFlags(_kitchen.DrinkFlags(dispenser.Index));
+        }
+
+        /// <summary>
+        /// Spec 033: a pour that reached <see cref="Worktown.Sim.Cooking.Drinks.MaxMl"/> ends as if released (a spill, the cup full). A
+        /// pour whose player left (despawned) is dropped at once, without a charge, so the tap is free for everyone.
+        /// </summary>
+        private void StopOverduePours(uint tick, double tickRate)
+        {
+            if (_pourers.Count > 0)
+            {
+                DrinkSteps.DropLeftPours(_pourers, IsPresent, _leftPours);
+                foreach (long key in _leftPours)
+                {
+                    int station = DrinkDesk.StationOfKey(key), tap = DrinkDesk.TapOfKey(key);
+                    RefreshDrinks(station >= 0 && station < _stations.Length ? _stations[station] : null);
+                    Debug.Log("[Kitchen] the pour of a player who left was dropped (dispenser " + station + ", tap " + tap + ")");
+                }
+            }
+            while (_kitchen.TryFindOverduePour(tick, tickRate, out int station, out int tap, out int owner))
+            {
+                Station dispenser = station >= 0 && station < _stations.Length ? _stations[station] : null;
+                long key = DrinkDesk.KeyOf(station, tap);
+                if (_pourers.TryGetValue(key, out PickupInteractor player) && player != null && player.OwnerId == owner && dispenser != null)
+                {
+                    CookOutcome ended = EndPour(player, dispenser, tap);
+                    if (ended != CookOutcome.Ok) Debug.Log("[Kitchen] the held pour ended: " + ended);
+                    continue;
+                }
+                _pourers.Remove(key);
+                _kitchen.CancelPour(station, tap);
+                RefreshDrinks(dispenser);
+            }
+        }
+
         // ---- cookware (RequestUse) ----
 
         /// <summary>
@@ -641,6 +803,7 @@ namespace Worktown.Game.Cooking
                 else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
                 else if (station != null && station.Kind == StationKind.Griddle) RefreshGriddle(station); // spec 030
                 else if (station != null && station.Kind == StationKind.Assembly) RefreshAssembly(station); // spec 031
+                else if (station != null && station.Kind == StationKind.DrinkDispenser) RefreshDrinks(station); // spec 033
             }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
         }
@@ -774,6 +937,7 @@ namespace Worktown.Game.Cooking
                 }
                 PublishHeat(tick, tickRate);
                 StopOverdueSqueezes(tick, tickRate); // spec 031
+                StopOverduePours(tick, tickRate); // spec 033
             }
             WatchHomes();
         }
@@ -957,8 +1121,8 @@ namespace Worktown.Game.Cooking
                 soldPayout = sale.Payout;
                 if (served)
                     entry = "Player " + player.OwnerId + " handed " + name + " " + stars + " to a guest · "
-                        + Worktown.Game.Npc.Menu.NameOf(pick.Dish) + " order: " + Worktown.Game.Npc.OrderRules.Describe(pick.Fit.Match)
-                        + " · pays at the register";
+                        + (pick.IsDrink ? "drink" : Worktown.Game.Npc.Menu.NameOf(pick.Dish)) + " order: " // spec 033: a drink line
+                        + Worktown.Game.Npc.OrderRules.Describe(pick.Fit.Match);
                 else
                     entry = "Player " + player.OwnerId + " sold " + name + " " + stars + " for "
                         + EconomyRules.Money(sale.Payout) + " (" + where + ")";
@@ -996,7 +1160,7 @@ namespace Worktown.Game.Cooking
                 try { handed = _customers.OnHandedOver(pick, player, soldPayout); }
                 catch (System.Exception e) { Debug.LogException(e); }
                 bool waiting = true;
-                try { waiting = _customers.IsPaying(pick.CustomerId); }
+                try { waiting = _customers.HasBill(pick); } // spec 033: in the register's line, or the line is on its tab
                 catch (System.Exception e) { Debug.LogException(e); }
                 if (Worktown.Game.Shop.RegisterFlow.FallbackPays(handed, waiting))
                     _economy.TryPayGuest(player.OwnerId, player.NetworkObject, EconomyRules.ApplyPermille(soldPayout, pick.BillPermille), out _);

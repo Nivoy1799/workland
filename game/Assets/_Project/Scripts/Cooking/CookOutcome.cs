@@ -67,6 +67,18 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 032: the change tray holds no more (it is synced as a byte).</summary>
         TrayFull,
         /// <summary>Spec 032: there is no change in the tray to take back.</summary>
-        TrayEmpty
+        TrayEmpty,
+        /// <summary>Spec 033: a tap pours into a cup in the hands, the lid stack lids one: take a cup first.</summary>
+        NeedsCup,
+        /// <summary>Spec 033: the cup has its lid (nothing more goes in, it is lidded once).</summary>
+        CupClosed,
+        /// <summary>Spec 033: the cup holds another drink (a top-up is the same drink only).</summary>
+        OtherDrink,
+        /// <summary>Spec 033: the cup ran over (or the server stopped it): nothing more goes in.</summary>
+        CupFull,
+        /// <summary>Spec 033: a lid goes only on a filled cup.</summary>
+        NotFilled,
+        /// <summary>Spec 033: enough empty cups lie about already (DrinkRules.MaxEmptyCups).</summary>
+        NoCupsLeft
     }
 }

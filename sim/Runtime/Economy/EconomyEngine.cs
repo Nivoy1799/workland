@@ -230,6 +230,23 @@ namespace Worktown.Sim.Economy
             return Debit(s, ai, PriceRules.PortionCost(price, percent));
         }
 
+        /// <summary>
+        /// Spec 033: one pour at the drinks station, charged once: the cup's grocer price when <paramref name="withCup"/> (it was
+        /// empty) plus <paramref name="percent"/> % of the drink's (<see cref="PriceRules.FillCost"/>). Percent outside 1..100 is
+        /// InvalidQuantity; on any failure nothing changes.
+        /// </summary>
+        public PurchaseResult TryBuyFill(EconomyState s, string buyerId, string drinkId, int percent, bool withCup)
+        {
+            Need(s);
+            int ai = FindAccount(s, buyerId);
+            if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
+            if (!_catalog.TryGetGrocerPrice(drinkId, out var drink)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            long cup = 0;
+            if (withCup && !_catalog.TryGetGrocerPrice(Drinks.CupId, out cup)) return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            if (percent < 1 || percent > 100) return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);
+            return Debit(s, ai, PriceRules.FillCost(cup, drink, percent, withCup));
+        }
+
         /// <summary>031b review: the grocer debit shared by <see cref="TryBuyBase"/> and <see cref="TryBuyPortion"/>: account
         /// <paramref name="ai"/> pays <paramref name="cost"/> to the grocer, or InsufficientFunds and nothing changes.</summary>
         private static PurchaseResult Debit(EconomyState s, int ai, long cost)

@@ -28,6 +28,20 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static readonly IReadOnlyList<BaseItemDef> All = Combine();
 
+        /// <summary>
+        /// Spec 033: every base item the kitchen's sim knows: <see cref="All"/> (the stock, in look-byte order) and then the drink
+        /// dispenser's empty cup and its three drinks (<see cref="Drinks.Items"/>; not stock, no look index of their own: a cup's look
+        /// names its drink in its own byte).
+        /// </summary>
+        public static readonly IReadOnlyList<BaseItemDef> Catalog = CombineCatalog();
+
+        private static IReadOnlyList<BaseItemDef> CombineCatalog()
+        {
+            var all = new List<BaseItemDef>(All);
+            all.AddRange(Drinks.Items);
+            return all.AsReadOnly();
+        }
+
         /// <summary>The index of the first street-food item (the four demo ingredients come before it).</summary>
         public const int FirstStreetFood = 4;
 

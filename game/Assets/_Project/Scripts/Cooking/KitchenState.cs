@@ -57,7 +57,7 @@ namespace Worktown.Game.Cooking
         public static KitchenState CreateDemo()
         {
             OperationCatalog operations = OperationCatalog.CreateDefault();
-            return new KitchenState(new ItemFactory(new ItemCatalog(DemoIngredients.All), operations), operations);
+            return new KitchenState(new ItemFactory(new ItemCatalog(DemoIngredients.Catalog), operations), operations); // spec 033: + cups, drinks
         }
 
         private static readonly IReadOnlyDictionary<string, ParamValue> NoParams = new Dictionary<string, ParamValue>();
@@ -77,6 +77,7 @@ namespace Worktown.Game.Cooking
         public void Register(int objectId, Item item)
         {
             _items[objectId] = item;
+            _cupMl.Remove(objectId); // spec 033: a new item under this id holds no drink yet (CommitCup sets it)
         }
 
         public bool TryGet(int objectId, out Item item)
@@ -106,6 +107,7 @@ namespace Worktown.Game.Cooking
         /// <summary>Removes the food (it was served or despawned).</summary>
         public bool TryRemove(int objectId, out Item item)
         {
+            _cupMl.Remove(objectId); // spec 033
             if (!_items.TryGetValue(objectId, out item)) return false;
             _items.Remove(objectId);
             return true;
@@ -127,6 +129,9 @@ namespace Worktown.Game.Cooking
             _grill.Clear();
             _builds.Clear();
             _squeezes.Clear();
+            _pours.Clear(); // spec 033
+            _cupMl.Clear();
+            _spills.Clear();
         }
 
         /// <summary>Spec 021: a vessel left the world (sold plate, lost cookware): its contents and position go with it.</summary>
@@ -1497,6 +1502,191 @@ namespace Worktown.Game.Cooking
             for (int d = 0; d < BuildRules.DispenserCount; d++)
                 if (_squeezes.ContainsKey(SqueezeKey(board, d))) flags = BuildRules.WithSqueezing(flags, d, true);
             return flags;
+        }
+
+        // ---- Spec 033: the drink dispenser ----
+
+        private sealed class PourRecord
+        {
+            public int Owner;
+            public uint StartTick;
+            /// <summary>The cup's object id in the hands at the press (the release fills only that cup).</summary>
+            public int Cup;
+            /// <summary>The exact ml in the cup at the press (0 for an empty cup).</summary>
+            public float Before;
+            public bool WasEmpty;
+        }
+
+        private readonly Dictionary<long, PourRecord> _pours = new Dictionary<long, PourRecord>();
+        // The exact ml in each filled cup (server only, D21: clients see the bucket), per food object id.
+        private readonly Dictionary<int, float> _cupMl = new Dictionary<int, float>();
+        // The dispensers with a spill on the counter (station index). Spec 035 (cleaning) consumes it (ClearSpill).
+        private readonly HashSet<int> _spills = new HashSet<int>();
+
+        private static long PourKey(int station, int tap) => ((long)station << 8) | (uint)(tap & 0xFF);
+
+        /// <summary>A new empty cup (the base item "cup"). Register it under its object id once spawned.</summary>
+        public CookOutcome TryCreateCup(out Item cup) => TryCreateIngredient(Drinks.CupId, out cup);
+
+        /// <summary>How many empty cups exist as food objects now (DrinkRules.MaxEmptyCups caps the free cups).</summary>
+        public int EmptyCupCount()
+        {
+            int n = 0;
+            foreach (KeyValuePair<int, Item> kv in _items)
+                if (Drinks.IsEmptyCup(kv.Value)) n++;
+            return n;
+        }
+
+        /// <summary>The exact ml in cup <paramref name="cupObjectId"/> (server only), 0 when empty or unknown.</summary>
+        public float CupMl(int cupObjectId) => _cupMl.TryGetValue(cupObjectId, out float ml) ? ml : 0f;
+
+        /// <summary>
+        /// Whether the item <paramref name="cupObjectId"/> can take a pour from tap <paramref name="tap"/>: an empty cup, or an open cup of
+        /// that drink not yet at the server's stop. NeedsCup (no cup), CupClosed (lidded), OtherDrink, CupFull.
+        /// </summary>
+        public CookOutcome CanPourInto(int cupObjectId, int tap)
+        {
+            if (!DrinkRules.IsTap(tap)) return CookOutcome.InvalidOption;
+            if (!_items.TryGetValue(cupObjectId, out Item cup) || !Drinks.IsCup(cup)) return CookOutcome.NeedsCup;
+            if (Drinks.IsLidded(cup)) return CookOutcome.CupClosed;
+            if (Drinks.IsEmptyCup(cup)) return CookOutcome.Ok;
+            if (Drinks.DrinkOf(cup) != DrinkRules.DrinkOf(tap)) return CookOutcome.OtherDrink;
+            return CupMl(cupObjectId) >= Drinks.MaxMl || Drinks.LevelOf(cup) == Drinks.Spilled ? CookOutcome.CupFull : CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// A player presses tap <paramref name="tap"/> of dispenser <paramref name="station"/> holding cup <paramref name="cupObjectId"/>:
+        /// the pour starts at <paramref name="tick"/> (the server's clock). The cup's refusals (<see cref="CanPourInto"/>), DispenserBusy
+        /// (someone else pours that tap, or this player already pours another one); a second press by the same player while it runs
+        /// keeps the first start (031b, 10.0). Nothing is charged or changed but the pour record.
+        /// </summary>
+        public CookOutcome TryStartPour(int station, int tap, int owner, int cupObjectId, uint tick)
+        {
+            if (!DrinkRules.IsTap(tap)) return CookOutcome.InvalidOption;
+            long key = PourKey(station, tap);
+            if (_pours.TryGetValue(key, out PourRecord running)) return running.Owner == owner ? CookOutcome.Ok : CookOutcome.DispenserBusy;
+            CookOutcome can = CanPourInto(cupObjectId, tap);
+            if (can != CookOutcome.Ok) return can;
+            foreach (KeyValuePair<long, PourRecord> kv in _pours)
+                if (kv.Value.Owner == owner || kv.Value.Cup == cupObjectId) return CookOutcome.DispenserBusy; // one pour per player and cup
+            _items.TryGetValue(cupObjectId, out Item cup);
+            _pours[key] = new PourRecord
+            {
+                Owner = owner, StartTick = tick, Cup = cupObjectId, Before = CupMl(cupObjectId), WasEmpty = Drinks.IsEmptyCup(cup),
+            };
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Whether tap <paramref name="tap"/> of dispenser <paramref name="station"/> pours, by whom and into which cup.</summary>
+        public bool IsPouring(int station, int tap, out int owner, out uint startTick, out int cupObjectId)
+        {
+            owner = -1;
+            startTick = 0;
+            cupObjectId = -1;
+            if (!_pours.TryGetValue(PourKey(station, tap), out PourRecord r)) return false;
+            owner = r.Owner;
+            startTick = r.StartTick;
+            cupObjectId = r.Cup;
+            return true;
+        }
+
+        /// <summary>
+        /// The player lets go (or the server stops the pour at <see cref="Drinks.MaxMl"/>): the pour ends at <paramref name="tick"/> and the
+        /// cup is previewed: the drink for the ml held since the press onto what was in it (capped at the stop). The record is gone
+        /// whatever happens next. InvalidOption when this player was not pouring that tap; NeedsCup when the player no longer holds the
+        /// cup of the press (<paramref name="heldCupId"/>, -1 for nothing) or it is gone; SimRefused. Nothing changes on the cup: the caller
+        /// charges <paramref name="poured"/> (and the cup when <paramref name="wasEmpty"/>), then <see cref="CommitCup"/>s it.
+        /// </summary>
+        public CookOutcome TryEndPour(int station, int tap, int owner, uint tick, double tickRate, int heldCupId, out Item cup, out float total,
+            out float poured, out bool wasEmpty, out int cupObjectId)
+        {
+            cup = null;
+            total = poured = 0f;
+            wasEmpty = false;
+            cupObjectId = -1;
+            long key = PourKey(station, tap);
+            if (!_pours.TryGetValue(key, out PourRecord r) || r.Owner != owner) return CookOutcome.InvalidOption;
+            _pours.Remove(key);
+            cupObjectId = r.Cup;
+            wasEmpty = r.WasEmpty;
+            total = DrinkRules.Total(r.Before, DrinkRules.PourMl(r.StartTick, tick, tickRate));
+            poured = total - r.Before;
+            if (heldCupId != r.Cup || !_items.TryGetValue(r.Cup, out Item now) || !Drinks.IsCup(now) || Drinks.IsLidded(now))
+                return CookOutcome.NeedsCup;
+            OperationResult filled = _factory.Apply(Drinks.FillOperationId, new[] { _factory.CreateBase(DrinkRules.DrinkOf(tap)).Item },
+                Drinks.FillParams(total));
+            if (!filled.Ok || filled.Item == null) return CookOutcome.SimRefused;
+            cup = filled.Item;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Cup <paramref name="cupObjectId"/> becomes <paramref name="cup"/> holding exactly <paramref name="ml"/> (a paid preview).</summary>
+        public void CommitCup(int cupObjectId, Item cup, float ml)
+        {
+            if (cup == null) return;
+            _items[cupObjectId] = cup;
+            _cupMl[cupObjectId] = Drinks.ClampMl(ml);
+        }
+
+        /// <summary>A pour whose ml reached <see cref="Drinks.MaxMl"/> by <paramref name="tick"/>, or false.</summary>
+        public bool TryFindOverduePour(uint tick, double tickRate, out int station, out int tap, out int owner)
+        {
+            station = tap = owner = -1;
+            foreach (KeyValuePair<long, PourRecord> kv in _pours)
+            {
+                if (kv.Value.Before + DrinkRules.PourMl(kv.Value.StartTick, tick, tickRate) < Drinks.MaxMl) continue;
+                station = (int)(kv.Key >> 8);
+                tap = (int)(kv.Key & 0xFF);
+                owner = kv.Value.Owner;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Drops a pour without a result (the player left).</summary>
+        public void CancelPour(int station, int tap) => _pours.Remove(PourKey(station, tap));
+
+        /// <summary>
+        /// The lid on cup <paramref name="cupObjectId"/>, without changing it: an open cup with a drink in it. NeedsCup, CupClosed,
+        /// NotFilled, DispenserBusy (it is under a tap), SimRefused.
+        /// </summary>
+        public CookOutcome TryPreviewLid(int cupObjectId, out Item lidded)
+        {
+            lidded = null;
+            if (!_items.TryGetValue(cupObjectId, out Item cup) || !Drinks.IsCup(cup)) return CookOutcome.NeedsCup;
+            if (Drinks.IsLidded(cup)) return CookOutcome.CupClosed;
+            if (Drinks.IsEmptyCup(cup)) return CookOutcome.NotFilled;
+            foreach (KeyValuePair<long, PourRecord> kv in _pours)
+                if (kv.Value.Cup == cupObjectId) return CookOutcome.DispenserBusy;
+            OperationResult made = _factory.Apply(Drinks.LidOperationId, new[] { cup }, NoParams);
+            if (!made.Ok || made.Item == null) return CookOutcome.SimRefused;
+            lidded = made.Item;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>A lidded cup keeps its exact ml (a preview of <see cref="TryPreviewLid"/> the caller commits).</summary>
+        public void CommitLid(int cupObjectId, Item lidded)
+        {
+            if (lidded == null || !_items.ContainsKey(cupObjectId)) return;
+            _items[cupObjectId] = lidded;
+        }
+
+        /// <summary>Spec 033: a pour ran over the brim at dispenser <paramref name="station"/>: the spill stays until spec 035 cleans it.</summary>
+        public void MarkSpill(int station) => _spills.Add(station);
+
+        /// <summary>Whether dispenser <paramref name="station"/> has a spill on the counter.</summary>
+        public bool HasSpill(int station) => _spills.Contains(station);
+
+        /// <summary>Spec 035's hook: the spill at dispenser <paramref name="station"/> is wiped (true when there was one).</summary>
+        public bool ClearSpill(int station) => _spills.Remove(station);
+
+        /// <summary>The dispenser's synced byte: a pouring bit per tap and the spill bit.</summary>
+        public byte DrinkFlags(int station)
+        {
+            byte flags = 0;
+            for (int t = 0; t < DrinkRules.TapCount; t++)
+                if (_pours.ContainsKey(PourKey(station, t))) flags = DrinkRules.WithPouring(flags, t, true);
+            return DrinkRules.WithSpill(flags, HasSpill(station));
         }
 
         // ---- Spec 013/021: plate and bowl ----

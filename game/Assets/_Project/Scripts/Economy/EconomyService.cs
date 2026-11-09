@@ -112,6 +112,23 @@ namespace Worktown.Game.Economy
             return _economy.BalanceOf(EconomyRules.AccountId(player.OwnerId)) >= PriceRules.PortionCost(price, percent);
         }
 
+        /// <summary>Spec 033, server: charge one pour at the drink dispenser (the drink's share, and the cup when it was empty), once.</summary>
+        public EconomyError TryBuyFill(NetworkObject player, string drinkId, int percent, bool withCup, out long cost)
+        {
+            EconomyError error = _economy.TryBuyFill(EconomyRules.AccountId(player.OwnerId), drinkId, percent, withCup, out cost);
+            PublishWallet(player);
+            return error;
+        }
+
+        /// <summary>Spec 033, server: whether the player could pay such a pour now (no charge).</summary>
+        public bool CanAffordFill(NetworkObject player, string drinkId, int percent, bool withCup)
+        {
+            if (player == null || !_economy.TryGetGrocerPrice(drinkId, out long drink)) return false;
+            long cup = 0;
+            if (withCup && !_economy.TryGetGrocerPrice(Worktown.Sim.Cooking.Drinks.CupId, out cup)) return false;
+            return _economy.BalanceOf(EconomyRules.AccountId(player.OwnerId)) >= PriceRules.FillCost(cup, drink, percent, withCup);
+        }
+
         /// <summary>Server: sell a plated dish to NPC demand or the wholesaler.</summary>
         public SaleResult TrySell(NetworkObject player, Item plated)
         {

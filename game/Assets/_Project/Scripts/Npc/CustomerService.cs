@@ -28,6 +28,10 @@ namespace Worktown.Game.Npc
     /// payment (<see cref="UseRegister"/>; 032 review: any cook, the money goes to the payee; the pure <see cref="RegisterFlow"/> and
     /// <see cref="RegisterDesk"/>): then it pays, leaves a review and goes. The kitchen closing, the payee leaving or 30 s without a
     /// touch settle a waiting payment by itself (the bill, no tip).
+    /// Spec 033: half the guests also order a drink (its own seeded RNG, so the 022/032 draws keep their sequence). The dish and the
+    /// drink are handed over on their own, in any order (<see cref="GuestTab"/>): a guest with a line still open stays in the queue
+    /// (patience draining) and takes only that line; the last line sends it to the register with one bill for the whole order. A guest
+    /// that leaves with a line still open pays what it got (no tip), once.
     /// </summary>
     public sealed class CustomerService : MonoBehaviour
     {
@@ -64,6 +68,9 @@ namespace Worktown.Game.Npc
         private readonly List<int> _tickets = new List<int>(CustomerRules.MaxVisible);
         private readonly Shift _shift = new Shift();
         private IRandom _orders = new SeededRandom(CustomerRules.OrderSeed);
+        private IRandom _drinkOrders = new SeededRandom(CustomerRules.DrinkSeed); // spec 033
+        private readonly GuestTab _tab = new GuestTab(); // spec 033: the order's lines (dish and drink)
+        private readonly Dictionary<int, PickupInteractor> _linePayees = new Dictionary<int, PickupInteractor>();
         private bool _synced;
         private float _nextRailRefresh;
 
@@ -128,6 +135,9 @@ namespace Worktown.Game.Npc
             _payees.Clear();
             _shift.Reset();
             _orders = new SeededRandom(CustomerRules.OrderSeed);
+            _drinkOrders = new SeededRandom(CustomerRules.DrinkSeed);
+            _tab.Clear();
+            _linePayees.Clear();
             _synced = false;
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
             if (_tourOrders != null) _tourOrders = new TourOrders();
@@ -189,6 +199,7 @@ namespace Worktown.Game.Npc
         {
             foreach (QueuedCustomer waiting in _queue.Entries)
             {
+                PayOpenTab(waiting.Id, "the kitchen closed");
                 _guests.Remove(waiting.Id);
                 _patience.Remove(waiting.Id);
                 if (_customers.TryGetValue(waiting.Id, out Customer customer))
@@ -217,7 +228,21 @@ namespace Worktown.Game.Npc
         {
             pick = default;
             if (!_networkManager.IsServerStarted || !_shift.IsOpen) return false;
-            if (!_queue.TryPick(e => OrderRules.Match(plated, Menu.ById(e.Dish), e.Modifiers), out QueuedCustomer customer, out _))
+            // Spec 033: a lidded cup goes to a guest still waiting for its drink, anything else to one still waiting for its dish.
+            bool drink = Drinks.IsCup(plated);
+            if (drink)
+            {
+                if (!_queue.TryPick(e => _tab.WantsDrink(e.Id), e => OrderRules.FitDrink(plated, _tab.DrinkOf(e.Id)).Match,
+                        out QueuedCustomer thirsty, out _))
+                    return false;
+                OrderFit cupFit = OrderRules.FitDrink(plated, _tab.DrinkOf(thirsty.Id));
+                _patience.Get(thirsty.Id, out float waitedFor, out float patienceFor);
+                pick = new GuestPick(thirsty.Id, thirsty.Dish, cupFit, OrderRules.GuestSharePermille(cupFit.Match), Tenths(waitedFor),
+                    Tenths(patienceFor), true);
+                return true;
+            }
+            if (!_queue.TryPick(e => _tab.WantsFood(e.Id), e => OrderRules.Match(plated, Menu.ById(e.Dish), e.Modifiers),
+                    out QueuedCustomer customer, out _))
                 return false;
             OrderFit fit = OrderRules.Fit(plated, Menu.ById(customer.Dish), customer.Modifiers);
             float itemQuality = ItemRater.Rate(plated).Quality;
@@ -234,20 +259,47 @@ namespace Worktown.Game.Npc
         public bool IsPaying(int guestId) => Flow.Desk.IsWaiting(guestId);
 
         /// <summary>
+        /// Spec 033: the line of <paramref name="pick"/> is billed already: its guest waits in the register's line, or the line is on its
+        /// tab (it pays for it with the rest of its order, or when it leaves). The counter's fallback never pays such a line again.
+        /// </summary>
+        public bool HasBill(GuestPick pick) => Flow.Desk.IsWaiting(pick.CustomerId) || _tab.IsBilled(pick.CustomerId, pick.IsDrink);
+
+        /// <summary>
         /// Spec 032, server, after the sim sold the dish (credited nothing yet: TrySellForGuest): guest <paramref name="pick"/> takes it
         /// from <paramref name="payee"/>, walks to the register and waits to pay its bill (<paramref name="simPayout"/> at the pick's
         /// share) and its tip. False only when the guest is gone (then the caller pays the bill at once). 032 review: the register's
         /// line is the commit point (RegisterFlow.HandOver); once the guest is in it this returns true whatever the presentation does.
+        /// Spec 033: an order with a drink takes its lines one by one (<see cref="GuestTab"/>); a line that leaves another open goes on
+        /// the guest's tab (the commit point for it; true) and the guest waits in the queue for the rest.
         /// </summary>
         public bool OnHandedOver(GuestPick pick, PickupInteractor payee, long simPayout)
         {
-            if (payee == null || !_queue.Remove(pick.CustomerId)) return false;
+            if (payee == null || _queue.IndexOf(pick.CustomerId) < 0) return false;
+            // Spec 033: one line of the order: on the tab (the commit point for a line) until the last one comes; then one pick for all.
+            if (!_tab.Serve(pick, payee.OwnerId, GuestTab.LineBill(pick, simPayout), out GuestPick whole, out long bill))
+            {
+                _linePayees[pick.CustomerId] = payee;
+                try
+                {
+                    QueuedCustomer entry = _queue.Entries[_queue.IndexOf(pick.CustomerId)];
+                    if (_customers.TryGetValue(pick.CustomerId, out Customer waiting) && waiting != null)
+                        waiting.ServerSay(CustomerRules.StillWaitingText(_tab.FoodServed(pick.CustomerId), entry.Dish, entry.Drink));
+                    Debug.Log("[Customers] guest " + pick.CustomerId + " took its " + (pick.IsDrink ? "drink" : Menu.NameOf(pick.Dish)) + " ("
+                        + OrderRules.Describe(pick.Fit.Match) + ", line bill " + EconomyRules.Money(GuestTab.LineBill(pick, simPayout))
+                        + "); the rest of its order is still open");
+                    PublishTickets();
+                }
+                catch (System.Exception e) { Debug.LogException(e); }
+                return true;
+            }
+            _linePayees.Remove(pick.CustomerId);
+            _queue.Remove(pick.CustomerId);
             _arrivedAt.Remove(pick.CustomerId);
             _guests.TryGetValue(pick.CustomerId, out Guest g);
             _guests.Remove(pick.CustomerId);
             _patience.Remove(pick.CustomerId); // spec 032: no patience at the register
             _payees[pick.CustomerId] = payee;
-            Flow.HandOver(pick, payee.OwnerId, simPayout, g != null ? g.Order : null, Stage, Time.time);
+            Flow.HandOver(whole, payee.OwnerId, bill, g != null ? g.Order : null, Stage, Time.time);
             try
             {
                 Sync();
@@ -370,6 +422,7 @@ namespace Worktown.Game.Npc
             if (_outOfPatience.Count == 0) return;
             foreach (int id in _outOfPatience)
             {
+                PayOpenTab(id, "out of patience");
                 _queue.Remove(id);
                 _arrivedAt.Remove(id);
                 _guests.Remove(id);
@@ -390,10 +443,14 @@ namespace Worktown.Game.Npc
         {
             if (!_networkManager.IsServerStarted) return;
             IReadOnlyList<string> desired = CustomerRules.DesiredWishes(_economy.OpenDemand, HasDishes, _shift.IsOpen);
+            // Spec 033: a guest whose dish came already (sold to the demand) still waits for its drink: it keeps its place in the
+            // reconcile, so nobody else is sent away for the dish it got.
+            if (_tab.Count > 0 && _shift.IsOpen) desired = CustomerRules.KeepOpenOrders(desired, _queue.Entries, _tab.FoodServed);
             _queue.Reconcile(desired, _leaving, _joining);
 
             foreach (QueuedCustomer gone in _leaving)
             {
+                PayOpenTab(gone.Id, "changed its mind");
                 _arrivedAt.Remove(gone.Id);
                 _guests.Remove(gone.Id);
                 _patience.Remove(gone.Id);
@@ -409,20 +466,24 @@ namespace Worktown.Game.Npc
             foreach (string wish in _joining)
             {
                 if (spawned >= free) break;
-                MenuDish dish = DrawDish(wish, out GuestOrder order, out float patienceScale);
+                MenuDish dish = DrawDish(wish, out GuestOrder order, out float patienceScale, out string drink);
                 if (dish == null) continue; // cannot happen: only markets with dishes are desired
                 RecipeTemplate template = dish.Template != null ? RecipeTemplates.ById(dish.Template) : null;
                 byte modifiers = OrderModifiers.Pack(template, order.Modifiers);
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_customerPrefab, true);
                 nob.transform.SetPositionAndRotation(_entry.position, _entry.rotation);
                 var customer = nob.GetComponent<Customer>();
-                customer.ServerInit(wish, dish.Id, modifiers, _entry.position); // before Spawn: values go out with the spawn
+                byte drinkByte = DrinkRules.DrinkByte(drink); // spec 033
+                customer.ServerInit(wish, dish.Id, modifiers, drinkByte, _entry.position); // before Spawn: values go out with the spawn
                 _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;
-                _queue.Add(nob.ObjectId, wish, dish.Id, modifiers);
+                _queue.Add(nob.ObjectId, wish, dish.Id, modifiers, drinkByte);
+                _tab.Open(nob.ObjectId, drink);
                 _arrivedAt[nob.ObjectId] = Time.time;
                 _guests[nob.ObjectId] = new Guest { Order = order, Modifiers = modifiers };
-                _patience.Add(nob.ObjectId, GuestOrders.PatienceSeconds(order, CustomerRules.LayersOf(dish, modifiers)) * patienceScale);
+                // Spec 033: a drink is one more layer of work for the patience.
+                _patience.Add(nob.ObjectId, GuestOrders.PatienceSeconds(order, CustomerRules.LayersOf(dish, modifiers) + (drink != null ? 1 : 0))
+                    * patienceScale);
                 spawned++;
             }
 
@@ -438,15 +499,40 @@ namespace Worktown.Game.Npc
         }
 
         /// <summary>Spec 032: the next guest's dish (022's seeded draw) and its order details (the same RNG, GuestOrders).</summary>
-        private MenuDish DrawDish(string wish, out GuestOrder order, out float patienceScale)
+        private MenuDish DrawDish(string wish, out GuestOrder order, out float patienceScale, out string drink)
         {
             patienceScale = _patienceScale;
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
-            if (_tourOrders != null && _tourOrders.TryNext(wish, out MenuDish scripted, out order, out patienceScale)) return scripted;
+            if (_tourOrders != null && _tourOrders.TryNext(wish, out MenuDish scripted, out order, out patienceScale, out drink)) return scripted;
 #endif
             MenuDish dish = Menu.Draw(_orders, wish, Menu.CrateIngredients);
             order = GuestOrders.Draw(_orders, dish != null && dish.Template != null ? RecipeTemplates.ById(dish.Template) : null);
+            drink = dish != null ? Drinks.DrawOrderDrink(_drinkOrders) : null; // spec 033: its own RNG
             return dish;
+        }
+
+        /// <summary>
+        /// Spec 033: guest <paramref name="guestId"/> leaves (<paramref name="why"/>) with a line of its order still open: it pays what it
+        /// got (the lines' bill, no tip) to the cook who handed it over, once (the tab is closed), and the shift counts the sale.
+        /// </summary>
+        private void PayOpenTab(int guestId, string why)
+        {
+            _linePayees.TryGetValue(guestId, out PickupInteractor payee);
+            _linePayees.Remove(guestId);
+            if (!_tab.TakeOpenBill(guestId, out long bill, out int payeeId, out int stars, out int misses)) return;
+            try
+            {
+                NetworkObject nob = payee != null && payee.IsSpawned && payee.OwnerId == payeeId ? payee.NetworkObject : null;
+                long paid = 0;
+                if (_economy != null && bill > 0 && !_economy.TryPayGuest(payeeId, nob, bill, out paid))
+                    Debug.LogError("[Customers] could not pay " + EconomyRules.Money(bill) + " for guest " + guestId + "'s open order");
+                GuestReview review = ReviewRules.Review(stars, 0, 1, misses, false);
+                _shift.RecordSale(stars, paid, 0, review);
+                if (_feed != null) _feed.ServerAdd("Guest paid " + EconomyRules.Money(paid) + " for what it got (" + why + ", no tip)");
+                Debug.Log("[Customers] guest " + guestId + " left with its order open (" + why + "): paid " + EconomyRules.Money(paid)
+                    + " to player " + payeeId);
+            }
+            catch (System.Exception e) { Debug.LogException(e); }
         }
 
         /// <summary>Spec 032: the paying guests stand in line at the register, the first in front of it.</summary>
@@ -466,6 +552,7 @@ namespace Worktown.Game.Npc
 
         private void OnExited(Customer customer)
         {
+            PayOpenTab(customer.ObjectId, "the guest is gone"); // spec 033: normally paid when it left the queue already
             _customers.Remove(customer.ObjectId);
             _guests.Remove(customer.ObjectId);
             _patience.Remove(customer.ObjectId);
@@ -485,7 +572,8 @@ namespace Worktown.Game.Npc
             foreach (QueuedCustomer entry in _queue.Entries)
             {
                 float since = _arrivedAt.TryGetValue(entry.Id, out float at) ? at : now;
-                _tickets.Add(CustomerRules.PackTicket(entry.Dish, CustomerRules.WaitMinutes(now - since), entry.Modifiers));
+                _tickets.Add(CustomerRules.PackTicket(entry.Dish, CustomerRules.WaitMinutes(now - since), entry.Modifiers,
+                    _tab.WantsDrink(entry.Id) ? entry.Drink : (byte)0, _tab.FoodServed(entry.Id))); // spec 033: the open drink line
             }
             _rail.ServerSetTickets(_tickets);
         }

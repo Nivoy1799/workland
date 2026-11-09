@@ -107,6 +107,8 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationAssembly, Mode = Fit.Graybox },
             // Spec 032: no register in the packs: a graybox till (body, leaning display, change drawer, buttons, card terminal, mat).
             new Def { Key = ArtKey.StationRegister, Mode = Fit.Graybox },
+            // Spec 033: no drink dispenser in the packs: a graybox (Steel body, a panel per drink, spouts, a drip tray).
+            new Def { Key = ArtKey.StationDrinkDispenser, Mode = Fit.Graybox },
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -167,6 +169,9 @@ namespace Worktown.Game.Editor
             // Spec 031b: the clamshell's lid is turned shut, so the box reads as one closed box, not two trays.
             new Def { Key = ArtKey.PropTakeawayBox, Model = FoodKit + "styrofoam.fbx", Mode = Fit.Max, CloseLid = true },
             FoodDef(ArtKey.PropPaperBag, "bag.fbx"),
+            // Spec 033: the takeaway cup. The Kenney cup is a mug and the soda glass a purple cocktail glass with a straw and lemon, so
+            // the cup is a graybox: an open, tapered Cream paper cup with its fill line (DrinkArtRules), 12 cm real, x1.5.
+            new Def { Key = ArtKey.PropCup, Mode = Fit.Graybox },
             // Cookware (real size x1.15).
             FoodDef(ArtKey.FoodPlate, "plate.fbx"),
             FoodDef(ArtKey.FoodBowl, "bowl.fbx"),
@@ -892,6 +897,8 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationGriddle) return BuildGriddle(parent); // spec 030
             if (key == ArtKey.StationAssembly) return BuildAssembly(parent); // spec 031
             if (key == ArtKey.StationRegister) return BuildRegister(parent); // spec 032
+            if (key == ArtKey.StationDrinkDispenser) return BuildDrinkDispenser(parent); // spec 033
+            if (key == ArtKey.PropCup) return BuildCup(parent);
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -1100,6 +1107,75 @@ namespace Worktown.Game.Editor
             Box(model, "Give", F(RegisterArtRules.GiveCentre), RegisterArtRules.ButtonSize, give);
             Box(model, "Terminal", F(RegisterArtRules.TerminalCentre), RegisterArtRules.TerminalSize, screen);
             Box(model, "Change mat", F(RegisterArtRules.MatCentre), RegisterArtRules.MatSize, mat);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 033: the graybox drink dispenser as the wrapper's "Model" (DrinkArtRules, the base on the counter top at the origin): a
+        /// Steel body with a cap, a coloured panel per drink above its tap, the three Steel spouts and the Charcoal drip tray. The levers,
+        /// the cup stack and the lid stack are the scene's (they move or fly). Front on +Z like the kit (the scene turns it to the cook).
+        /// </summary>
+        private static GameObject BuildDrinkDispenser(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("DrinkBody", Palette.Steel);
+            Material cap = GrayboxMaterial("DrinkCap", Palette.DeepBlue);
+            Material tray = GrayboxMaterial("DrinkTray", Palette.Charcoal);
+            Material spout = GrayboxMaterial("DrinkSpout", Palette.Charcoal);
+            Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
+            Box(model, "Body", F(DrinkArtRules.BodyCentre), DrinkArtRules.BodySize, steel);
+            Box(model, "Cap", F(DrinkArtRules.CapCentre), DrinkArtRules.CapSize, cap);
+            Box(model, "Drip tray", F(DrinkArtRules.TrayCentre), DrinkArtRules.TraySize, tray);
+            for (int tap = 0; tap < Worktown.Game.Cooking.DrinkRules.TapCount; tap++)
+            {
+                Box(model, "Panel " + tap, F(DrinkArtRules.PanelCentre(tap)), DrinkArtRules.PanelSize,
+                    GrayboxMaterial("DrinkPanel" + tap, DrinkArtRules.DrinkColour(tap)));
+                Box(model, "Spout " + tap, F(DrinkArtRules.SpoutCentre(tap)), DrinkArtRules.SpoutSize, spout);
+                // The spout's arm back into the body.
+                Vector3 arm = DrinkArtRules.SpoutCentre(tap) + new Vector3(0f, DrinkArtRules.SpoutSize.y * 0.5f - 0.01f, 0.06f);
+                Box(model, "Arm " + tap, F(arm), new Vector3(0.03f, 0.02f, 0.12f), spout);
+            }
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 033: the graybox takeaway cup as the wrapper's "Model": <see cref="DrinkArtRules.CupSides"/> Cream wall slabs leaning out
+        /// from the bottom radius to the top one (an open, tapered paper cup, so the liquid shows from above), a Cream bottom, and the fill
+        /// line printed round the outside (short Charcoal dashes on every slab). Its bottom at the origin.
+        /// </summary>
+        private static GameObject BuildCup(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material paper = GrayboxMaterial("Cup", Palette.Cream);
+            Material line = GrayboxMaterial("CupLine", Palette.Charcoal);
+            float h = DrinkArtRules.CupHeight, rb = DrinkArtRules.CupBottomRadius, rt = DrinkArtRules.CupTopRadius, t = DrinkArtRules.CupWall;
+            int n = DrinkArtRules.CupSides;
+            float slant = Mathf.Sqrt(h * h + (rt - rb) * (rt - rb));
+            float tilt = Mathf.Atan2(rt - rb, h) * Mathf.Rad2Deg;
+            float width = 2f * Mathf.PI * (rt + t) / n * 1.04f;
+            float lineY = h * DrinkArtRules.FillLineHeight;
+            float lineR = rb + (rt - rb) * lineY / h + t;
+            for (int i = 0; i < n; i++)
+            {
+                float a = 360f * i / n;
+                Quaternion turn = Quaternion.Euler(0f, a, 0f);
+                Vector3 radial = turn * Vector3.forward;
+                GameObject wall = Box(model, "Wall " + i, radial * ((rb + rt) * 0.5f + t * 0.5f) + Vector3.up * (h * 0.5f),
+                    new Vector3(width, slant, t), paper);
+                wall.transform.localRotation = turn * Quaternion.Euler(tilt, 0f, 0f);
+                GameObject dash = Box(model, "Fill line " + i, radial * (lineR + 0.0012f) + Vector3.up * lineY,
+                    new Vector3(width * 0.55f, 0.004f, 0.0015f), line);
+                dash.transform.localRotation = turn * Quaternion.Euler(tilt, 0f, 0f);
+            }
+            GameObject bottom = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            bottom.name = "Bottom";
+            UnityEngine.Object.DestroyImmediate(bottom.GetComponent<Collider>());
+            bottom.transform.SetParent(model.transform, false);
+            bottom.transform.localPosition = new Vector3(0f, 0.003f, 0f);
+            bottom.transform.localScale = new Vector3(2f * rb + t, 0.003f, 2f * rb + t); // Unity's cylinder is 2 m high
+            bottom.GetComponent<MeshRenderer>().sharedMaterial = paper;
             return model;
         }
 

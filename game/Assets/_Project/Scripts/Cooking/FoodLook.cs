@@ -39,6 +39,11 @@ namespace Worktown.Game.Cooking
         public const byte KindWrapped = 5;
         public const byte KindBoxed = 6;
         public const byte KindBagged = 7;
+        /// <summary>Spec 033: a cup from the drink dispenser, open (empty or filled) or with its lid. For these two kinds the ingredient
+        /// byte is the drink (DrinkRules.DrinkByte: 0 none, 1 lemonade, 2 iced tea, 3 soda) and the shape byte the level
+        /// (DrinkRules.LevelEmpty .. LevelSpilled).</summary>
+        public const byte KindCup = 8;
+        public const byte KindLidded = 9;
 
         /// <summary>Parts drawn on a plate or in a bowl; the rest are not drawn.</summary>
         public const int MaxParts = 4;
@@ -52,7 +57,8 @@ namespace Worktown.Game.Cooking
         /// <summary>0 none, 1 fried (fry or saute), 2 boiled, 3 deep-fried (spec 029), 4 grilled (spec 031b): picks the golden shift
         /// (spec 017 open question 3).</summary>
         public byte Heat;
-        /// <summary>0 single, 1 plated, 2 mixed; spec 031: 3 an open build, 4 folded, 5 in paper, 6 boxed, 7 bagged.</summary>
+        /// <summary>0 single, 1 plated, 2 mixed; spec 031: 3 an open build, 4 folded, 5 in paper, 6 boxed, 7 bagged; spec 033: 8 a cup,
+        /// 9 a lidded cup.</summary>
         public byte Kind;
         /// <summary>Plated or mixed: number of parts shown (max 4), else 0.</summary>
         public byte PartCount;

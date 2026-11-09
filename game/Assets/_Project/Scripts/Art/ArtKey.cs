@@ -109,6 +109,9 @@ namespace Worktown.Game.Art
         PropTakeawayBox,
         PropPaperBag,
         /// <summary>Spec 032: the register on the counter (graybox, RegisterArtRules).</summary>
-        StationRegister
+        StationRegister,
+        /// <summary>Spec 033: the drink dispenser on the front counter (graybox, DrinkArtRules) and the takeaway cup (Kenney cup).</summary>
+        StationDrinkDispenser,
+        PropCup
     }
 }

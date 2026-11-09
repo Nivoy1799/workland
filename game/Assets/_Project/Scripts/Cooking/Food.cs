@@ -26,6 +26,9 @@ namespace Worktown.Game.Cooking
 
         private bool _visualDirty;
 
+        /// <summary>Spec 033: the client-side model (the owner predicts a cup's level and lid on it); null on a headless server.</summary>
+        public FoodVisual Visual => _visual;
+
         private void Awake()
         {
             DisplayName.OnChange += (_, _, _) => Refresh();
