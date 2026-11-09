@@ -1630,8 +1630,19 @@ namespace Worktown.Game.Cooking
             if (heldCupId != r.Cup || !_items.TryGetValue(r.Cup, out Item now) || !ReferenceEquals(now, r.CupItem) || !Drinks.IsCup(now)
                 || Drinks.IsLidded(now))
                 return CookOutcome.NeedsCup;
+            return TryPreviewFill(tap, total, out cup);
+        }
+
+        /// <summary>
+        /// Spec 038b: the sim's cup of tap <paramref name="tap"/>'s drink holding <paramref name="ml"/> (its bucket from the ml), not stored
+        /// anywhere; SimRefused when the sim refuses. The pour's end previews with it, again for a shorter pour when the keg ran short.
+        /// </summary>
+        public CookOutcome TryPreviewFill(int tap, float ml, out Item cup)
+        {
+            cup = null;
+            if (!DrinkRules.IsTap(tap)) return CookOutcome.InvalidOption;
             OperationResult filled = _factory.Apply(Drinks.FillOperationId, new[] { _factory.CreateBase(DrinkRules.DrinkOf(tap)).Item },
-                Drinks.FillParams(total));
+                Drinks.FillParams(ml));
             if (!filled.Ok || filled.Item == null) return CookOutcome.SimRefused;
             cup = filled.Item;
             return CookOutcome.Ok;

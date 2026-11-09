@@ -10,9 +10,11 @@ namespace Worktown.Game.Shop
     /// stack). Nothing is charged in money: the orders paid for it. A press finds nothing left: OutOfStock. The refund backstop puts
     /// back exactly what the charge took. 034 review: a good the shop does not stock is never free: OutOfStock (every sauce, packaging
     /// and drink has a stock line; a test pins it). A portion or a pour is drawn whole or not at all (no last drops: the wholesaler's
-    /// cap counts the bucket's least share). One instance per server step; each charge starts from nothing drawn.
+    /// cap counts the bucket's least share); 038b: a pour larger than the keg's rest is first cut to that rest by the dispenser
+    /// (<see cref="IDrinkStock"/>), so its charge draws exactly what the cup gets. One instance per server step; each charge starts
+    /// from nothing drawn.
     /// </summary>
-    public sealed class StockWallet : IAssemblyWallet, IDrinkWallet
+    public sealed class StockWallet : IAssemblyWallet, IDrinkWallet, IDrinkStock
     {
         private readonly StockRoom _room;
         private int _drawn;
@@ -74,6 +76,13 @@ namespace Worktown.Game.Shop
         {
             int line = LineOf(drinkId);
             return line >= 0 && _room.CanDraw(line, percent);
+        }
+
+        /// <summary>Spec 038b: what the tap's kegs still hold (% of a cup), so a pour larger than that fills only what is left.</summary>
+        public long AvailablePercent(string drinkId)
+        {
+            int line = LineOf(drinkId);
+            return line >= 0 ? _room.LineOf(line)?.AvailablePercent ?? 0 : 0;
         }
 
         public void Refund(int owner, string drinkId, int percent, bool withCup, long cost)

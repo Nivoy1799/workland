@@ -99,6 +99,9 @@ namespace Worktown.Game.Tutorial
             _hint.text = done ? "F4 closes" : optional ? "F5 skips this step  ·  F4 skips the tutorial" : "F4 skips the tutorial";
         }
 
+        /// <summary>038b: the same step's instruction changes (its variant for what the player holds); the caller calls it only on a change.</summary>
+        public void SetText(string text) => _text.text = text;
+
         public string Text => _text.text;
         public string Kicker => _kicker.text;
         public bool CardShown => _cardShown;

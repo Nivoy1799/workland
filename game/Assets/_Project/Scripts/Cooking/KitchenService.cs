@@ -138,11 +138,13 @@ namespace Worktown.Game.Cooking
                 _squeezers.Clear();
                 _pourers.Clear(); // spec 033
                 // 036 review: an untouched loaded cone goes back to the cone stock line (a partly shaved one is lost, like food in a pan).
+                // 038b: up to the line's capacity; the rest waits in a delivery box.
                 int untouched = Spits.ClearReturningUntouched();
                 if (untouched > 0 && _supply != null)
                 {
-                    _supply.Room.Return(Worktown.Game.Shop.StockCatalog.ConeLine, untouched);
-                    Debug.Log("[Kitchen] the server stopped: " + untouched + " untouched seitan cone(s) back in stock");
+                    int boxed = _supply.Room.ReturnUpToCapacity(Worktown.Game.Shop.StockCatalog.ConeLine, untouched);
+                    Debug.Log("[Kitchen] the server stopped: " + (untouched - boxed) + " untouched seitan cone(s) back in stock"
+                        + (boxed > 0 ? ", " + boxed + " in a delivery box (the line is full)" : ""));
                 }
                 _spitCones.Clear();
                 _spitTrays.Clear();

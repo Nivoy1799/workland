@@ -249,7 +249,8 @@ namespace Worktown.Sim.Economy
 
         /// <summary>
         /// Spec 034: an order of <paramref name="packs"/> packs from the supplier, paid once: <see cref="Supplier.OrderCost"/> of the
-        /// good's grocer price (the bulk price). UnknownBaseItem for a good the catalog does not price or an offer at another price,
+        /// good's grocer price (the bulk price). UnknownBaseItem for a good the catalog does not price or an offer at another price (038b:
+        /// or a price good other than the good itself while the good has a grocer price of its own),
         /// InvalidQuantity outside 1..<see cref="Supplier.MaxPacksPerOrder"/>, InsufficientFunds; on any failure nothing changes.
         /// </summary>
         public PurchaseResult TryBuySupply(EconomyState s, string buyerId, SupplierOffer offer, int packs)
@@ -259,6 +260,9 @@ namespace Worktown.Sim.Economy
             int ai = FindAccount(s, buyerId);
             if (ai < 0) return new PurchaseResult(s, EconomyError.UnknownAccount, 0);
             if (!_catalog.TryGetGrocerPrice(offer.PriceGoodId, out var price) || price != offer.GrocerPrice) // 036 review: the price good
+                return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
+            // 038b: a good the grocer prices is bought at its own price; another price good only for a good it has none for (a cone).
+            if (offer.PriceGoodId != offer.GoodId && _catalog.TryGetGrocerPrice(offer.GoodId, out _))
                 return new PurchaseResult(s, EconomyError.UnknownBaseItem, 0);
             if (packs < 1 || packs > Supplier.MaxPacksPerOrder || offer.PackSize < 1 || offer.GrocerItemsPerUnit < 1)
                 return new PurchaseResult(s, EconomyError.InvalidQuantity, 0);

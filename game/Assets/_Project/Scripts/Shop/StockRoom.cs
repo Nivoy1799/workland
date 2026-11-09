@@ -104,6 +104,27 @@ namespace Worktown.Game.Shop
             if (l != null && units > 0) Apply(Stock.Return(l.GoodId, units));
         }
 
+        /// <summary>
+        /// Spec 038b: <paramref name="units"/> sealed units go back to line <paramref name="line"/> (a seitan cone left untouched on the
+        /// spit at a server stop) up to its capacity; the rest waits at the supplier in one delivery box (the 034 boxes: it comes to the
+        /// back door and is unpacked when there is room), so a line never exceeds its capacity and nothing is lost. Returns the units
+        /// boxed (0 when all fit).
+        /// </summary>
+        public int ReturnUpToCapacity(int line, int units)
+        {
+            StockLine l = LineOf(line);
+            if (l == null || units <= 0) return 0;
+            int fit = System.Math.Min(units, l.Room);
+            if (fit > 0) Apply(Stock.Fill(l.GoodId, fit));
+            int rest = units - fit;
+            if (rest > 0)
+            {
+                _waiting.Add(new BoxContents(line, rest));
+                Version++;
+            }
+            return rest;
+        }
+
         /// <summary>The refund backstop for a portion: <paramref name="percent"/> drawn goes back.</summary>
         public void ReturnPercent(int line, int percent)
         {
