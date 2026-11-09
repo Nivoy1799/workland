@@ -141,3 +141,6 @@ tuned later by the human.
   calm-guests flag can go stale within one session; the engine should tie PriceGoodId to GoodId; a tap pour larger
   than what is left is refused whole; a returned cone can exceed capacity; two repeated lookups; sim test for
   PriceGoodId; `string?` nullable.
+- 038b review (approved with nits): the calm-guests MonoBehaviour wiring is untested (only pure parts); two error paths
+  after a cut pour; the engine trusts offer fields (items per unit, pack size); plates spawned within 1 s are not seen by
+  the tutorial target; an unused using.

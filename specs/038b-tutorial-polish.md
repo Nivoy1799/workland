@@ -1,7 +1,7 @@
 ---
 id: 038b
 title: Tutorial and supply polish (review follow-ups of 038)
-status: approved
+status: done
 owner: architect
 builder: opus
 ---
