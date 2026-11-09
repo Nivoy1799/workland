@@ -86,6 +86,9 @@ namespace Worktown.Game.Net
         // Spec 029: the fryer baskets (scene objects; fixed vessels without a Pickup) and their looks.
         private FryerBasket[] _allBaskets;
         private Vessel[] _basketVessels = new Vessel[0];
+        // Spec 030: the griddle spots (fixed vessels without a Pickup, like the baskets).
+        private GriddleSpot[] _allGriddleSpots;
+        private Vessel[] _griddleVessels = new Vessel[0];
         // Spec 028b: the copy of a taken ingredient flying into the hand until the server's food is there (owner only).
         private Worktown.Game.Art.StockTakeLook _pendingTake;
         private string _pendingTakeName;
@@ -133,6 +136,8 @@ namespace Worktown.Game.Net
             public Worktown.Game.Art.StockTakeLook Take;
             /// <summary>Spec 029: a fryer basket's predicted arc into or out of the oil.</summary>
             public Worktown.Game.Art.BasketView Basket;
+            /// <summary>Spec 030: a griddle spot's predicted flip.</summary>
+            public Worktown.Game.Art.GriddleSpotView Griddle;
             public int ClickFrame;
             public bool VisualLogged;
         }
@@ -209,6 +214,7 @@ namespace Worktown.Game.Net
                 if (look.Item != null) look.Item.EndPrediction(false);
                 if (look.Take != null) look.Take.Confirm(); // spec 028b: the copy just goes
                 if (look.Basket != null) look.Basket.EndPrediction(); // spec 029: back to the synced pose
+                if (look.Griddle != null) look.Griddle.EndPrediction(false); // spec 030
             }
             _ending.Clear();
             _pendingTake = null;
@@ -324,6 +330,13 @@ namespace Worktown.Game.Net
                 // Spec 027b: inside the request interval the click waits (never swallowed).
                 Queue(QueuedKind.Click, true);
             }
+            else if (((mouse != null && locked && mouse.rightButton.wasPressedThisFrame) || (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame))
+                     && InteractionRules.RightClickFlips(CurrentAim) && Target is Vessel spot
+                     && Time.unscaledTime - _lastSendTime >= _clientInterval)
+            {
+                // Spec 030: the right click on a griddle spot flips; without the spatula the server answers "Use the spatula".
+                FlipWithLook(spot);
+            }
 
             bool drop = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
             if (drop && InteractionRules.DropKeyActs(true) && held != null) Queue(QueuedKind.Drop, true);
@@ -416,6 +429,9 @@ namespace Worktown.Game.Net
                             view.PredictShake(FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
                                 TimeManager != null ? (float)TimeManager.TickDelta : 0f));
                     }
+                    break;
+                case InteractionAction.Flip:
+                    if (Target is Vessel spot) FlipWithLook(spot); // spec 030: the arc and the tssh at the click
                     break;
                 case InteractionAction.PutInto:
                 case InteractionAction.Pour:
@@ -524,10 +540,11 @@ namespace Worktown.Game.Net
         /// </summary>
         private Held Hands(Pickup held)
         {
-            if (held == null && _pendingTake != null) return Held.Food(_pendingTakeName ?? "food", false);
-            // Spec 029b: an item on its predicted way into the hands counts as held (no stock take while the knife flies in).
-            if (held == null && _pendingPickUp != null && _pendingPickUp.IsSpawned && _pendingPickUp.HasPrediction) return Describe(_pendingPickUp);
-            return Describe(held);
+            // Spec 029b/030: the pure rule (InteractionRules.EffectiveHands): a take on its way counts as that food; an item on its
+            // predicted way into the hands counts as held for refusals only (no take or buy, and never a tip or pour with it).
+            bool flying = _pendingPickUp != null && _pendingPickUp.IsSpawned && _pendingPickUp.HasPrediction;
+            return InteractionRules.EffectiveHands(Describe(held), _pendingTake != null ? _pendingTakeName ?? "food" : null,
+                flying ? Describe(_pendingPickUp) : (Held?)null);
         }
 
         /// <summary>Spec 027b: a drop request (Q, or E in third person) with its predicted fall in front of you.</summary>
@@ -608,13 +625,9 @@ namespace Worktown.Game.Net
         private void PressBasketButton(StationButton button)
         {
             FryerRules.TryParseBasketOption(button.Option, out int index);
-            RefreshInteractables();
-            Vessel basket = null;
-            for (int i = 0; i < _allBaskets.Length; i++)
-                if (_allBaskets[i] != null && _allBaskets[i].Fryer == button.Station && _allBaskets[i].Basket == index) basket = _basketVessels[i];
-            Worktown.Game.Art.BasketView view = basket != null && basket.TryGetComponent(out Worktown.Game.Art.BasketView v) ? v : null;
+            Vessel basket = BasketOf(button.Station, index, out Worktown.Game.Art.BasketView view);
             byte flags = button.Station.TryGetComponent(out StationContents fryer) ? fryer.StoveFlags.Value : (byte)0;
-            bool seenLowered = view != null ? view.SeenLowered : FryerRules.IsLowered(flags, index);
+            bool seenLowered = SeenLowered(button.Station, index, flags); // spec 030: the same state the prompt shows
             SendStation(button.Station.Index, FryerRules.IntentOption(index, seenLowered));
             if (view == null) return;
             bool lowering = !seenLowered;
@@ -626,6 +639,48 @@ namespace Worktown.Game.Net
                 TimeManager != null ? (float)TimeManager.TickDelta : 0f);
             _looks.Add(pending, view, new FeelPrediction(PredictionKind.Basket, OwnerId, Snapshot(pending), Time.unscaledTime, timeout),
                 _lastRequest);
+        }
+
+        /// <summary>
+        /// Spec 030: a flip of the food on a griddle spot: RequestUse(spot, ActionFlip). With the spatula in the hands the food
+        /// turns over now on its arc with the "tssh" (judged like any predicted look: confirmed when the spot's synced flip
+        /// counter moves on; a refusal or the timeout turns it back with "nope"). Without the spatula nothing moves: the
+        /// server says "Use the spatula".
+        /// </summary>
+        private void FlipWithLook(Vessel spot)
+        {
+            if (spot == null) return;
+            SendUse(spot.NetworkObject, VesselRules.ActionFlip);
+            if (!InteractionRules.PredictsFlip(CurrentHeld, CurrentAim) || !spot.TryGetComponent(out Worktown.Game.Art.GriddleSpotView view)) return;
+            PlaySound(SoundKey.Flip, spot.transform.position);
+            float timeout = FeelRules.ConfirmTimeout(FeelSettings.Current.ConfirmTimeout, RoundTripSeconds(),
+                TimeManager != null ? (float)TimeManager.TickDelta : 0f);
+            view.PredictFlip(timeout);
+            if (_snapshotOf == null) _snapshotOf = Snapshot;
+            var pending = new PendingLook { Griddle = view, ClickFrame = Time.frameCount };
+            _looks.Add(pending, view, new FeelPrediction(PredictionKind.Flip, OwnerId, Snapshot(pending), Time.unscaledTime, timeout),
+                _lastRequest);
+        }
+
+        /// <summary>Spec 029/030: basket <paramref name="index"/> of <paramref name="fryer"/> and its view, or null.</summary>
+        private Vessel BasketOf(Station fryer, int index, out Worktown.Game.Art.BasketView view)
+        {
+            RefreshInteractables();
+            Vessel basket = null;
+            for (int i = 0; i < _allBaskets.Length; i++)
+                if (_allBaskets[i] != null && _allBaskets[i].Fryer == fryer && _allBaskets[i].Basket == index) basket = _basketVessels[i];
+            view = basket != null && basket.TryGetComponent(out Worktown.Game.Art.BasketView v) ? v : null;
+            return basket;
+        }
+
+        /// <summary>
+        /// Spec 029b/030: where this client sees basket <paramref name="index"/>: its own pending arc first, else the synced state
+        /// (the fryer's <paramref name="flags"/> when the basket has no view). The button's click and its prompt both use it.
+        /// </summary>
+        private bool SeenLowered(Station fryer, int index, byte flags)
+        {
+            BasketOf(fryer, index, out Worktown.Game.Art.BasketView view);
+            return view != null ? view.SeenLowered : FryerRules.IsLowered(flags, index);
         }
 
         /// <summary>The measured round trip in s, or FeelRules.AssumedRoundTrip before the first ping.</summary>
@@ -648,6 +703,12 @@ namespace Worktown.Game.Net
             if (look.Take != null) return TakeSnapshot(FindHeldPickup());
             // Spec 029: a basket is about its synced state: 1 while it is in the oil.
             if (look.Basket != null) return new ItemSnapshot(true, -1, Vector3.zero, look.Basket.SyncedLowered ? 1 : 0);
+            // Spec 030: a flip is about the spot's synced flip counter (gone once the spot is empty).
+            if (look.Griddle != null)
+            {
+                Vessel spotVessel = look.Griddle.GetComponent<Vessel>();
+                return new ItemSnapshot(spotVessel != null && spotVessel.ContentCount > 0, -1, Vector3.zero, look.Griddle.SyncedFlips);
+            }
             Pickup item = look.Item;
             if (item == null || !item.IsSpawned) return ItemSnapshot.Gone;
             Vessel vessel = look.Vessel;
@@ -673,6 +734,7 @@ namespace Worktown.Game.Net
                 {
                     Debug.Log("[Feel] click to confirm: " + ms.ToString("0") + " ms (" + p.Kind + ")");
                     if (look.Item != null) look.Item.EndPrediction(true);
+                    if (look.Griddle != null) look.Griddle.EndPrediction(true); // spec 030
                     if (look.Basket != null) look.Basket.EndPrediction();
                     if (look.Take != null)
                     {
@@ -690,6 +752,11 @@ namespace Worktown.Game.Net
                 {
                     look.Basket.EndPrediction(); // spec 029: it swings back to where the server keeps it
                     nopeAt = look.Basket.transform.position;
+                }
+                if (look.Griddle != null)
+                {
+                    look.Griddle.EndPrediction(false); // spec 030: it turns back over
+                    nopeAt = look.Griddle.transform.position;
                 }
                 if (look.Take != null)
                 {
@@ -709,6 +776,7 @@ namespace Worktown.Game.Net
             if (look.Item != null) drawn = look.Item.PredictionDrawnFrame;
             else if ((object)look.Take != null) drawn = look.Take.DrawnFrame; // the copy may be gone already; its number stays
             else if (look.Basket != null) drawn = look.Basket.PredictionDrawnFrame;
+            else if (look.Griddle != null) drawn = look.Griddle.PredictionDrawnFrame; // spec 030
             if (drawn < 0) return;
             look.VisualLogged = true;
             int frames = drawn - look.ClickFrame;
@@ -746,6 +814,7 @@ namespace Worktown.Game.Net
         {
             if (held == null) return Held.Nothing;
             if (held.TryGetComponent(out Knife _)) return Held.Knife;
+            if (held.TryGetComponent(out Spatula _)) return Held.Spatula; // spec 030
             if (held.TryGetComponent(out Vessel vessel)) return Held.Cookware(vessel.Kind, vessel.ContentCount, vessel.Title.Value);
             if (held.TryGetComponent(out Food food))
                 return Held.Food(food.DisplayName.Value, food.Look.Value.Kind == FoodLook.KindPlated);
@@ -759,7 +828,10 @@ namespace Worktown.Game.Net
             {
                 case StationButton button:
                     byte flags = button.Station != null && button.Station.TryGetComponent(out StationContents stove) ? stove.StoveFlags.Value : (byte)0;
-                    // Spec 029: the fryer's knob and basket buttons say what they do from the fryer's flags.
+                    // Spec 029: the fryer's knob and basket buttons say what they do from the fryer's flags; spec 030 (029b review): a
+                    // basket button from where this client sees the basket (its pending arc first), as its click asks.
+                    if (button.Station != null && button.Station.Kind == StationKind.Fryer && FryerRules.TryParseBasketOption(button.Option, out int seenBasket))
+                        flags = FryerRules.WithLowered(flags, seenBasket, SeenLowered(button.Station, seenBasket, flags));
                     return AimTarget.Button(button.Station != null ? button.Station.Kind : StationKind.Stove, button.Option, flags);
                 case PlaceSurface surface:
                     return AimTarget.Spot(TargetSpot, surface.IsBurner);
@@ -771,6 +843,7 @@ namespace Worktown.Game.Net
                     return station.Kind == StationKind.Crate ? DescribeStock(station.IngredientIndex) : AimTarget.OnStation(station.Kind);
                 case Pickup pickup:
                     if (pickup.TryGetComponent(out Knife _)) return AimTarget.Item("knife");
+                    if (pickup.TryGetComponent(out Spatula _)) return AimTarget.Item("spatula"); // spec 030
                     if (pickup.TryGetComponent(out Food food))
                         return AimTarget.Item(food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food");
                     return AimTarget.Item("box");
@@ -909,7 +982,7 @@ namespace Worktown.Game.Net
                 }
                 // Spec 029: a fryer basket (a fixed vessel, no Pickup); its collider moves with its arc.
                 Vessel fixedVessel = hitCollider.GetComponentInParent<Vessel>();
-                if (fixedVessel != null && fixedVessel.Kind == VesselKind.Basket)
+                if (fixedVessel != null && VesselRules.IsFixed(fixedVessel.Kind)) // spec 030: a griddle spot too
                 {
                     if (fixedVessel.IsSpawned) AddAimHit(distance, AimKind.Vessel, fixedVessel);
                     else AddAimHit(distance, AimKind.Other, null);
@@ -1008,6 +1081,13 @@ namespace Worktown.Game.Net
                 _basketVessels = new Vessel[_allBaskets.Length];
                 for (int i = 0; i < _allBaskets.Length; i++) _basketVessels[i] = _allBaskets[i].GetComponent<Vessel>();
             }
+            if (_allGriddleSpots == null || HasMissing(_allGriddleSpots))
+            {
+                // Spec 030: looked up once like the baskets.
+                _allGriddleSpots = FindObjectsByType<GriddleSpot>(FindObjectsSortMode.None);
+                _griddleVessels = new Vessel[_allGriddleSpots.Length];
+                for (int i = 0; i < _allGriddleSpots.Length; i++) _griddleVessels[i] = _allGriddleSpots[i].GetComponent<Vessel>();
+            }
         }
 
         private static bool HasMissing<TItem>(TItem[] items) where TItem : UnityEngine.Object
@@ -1062,6 +1142,13 @@ namespace Worktown.Game.Net
                 Vessel basket = _basketVessels[i];
                 if (basket == null || !basket.IsSpawned) continue;
                 AddCone(ray, basket, PlaceSpots.None, basket.ContentPoint, hands, Describe(basket), range, feel.AimCone, basket.transform.position);
+            }
+            for (int i = 0; i < _griddleVessels.Length; i++)
+            {
+                // Spec 030: a griddle spot competes at its food, reach measured to its pivot (as the server does).
+                Vessel spot = _griddleVessels[i];
+                if (spot == null || !spot.IsSpawned) continue;
+                AddCone(ray, spot, PlaceSpots.None, spot.ContentPoint, hands, Describe(spot), range, feel.AimCone, spot.transform.position);
             }
             if (!hands.IsHolding)
                 foreach (StockSlot slot in _allSlots) // spec 028b: reach to the slot's anchor, as the server measures it
@@ -1146,8 +1233,9 @@ namespace Worktown.Game.Net
             Station own = candidate != null ? candidate.GetComponentInParent<Station>() : null;
             if (candidate is StationButton button) own = button.Station;
             // Spec 029: a basket hangs in its fryer; neither the fryer nor the basket's own collider hides it.
-            Transform self = candidate is Vessel fixedBasket && fixedBasket.Kind == VesselKind.Basket ? fixedBasket.transform : null;
+            Transform self = candidate is Vessel fixedVessel && VesselRules.IsFixed(fixedVessel.Kind) ? fixedVessel.transform : null;
             if (self != null && self.TryGetComponent(out FryerBasket fb)) own = fb.Fryer;
+            if (self != null && self.TryGetComponent(out GriddleSpot gs)) own = gs.Griddle; // spec 030: on its griddle
             int count = Physics.RaycastNonAlloc(new Ray(eye, to.normalized), _sightHits, distance, Physics.DefaultRaycastLayers,
                 QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)

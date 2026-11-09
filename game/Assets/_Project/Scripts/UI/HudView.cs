@@ -160,6 +160,7 @@ namespace Worktown.Game.UI
         {
             if (held.TryGetComponent(out Food food)) return food.Describe();
             if (held.TryGetComponent(out Knife _)) return "Knife";
+            if (held.TryGetComponent(out Spatula _)) return "Spatula"; // spec 030
             if (held.TryGetComponent(out Vessel vessel))
             {
                 string name = VesselRules.Name(vessel.Kind);
@@ -306,6 +307,7 @@ namespace Worktown.Game.UI
                 case CookOutcome.FryerOff: return "Switch the fryer on first"; // spec 029
                 case CookOutcome.BasketLowered: return "Raise the basket first";
                 case CookOutcome.NotLowered: return "Lower the basket with food first";
+                case CookOutcome.NoSpatula: return Worktown.Game.Net.Rules.InteractionRules.UseTheSpatula; // spec 030
                 default: return outcome.ToString();
             }
         }

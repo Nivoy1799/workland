@@ -65,6 +65,17 @@ namespace Worktown.Game.Cooking
         public static bool IsLowered(byte flags, int basket) =>
             basket >= 0 && basket < BasketsPerFryer && (flags & (2 << basket)) != 0;
 
+        /// <summary>
+        /// Spec 030 (029b review): the fryer byte with basket <paramref name="basket"/>'s lowered bit set to where this client
+        /// sees it (its own pending arc first, BasketView.SeenLowered), so the button's prompt says what its click will ask for.
+        /// </summary>
+        public static byte WithLowered(byte flags, int basket, bool lowered)
+        {
+            if (basket < 0 || basket >= BasketsPerFryer) return flags;
+            int bit = 2 << basket;
+            return (byte)(lowered ? flags | bit : flags & ~bit);
+        }
+
         /// <summary>A basket's mode byte from its state and how often it was shaken.</summary>
         public static byte Mode(BasketState state, int shakes)
         {

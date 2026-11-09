@@ -24,6 +24,10 @@ namespace Worktown.Game.Art
         private const float WarnPulseHz = 4f;
         /// <summary>Spec 029: how far above a fryer basket's contents its ring stands (m).</summary>
         public const float BasketLift = 0.2f;
+        /// <summary>Spec 030: a griddle spot's ring stands this high over its food, centred (the spots stand close together).</summary>
+        public const float GriddleLift = 0.16f;
+        private float _sideOffset = SideOffset;
+        private int _shownMode = -1;
         private float _lift;
         private float _side = 1f;
 
@@ -69,6 +73,12 @@ namespace Worktown.Game.Art
             _lift = vessel.Kind == VesselKind.Basket ? BasketLift : 0f;
             // Spec 029: the left basket's ring stands on its left, so the other basket never hides it.
             _side = vessel.TryGetComponent(out FryerBasket basket) && basket.Basket == 0 ? -1f : 1f;
+            if (vessel.Kind == VesselKind.Griddle)
+            {
+                _lift = GriddleLift; // spec 030: over the spot, not beside it (the next spot is 0.3 m away)
+                _side = 0f;
+                _sideOffset = 0f;
+            }
 
             _ring = new GameObject("HeatRing (" + vessel.name + ")");
             _mesh = new Mesh { name = "HeatRing" };
@@ -119,7 +129,7 @@ namespace Worktown.Game.Art
                 return;
             }
             float radius = HeatRingRules.RingPixels * 0.5f * perPixel;
-            Vector3 centre = anchor + view.right * (_side * (SideOffset + radius + HeatRingRules.GapPixels * perPixel))
+            Vector3 centre = anchor + view.right * (_side * (_sideOffset + radius + HeatRingRules.GapPixels * perPixel))
                 + view.up * (UpOffset + radius * 0.3f);
 
             if (_rig == null && now >= _nextRigLookup)
@@ -139,7 +149,8 @@ namespace Worktown.Game.Art
             }
 
             int progress = _vessel.HeatProgress.Value;
-            if (progress != _shownProgress || zone != _shownZone) Rebuild(progress, zone);
+            int mode = _vessel.Kind == VesselKind.Griddle ? _vessel.Mode.Value : 0;
+            if (progress != _shownProgress || zone != _shownZone || mode != _shownMode) Rebuild(progress, zone, mode);
             Vector3 ringScreen = cam.WorldToScreenPoint(centre);
             _screenInFront = ringScreen.z > 0f;
             float halfPixels = HeatRingRules.RingPixels * 0.5f;
@@ -154,11 +165,23 @@ namespace Worktown.Game.Art
             _renderer.enabled = true;
         }
 
-        private void Rebuild(int progress, HeatZone zone)
+        private void Rebuild(int progress, HeatZone zone, int mode)
         {
             _shownProgress = progress;
             _shownZone = zone;
-            HeatRingRules.Build(progress / 255f, zone, _vertices, _colors, _triangles);
+            _shownMode = mode;
+            if (_vessel.Kind == VesselKind.Griddle)
+            {
+                // Spec 030: one half per side: the down side from the heat bytes, the up side from the mode byte.
+                byte m = (byte)mode;
+                int down = GriddleRules.DownSideOf(m);
+                float upProgress = GriddleRules.UpProgressOf(m);
+                HeatZone upZone = GriddleRules.UpZoneOf(m);
+                float downProgress = progress / 255f;
+                if (down == 0) HeatRingRules.BuildHalves(downProgress, zone, upProgress, upZone, 0, _vertices, _colors, _triangles);
+                else HeatRingRules.BuildHalves(upProgress, upZone, downProgress, zone, 1, _vertices, _colors, _triangles);
+            }
+            else HeatRingRules.Build(progress / 255f, zone, _vertices, _colors, _triangles);
             HeatRingRules.ToVertexColors(_colors, QualitySettings.activeColorSpace == ColorSpace.Linear);
             _mesh.Clear();
             _mesh.SetVertices(_vertices);

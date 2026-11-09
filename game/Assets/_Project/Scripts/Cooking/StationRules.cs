@@ -79,6 +79,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Shelf: return stationName + ": pick an item in first person (V)";
                 // Spec 029: the fryer's knob, basket buttons and baskets are aimed at.
                 case StationKind.Fryer: return stationName + ": fry in first person (V)";
+                // Spec 030: the griddle's knob and spots are aimed at.
+                case StationKind.Griddle: return stationName + ": grill in first person (V)";
                 default: return stationName;
             }
         }

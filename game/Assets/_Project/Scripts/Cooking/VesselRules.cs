@@ -21,6 +21,8 @@ namespace Worktown.Game.Cooking
         public const int ActionTurn = 2;
         /// <summary>Spec 029: shake a lowered fryer basket (empty hands).</summary>
         public const int ActionShake = 3;
+        /// <summary>Spec 030: flip the food on a griddle spot (the spatula in the hands).</summary>
+        public const int ActionFlip = 4;
 
         /// <summary>How many things it holds: board and pan one (open question 2), pot four, plate and bowl the sim limits.</summary>
         public static int Capacity(VesselKind kind)
@@ -33,12 +35,17 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Plate: return CookingLimits.MaxPlateInputs;
                 case VesselKind.Bowl: return CookingLimits.MaxMixInputs;
                 case VesselKind.Basket: return 1; // spec 029: one portion
+                case VesselKind.Griddle: return 1; // spec 030: one item per spot
                 default: return 0;
             }
         }
 
         /// <summary>Pan and pot cook over time while they stand on a burner that is on; spec 029: a basket while it is in the oil.</summary>
-        public static bool IsHeat(VesselKind kind) => kind == VesselKind.Pan || kind == VesselKind.Pot || kind == VesselKind.Basket;
+        public static bool IsHeat(VesselKind kind) =>
+            kind == VesselKind.Pan || kind == VesselKind.Pot || kind == VesselKind.Basket || kind == VesselKind.Griddle; // spec 030: a griddle spot
+
+        /// <summary>Spec 030: cookware fixed to its station (no Pickup, never carried): a fryer basket, a griddle spot.</summary>
+        public static bool IsFixed(VesselKind kind) => kind == VesselKind.Basket || kind == VesselKind.Griddle;
 
         /// <summary>Spec 029: the cookware that cooks on a burner (pan, pot); a basket hangs in its fryer.</summary>
         public static bool StandsOnBurner(VesselKind kind) => kind == VesselKind.Pan || kind == VesselKind.Pot;
@@ -71,11 +78,12 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static bool TakesOutByHand(VesselKind kind)
         {
-            return kind == VesselKind.Board || kind == VesselKind.Pan || kind == VesselKind.Bowl || kind == VesselKind.Basket;
+            return kind == VesselKind.Board || kind == VesselKind.Pan || kind == VesselKind.Bowl || kind == VesselKind.Basket
+                || kind == VesselKind.Griddle; // spec 030
         }
 
         /// <summary>Plates do not come back when lost (the shelf gives new ones); all other cookware has a home spot.</summary>
-        public static bool RespawnsAtHome(VesselKind kind) => kind != VesselKind.Plate && kind != VesselKind.Basket; // spec 029: fixed
+        public static bool RespawnsAtHome(VesselKind kind) => kind != VesselKind.Plate && !IsFixed(kind); // spec 029/030: fixed
 
         /// <summary>
         /// Spec 029b: the target checks of a RequestUse before anything changes (KitchenService.TryUseVessel). Cookware must
@@ -84,7 +92,7 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static CookOutcome CheckUseTarget(VesselKind kind, bool hasPickup, bool isHeld, Vector3 player, Vector3 pivot)
         {
-            if (kind != VesselKind.Basket && (!hasPickup || isHeld)) return CookOutcome.NotAVessel;
+            if (!IsFixed(kind) && (!hasPickup || isHeld)) return CookOutcome.NotAVessel; // spec 030: a griddle spot too
             if (!StationRules.IsInReach(player, pivot)) return CookOutcome.TooFar;
             return CookOutcome.Ok;
         }
@@ -101,6 +109,22 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static bool TipsFromBasket(VesselKind held) => IsAssembly(held);
 
+        /// <summary>
+        /// Spec 030: a flip is for a griddle spot (InvalidOption otherwise) and needs the spatula in the hands (NoSpatula: "Use
+        /// the spatula", also with empty hands), else Ok. Reach and the food on the spot are checked by the caller.
+        /// </summary>
+        public static CookOutcome CheckFlip(VesselKind kind, bool holdingSpatula)
+        {
+            if (kind != VesselKind.Griddle) return CookOutcome.InvalidOption;
+            return holdingSpatula ? CookOutcome.Ok : CookOutcome.NoSpatula;
+        }
+
+        /// <summary>
+        /// Spec 030: holding a plate or bowl, a click on a griddle spot (or a raised fryer basket) with food slides it onto what
+        /// you hold.
+        /// </summary>
+        public static bool TipsFromFixed(VesselKind target, VesselKind held) => IsFixed(target) && IsAssembly(held);
+
         /// <summary>Lower-case name for prompts: "board", "pan", "pot", "plate", "bowl".</summary>
         public static string Name(VesselKind kind)
         {
@@ -112,6 +136,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Plate: return "plate";
                 case VesselKind.Bowl: return "bowl";
                 case VesselKind.Basket: return "basket";
+                case VesselKind.Griddle: return "griddle";
                 default: return "it";
             }
         }

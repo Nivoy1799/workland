@@ -23,6 +23,8 @@ namespace Worktown.Game.Audio
         /// <summary>Spec 029: the fryer's deep oil bubbling (loop), a basket's shake rattle and its drain drips.</summary>
         Fryer,
         Rattle,
-        Drip
+        Drip,
+        /// <summary>Spec 030: the flip on the griddle, a short "tssh" (a burst of sizzle as the raw side hits the plate).</summary>
+        Flip
     }
 }

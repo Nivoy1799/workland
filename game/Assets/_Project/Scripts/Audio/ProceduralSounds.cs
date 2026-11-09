@@ -325,6 +325,29 @@ namespace Worktown.Game.Audio
             return s;
         }
 
+        /// <summary>
+        /// Spec 030: the flip "tssh": a soft scrape of the spatula, then a burst of high-passed sizzle noise that swells in 20 ms
+        /// and fades over 0.35 s (the raw side hits the hot plate).
+        /// </summary>
+        public static float[] Flip()
+        {
+            var rng = new System.Random(3001);
+            var s = new float[(int)(SampleRate * 0.45f)];
+            float previous = 0f, band = 0f;
+            for (int i = 0; i < s.Length; i++)
+            {
+                float t = i / (float)SampleRate;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float high = noise - previous;
+                previous = noise;
+                band += (noise - band) * 0.25f; // a softer, lower noise for the scrape
+                float scrape = band * 0.2f * (t < 0.05f ? (float)Math.Sin(Math.PI * t / 0.05f) : 0f);
+                float hiss = high * 0.24f * Math.Min(1f, Math.Max(0f, t - 0.04f) / 0.02f) * (float)Math.Exp(-Math.Max(0f, t - 0.06f) / 0.12f);
+                s[i] = scrape + hiss;
+            }
+            return s;
+        }
+
         /// <summary>A soft bell partial: a sine with a 3 ms attack and an exponential decay.</summary>
         private static float Bell(float t, float freq, float amp, float decay)
         {
@@ -353,6 +376,7 @@ namespace Worktown.Game.Audio
                 case SoundKey.Fryer: return Fryer();
                 case SoundKey.Rattle: return Rattle();
                 case SoundKey.Drip: return Drip();
+                case SoundKey.Flip: return Flip();
                 default: throw new ArgumentOutOfRangeException(nameof(key), key, "no sound for key");
             }
         }

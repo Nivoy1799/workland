@@ -15,7 +15,9 @@ namespace Worktown.Game.Art
             Palette.FoodPotato, Palette.FoodApple, Palette.FoodTomato, Palette.FoodOnion,
             // Spec 028: flatbread, wrap, seitan, falafel mix, lettuce, cucumber, red cabbage, lemon, garlic-herb sauce, chili sauce.
             Palette.FoodFlatbread, Palette.FoodWrap, Palette.FoodSeitan, Palette.FoodFalafel, Palette.FoodLettuce,
-            Palette.FoodCucumber, Palette.FoodRedCabbage, Palette.FoodLemon, Palette.FoodHerbSauce, Palette.FoodChiliSauce
+            Palette.FoodCucumber, Palette.FoodRedCabbage, Palette.FoodLemon, Palette.FoodHerbSauce, Palette.FoodChiliSauce,
+            // Spec 030: paprika, eggplant, mushroom.
+            Palette.FoodPaprika, Palette.FoodEggplant, Palette.FoodMushroom
         };
 
         /// <summary>Darkening for raw / short / medium / long (open question 3).</summary>
@@ -27,6 +29,7 @@ namespace Worktown.Game.Art
         private const byte Potato = 0, Apple = 1, Tomato = 2, Onion = 3;
         private const byte Flatbread = 4, Wrap = 5, Seitan = 6, FalafelMix = 7, Lettuce = 8, Cucumber = 9, RedCabbage = 10,
             Lemon = 11, HerbSauce = 12, ChiliSauce = 13;
+        private const byte Paprika = 14, Eggplant = 15, Mushroom = 16; // spec 030
 
         public static int IngredientCount => IngredientColors.Length;
 
@@ -131,6 +134,9 @@ namespace Worktown.Game.Art
                 case Lemon: return ArtKey.FoodLemon;
                 case HerbSauce: return ArtKey.FoodSauceGarlicHerb;
                 case ChiliSauce: return ArtKey.FoodSauceChili;
+                case Paprika: return ArtKey.FoodPaprika; // spec 030
+                case Eggplant: return ArtKey.FoodEggplant;
+                case Mushroom: return ArtKey.FoodMushroom;
                 default: throw new System.ArgumentOutOfRangeException(nameof(ingredient), ingredient, "no whole model");
             }
         }

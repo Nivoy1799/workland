@@ -100,6 +100,8 @@ namespace Worktown.Game.Editor
             // basket, fronts on +Z like the kit (the scene builder turns them to the aisle).
             new Def { Key = ArtKey.StationFryer, Mode = Fit.Graybox },
             new Def { Key = ArtKey.ToolFryerBasket, Mode = Fit.Graybox },
+            // Spec 030: no griddle model in the packs either: a graybox steel plate on a steel cabinet with a front panel.
+            new Def { Key = ArtKey.StationGriddle, Mode = Fit.Graybox },
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -140,6 +142,10 @@ namespace Worktown.Game.Editor
             FoodDef(ArtKey.FoodLemonHalf, "lemon-half.fbx"),
             FlatFoodDef(ArtKey.FoodSauceGarlicHerb, "bottle-musterd.fbx"),
             FoodDef(ArtKey.FoodSauceChili, "bottle-ketchup.fbx"),
+            // Spec 030: the grill vegetables (the kit's own models and colours).
+            FoodDef(ArtKey.FoodPaprika, "paprika.fbx"),
+            FoodDef(ArtKey.FoodEggplant, "eggplant.fbx"),
+            FoodDef(ArtKey.FoodMushroom, "mushroom.fbx"),
             // Generic pieces at their real size (m): a half fruit, a 1 cm slice, a fry-sized stick, a 3 cm cube.
             Piece(ArtKey.FoodPieceHalf, PrimitiveType.Sphere, new Vector3(0.08f, 0.04f, 0.08f)),
             Piece(ArtKey.FoodPieceSlice, PrimitiveType.Cylinder, new Vector3(0.07f, 0.01f, 0.07f)),
@@ -157,6 +163,8 @@ namespace Worktown.Game.Editor
             // Spec 019: the cutting board on the board station, the knife (its long side along Z, see AlongZ).
             new Def { Key = ArtKey.ToolCuttingBoard, Model = FoodKit + "cutting-board.fbx", Mode = Fit.Max },
             new Def { Key = ArtKey.ToolKnife, Model = FoodKit + "cooking-knife.fbx", Mode = Fit.Max, AlongZ = true },
+            // Spec 030: the griddle spatula (Food Kit), its long side along Z like the knife.
+            new Def { Key = ArtKey.ToolSpatula, Model = FoodKit + "cooking-spatula.fbx", Mode = Fit.Max, AlongZ = true },
 
             // Spec 023, spec 026: one cabinet module (0.6 m wide, worktop high, station deep); the scene builder lines up
             // as many as a worktop run needs instead of stretching one cabinet.
@@ -807,6 +815,7 @@ namespace Worktown.Game.Editor
         {
             if (key == ArtKey.StationFryer) return BuildFryer(parent);
             if (key == ArtKey.ToolFryerBasket) return BuildBasket(parent);
+            if (key == ArtKey.StationGriddle) return BuildGriddle(parent); // spec 030
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -915,6 +924,37 @@ namespace Worktown.Game.Editor
             // A low rail behind the wells (the worktop stays at 0.90 m): the raised baskets hang in front of it.
             float barZ = Z(FryerArt.WellBack + 0.03f);
             Box(model, "Rail", new Vector3(0f, h + 0.006f, barZ), new Vector3(w - 0.06f, 0.012f, 0.02f), dark);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 030: the graybox griddle as the wrapper's "Model" (<see cref="GriddleArtRules"/>, station z mirrored: the front on +Z):
+        /// a steel cabinet with a darker front panel for the knob, the dark steel plate (0.9 × 0.6 m) at the front with a low rim on
+        /// its sides and back and a grease trough along its front edge, and a steel deck behind it.
+        /// </summary>
+        private static GameObject BuildGriddle(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            Material panel = GrayboxMaterial("FryerPanel", Palette.Shade(Palette.Steel, 0.78f));
+            Material plate = GrayboxMaterial("GriddlePlate", Color.Lerp(Palette.Charcoal, Palette.Steel, 0.3f));
+            Material dark = GrayboxMaterial("FryerDark", Palette.Charcoal);
+            const float w = GriddleArtRules.Width, d = GriddleArtRules.Depth, h = GriddleArtRules.PlateTop, t = GriddleArtRules.PlateThickness;
+            float Z(float stationZ) => -stationZ; // the wrapper's front is +Z
+            float body = h - t;
+            Box(model, "Cabinet", new Vector3(0f, body * 0.5f, 0f), new Vector3(w, body, d), steel);
+            Box(model, "Front panel", new Vector3(0f, body * 0.5f, Z(-d * 0.5f + 0.02f)), new Vector3(w, body - 0.02f, 0.04f), panel);
+            float pw = Worktown.Game.Cooking.GriddleRules.PlateWidth, pd = Worktown.Game.Cooking.GriddleRules.PlateDepth;
+            float pz = GriddleArtRules.PlateCenterZ;
+            Box(model, "Plate", new Vector3(0f, h - t * 0.5f, Z(pz)), new Vector3(pw, t, pd), plate);
+            Box(model, "Rim back", new Vector3(0f, h - 0.01f, Z(pz + pd * 0.5f + 0.01f)), new Vector3(pw + 0.04f, 0.028f, 0.02f), steel);
+            Box(model, "Rim left", new Vector3(-pw * 0.5f - 0.01f, h - 0.01f, Z(pz)), new Vector3(0.02f, 0.028f, pd), steel);
+            Box(model, "Rim right", new Vector3(pw * 0.5f + 0.01f, h - 0.01f, Z(pz)), new Vector3(0.02f, 0.028f, pd), steel);
+            float frontEdge = pz - pd * 0.5f;
+            Box(model, "Trough", new Vector3(0f, h - t - 0.01f, Z(frontEdge - 0.015f)), new Vector3(pw, 0.02f, 0.03f), dark);
+            float deckFront = pz + pd * 0.5f + 0.02f;
+            Box(model, "Deck", new Vector3(0f, h - t * 0.5f, Z((deckFront + d * 0.5f) * 0.5f)), new Vector3(w, t, d * 0.5f - deckFront), steel);
             return model;
         }
 

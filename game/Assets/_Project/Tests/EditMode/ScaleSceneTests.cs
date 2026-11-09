@@ -72,7 +72,7 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(2, stoves);
 
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(11, surfaces.Count);
+                Assert.AreEqual(12, surfaces.Count); // spec 030: the griddle's deck
                 foreach (PlaceSurface surface in surfaces)
                 {
                     for (int i = 0; i < surface.SpotCount; i++)
@@ -151,6 +151,8 @@ namespace Worktown.Game.Tests
                 List<Component> vessels = VesselTestKit.AllOf(scene, VesselTestKit.VesselType);
                 // Spec 029: the two fryer baskets hang in the oil, not on a worktop.
                 Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Basket));
+                // Spec 030: the six griddle spots lie on the griddle's plate.
+                Assert.AreEqual(Worktown.Game.Cooking.GriddleRules.SpotsPerGriddle, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Griddle));
                 Assert.AreEqual(6, vessels.Count);
                 foreach (Component vessel in vessels)
                 {

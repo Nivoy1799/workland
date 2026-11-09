@@ -26,7 +26,8 @@ namespace Worktown.Game.Cooking
         /// <summary>What taking, pouring or selling would give ("crispy fried potato sticks"), empty when empty.</summary>
         public readonly SyncVar<string> Title = new SyncVar<string>(string.Empty);
         /// <summary>Pan: <see cref="ModeFry"/> or <see cref="ModeSaute"/>. Spec 029, basket: its state and shake counter
-        /// (<see cref="FryerRules.Mode"/>). 0 for the rest.</summary>
+        /// (<see cref="FryerRules.Mode"/>). Spec 030, griddle spot: the down side, a flip counter and the up side
+        /// (<see cref="GriddleRules.Mode"/>). 0 for the rest.</summary>
         public readonly SyncVar<byte> Mode = new SyncVar<byte>(ModeFry);
         /// <summary>Spec 027c: 0-255, the share of the way to the end of the good window (the good window starts at
         /// <see cref="HeatZoneRules.GoodShare"/>).</summary>
@@ -86,7 +87,11 @@ namespace Worktown.Game.Cooking
         {
             Names.OnChange += (_, _, _, _, _) => _labelDirty = true;
             Looks.OnChange += (_, _, _, _, _) => _visualDirty = true;
-            Mode.OnChange += (_, _, _) => _labelDirty = true;
+            Mode.OnChange += (_, _, _) =>
+            {
+                _labelDirty = true;
+                _heatDirty = true; // spec 030: a griddle spot's top is its up side (in the mode byte)
+            };
             HeatProgress.OnChange += (_, _, _) => _heatDirty = true;
             HeatZone.OnChange += (_, _, _) => _heatDirty = true;
         }
@@ -154,7 +159,10 @@ namespace Worktown.Game.Cooking
             {
                 _heatDirty = false;
                 // Spec 027c: the food in the pan or pot shifts colour with the heat, for every viewer.
-                if (_visual != null) _visual.SetHeat(Zone, Progress01, _kind == VesselKind.Pot);
+                // Spec 030: on a griddle the top shows the side that is up (it cooked before the last flip).
+                if (_visual != null && _kind == VesselKind.Griddle)
+                    _visual.SetHeat(GriddleRules.UpZoneOf(Mode.Value), GriddleRules.UpProgressOf(Mode.Value), false);
+                else if (_visual != null) _visual.SetHeat(Zone, Progress01, _kind == VesselKind.Pot);
             }
             if (_labelDirty)
             {

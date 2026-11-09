@@ -15,9 +15,9 @@ namespace Worktown.Game.Cooking
         /// <summary>Two shelves of four behind the fridge's open doors.</summary>
         public const int FridgeRows = 2;
         public const int FridgeColumns = 4;
-        /// <summary>Three boards of two (six dry items; a third column would stand empty).</summary>
+        /// <summary>Three boards of three: the six dry items and (spec 030) the grill vegetables in the third column.</summary>
         public const int ShelfRows = 3;
-        public const int ShelfColumns = 2;
+        public const int ShelfColumns = 3;
 
         /// <summary>Top shelf: the vegetables; lower shelf: seitan, falafel mix, lemon, apple.</summary>
         public static readonly IReadOnlyList<string> Fridge = Array.AsReadOnly(new[]
@@ -26,12 +26,15 @@ namespace Worktown.Game.Cooking
             "seitan", "falafel_mix", "lemon", "apple"
         });
 
-        /// <summary>Top board: the sauces; middle: potato and onion (used most, at hand height); bottom: flatbread and wraps.</summary>
+        /// <summary>
+        /// Top board: the sauces; middle: potato and onion (used most, at hand height); bottom: flatbread and wraps. Spec 030: the
+        /// third column holds the grill vegetables (a vegetable rack, kept dry like the potatoes): mushroom, paprika, eggplant.
+        /// </summary>
         public static readonly IReadOnlyList<string> Shelf = Array.AsReadOnly(new[]
         {
-            "garlic_herb_sauce", "chili_sauce",
-            "potato", "onion",
-            "flatbread", "wrap"
+            "garlic_herb_sauce", "chili_sauce", "mushroom",
+            "potato", "onion", "paprika",
+            "flatbread", "wrap", "eggplant"
         });
 
         /// <summary>True for the stations whose option picks a slot.</summary>

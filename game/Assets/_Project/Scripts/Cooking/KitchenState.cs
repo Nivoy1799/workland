@@ -33,6 +33,9 @@ namespace Worktown.Game.Cooking
         // heat session in _heat like the pan's; it runs while the basket is lowered and its fryer is on.
         private readonly Dictionary<int, bool> _fryerOn = new Dictionary<int, bool>();
         private readonly Dictionary<int, BasketRecord> _baskets = new Dictionary<int, BasketRecord>();
+        // Spec 030: each griddle's switch (per griddle station index) and each spot (per spot vessel id) with its item and sides.
+        private readonly Dictionary<int, bool> _griddleOn = new Dictionary<int, bool>();
+        private readonly Dictionary<int, GrillRecord> _grill = new Dictionary<int, GrillRecord>();
 
         private sealed class BasketRecord
         {
@@ -120,6 +123,8 @@ namespace Worktown.Game.Cooking
             _boardCut.Clear();
             _fryerOn.Clear();
             _baskets.Clear();
+            _griddleOn.Clear();
+            _grill.Clear();
         }
 
         /// <summary>Spec 021: a vessel left the world (sold plate, lost cookware): its contents and position go with it.</summary>
@@ -129,6 +134,7 @@ namespace Worktown.Game.Cooking
             _burnerOf.Remove(vesselId);
             _assembly.Remove(vesselId);
             _baskets.Remove(vesselId);
+            _grill.Remove(vesselId);
             ClearBoard(vesselId);
         }
 
@@ -143,6 +149,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Pan:
                 case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: return HeatCount(vesselId);
+                case VesselKind.Griddle: return HeatCount(vesselId); // spec 030
                 default: return CountIn(vesselId);
             }
         }
@@ -160,6 +167,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Pan:
                 case VesselKind.Pot: return TryPutOnHeat(foodObjectId, vesselId, kind, tick);
                 case VesselKind.Basket: return TryPutInBasket(foodObjectId, vesselId, tick);
+                case VesselKind.Griddle: return TryPutOnGriddle(foodObjectId, vesselId, tick); // spec 030
                 default: return TryAddToVessel(foodObjectId, vesselId, kind);
             }
         }
@@ -180,6 +188,7 @@ namespace Worktown.Game.Cooking
                     // Spec 029: only from a raised (or draining) basket.
                     if (BasketStateOf(vesselId, tick) == BasketState.Lowered) return CookOutcome.BasketLowered;
                     return TryPreviewHeatTake(vesselId, tick, tickRate, out result);
+                case VesselKind.Griddle: return TryPreviewGriddleTake(vesselId, tick, tickRate, out result); // spec 030
                 case VesselKind.Bowl: return TryPreviewTake(vesselId, kind, out result);
                 case VesselKind.Pot: return HeatCount(vesselId) > 0 ? CookOutcome.PourInstead : CookOutcome.StationEmpty;
                 default: return CookOutcome.InvalidOption;
@@ -197,6 +206,7 @@ namespace Worktown.Game.Cooking
                     ClearHeat(vesselId);
                     if (_baskets.TryGetValue(vesselId, out BasketRecord basket)) basket.Shaken = false; // the next fry starts fresh
                     break;
+                case VesselKind.Griddle: ClearGriddle(vesselId); break; // spec 030
                 default: ClearVessel(vesselId); break;
             }
         }
@@ -251,6 +261,7 @@ namespace Worktown.Game.Cooking
             {
                 case VesselKind.Board: return BoardName(vesselId);
                 case VesselKind.Pan:
+                case VesselKind.Griddle: // spec 030
                 case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: outcome = TryPreviewHeatTake(vesselId, tick, tickRate, out result); break;
                 default: outcome = TryPreviewTake(vesselId, kind, out result); break;
@@ -267,6 +278,7 @@ namespace Worktown.Game.Cooking
                     string name = BoardName(vesselId);
                     return name == null ? new string[0] : new[] { name };
                 case VesselKind.Pan:
+                case VesselKind.Griddle: // spec 030
                 case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: return HeatNames(vesselId, tick, tickRate);
                 default: return NamesIn(vesselId);
@@ -282,6 +294,7 @@ namespace Worktown.Game.Cooking
                     FoodLook? look = BoardLook(vesselId);
                     return look.HasValue ? new[] { look.Value } : new FoodLook[0];
                 case VesselKind.Pan:
+                case VesselKind.Griddle: return GriddleLooks(vesselId); // spec 030
                 case VesselKind.Basket: // spec 029
                 case VesselKind.Pot: return HeatLooks(vesselId, tick, tickRate);
                 default: return LooksIn(vesselId);
@@ -524,6 +537,7 @@ namespace Worktown.Game.Cooking
         /// <summary>How many ingredients are in the pan or pot.</summary>
         public int HeatCount(int vesselId)
         {
+            if (_grill.TryGetValue(vesselId, out GrillRecord spot)) return spot.Food != null ? 1 : 0; // spec 030
             return _heat.TryGetValue(vesselId, out List<HeatSession> sessions) ? sessions.Count : 0;
         }
 
@@ -545,6 +559,7 @@ namespace Worktown.Game.Cooking
         public CookOutcome TryPreviewHeatTake(int vesselId, uint tick, double tickRate, out Item result)
         {
             result = null;
+            if (_grill.ContainsKey(vesselId)) return TryPreviewGriddleTake(vesselId, tick, tickRate, out result); // spec 030
             if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions) || sessions.Count == 0) return CookOutcome.StationEmpty;
             // Spec 029: a basket's fry carries the shake bonus and, while it still drains, the greasy penalty.
             bool shaken = false, greasy = false;
@@ -596,13 +611,21 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public IReadOnlyList<string> HeatNames(int vesselId, uint tick, double tickRate)
         {
+            if (_grill.ContainsKey(vesselId)) return GriddleNames(vesselId, tick, tickRate); // spec 030
             if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions)) return new string[0];
+            // Spec 030 (orchestrator decision): each line is the name that food would get if taken out now (the basket's shake
+            // and drain included), so the label never contradicts the item; too short gives the food's own name.
+            bool shaken = false, greasy = false;
+            if (_baskets.TryGetValue(vesselId, out BasketRecord basket))
+            {
+                shaken = basket.Shaken;
+                greasy = BasketStateOf(vesselId, tick) == BasketState.Draining;
+            }
             var names = new List<string>(sessions.Count);
             foreach (HeatSession session in sessions)
             {
-                double seconds = CookingTime.SimSeconds(session.CookedTicks(tick), tickRate);
-                HeatZone zone = HeatZoneRules.Zone(seconds, session.Timeline);
-                names.Add(HeatLabelRules.Label(session.Food, NameOf(session.Food), session.OperationId, zone));
+                CookOne(session, tick, tickRate, shaken, greasy, out Item preview);
+                names.Add(HeatLabelRules.Label(NameOf(preview ?? session.Food)));
             }
             return names;
         }
@@ -630,6 +653,11 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public HeatReading HeatReadingOf(int vesselId, uint tick, double tickRate)
         {
+            if (_grill.ContainsKey(vesselId))
+            {
+                GriddleReadings(vesselId, tick, tickRate, out HeatReading down, out _); // spec 030: the side that cooks now
+                return down;
+            }
             if (!_heat.TryGetValue(vesselId, out List<HeatSession> sessions)) return HeatReading.Empty;
             HeatReading reading = HeatReading.Empty;
             foreach (HeatSession session in sessions)
@@ -682,11 +710,18 @@ namespace Worktown.Game.Cooking
         /// Review of spec 027c: the cache key: the item hash, the op, the temperature, and the exact bits of what the heat op
         /// reads (the surface, the heat tolerance, each component's doneness and ideal window).
         /// </summary>
-        public static string TimelineKeyOf(Item food, string opId, int? tempC)
+        public static string TimelineKeyOf(Item food, string opId, int? tempC) => TimelineKeyOf(food, opId, tempC, null);
+
+        /// <summary>
+        /// Spec 030: the cache key with the side state the timeline was built for (<see cref="SideTimelineKey"/> for a griddle
+        /// side; null for a whole item in a pan, pot or basket, the key of 027c unchanged).
+        /// </summary>
+        public static string TimelineKeyOf(Item food, string opId, int? tempC, string sides)
         {
             var key = new System.Text.StringBuilder(64 + 24 * food.Components.Count);
             key.Append(food.Hash).Append('|').Append(opId).Append('|').Append(tempC.HasValue ? tempC.Value.ToString() : "-")
                 .Append('|').Append(Bits(food.Surface)).Append('|').Append(Bits(food.Stats.HeatTolerance));
+            if (sides != null) key.Append("|sides:").Append(sides);
             foreach (ItemComponent c in food.Components)
                 key.Append('|').Append(c.BaseId).Append(':').Append(Bits(c.Doneness)).Append(':')
                     .Append(Bits(c.Ideal.Min)).Append(':').Append(Bits(c.Ideal.Max));
@@ -884,6 +919,216 @@ namespace Worktown.Game.Cooking
                 _heat[vesselId] = sessions;
             }
             return sessions;
+        }
+
+        // ---- Spec 030: the griddle and its spots ----
+
+        /// <summary>
+        /// The griddle spot vessel <paramref name="vesselId"/> is spot <paramref name="spot"/> of griddle station
+        /// <paramref name="griddle"/> (empty). Registering it again with the same griddle and spot keeps its state.
+        /// </summary>
+        public void RegisterGriddleSpot(int vesselId, int griddle, int spot)
+        {
+            if (_grill.TryGetValue(vesselId, out GrillRecord known) && known.Griddle == griddle && known.Spot == spot) return;
+            _grill[vesselId] = new GrillRecord { Griddle = griddle, Spot = spot };
+        }
+
+        /// <summary>The griddle's switch (griddles start off).</summary>
+        public bool GriddleIsOn(int griddle) => _griddleOn.TryGetValue(griddle, out bool on) && on;
+
+        /// <summary>Switches the griddle on or off; the down side of every item on it cooks only while it is on.</summary>
+        public CookOutcome TryToggleGriddle(int griddle, uint tick)
+        {
+            bool on = !GriddleIsOn(griddle);
+            _griddleOn[griddle] = on;
+            foreach (GrillRecord spot in _grill.Values)
+                if (spot.Griddle == griddle && spot.Food != null) spot.SetRunning(on, tick);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Puts the held food on the griddle spot, side 1 down: one item per spot (VesselFull), not a finished plate
+        /// (AlreadyPlated), only food the sim would grill or toast (SimRefused). Bread toasts (<see cref="Griddle.OperationFor"/>).
+        /// Its down side cooks from <paramref name="tick"/> while the griddle is on.
+        /// </summary>
+        public CookOutcome TryPutOnGriddle(int foodObjectId, int vesselId, uint tick)
+        {
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot)) return CookOutcome.NotAVessel;
+            if (!_items.TryGetValue(foodObjectId, out Item item)) return CookOutcome.NotFood;
+            CookOutcome fits = VesselRules.CanPutIn(VesselKind.Griddle, spot.Food != null ? 1 : 0, AssemblyRules.IsPlated(item));
+            if (fits != CookOutcome.Ok) return fits;
+            string opId = Griddle.OperationFor(item);
+            if (!TryGetTimeParam(opId, out ParamDef time)) return CookOutcome.SimRefused;
+            OperationResult dry = _factory.Apply(opId, new[] { item }, Griddle.Params(time.Max, time.Max));
+            if (!dry.Ok || dry.Item == null) return CookOutcome.SimRefused;
+
+            spot.Food = item;
+            spot.OperationId = opId;
+            spot.BDown = false;
+            spot.Sides[0] = new HeatSession(item, opId, null, GriddleIsOn(spot.Griddle), tick);
+            spot.Sides[1] = new HeatSession(item, opId, null, false, tick);
+            spot.Timeline = SideTimelineOf(item, opId, time);
+            _items.Remove(foodObjectId);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Turns the item on the spot over (any time, also a raw side): the side that was up cooks now, the other stops. The
+        /// flip counter in the mode byte goes up, so every viewer sees the flip. StationEmpty on an empty spot. The spatula and
+        /// the reach are the caller's checks (<see cref="VesselRules.CheckFlip"/>).
+        /// </summary>
+        public CookOutcome TryFlip(int vesselId, uint tick)
+        {
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot)) return CookOutcome.NotAVessel;
+            if (spot.Food == null) return CookOutcome.StationEmpty;
+            spot.Down.Stop(tick);
+            spot.BDown = !spot.BDown;
+            if (GriddleIsOn(spot.Griddle)) spot.Down.Start(tick);
+            spot.Flips++;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>How often the spot's item was flipped (for tests and the log).</summary>
+        public int FlipsOf(int vesselId) => _grill.TryGetValue(vesselId, out GrillRecord spot) ? spot.Flips : 0;
+
+        /// <summary>
+        /// The two sides of the item on the spot at <paramref name="tick"/>: each side's sim seconds down on a griddle that was
+        /// on, and which side is down now (the sim's <see cref="GriddleSides"/>). Fresh for an empty spot.
+        /// </summary>
+        public GriddleSides GriddleSidesOf(int vesselId, uint tick, double tickRate)
+        {
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot) || spot.Food == null) return GriddleSides.Fresh;
+            return new GriddleSides((float)CookingTime.SimSeconds(spot.Sides[0].CookedTicks(tick), tickRate),
+                (float)CookingTime.SimSeconds(spot.Sides[1].CookedTicks(tick), tickRate), spot.BDown);
+        }
+
+        /// <summary>
+        /// What taking the item off the spot gives now, without changing it: the griddle (or toast) op with both sides' times,
+        /// or TooShort (the food unchanged) when its longer side had less than <see cref="GriddleRules.MinCookSimSeconds"/>.
+        /// StationEmpty on an empty spot.
+        /// </summary>
+        public CookOutcome TryPreviewGriddleTake(int vesselId, uint tick, double tickRate, out Item result)
+        {
+            result = null;
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot) || spot.Food == null) return CookOutcome.StationEmpty;
+            GriddleSides sides = GriddleSidesOf(vesselId, tick, tickRate);
+            if (System.Math.Max(sides.SideA, sides.SideB) < GriddleRules.MinCookSimSeconds)
+            {
+                result = spot.Food;
+                return CookOutcome.TooShort;
+            }
+            OperationResult cooked = _factory.Apply(spot.OperationId, new[] { spot.Food }, Griddle.Params(sides));
+            if (!cooked.Ok || cooked.Item == null) return CookOutcome.SimRefused;
+            result = cooked.Item;
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// The zone readings of the spot's two sides, from each side's own time and the item's side timeline: the down side
+        /// (the Vessel's heat bytes) and the up side (in the mode byte). Empty readings for an empty spot.
+        /// </summary>
+        public void GriddleReadings(int vesselId, uint tick, double tickRate, out HeatReading down, out HeatReading up)
+        {
+            down = HeatReading.Empty;
+            up = HeatReading.Empty;
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot) || spot.Food == null) return;
+            GriddleSides sides = GriddleSidesOf(vesselId, tick, tickRate);
+            down = HeatZoneRules.Read(sides.Down, spot.Timeline);
+            up = HeatZoneRules.Read(sides.Up, spot.Timeline);
+        }
+
+        /// <summary>The spot's synced mode byte: the down side, the flip counter and the up side (<see cref="GriddleRules.Mode"/>).</summary>
+        public byte GriddleMode(int vesselId, uint tick, double tickRate)
+        {
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot)) return 0;
+            GriddleReadings(vesselId, tick, tickRate, out _, out HeatReading up);
+            return GriddleRules.Mode(spot.BDown ? 1 : 0, spot.Flips, up);
+        }
+
+        /// <summary>The griddle's synced byte (on).</summary>
+        public byte GriddleFlags(int griddle) => GriddleRules.Flags(GriddleIsOn(griddle));
+
+        /// <summary>The label of the item on the spot: its preview name and the side that is down (<see cref="HeatLabelRules"/>).</summary>
+        private IReadOnlyList<string> GriddleNames(int vesselId, uint tick, double tickRate)
+        {
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot) || spot.Food == null) return new string[0];
+            TryPreviewGriddleTake(vesselId, tick, tickRate, out Item preview);
+            return new[] { HeatLabelRules.GriddleLabel(NameOf(preview ?? spot.Food), spot.BDown ? 1 : 0) };
+        }
+
+        /// <summary>The look of the item on the spot: as it went on (its top's colour and the grill marks are drawn by the client
+        /// from the up side's zone).</summary>
+        private IReadOnlyList<FoodLook> GriddleLooks(int vesselId)
+        {
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot) || spot.Food == null) return new FoodLook[0];
+            return new[] { FoodLookRules.From(spot.Food) };
+        }
+
+        private void ClearGriddle(int vesselId)
+        {
+            if (!_grill.TryGetValue(vesselId, out GrillRecord spot)) return;
+            spot.Food = null;
+            spot.OperationId = null;
+            spot.Sides[0] = null;
+            spot.Sides[1] = null;
+            spot.BDown = false;
+        }
+
+        /// <summary>
+        /// The zone timeline of ONE side of <paramref name="food"/> on the griddle (cached like <see cref="TimelineOf"/>): built
+        /// from the real sim op with both sides at the same time, so the item's doneness is that side's
+        /// (<see cref="Griddle.CombineSides"/> of two equal sides). Each side cooks on its own along it; the key carries the side
+        /// state it was built for (<see cref="SideTimelineKey"/>), so it never mixes with a whole-item timeline.
+        /// </summary>
+        private HeatTimeline SideTimelineOf(Item food, string opId, ParamDef time)
+        {
+            string key = TimelineKeyOf(food, opId, null, SideTimelineKey);
+            if (_timelines.TryGetValue(key, out HeatTimeline cached)) return cached;
+            HeatTimeline built = BuildSideTimeline(food, opId, time);
+            if (_timelines.Count >= TimelineCacheCapacity) _timelines.Clear();
+            _timelines[key] = built;
+            return built;
+        }
+
+        private HeatTimeline BuildSideTimeline(Item food, string opId, ParamDef time)
+        {
+            return HeatZoneRules.Build(time, seconds =>
+            {
+                OperationResult cooked = _factory.Apply(opId, new[] { food }, Griddle.Params(seconds, seconds));
+                return cooked.Ok && cooked.Item != null ? cooked.Item.Components : null;
+            });
+        }
+
+        /// <summary>Spec 030: the side timeline of a food on the griddle, built fresh (for tests and the measured timings).</summary>
+        public HeatTimeline FreshSideTimeline(Item food)
+        {
+            string opId = Griddle.OperationFor(food);
+            return food != null && TryGetTimeParam(opId, out ParamDef time) ? BuildSideTimeline(food, opId, time) : default;
+        }
+
+        /// <summary>Spec 030: the side state a griddle timeline is built for: one side, the other side cooked the same.</summary>
+        public const string SideTimelineKey = "one-side";
+
+        private sealed class GrillRecord
+        {
+            public int Griddle;
+            public int Spot;
+            public Item Food;
+            public string OperationId;
+            /// <summary>Side 1 and side 2: each counts its own ticks down on a griddle that is on.</summary>
+            public readonly HeatSession[] Sides = new HeatSession[2];
+            public bool BDown;
+            public int Flips;
+            public HeatTimeline Timeline;
+
+            public HeatSession Down => Sides[BDown ? 1 : 0];
+
+            public void SetRunning(bool on, uint tick)
+            {
+                if (Down == null) return;
+                if (on) Down.Start(tick);
+                else Down.Stop(tick);
+            }
         }
 
         // ---- Spec 013/021: plate and bowl ----

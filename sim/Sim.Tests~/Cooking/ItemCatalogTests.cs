@@ -90,9 +90,9 @@ namespace Worktown.Sim.Tests.Cooking
         }
 
         [Fact]
-        public void OperationCatalog_DefaultHasSevenOperations() // spec 029: deep_fry
+        public void OperationCatalog_DefaultHasNineOperations() // spec 029: deep_fry; spec 030: griddle, toast
         {
-            Assert.Equal(7, OperationCatalog.CreateDefault().Count);
+            Assert.Equal(9, OperationCatalog.CreateDefault().Count);
         }
 
         [Fact]

@@ -158,6 +158,8 @@ namespace Worktown.Game.Dev
         private const float BackLineZ = 14.3f;
         // Spec 029: the fryer (x 6.44) moved the stoves 0.84 m to the right. Spec 029b: the stoves stand side by side, the
         // plating worktop (x 9.34 to 10.60) and the plate shelf (11.22) follow stove B.
+        // Spec 030: the griddle (x 5.49) between the prep run (now one board wide) and the fryer; nothing else moved.
+        private const float GriddleX = 5.49f;
         private const float FryerX = 6.44f;
         private const float StoveAX = 7.48f;
         private const float StoveBX = 8.72f;
@@ -220,6 +222,8 @@ namespace Worktown.Game.Dev
                 TourStep.Wait(0.6f), TourStep.Shot("stock-first"),
                 LookAtSlot(StationKind.Fridge, "cucumber"), TourStep.Wait(0.6f), TourStep.Shot("fridge-slot"),
                 LookAtSlot(StationKind.Shelf, "potato"), TourStep.Wait(0.6f), TourStep.Shot("shelf-slot"),
+                // Spec 030: the griddle from the aisle (first person): the plate, its six spots, the knob, the spatula on the deck.
+                TourStep.WalkTo(GriddleX, StandZ), TourStep.LookAt(GriddleX, 0.75f, BackLineZ - 0.2f), TourStep.Wait(0.6f), TourStep.Shot("griddle-first"),
                 // Spec 029: the fryer from the aisle (first person): the knob, the basket buttons, both baskets on the hook.
                 TourStep.WalkTo(FryerX, StandZ), TourStep.LookAt(FryerX, 0.85f, BackLineZ - 0.2f), TourStep.Wait(0.6f), TourStep.Shot("fryer-first"),
                 TourStep.WalkTo(StoveAX, StandZ), TourStep.LookAt(StoveAX, 0.9f, BackLineZ - 0.15f),
@@ -285,7 +289,7 @@ namespace Worktown.Game.Dev
             {
                 new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
             };
-            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 420f);
+            return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 600f); // spec 030: + the griddle
         }
     }
 }

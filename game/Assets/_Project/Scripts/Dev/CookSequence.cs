@@ -86,6 +86,8 @@ namespace Worktown.Game.Dev
             Vector3 atB = new Vector3(stoveB.transform.position.x, 0f, standZ);
             // Spec 029 (AC5, AC6): first an order of fries from potato to the counter, through the fryer.
             if (capture != null) yield return FryFries(actor, capture, laneZ);
+            // Spec 030 (AC5, AC6): then "Grilled veggies" with seitan strips on the griddle (flips, grill marks), to the counter.
+            if (capture != null) yield return GrillVeggies(actor, capture, laneZ);
             Debug.Log("[Demo] walking to the first stove (" + Time.time.ToString("0.0") + " s)");
             yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(new Vector3(atA.x, 0f, laneZ), false, false);
@@ -454,6 +456,250 @@ namespace Worktown.Game.Dev
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
             Debug.Log("[Demo] fries: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("Fries order: exact order")) Debug.LogWarning("[Demo] fries: no exact Fries order was served");
+        }
+
+        /// <summary>Spec 030: seconds between the shots while the griddle cooks, and the longest the griddle part waits.</summary>
+        public const float GrillShotEvery = 3f;
+        public const float GrillWait = 60f;
+
+        /// <summary>
+        /// Spec 030 AC5/AC6: "Grilled veggies" from stock to the counter, with seitan strips. A plate onto the griddle's deck; seitan
+        /// from the fridge cut into sticks on the board (the griddle calls them strips) and onto spot 0, a whole paprika onto spot
+        /// 1 and a whole mushroom onto spot 2 while the griddle is still off; the knob on; the spatula from the deck. Each item is
+        /// flipped with the spatula when its down side reaches Perfect (frames of the seitan's flip, a shot of its grill marks);
+        /// then the spatula goes back on the deck, the plate comes up, and each item slides onto the held plate when its second
+        /// side reaches Perfect (frames of the seitan's slide). The plate is served at the counter (the orders are logged).
+        /// </summary>
+        private static IEnumerator GrillVeggies(TourActor actor, CookCapture capture, float laneZ)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            Station griddle = null, counter = null;
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+            {
+                if (s.Kind == StationKind.Griddle) griddle = s;
+                else if (s.Kind == StationKind.Counter) counter = s;
+            }
+            var spots = new Vessel[GriddleRules.SpotsPerGriddle];
+            foreach (GriddleSpot gs in UnityEngine.Object.FindObjectsByType<GriddleSpot>(FindObjectsSortMode.None))
+                if (gs.Griddle == griddle && gs.Spot >= 0 && gs.Spot < spots.Length) spots[gs.Spot] = gs.GetComponent<Vessel>();
+            StationButton knob = null;
+            foreach (StationButton b in UnityEngine.Object.FindObjectsByType<StationButton>(FindObjectsSortMode.None))
+                if (griddle != null && b.Station == griddle && b.Option == GriddleRules.PowerOption) knob = b;
+            Spatula spatula = UnityEngine.Object.FindFirstObjectByType<Spatula>();
+            Knife knife = UnityEngine.Object.FindFirstObjectByType<Knife>();
+            Vessel board = null, plate = null;
+            foreach (Vessel v in UnityEngine.Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+            {
+                if (v.Kind == VesselKind.Board) board = v;
+                else if (v.Kind == VesselKind.Plate && griddle != null && v.ContentCount == 0
+                         && (plate == null || Distance(v, griddle) < Distance(plate, griddle))) plate = v;
+            }
+            StockSlot seitanSlot = FindSlot("seitan"), paprikaSlot = FindSlot("paprika"), mushroomSlot = FindSlot("mushroom");
+            if (griddle == null || counter == null || knob == null || spatula == null || knife == null || board == null || plate == null
+                || seitanSlot == null || paprikaSlot == null || mushroomSlot == null || spots[0] == null || spots[1] == null || spots[2] == null)
+            {
+                Debug.LogWarning("[Demo] griddle: the griddle, its knob, spots, the spatula, knife, board, a plate, the counter or a slot is missing");
+                actor.CountTimeout("cook: griddle setup missing");
+                yield break;
+            }
+            PlaceSurface deck = SurfaceUnder(spatula.transform.position);
+            if (deck == null)
+            {
+                actor.CountTimeout("cook: the spatula lies on no surface");
+                yield break;
+            }
+            Vector3 atGriddle = new Vector3(griddle.transform.position.x, 0f, laneZ);
+            Vector3 knifeHome = knife.transform.position;
+            NetworkObject boardObject = board.NetworkObject, plateObject = plate.NetworkObject;
+            NetworkObject knifeObject = knife.GetComponent<NetworkObject>(), spatulaObject = spatula.GetComponent<NetworkObject>();
+            Debug.Log("[Demo] griddle: start (" + Time.time.ToString("0.0") + " s)");
+
+            // A plate onto the griddle's deck, so it is at hand when the food is done.
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(plate.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("pick up a plate for the griddle", ContentPoint(plate), InteractionAction.PickUp, () => me.DevSendPickup(plateObject));
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atGriddle, false, false);
+            int plateSpot = PlaceSpots.NearestFree(deck.Size, new Vector2(-0.375f, -0.125f), null);
+            yield return actor.Use("put the plate on the griddle's deck", deck.SpotWorldPosition(plateSpot), InteractionAction.Place,
+                () => me.DevSendPlace(deck.Index, plateSpot));
+            yield return capture.Shot("griddle");
+
+            // A whole paprika and a whole mushroom from the dry shelf onto the deck (staged; they go on the griddle after the seitan).
+            var staged = new List<Vector3>();
+            foreach (StockSlot slot in new[] { paprikaSlot, mushroomSlot })
+            {
+                yield return TakeFrom(actor, slot, laneZ);
+                yield return actor.WalkTo(atGriddle, false, false);
+                int deckSpot = PlaceSpots.NearestFree(deck.Size, new Vector2(-0.125f + 0.25f * staged.Count, -0.125f), null);
+                staged.Add(deck.SpotWorldPosition(deckSpot));
+                yield return actor.Use("put the " + slot.IngredientId + " on the griddle's deck", deck.SpotWorldPosition(deckSpot), InteractionAction.Place,
+                    () => me.DevSendPlace(deck.Index, deckSpot));
+            }
+
+            // Seitan strips: the fridge, the board, the knife (two strokes, a turn, a stroke), the knife back.
+            yield return TakeFrom(actor, seitanSlot, laneZ);
+            yield return actor.WalkTo(new Vector3(board.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("put the seitan on the board", ContentPoint(board), InteractionAction.PutInto,
+                () => me.DevSendUse(boardObject, VesselRules.ActionUse));
+            yield return actor.Use("pick up the knife", knife.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(knifeObject));
+            yield return actor.AimAt(ContentPoint(board), 0.6f);
+            foreach (int action in new[] { VesselRules.ActionStroke, VesselRules.ActionStroke, VesselRules.ActionTurn, VesselRules.ActionStroke })
+            {
+                me.DevSendUse(boardObject, action);
+                yield return new WaitForSeconds(0.7f);
+            }
+            Debug.Log("[Demo] griddle: the board holds " + board.Title.Value);
+            if (!board.Title.Value.Contains("seitan")) actor.CountTimeout("cook: the board holds no seitan (" + board.Title.Value + ")");
+            PlaceSurface prep = SurfaceUnder(knifeHome);
+            if (prep != null)
+            {
+                int spot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
+                yield return actor.Use("put the knife back", prep.SpotWorldPosition(spot), InteractionAction.Place, () => me.DevSendPlace(prep.Index, spot));
+            }
+            yield return actor.Use("take the seitan sticks", ContentPoint(board), InteractionAction.Take, () => me.DevSendUse(boardObject, VesselRules.ActionUse));
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atGriddle, false, false);
+
+            // The griddle on, the seitan strips on spot 0, then the staged paprika and mushroom on spots 1 and 2 (a few seconds
+            // apart, so their flips and takes do not all fall on the same moment).
+            yield return actor.Use("switch the griddle on", knob.transform.position, InteractionAction.Press,
+                () => me.DevSendStation(griddle.Index, GriddleRules.PowerOption), capture.Before("griddle-knob-aim", null, 0f));
+            NetworkObject spot0 = spots[0].NetworkObject;
+            yield return actor.Use("put the seitan strips on the griddle", ContentPoint(spots[0]), InteractionAction.PutInto,
+                () => me.DevSendUse(spot0, VesselRules.ActionUse), capture.Before("griddle-put-aim", null, 0f));
+            float start = Time.unscaledTime;
+            Debug.Log("[Demo] griddle: on, the seitan strips on spot 0 (" + Time.time.ToString("0.0") + " s)");
+            for (int i = 0; i < staged.Count; i++)
+            {
+                Food food = NearestFood(staged[i]);
+                if (food == null)
+                {
+                    actor.CountTimeout("cook: a staged vegetable is gone from the deck");
+                    continue;
+                }
+                NetworkObject foodObject = food.NetworkObject, target = spots[i + 1].NetworkObject;
+                yield return actor.Use("pick up the " + food.DisplayName.Value + " from the deck", food.transform.position, InteractionAction.PickUp,
+                    () => me.DevSendPickup(foodObject));
+                yield return actor.Use("put it on the griddle", ContentPoint(spots[i + 1]), InteractionAction.PutInto,
+                    () => me.DevSendUse(target, VesselRules.ActionUse));
+            }
+            yield return actor.Use("pick up the spatula", spatula.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(spatulaObject),
+                capture.Before("spatula-aim", null, 0f));
+            Vector3 watch = (ContentPoint(spots[0]) + ContentPoint(spots[2])) * 0.5f + Vector3.up * WatchAbove;
+            yield return actor.AimAt(watch, 0.4f);
+
+            // Flip each item once its down side is Perfect (a late one at once); a shot every GrillShotEvery s.
+            var flipped = new bool[3];
+            var taken = new bool[3];
+            float nextShot = 0f;
+            while (Time.unscaledTime - start < GrillWait && !(flipped[0] && flipped[1] && flipped[2]))
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    if (flipped[i] || spots[i].ContentCount == 0 || spots[i].Zone < HeatZone.Perfect) continue;
+                    flipped[i] = true;
+                    LogGrill("flip " + i, Time.unscaledTime - start, spots);
+                    NetworkObject target = spots[i].NetworkObject;
+                    yield return actor.Use("flip " + string.Join(" + ", spots[i].Names), ContentPoint(spots[i]), InteractionAction.Flip,
+                        () => me.DevSendUse(target, VesselRules.ActionFlip), i == 0 ? capture.Before("seitan-flip-aim", "seitan-flip", frames) : null);
+                    yield return actor.AimAt(watch, 0.2f);
+                }
+                float at = Time.unscaledTime - start;
+                if (at >= nextShot)
+                {
+                    LogGrill("shot", at, spots);
+                    yield return capture.Shot("grill-" + Mathf.RoundToInt(at).ToString("00") + "s-" + spots[0].Zone.ToString().ToLowerInvariant());
+                    nextShot += GrillShotEvery;
+                }
+                yield return null;
+            }
+            if (!(flipped[0] && flipped[1] && flipped[2])) actor.CountTimeout("cook: not every item was flipped at Perfect");
+            // The cooked side up: the grill marks on the seitan.
+            yield return actor.AimAt(ContentPoint(spots[0]) + Vector3.up * 0.12f, 0.5f);
+            LogGrill("marks", Time.unscaledTime - start, spots);
+            yield return capture.Shot("grill-marks-seitan");
+
+            // The spatula back on the deck, the plate up; each item slides onto the plate when its second side is Perfect.
+            int spatulaSpot = PlaceSpots.NearestFree(deck.Size, new Vector2(0.375f, 0.125f), null);
+            yield return actor.Use("put the spatula back", deck.SpotWorldPosition(spatulaSpot), InteractionAction.Place,
+                () => me.DevSendPlace(deck.Index, spatulaSpot));
+            yield return actor.Use("pick up the plate from the deck", ContentPoint(plate), InteractionAction.PickUp, () => me.DevSendPickup(plateObject));
+            yield return actor.AimAt(watch, 0.3f);
+            while (Time.unscaledTime - start < GrillWait && !(taken[0] && taken[1] && taken[2]))
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    if (taken[i] || spots[i].ContentCount == 0 || spots[i].Zone < HeatZone.Perfect) continue;
+                    taken[i] = true;
+                    LogGrill("slide " + i, Time.unscaledTime - start, spots);
+                    NetworkObject target = spots[i].NetworkObject;
+                    yield return actor.Use("slide " + spots[i].Title.Value + " onto the plate", ContentPoint(spots[i]), InteractionAction.Take,
+                        () => me.DevSendUse(target, VesselRules.ActionUse), i == 0 ? capture.Before("seitan-slide-aim", "seitan-onto-plate", frames) : null);
+                    yield return actor.AimAt(watch, 0.2f);
+                }
+                float at = Time.unscaledTime - start;
+                if (at >= nextShot)
+                {
+                    LogGrill("shot", at, spots);
+                    yield return capture.Shot("grill-" + Mathf.RoundToInt(at).ToString("00") + "s-" + spots[0].Zone.ToString().ToLowerInvariant());
+                    nextShot += GrillShotEvery;
+                }
+                yield return null;
+            }
+            Debug.Log("[Demo] griddle: the held plate holds '" + plate.Title.Value + "' (" + plate.ContentCount + " parts)");
+            if (plate.ContentCount != 3) actor.CountTimeout("cook: the grilled food did not all slide onto the plate");
+            yield return actor.Look(0f, -35f, 0.6f);
+            yield return capture.Shot("grilled-veggies-on-held-plate");
+
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
+            LogOrders();
+            Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
+            yield return actor.Use("serve the grilled veggies at the counter", counterTop, InteractionAction.Sell,
+                () => me.DevSendStation(counter.Index, 0), capture.Before("veggies-serve-aim", "veggies-served", RewardFramesSeconds));
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            yield return new WaitForSecondsRealtime(0.5f);
+            string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
+            Debug.Log("[Demo] griddle: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
+            if (!latest.Contains("Grilled veggies order: exact order")) Debug.LogWarning("[Demo] griddle: no exact Grilled veggies order was served");
+        }
+
+        /// <summary>
+        /// Spec 030: takes one item from exactly <paramref name="slot"/> (the fridge's seitan sits right next to the falafel mix, so
+        /// the aim alone may pick the neighbour): walks there, aims at it, and sends that slot's take with its predicted look.
+        /// </summary>
+        private static IEnumerator TakeFrom(TourActor actor, StockSlot slot, float laneZ)
+        {
+            PickupInteractor me = actor.Interactor;
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
+            yield return actor.WalkTo(new Vector3(slot.Anchor.x + 1f, 0f, laneZ), false, false);
+            yield return actor.AimAt(slot.Anchor, 0.5f);
+            me.DevTake(slot);
+            float until = Time.unscaledTime + 3f;
+            while (!me.IsHoldingSomething() && Time.unscaledTime < until) yield return null;
+            yield return new WaitForSecondsRealtime(0.3f); // the name arrives with the food
+            string want = DemoIngredients.All[slot.IngredientIndex].DisplayName;
+            if (!HeldName(me).Contains(want)) actor.CountTimeout("cook: took '" + HeldName(me) + "' instead of " + want);
+            yield return actor.LevelView();
+        }
+
+        private static void LogGrill(string what, float at, Vessel[] spots)
+        {
+            var parts = new List<string>();
+            for (int i = 0; i < 3; i++)
+            {
+                Vessel s = spots[i];
+                if (s == null) continue;
+                byte mode = s.Mode.Value;
+                var view = s.GetComponent<Worktown.Game.Art.GriddleSpotView>();
+                parts.Add("spot " + i + " " + Describe(s) + " up " + GriddleRules.UpZoneOf(mode) + " " + GriddleRules.SideName(GriddleRules.DownSideOf(mode))
+                    + " down, flips " + GriddleRules.FlipsOf(mode) + (view != null && view.TopMarksShown ? ", marks on top" : string.Empty)
+                    + " '" + string.Join(" + ", s.Names) + "'");
+            }
+            Debug.Log("[Grill] " + what + " at " + at.ToString("0.0") + " s: " + string.Join("; ", parts));
         }
 
         private static float Distance(Component a, Component b) => Vector3.Distance(a.transform.position, b.transform.position);

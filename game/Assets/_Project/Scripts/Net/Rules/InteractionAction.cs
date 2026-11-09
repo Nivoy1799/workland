@@ -21,6 +21,8 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Take the food from a board, pan or bowl; take a plate from the shelf.</summary>
         Take,
         /// <summary>Spec 029: shake a lowered fryer basket (empty hands).</summary>
-        Shake
+        Shake,
+        /// <summary>Spec 030: the spatula over a griddle spot with food: turn it over.</summary>
+        Flip
     }
 }

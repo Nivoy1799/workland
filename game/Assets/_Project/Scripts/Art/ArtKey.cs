@@ -91,6 +91,13 @@ namespace Worktown.Game.Art
         StationFryer,
         ToolFryerBasket,
         FoodFalafelBall,
-        PropFriesBox
+        PropFriesBox,
+
+        // Spec 030: the griddle (graybox: a steel plate on a cabinet), its spatula (Food Kit cooking-spatula) and the grill vegetables.
+        StationGriddle,
+        ToolSpatula,
+        FoodPaprika,
+        FoodEggplant,
+        FoodMushroom
     }
 }

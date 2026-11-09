@@ -68,7 +68,7 @@ namespace Worktown.Game.Tests
             kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             Assert.AreEqual(CookOutcome.TooShort, kitchen.TryPreviewHeatTake(Pan, Start + 9000, Rate, out Item back));
             Assert.AreEqual(sticks.Hash, back.Hash);
-            Assert.AreEqual("potato sticks · raw", kitchen.DescribeHeat(Pan, Start + 9000, Rate));
+            Assert.AreEqual("potato sticks", kitchen.DescribeHeat(Pan, Start + 9000, Rate), "spec 030: what a take gives (unchanged)");
         }
 
         [Test]
@@ -189,9 +189,11 @@ namespace Worktown.Game.Tests
             KitchenState kitchen = KitchenWithSticks(out _);
             HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
             kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
-            // Spec 029b: player words from the zone, not the bucket ids.
-            Assert.AreEqual("potato sticks · raw", kitchen.DescribeHeat(Pan, Start + 10, Rate));
-            Assert.AreEqual("potato sticks · cooked", kitchen.DescribeHeat(Pan, Start + 750, Rate));
+            // Spec 030 (orchestrator decision, replaces the 029b zone words): the label is the name a take gives now.
+            Assert.AreEqual("potato sticks", kitchen.DescribeHeat(Pan, Start + 10, Rate), "too short: the food's own name");
+            Assert.AreEqual(kitchen.ResultName(Pan, VesselKind.Pan, Start + 750, Rate), kitchen.DescribeHeat(Pan, Start + 750, Rate));
+            StringAssert.Contains("fried potato sticks", kitchen.DescribeHeat(Pan, Start + 750, Rate));
+            StringAssert.DoesNotContain("·", kitchen.DescribeHeat(Pan, Start + 750, Rate), "no zone word of its own");
             Assert.AreEqual(HeatZone.Good, kitchen.HeatReadingOf(Pan, Start + 750, Rate).Zone, "cooked: the ring says good");
         }
 

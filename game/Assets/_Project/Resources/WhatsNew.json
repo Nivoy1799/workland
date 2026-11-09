@@ -482,6 +482,26 @@
         "Is the walk from the fryer to the plates and the counter short enough now?",
         "Click a knife and right away a fridge slot: does nothing swap in your hand?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-030",
+      "date": "2026-11-09",
+      "title": "The griddle: grill, flip, toast",
+      "items": [
+        "A griddle with six spots stands between the prep board and the fryer; switch it on with the knob on its front",
+        "Each side of the food cooks on its own: the ring has a half per side, and only the side that is down fills",
+        "Pick up the spatula from the griddle's deck and click the food to flip it; grill marks show on the cooked side",
+        "New in stock: paprika, eggplant and mushroom on the dry shelf; bread toasts on the griddle in a few seconds",
+        "On the menu: Grilled veggies (grilled paprika and one more grilled vegetable on a plate) and Toasted flatbread",
+        "Labels on food that cooks now always show the name it gets when you take it out"
+      ],
+      "test": [
+        "Grill seitan strips: does the first half of the ring fill, and the second half after the flip?",
+        "Flip with the spatula: does the food turn over at once with a tssh, and do the grill marks show on top?",
+        "Right click the food without the spatula: does it say Use the spatula?",
+        "Hold a plate and click grilled food: does it slide onto the plate? Serve Grilled veggies to a guest",
+        "Is the griddle close enough to the board, the fryer and the plates?"
+      ]
     }
   ]
 }

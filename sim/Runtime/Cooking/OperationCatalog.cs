@@ -90,7 +90,31 @@ namespace Worktown.Sim.Cooking
                 new OperationDef("plate", "counter", OperationKind.Plate, true, 1, CookingLimits.MaxPlateInputs,
                     Array.Empty<ParamDef>(), null, plated, plated, "plate of {in}"),
                 DeepFryOperation(plated, none),
+                GriddleOperation(Griddle.OperationId, Griddle.GrillProfile, 54f, 120f, plated, none),
+                GriddleOperation(Griddle.ToastOperationId, Griddle.ToastProfile, 18f, 54f, plated, none),
             });
+        }
+
+        /// <summary>
+        /// Spec 030: a griddle op (<c>griddle</c> for seitan and vegetables, <c>toast</c> for bread) at the station "griddle": the
+        /// plate's fixed temperature, "time" = the shorter side's sim seconds and "long_side" = the longer side's (0..600, so an
+        /// item that was never flipped is valid), each in the buckets short / medium (from <paramref name="medium"/>) / long (from
+        /// <paramref name="longFrom"/>). The name comes from the two buckets (<see cref="Griddle.NameTemplate"/>).
+        /// </summary>
+        private static OperationDef GriddleOperation(string id, GriddleProfile profile, float medium, float longFrom, string[] plated,
+            string[] none)
+        {
+            BucketDef[] Buckets() => new[]
+            {
+                new BucketDef("short", 0f, ""),
+                new BucketDef("medium", medium, ""),
+                new BucketDef("long", longFrom, ""),
+            };
+            var shortSide = new ParamDef("time", ParamKind.Number, 0f, Griddle.MaxSideSeconds, Buckets());
+            var longSide = new ParamDef(Griddle.LongSideParam, ParamKind.Number, 0f, Griddle.MaxSideSeconds, Buckets());
+            string done = profile.Toasts ? "toasted" : "grilled";
+            return new OperationDef(id, Griddle.Station, OperationKind.Heat, false, 1, 1, new[] { shortSide, longSide },
+                new HeatProfile(Griddle.PlateTempC, 0.1f, -0.3f, 0.4f, 0.25f, 0f, null, profile), plated, none, done + " {in}");
         }
 
         /// <summary>
@@ -194,6 +218,19 @@ namespace Worktown.Sim.Cooking
                 bool hasTemp = temp != null && temp.Kind == ParamKind.Number;
                 if (hasTemp == op.Heat.FixedTemperatureC.HasValue)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs exactly one of a 'temp' param or a fixed temperature.", p);
+                if (h.Grill != null)
+                {
+                    // Spec 030: a griddle op has the long side next to "time", in the same range, and finite, ordered curves.
+                    var longSide = Find(Griddle.LongSideParam);
+                    if (h.Fry != null || longSide == null || longSide.Kind != ParamKind.Number || longSide.Min != time.Min
+                        || longSide.Max != time.Max)
+                        throw new ArgumentException($"Griddle operation '{op.Id}' needs a Number param '{Griddle.LongSideParam}' like 'time'.", p);
+                    var sides = new List<FryCurve>(h.Grill.Curves) { h.Grill.Fallback };
+                    foreach (var c in sides)
+                        if (c == null || !(c.WindowMinAt > 0f && c.WindowMaxAt > c.WindowMinAt && c.BurntAt > c.WindowMaxAt)
+                            || !Fin(c.BurntAt))
+                            throw new ArgumentException($"Griddle operation '{op.Id}' has an invalid side curve.", p);
+                }
                 if (h.Fry != null)
                 {
                     // Spec 029: a deep fry op has the server's shake and drain choices and finite, ordered curves.

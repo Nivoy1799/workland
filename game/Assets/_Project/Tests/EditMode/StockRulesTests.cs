@@ -125,7 +125,8 @@ namespace Worktown.Game.Tests
             }
             Assert.AreEqual(1, StockArt.SamplesPerSlot(StationKind.Fridge, 0.2f));
             Assert.AreEqual(2, StockArt.SamplesPerSlot(StationKind.Fridge, 0.105f));
-            Assert.AreEqual(3, StockArt.SamplesPerSlot(StationKind.Shelf, 0.12f));
+            Assert.AreEqual(2, StockArt.SamplesPerSlot(StationKind.Shelf, 0.12f)); // spec 030: three columns on the shelf (0.37 m slots)
+            Assert.AreEqual(3, StockArt.SamplesPerSlot(StationKind.Shelf, 0.09f));
         }
 
         // ---- AC2: the server's take rule ----
@@ -141,9 +142,9 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(StockLayout.Fridge[s], DemoIngredients.All[ingredient].Id);
                 Assert.AreEqual(Vector3.right * 0.28f * s, anchor);
             }
-            // Slot 6 exists in the fridge (8 slots) but not on the shelf (6): the wrong slot index for that station.
-            Assert.IsTrue(StockRules.TryResolve(fridge, 6, out _, out _));
-            Assert.AreEqual(CookOutcome.InvalidOption, StockRules.CheckTake(shelf, 6, Vector3.zero, false, out string none));
+            // Spec 030: slot 8 exists on the shelf (9 slots) but not in the fridge (8): the wrong slot index for that station.
+            Assert.IsTrue(StockRules.TryResolve(shelf, 8, out _, out _));
+            Assert.AreEqual(CookOutcome.InvalidOption, StockRules.CheckTake(fridge, 8, Vector3.zero, false, out string none));
             Assert.IsNull(none);
             foreach (int unknown in new[] { -1, 8, 99, int.MinValue, int.MaxValue })
                 Assert.AreEqual(CookOutcome.InvalidOption, StockRules.CheckTake(fridge, unknown, Vector3.zero, false, out _), "option " + unknown);

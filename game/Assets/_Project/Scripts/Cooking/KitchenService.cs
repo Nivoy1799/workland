@@ -34,6 +34,8 @@ namespace Worktown.Game.Cooking
         [SerializeField] private NetworkObject _knifePrefab;
         [Tooltip("Spec 021: one prefab per kind of cookware (board, pan, pot, plate, bowl), for respawns and the plate shelf.")]
         [SerializeField] private NetworkObject[] _vesselPrefabs = new NetworkObject[0];
+        [Tooltip("Spec 030: spatula prefab for replacing a lost spatula (the scene spatula is an instance of it).")]
+        [SerializeField] private NetworkObject _spatulaPrefab;
 
         private const float HomeCheckInterval = 0.5f;
         private const int MaxInitAttempts = 300;
@@ -54,6 +56,8 @@ namespace Worktown.Game.Cooking
         // Spec 029: the fryer baskets (key: fryer station index and basket), found on the first server frame.
         private readonly Dictionary<long, Vessel> _baskets = new Dictionary<long, Vessel>();
         private readonly List<Vessel> _basketList = new List<Vessel>();
+        // Spec 030: the griddle spots (key: griddle station index and spot), found on the first server frame.
+        private readonly Dictionary<long, Vessel> _griddleSpots = new Dictionary<long, Vessel>();
         private uint _lastHeatTick;
         private bool _heatChecked;
 
@@ -98,6 +102,7 @@ namespace Worktown.Game.Cooking
                 _heatChecked = false;
                 _baskets.Clear();
                 _basketList.Clear();
+                _griddleSpots.Clear();
             }
         }
 
@@ -122,6 +127,7 @@ namespace Worktown.Game.Cooking
                 case StationKind.Counter: return Serve(player, station);
                 case StationKind.Stove: return UseBurner(station, option);
                 case StationKind.Fryer: return UseFryer(station, option);
+                case StationKind.Griddle: return UseGriddle(station, option); // spec 030
                 case StationKind.PlateShelf: return TakePlate(player);
                 default: return CookOutcome.UnknownStation;
             }
@@ -191,6 +197,59 @@ namespace Worktown.Game.Cooking
             return CookOutcome.Ok;
         }
 
+        /// <summary>Spec 030: the griddle's power knob (GriddleRules.PowerOption); the spots' down sides cook while it is on.</summary>
+        private CookOutcome UseGriddle(Station griddle, int option)
+        {
+            if (option != GriddleRules.PowerOption) return CookOutcome.InvalidOption;
+            _kitchen.TryToggleGriddle(griddle.Index, Tick);
+            RefreshGriddle(griddle);
+            for (int s = 0; s < GriddleRules.SpotsPerGriddle; s++)
+                if (_griddleSpots.TryGetValue(BurnerKey(griddle.Index, s), out Vessel spot)) RefreshVessel(spot);
+            Debug.Log("[Kitchen] " + griddle.DisplayName + " " + (_kitchen.GriddleIsOn(griddle.Index) ? "on" : "off"));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 030: the griddle's light byte (on).</summary>
+        private void RefreshGriddle(Station griddle)
+        {
+            if (griddle == null || !griddle.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            contents.ServerSetStoveFlags(_kitchen.GriddleFlags(griddle.Index));
+        }
+
+        /// <summary>
+        /// Spec 030: a flip of the item on a griddle spot: the spatula must be in the hands (NoSpatula, "Use the spatula"; reach
+        /// was checked by the caller), food on the spot (StationEmpty). The new down side's heat bytes go out at once with the
+        /// mode byte, so the two ring halves never swap for a moment.
+        /// </summary>
+        private CookOutcome Flip(PickupInteractor player, Vessel spot)
+        {
+            bool spatula = _pickups.TryGetHeld(player, out NetworkObject tool) && tool.TryGetComponent(out Spatula _);
+            CookOutcome can = VesselRules.CheckFlip(spot.Kind, spatula);
+            if (can != CookOutcome.Ok) return can;
+            CookOutcome flipped = _kitchen.TryFlip(spot.ObjectId, Tick);
+            if (flipped != CookOutcome.Ok) return flipped;
+            RefreshVessel(spot);
+            _heatSync.Remove(spot);
+            PublishHeatOf(spot, Tick, TickRate);
+            GriddleSides sides = _kitchen.GriddleSidesOf(spot.ObjectId, Tick, TickRate);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " flipped the food on the griddle: " + GriddleRules.SideName(sides.DownSide)
+                + " down (side 1 " + (sides.SideA / CookingTime.TimeScale).ToString("0.0") + " s, side 2 "
+                + (sides.SideB / CookingTime.TimeScale).ToString("0.0") + " s)");
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 030: the griddle spot's item slides onto the plate (or into the bowl) the player holds.</summary>
+        private CookOutcome TipGriddle(PickupInteractor player, Vessel spot, Vessel plate)
+        {
+            CookOutcome tipped = _kitchen.TryPour(spot.ObjectId, VesselKind.Griddle, plate.ObjectId, plate.Kind, Tick, TickRate, out Item result);
+            if (tipped != CookOutcome.Ok && tipped != CookOutcome.TooShort) return tipped;
+            RefreshVessel(spot);
+            RefreshVessel(plate);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " slid " + KitchenState.NameOf(result) + " from the griddle onto the "
+                + VesselRules.Name(plate.Kind) + " q=" + KitchenState.QualityOf(result).ToString("0.00"));
+            return tipped;
+        }
+
         // ---- cookware (RequestUse) ----
 
         /// <summary>
@@ -211,6 +270,7 @@ namespace Worktown.Game.Cooking
 
             if (action == VesselRules.ActionStroke || action == VesselRules.ActionTurn) return Cut(player, vessel, action);
             if (action == VesselRules.ActionShake) return Shake(player, vessel);
+            if (action == VesselRules.ActionFlip) return Flip(player, vessel); // spec 030
             if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
 
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
@@ -218,6 +278,8 @@ namespace Worktown.Game.Cooking
             {
                 // Spec 029b: holding a plate or bowl, a click on a raised basket tips its food onto it (no new RPC).
                 if (vessel.Kind == VesselKind.Basket && VesselRules.TipsFromBasket(source.Kind)) return TipBasket(player, vessel, source);
+                // Spec 030: holding a plate or bowl, a click on a griddle spot slides its item onto it.
+                if (vessel.Kind == VesselKind.Griddle && VesselRules.TipsFromFixed(vessel.Kind, source.Kind)) return TipGriddle(player, vessel, source);
                 return Pour(player, source, vessel);
             }
             if (!held.TryGetComponent(out Food food)) return CookOutcome.NotFood;
@@ -327,6 +389,7 @@ namespace Worktown.Game.Cooking
             byte mode = 0;
             if (vessel.Kind == VesselKind.Pan) mode = _kitchen.PanIsSaute(id) ? Vessel.ModeSaute : Vessel.ModeFry;
             else if (vessel.Kind == VesselKind.Basket) mode = _kitchen.BasketMode(id, tick); // spec 029
+            else if (vessel.Kind == VesselKind.Griddle) mode = _kitchen.GriddleMode(id, tick, rate); // spec 030
             vessel.ServerSet(_kitchen.ContentNames(id, vessel.Kind, tick, rate), _kitchen.ContentLooks(id, vessel.Kind, tick, rate),
                 _kitchen.ResultName(id, vessel.Kind, tick, rate), mode);
         }
@@ -375,6 +438,18 @@ namespace Worktown.Game.Cooking
             }
             foreach (Knife knife in FindObjectsByType<Knife>(FindObjectsSortMode.None))
                 if (knife.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _knifePrefab));
+            // Spec 030: the spatula comes back at its home spot like the knife.
+            foreach (Spatula spatula in FindObjectsByType<Spatula>(FindObjectsSortMode.None))
+                if (spatula.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _spatulaPrefab));
+            // Spec 030: the griddle spots (fixed scene objects on their griddle).
+            _griddleSpots.Clear();
+            foreach (GriddleSpot gs in FindObjectsByType<GriddleSpot>(FindObjectsSortMode.None))
+            {
+                if (gs.Griddle == null || !gs.TryGetComponent(out Vessel spot) || !spot.IsSpawned) continue;
+                _kitchen.RegisterGriddleSpot(spot.ObjectId, gs.Griddle.Index, gs.Spot);
+                _griddleSpots[BurnerKey(gs.Griddle.Index, gs.Spot)] = spot;
+                RefreshVessel(spot);
+            }
             // Spec 029: the fryer baskets (scene objects next to their fryer).
             _baskets.Clear();
             _basketList.Clear();
@@ -390,6 +465,7 @@ namespace Worktown.Game.Cooking
             {
                 if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
                 else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
+                else if (station != null && station.Kind == StationKind.Griddle) RefreshGriddle(station); // spec 030
             }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
         }
@@ -489,7 +565,9 @@ namespace Worktown.Game.Cooking
             EnsureInitialized();
             uint tick = Tick;
             double tickRate = TickRate;
-            if (_labelsDirty || CookingTime.ElapsedTicks(_lastLabelTick, tick) >= tickRate || tick < _lastLabelTick)
+            // Spec 030 (orchestrator decision): the label is the name a take would give now, so it is refreshed 4 times a
+            // second (HeatSync's rate; only changes are sent), and the name in the hands never differs from the label for long.
+            if (_labelsDirty || CookingTime.ElapsedTicks(_lastLabelTick, tick) >= HeatSync.MinTicks(tickRate) || tick < _lastLabelTick)
             {
                 _labelsDirty = false;
                 _lastLabelTick = tick;
@@ -518,21 +596,25 @@ namespace Worktown.Game.Cooking
         private void PublishHeat(uint tick, double tickRate)
         {
             foreach (Vessel vessel in _vessels)
+                if (vessel != null) PublishHeatOf(vessel, tick, tickRate);
+        }
+
+        private void PublishHeatOf(Vessel vessel, uint tick, double tickRate)
+        {
+            if (!vessel.IsServerInitialized || !VesselRules.IsHeat(vessel.Kind)) return;
+            if (!_heatSync.TryGetValue(vessel, out HeatSync sync))
             {
-                if (vessel == null || !vessel.IsServerInitialized || !VesselRules.IsHeat(vessel.Kind)) continue;
-                if (!_heatSync.TryGetValue(vessel, out HeatSync sync))
-                {
-                    sync = new HeatSync();
-                    _heatSync[vessel] = sync;
-                }
-                HeatReading reading = _kitchen.HeatReadingOf(vessel.ObjectId, tick, tickRate);
-                byte zone = HeatZoneRules.Encode(reading);
-                byte zoneBefore = sync.Zone;
-                if (!sync.ShouldSend(tick, tickRate, reading.Progress, zone)) continue;
-                vessel.ServerSetHeat(reading.Progress, zone);
-                // Spec 029b: the label's words follow the zone, so they change with the ring, not up to a second later.
-                if (HeatZoneRules.ZoneOf(zone) != HeatZoneRules.ZoneOf(zoneBefore)) RefreshVessel(vessel);
+                sync = new HeatSync();
+                _heatSync[vessel] = sync;
             }
+            HeatReading reading = _kitchen.HeatReadingOf(vessel.ObjectId, tick, tickRate);
+            byte zone = HeatZoneRules.Encode(reading);
+            byte zoneBefore = sync.Zone;
+            if (!sync.ShouldSend(tick, tickRate, reading.Progress, zone)) return;
+            vessel.ServerSetHeat(reading.Progress, zone);
+            // Spec 029b: the label follows the zone change with the ring, not up to a refresh later (spec 030: the name a take
+            // would give may change with it; the refresh also republishes a griddle spot's up side).
+            if (HeatZoneRules.ZoneOf(zone) != HeatZoneRules.ZoneOf(zoneBefore)) RefreshVessel(vessel);
         }
 
         // ---- stock and the counter (spec 007/009, spec 028b) ----

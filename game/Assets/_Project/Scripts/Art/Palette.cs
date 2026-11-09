@@ -55,6 +55,10 @@ namespace Worktown.Game.Art
         public static readonly Color FoodLemon = Rgb(0xE6CB5A);
         public static readonly Color FoodHerbSauce = Rgb(0xE3E0B8);
         public static readonly Color FoodChiliSauce = Rgb(0xC4513F);
+        // Spec 030: the grill vegetables.
+        public static readonly Color FoodPaprika = Rgb(0xC4503C);
+        public static readonly Color FoodEggplant = Rgb(0x6E4A6E);
+        public static readonly Color FoodMushroom = Rgb(0xC8B496);
         /// <summary>What fried food shifts towards.</summary>
         public static readonly Color FoodGolden = Rgb(0xE8BE6A);
 
@@ -65,7 +69,8 @@ namespace Worktown.Game.Art
             ("FoodGolden", FoodGolden),
             ("FoodFlatbread", FoodFlatbread), ("FoodWrap", FoodWrap), ("FoodSeitan", FoodSeitan), ("FoodFalafel", FoodFalafel),
             ("FoodLettuce", FoodLettuce), ("FoodCucumber", FoodCucumber), ("FoodRedCabbage", FoodRedCabbage),
-            ("FoodLemon", FoodLemon), ("FoodHerbSauce", FoodHerbSauce), ("FoodChiliSauce", FoodChiliSauce)
+            ("FoodLemon", FoodLemon), ("FoodHerbSauce", FoodHerbSauce), ("FoodChiliSauce", FoodChiliSauce),
+            ("FoodPaprika", FoodPaprika), ("FoodEggplant", FoodEggplant), ("FoodMushroom", FoodMushroom)
         };
 
         /// <summary>Highest HSV saturation a food colour may have.</summary>

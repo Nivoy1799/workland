@@ -21,6 +21,9 @@ namespace Worktown.Game.Cooking
         Shelf,
         /// <summary>Spec 029: a deep fryer with two baskets (<see cref="VesselKind.Basket"/>): a power knob and a lower/raise button
         /// per basket on its front (<see cref="FryerRules"/>).</summary>
-        Fryer
+        Fryer,
+        /// <summary>Spec 030: a flat griddle with six spots (<see cref="VesselKind.Griddle"/>) and a power knob on its front
+        /// (<see cref="GriddleRules"/>).</summary>
+        Griddle
     }
 }

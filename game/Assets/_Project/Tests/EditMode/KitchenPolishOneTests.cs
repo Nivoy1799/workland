@@ -176,7 +176,14 @@ namespace Worktown.Game.Tests
             StockTakeLook look = StockTakeLook.Begin(slot.transform, () => new Pose(Vector3.up, Quaternion.identity), 0f, FeelSettings.PresetA());
             try
             {
+                // Spec 030 (029b nit): Begin only places the copy; the frame is taken when a frame really draws it (the real
+                // frame path: Step is what LateUpdate runs; the render hook does the same), so the check is no tautology.
+                Assert.AreEqual(-1, look.DrawnFrame, "not drawn yet: nothing has rendered it");
+                look.Step(0.01f);
                 Assert.AreEqual(Time.frameCount, look.DrawnFrame, "drawn in the click's frame (measured, not assumed)");
+                int first = look.DrawnFrame;
+                look.Step(0.02f);
+                Assert.AreEqual(first, look.DrawnFrame, "the first drawn frame is kept");
             }
             finally
             {
@@ -188,24 +195,14 @@ namespace Worktown.Game.Tests
         // ---- 5. readable labels ----
 
         [Test]
-        public void HeatLabels_ArePlayerWords_FromTheZone()
+        public void HeatLabels_AreThePreviewName_NeverAZoneWordOfTheirOwn()
         {
-            Assert.AreEqual("pale fries", HeatLabelRules.Label("potato sticks", true, "fries", HeatZone.Raw));
-            Assert.AreEqual("pale fries", HeatLabelRules.Label("potato sticks", true, "fries", HeatZone.Cooking));
-            Assert.AreEqual("golden fries", HeatLabelRules.Label("potato sticks", true, "fries", HeatZone.Good));
-            Assert.AreEqual("golden fries", HeatLabelRules.Label("potato sticks", true, "fries", HeatZone.Perfect));
-            Assert.AreEqual("dark fries", HeatLabelRules.Label("potato sticks", true, "fries", HeatZone.Overdone));
-            Assert.AreEqual("dark fries", HeatLabelRules.Label("potato sticks", true, "fries", HeatZone.Burnt));
-            Assert.AreEqual("golden falafel balls", HeatLabelRules.Label("falafel mix", true, "falafel balls", HeatZone.Perfect));
-            Assert.AreEqual("potato · golden", HeatLabelRules.Label("potato", true, null, HeatZone.Good), "unshaped deep-fried food");
-            string[] pan = { "raw", "raw", "warm", "cooked", "cooked", "well done", "burnt" };
-            for (int z = 0; z <= (int)HeatZone.Burnt; z++)
-                Assert.AreEqual("potato sticks · " + pan[z], HeatLabelRules.Label("potato sticks", false, null, (HeatZone)z), ((HeatZone)z).ToString());
-            foreach (HeatZone z in new[] { HeatZone.Raw, HeatZone.Cooking, HeatZone.Good, HeatZone.Overdone, HeatZone.Burnt })
-            {
-                StringAssert.DoesNotContain("short", HeatLabelRules.Label("x", false, null, z));
-                StringAssert.DoesNotContain("medium", HeatLabelRules.Label("x", true, "fries", z));
-            }
+            // Spec 030 (orchestrator decision): the label is exactly the name a take would give now; the ring shows the zone.
+            Assert.AreEqual("golden fries", HeatLabelRules.Label("golden fries"));
+            Assert.AreEqual("potato sticks", HeatLabelRules.Label("potato sticks"), "raw, never heated: the sim name");
+            Assert.AreEqual(string.Empty, HeatLabelRules.Label(null));
+            Assert.AreEqual("half-grilled seitan strips · side 2 down", HeatLabelRules.GriddleLabel("half-grilled seitan strips", 1));
+            Assert.AreEqual("seitan strips · side 1 down", HeatLabelRules.GriddleLabel("seitan strips", 0));
         }
 
         [Test]
@@ -227,6 +224,10 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("golden fries", kitchen.DescribeHeat(basket, Real(28), rate));
             Assert.AreEqual("dark fries", kitchen.DescribeHeat(basket, Real(42), rate));
             kitchen.TryRaiseBasket(basket, Real(42), rate);
+            // Spec 030: while it drains the label says what a take gives now (greasy), so taking it never renames it.
+            kitchen.TryPreviewTakeOut(basket, VesselKind.Basket, Real(43), rate, out Worktown.Sim.Cooking.Item dripping);
+            Assert.AreEqual(KitchenState.NameOf(dripping), kitchen.DescribeHeat(basket, Real(43), rate));
+            Assert.AreEqual("greasy dark fries", kitchen.DescribeHeat(basket, Real(43), rate));
             kitchen.TryPreviewTakeOut(basket, VesselKind.Basket, Real(45), rate, out Worktown.Sim.Cooking.Item fries);
             Assert.AreEqual("dark fries", KitchenState.NameOf(fries), "off the heat: the sim's name");
         }

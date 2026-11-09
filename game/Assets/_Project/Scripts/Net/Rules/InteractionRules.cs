@@ -25,6 +25,7 @@ namespace Worktown.Game.Net.Rules
         public static InteractionAction ActionFor(Held held, AimTarget target)
         {
             if (target.IsTooFar) return InteractionAction.None; // spec 020: the server would refuse it (TooFar)
+            if (held.IsPending) return InteractionAction.None; // spec 030: a pick-up in flight only refuses (see Held.IsPending)
             switch (target.Kind)
             {
                 case AimKind.Button: return InteractionAction.Press;
@@ -41,6 +42,7 @@ namespace Worktown.Game.Net.Rules
         {
             bool hasFood = target.ContentCount > 0;
             if (target.Vessel == VesselKind.Basket) return BasketAction(held, target, hasFood);
+            if (target.Vessel == VesselKind.Griddle) return GriddleAction(held, target, hasFood); // spec 030
             if (held.IsKnife)
                 return target.Vessel == VesselKind.Board && hasFood ? InteractionAction.Cut : InteractionAction.None;
             if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
@@ -63,6 +65,34 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>
+        /// Spec 030, a griddle spot (fixed to its griddle, never picked up): the spatula flips the food on it, food that fits goes
+        /// on, a plate or bowl with room takes the food (the spot's Take, like a basket's tip), empty hands take it off.
+        /// Anything else (the knife, a box) does nothing. A flip by hand is the right click (refused: "Use the spatula").
+        /// </summary>
+        private static InteractionAction GriddleAction(Held held, AimTarget target, bool hasFood)
+        {
+            if (held.IsSpatula) return hasFood ? InteractionAction.Flip : InteractionAction.None;
+            if (held.IsFood) return Fits(held, target) ? InteractionAction.PutInto : InteractionAction.None;
+            if (held.IsVessel) return TipsInto(held, hasFood) ? InteractionAction.Take : InteractionAction.None;
+            return !held.IsHolding && hasFood ? InteractionAction.Take : InteractionAction.None;
+        }
+
+        /// <summary>Spec 030: the text a flip by hand gets, as the prompt's hint and the server's refusal (CookOutcome.NoSpatula).</summary>
+        public const string UseTheSpatula = "Use the spatula";
+
+        /// <summary>
+        /// Spec 030: a right click on a griddle spot with food asks for a flip whatever the hands hold (the server checks the
+        /// spatula: without it the answer is "Use the spatula"). False for anything else and beyond reach.
+        /// </summary>
+        public static bool RightClickFlips(AimTarget target)
+        {
+            return !target.IsTooFar && target.Kind == AimKind.Vessel && target.Vessel == VesselKind.Griddle && target.ContentCount > 0;
+        }
+
+        /// <summary>Spec 030: a flip is predicted (the arc at the click) only with the spatula in the hands; the server would refuse it otherwise.</summary>
+        public static bool PredictsFlip(Held held, AimTarget target) => held.IsSpatula && !held.IsPending && RightClickFlips(target);
+
+        /// <summary>
         /// Spec 029b: holding a plate or bowl with room, a click on a raised basket with food tips the food onto it (the
         /// basket's Take, sent as the same RequestUse action; the server pours the basket into what you hold).
         /// </summary>
@@ -77,6 +107,20 @@ namespace Worktown.Game.Net.Rules
         /// (no Place, PutInto or Sell of food that is not there).
         /// </summary>
         public static bool WaitsForTake(bool takePending, bool reallyHolding) => takePending && !reallyHolding;
+
+        /// <summary>
+        /// Spec 030 (029b review): the hands as the rules see them. What is really held wins; else a take from stock on its way
+        /// counts as that food (<paramref name="pendingTakeName"/>, null when none; <see cref="WaitsForTake"/> then offers
+        /// nothing); else an item on its predicted way into the hands (<paramref name="pendingPickUp"/>) counts as held only for
+        /// refusals (<see cref="Held.Pending"/>: no take, no buy, and never a tip or pour with a plate that may not arrive).
+        /// </summary>
+        public static Held EffectiveHands(Held real, string pendingTakeName, Held? pendingPickUp)
+        {
+            if (real.IsHolding) return real;
+            if (pendingTakeName != null) return Held.Food(pendingTakeName, false);
+            if (pendingPickUp.HasValue && pendingPickUp.Value.IsHolding) return Held.Pending(pendingPickUp.Value);
+            return real;
+        }
 
         private static InteractionAction StationAction(Held held, AimTarget target)
         {
@@ -147,6 +191,7 @@ namespace Worktown.Game.Net.Rules
         {
             if (target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Lowered)
                 return held.IsHolding ? "Raise the basket first" : null; // spec 029
+            if (target.Vessel == VesselKind.Griddle && held.IsSpatula) return "Put food on the griddle first"; // spec 030
             if (held.IsKnife) return target.Vessel == VesselKind.Board ? "Put food on the board to cut" : null;
             if (held.IsFood)
             {
@@ -163,10 +208,12 @@ namespace Worktown.Game.Net.Rules
             switch (ActionFor(held, target))
             {
                 case InteractionAction.Press:
+                    if (target.Station == StationKind.Griddle) return Click(GriddleRules.PowerText(GriddleRules.IsOn(target.StoveFlags))); // spec 030
                     return target.Station == StationKind.Fryer
                         ? FryerButtonPrompt(target.Option, target.StoveFlags)
                         : ButtonPrompt(target.Option, target.StoveFlags);
                 case InteractionAction.Shake: return Click("shake the basket");
+                case InteractionAction.Flip: return Click("flip " + TakeWhat(target)); // spec 030
                 case InteractionAction.Cut: return "Drag down · cut   Right click · turn";
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));
                 case InteractionAction.Pour: return Click("pour into the " + VesselRules.Name(target.Vessel));
@@ -181,8 +228,9 @@ namespace Worktown.Game.Net.Rules
                     // Spec 029: a basket that still drips gives greasy food; the prompt says so.
                     bool dripping = target.Vessel == VesselKind.Basket && FryerRules.StateOf(target.Mode) == BasketState.Draining;
                     string drip = dripping ? " (still dripping)" : string.Empty;
-                    if (held.IsVessel) return Click("tip " + TakeWhat(target) + " " + IntoWhat(held.Vessel) + drip); // spec 029b
-                    return Click("take " + TakeWhat(target) + drip);
+                    bool griddle = target.Vessel == VesselKind.Griddle && target.Kind == AimKind.Vessel; // spec 030
+                    if (held.IsVessel) return Click((griddle ? "slide " : "tip ") + TakeWhat(target) + " " + IntoWhat(held.Vessel) + drip); // spec 029b
+                    return Click("take " + TakeWhat(target) + drip) + (griddle ? "   Flip: " + UseTheSpatula.ToLowerInvariant() : string.Empty);
                 default: return Reason(held, target);
             }
         }
@@ -224,6 +272,7 @@ namespace Worktown.Game.Net.Rules
             switch (kind)
             {
                 case VesselKind.Board: return "on the board";
+                case VesselKind.Griddle: return "on the griddle"; // spec 030
                 case VesselKind.Plate: return "on the plate";
                 default: return "into the " + VesselRules.Name(kind);
             }

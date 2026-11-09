@@ -47,6 +47,8 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 029: the basket is in the oil; raise it first to put food in or take it out.</summary>
         BasketLowered,
         /// <summary>Spec 029: a shake needs a lowered basket with food.</summary>
-        NotLowered
+        NotLowered,
+        /// <summary>Spec 030: a flip needs the spatula in the hands ("Use the spatula").</summary>
+        NoSpatula
     }
 }

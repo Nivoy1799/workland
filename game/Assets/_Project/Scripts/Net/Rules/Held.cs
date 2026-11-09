@@ -23,10 +23,20 @@ namespace Worktown.Game.Net.Rules
         public readonly int ContentCount;
         /// <summary>Cookware: what pouring or selling it gives ("crispy fried potato sticks"), null when empty.</summary>
         public readonly string ContentName;
+        /// <summary>Spec 030: the griddle's spatula (flips food on a griddle spot).</summary>
+        public readonly bool IsSpatula;
+        /// <summary>
+        /// Spec 030 (029b review): an item still on its predicted way into the hands (a pick-up the server has not answered). It
+        /// counts as held only for refusals (no take, no buy, no second pick-up): every action is None, so nothing that depends on
+        /// the item (a tip, a pour, a place) is sent for something that may never arrive.
+        /// </summary>
+        public readonly bool IsPending;
 
         private Held(bool holding, bool food, bool knife, bool plated, string name, bool vessel = false,
-            VesselKind kind = default, int count = 0, string contentName = null)
+            VesselKind kind = default, int count = 0, string contentName = null, bool spatula = false, bool pending = false)
         {
+            IsSpatula = spatula;
+            IsPending = pending;
             IsHolding = holding;
             IsFood = food;
             IsKnife = knife;
@@ -46,6 +56,16 @@ namespace Worktown.Game.Net.Rules
         }
 
         public static Held Knife => new Held(true, false, true, false, "knife");
+
+        /// <summary>Spec 030: the griddle's spatula.</summary>
+        public static Held Spatula => new Held(true, false, false, false, "spatula", spatula: true);
+
+        /// <summary>Spec 030: <paramref name="item"/> on its way into the hands (a pending pick-up): held, but no action.</summary>
+        public static Held Pending(Held item)
+        {
+            return new Held(true, item.IsFood, item.IsKnife, item.IsPlated, item.Name, item.IsVessel, item.Vessel, item.ContentCount,
+                item.ContentName, item.IsSpatula, true);
+        }
 
         /// <summary>Spec 021: a board, pan, pot, plate or bowl with <paramref name="count"/> things in it.</summary>
         public static Held Cookware(VesselKind kind, int count, string contentName)

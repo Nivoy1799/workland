@@ -23,6 +23,10 @@ namespace Worktown.Game.Npc
         public const byte VeggieMix = 6;
         /// <summary>Spec 029: four falafel balls from the fryer.</summary>
         public const byte Falafel = 7;
+        /// <summary>Spec 030: grilled paprika and one more grilled vegetable on a plate (the griddle, both sides done; whole or cut).</summary>
+        public const byte GrilledVeggies = 8;
+        /// <summary>Spec 030: a flatbread toasted on both sides on the griddle.</summary>
+        public const byte ToastedFlatbread = 9;
 
         private static readonly IReadOnlyList<string> Sticks = new[] { "sticks" };
         private static readonly IReadOnlyList<string> Slices = new[] { "slices" };
@@ -32,6 +36,8 @@ namespace Worktown.Game.Npc
         private static readonly IReadOnlyList<string> DeepFryOp = new[] { Worktown.Sim.Cooking.DeepFry.OperationId };
         private static readonly IReadOnlyList<string> SauteOp = new[] { "saute" };
         private static readonly IReadOnlyList<string> BoilOp = new[] { "boil" };
+        private static readonly IReadOnlyList<string> GriddleOp = new[] { Worktown.Sim.Cooking.Griddle.OperationId }; // spec 030
+        private static readonly IReadOnlyList<string> ToastOp = new[] { Worktown.Sim.Cooking.Griddle.ToastOperationId };
 
         /// <summary>
         /// The menu, in id order. Fries, potato soup and fried apple are one ingredient (sim market snack); onion soup,
@@ -57,6 +63,12 @@ namespace Worktown.Game.Npc
                 }, false, false, 4),
             new MenuDish(Falafel, "Falafel (4)", "snack", "falafel_mix",
                 new[] { new DishNeed("falafel_mix", null, DeepFryOp, "medium") }, false, false, 1),
+            // Spec 030: the griddle's "time" bucket is its shorter side, so "medium" means both sides grilled (at least 9 s each).
+            new MenuDish(GrilledVeggies, "Grilled veggies", "meal", "paprika",
+                new[] { new DishNeed("paprika", null, GriddleOp, "medium"), new DishNeed(null, null, GriddleOp, "medium") },
+                false, false, 3),
+            new MenuDish(ToastedFlatbread, "Toasted flatbread", "snack", "flatbread",
+                new[] { new DishNeed("flatbread", null, ToastOp, "medium") }, false, false, 1),
         };
 
         /// <summary>What the crates sell (spec 007 demo ingredients): potato, apple, tomato, onion.</summary>

@@ -54,6 +54,7 @@ namespace Worktown.Game.Editor
         private const string PingMarkerPrefabPath = Root + "/Prefabs/PingMarker.prefab";
         private const string CustomerPrefabPath = Root + "/Prefabs/Customer.prefab";
         private const string KnifePrefabPath = Root + "/Prefabs/Knife.prefab";
+        private const string SpatulaPrefabPath = Root + "/Prefabs/Spatula.prefab"; // spec 030
         private const string StoveButtonMaterialPath = Root + "/Settings/StoveButton.mat";
         // Spec 019: the knife's pickup collider (long side along Z, like its model).
         private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.345f); // spec 026: the 0.345 m knife
@@ -81,11 +82,16 @@ namespace Worktown.Game.Editor
         private const float FridgeX = PrepStartX - StationHalfGap;
         private const float StockShelfX = FridgeX - 2f * StationHalfGap;
         private const float KitchenMinX = StockShelfX - StationHalfGap - LandingWidth;
-        private const float PrepWidth = 1.8f;
+        // Spec 030: the prep run is one board wide (0.74 m: the board and the knife), so the griddle fits next to the fryer and
+        // every 027a/029b distance holds (board to stove A 2.9 m, the fryer and everything right of it unchanged).
+        private const float PrepWidth = 0.74f;
         private const float BetweenWidth = 1.26f;
         // Spec 029: the deep fryer joins the back line between prep and the stoves (dish flow: stock, prep, fryer, stoves, plates).
         private const float FryerHalfGap = FryerArt.Width * 0.5f + WorktopGapMargin;
-        private const float FryerX = PrepStartX + PrepWidth + FryerHalfGap;
+        // Spec 030: the griddle in the heat block, between prep and the fryer (dish flow: stock, prep, griddle, fryer, stoves, plates).
+        private const float GriddleHalfGap = GriddleArtRules.Width * 0.5f + WorktopGapMargin;
+        private const float GriddleX = PrepStartX + PrepWidth + GriddleHalfGap;
+        private const float FryerX = GriddleX + GriddleHalfGap + FryerHalfGap;
         // Spec 029b: the two stoves stand side by side (the worktop that stood between them moved to the right end), so the
         // plating worktop and the plate shelf come 1.26 m closer to the fryer: fryer to the first plate about 3.2 m (was 4.5).
         // The kitchen keeps its length; the serving counter, the queue and the rail move with the plate shelf.
@@ -177,6 +183,7 @@ namespace Worktown.Game.Editor
             NetworkObject foodPrefab = CreateFoodPrefab(pickupMat, builtCatalog);
             NetworkObject customerPrefab = CreateCustomerPrefab(builtCatalog);
             NetworkObject knifePrefab = CreateKnifePrefab(builtCatalog); // spec 019
+            NetworkObject spatulaPrefab = CreateSpatulaPrefab(builtCatalog); // spec 030
             List<NetworkObject> vesselPrefabs = CreateVesselPrefabs(builtCatalog); // spec 021
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
@@ -194,7 +201,7 @@ namespace Worktown.Game.Editor
             Transform[] spawns = CreateSpawnPoints();
             CreatePickups(pickupPrefab);
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
-            CreateKitchen(networkManager, foodPrefab, knifePrefab, vesselPrefabs, catalog);
+            CreateKitchen(networkManager, foodPrefab, knifePrefab, spatulaPrefab, vesselPrefabs, catalog);
             CreateCustomers(networkManager, customerPrefab);
             CreateBootstrap(networkManager);
 
@@ -1044,6 +1051,133 @@ namespace Worktown.Game.Editor
             SetField(bubbles, "_area", new Vector2(FryerArt.WellWidth - 0.04f, FryerArt.WellBack - FryerArt.WellFront - 0.06f));
         }
 
+        /// <summary>Spec 030: the griddle's name (its sign and the server log) and its spots' object names.</summary>
+        public const string GriddleName = "Griddle";
+        public const string GriddleSpotName = "Griddle spot";
+
+        /// <summary>
+        /// Spec 030: the griddle's front and spots (<see cref="GriddleArtRules"/>). On the front face the power knob right of the sign
+        /// (a StationButton, option GriddleRules.PowerOption), its label and a pilot light, coloured by a FryerButtonVisual (the same
+        /// on bit). Each of the six spots is its own scene NetworkObject on the plate (never moves; no Pickup): a Vessel of kind
+        /// Griddle with its GriddleSpot, a low aim collider, the "Contents" GriddleSpotView flips, steam and the two-half ring.
+        /// </summary>
+        private static void BuildGriddle(ArtCatalog catalog, Station griddle, Transform parent)
+        {
+            float rootY = griddle.transform.localPosition.y;
+            Material material = CreateMaterial(StoveButtonMaterialPath, Color.white);
+            var visual = griddle.gameObject.AddComponent<FryerButtonVisual>();
+            SetField(visual, "_contents", griddle.GetComponent<StationContents>());
+            float frontZ = -GriddleArtRules.Depth * 0.5f - 0.04f;
+            float buttonY = GriddleArtRules.ButtonHeight - rootY, labelY = GriddleArtRules.LabelHeight - rootY;
+            SetField(visual, "_power", CreateButton(griddle, "Power", new Vector3(GriddleArtRules.KnobX, buttonY, frontZ), GriddleRules.PowerOption, material));
+            CreateButtonLabel(griddle, "PowerLabel", new Vector3(GriddleArtRules.KnobX, labelY, frontZ - 0.04f), "on/off").characterSize = 0.014f;
+            GameObject pilot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            pilot.name = "Pilot light";
+            UnityEngine.Object.DestroyImmediate(pilot.GetComponent<Collider>());
+            pilot.transform.SetParent(griddle.transform, false);
+            pilot.transform.localPosition = new Vector3(GriddleArtRules.KnobX - 0.11f, buttonY + 0.045f, frontZ + 0.02f);
+            pilot.transform.localScale = Vector3.one * 0.035f;
+            pilot.GetComponent<MeshRenderer>().sharedMaterial = material;
+            SetField(visual, "_pilot", pilot.GetComponent<MeshRenderer>());
+
+            Material steam = CreateSteamMaterial();
+            Material marks = CreateMaterial(Root + "/Settings/GrillMarks.mat", Palette.Charcoal);
+            for (int s = 0; s < GriddleRules.SpotsPerGriddle; s++) CreateGriddleSpot(catalog, griddle, s, parent, steam, marks);
+        }
+
+        private static void CreateGriddleSpot(ArtCatalog catalog, Station griddle, int spot, Transform parent, Material steam, Material marks)
+        {
+            float rootY = griddle.transform.localPosition.y;
+            Vector2 p = GriddleArtRules.SpotPosition(spot);
+            var root = new GameObject(GriddleSpotName + " " + spot);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(griddle.transform.TransformPoint(new Vector3(p.x, GriddleArtRules.PlateTop - rootY, p.y)),
+                griddle.transform.rotation);
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = new Vector3(GriddleArtRules.SpotSize, GriddleArtRules.SpotColliderHeight, GriddleArtRules.SpotSize);
+            collider.center = new Vector3(0f, GriddleArtRules.SpotColliderHeight * 0.5f, 0f);
+
+            var anchor = new GameObject(Vessel.ContentsName);
+            anchor.transform.SetParent(root.transform, false);
+            anchor.transform.localPosition = new Vector3(0f, 0.002f, 0f);
+            var food = anchor.AddComponent<FoodVisual>();
+            SetField(food, "_catalog", catalog);
+            SetField(food, "_partScale", 0.7f);
+            SetField(food, "_partRadius", 0.05f);
+
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, 0.36f, 0f), 40, 0.03f);
+            label.text = string.Empty;
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            var vessel = root.AddComponent<Vessel>();
+            SetField(vessel, "_kind", (int)VesselKind.Griddle);
+            SetField(vessel, "_label", label);
+            SetField(vessel, "_visual", food);
+            var marker = root.AddComponent<GriddleSpot>();
+            SetField(marker, "_griddle", griddle);
+            SetField(marker, "_spot", spot);
+            SetField(root.AddComponent<GriddleSpotView>(), "_markMaterial", marks);
+            var steamView = root.AddComponent<VesselSteam>();
+            SetField(steamView, "_material", steam);
+            SetField(steamView, "_steamHeight", 0.06f);
+        }
+
+        /// <summary>Spec 030: the steel deck behind the griddle's plate, a place surface at the plate's height.</summary>
+        private static PlaceSurface CreateGriddleDeck(Station griddle, int index)
+        {
+            float rootY = griddle.transform.localPosition.y;
+            float top = GriddleArtRules.PlateTop - rootY;
+            var size = new Vector2(GriddleArtRules.Width, GriddleArtRules.DeckDepth);
+            var go = new GameObject("Griddle deck");
+            go.transform.SetParent(griddle.transform, false);
+            go.transform.localPosition = new Vector3(0f, 0f, GriddleArtRules.DeckCenterZ);
+            var box = go.AddComponent<BoxCollider>();
+            box.size = new Vector3(size.x, 0.02f, size.y);
+            box.center = new Vector3(0f, top + 0.005f - 0.01f, 0f);
+            go.isStatic = true;
+            var surface = go.AddComponent<PlaceSurface>();
+            SetField(surface, "_index", index);
+            SetField(surface, "_size", size);
+            SetField(surface, "_topY", top);
+            return surface;
+        }
+
+        /// <summary>
+        /// Spec 030: the griddle spatula, a normal pickup like the knife with a Spatula marker and the Food Kit cooking-spatula
+        /// (fitted to ArtSizeTable, long side along Z); the collider wraps the model, its visual on the collider's bottom.
+        /// </summary>
+        private static NetworkObject CreateSpatulaPrefab(ArtCatalog catalog)
+        {
+            var root = new GameObject("Spatula");
+            var visual = new GameObject("Visual");
+            visual.transform.SetParent(root.transform, false);
+            Bounds model = new Bounds(new Vector3(0f, 0.02f, 0f), new Vector3(0.1f, 0.04f, 0.345f));
+            if (catalog != null && catalog.TryGet(ArtKey.ToolSpatula, out GameObject wrapper))
+            {
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, visual.transform);
+                model = LocalBounds(root, instance);
+            }
+            else Debug.LogError("[Graybox] no ToolSpatula model in the art catalog");
+            float height = Mathf.Max(model.size.y, MinVesselColliderHeight);
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = new Vector3(Mathf.Max(model.size.x, 0.08f), height, model.size.z);
+            collider.center = new Vector3(model.center.x, 0f, model.center.z);
+            visual.transform.localPosition = new Vector3(0f, -height * 0.5f - model.min.y, 0f);
+            Debug.Log("[Graybox] spatula model " + model.size.x.ToString("0.000") + " x " + model.size.y.ToString("0.000") + " x "
+                + model.size.z.ToString("0.000") + " m (target " + ArtSizeTable.TargetSize(ArtKey.ToolSpatula).ToString("0.000") + " m)");
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true); // like the knife
+            AddServerAuthoritativeTransform(root);
+            root.AddComponent<Pickup>();
+            root.AddComponent<Spatula>();
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, SpatulaPrefabPath);
+            UnityEngine.Object.DestroyImmediate(root);
+            return saved.GetComponent<NetworkObject>();
+        }
+
         private static Renderer CreateButton(Station station, string name, Vector3 localPosition, int option, Material material)
         {
             GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube); // keeps its BoxCollider for the aim ray
@@ -1094,7 +1228,7 @@ namespace Worktown.Game.Editor
         /// fridge), worktops, two stoves (two burners each), the counter and the plate shelf; the cookware lying on top; the serve
         /// feed and the kitchen service.
         /// </summary>
-        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab,
+        private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab, NetworkObject spatulaPrefab,
             List<NetworkObject> vesselPrefabs, ArtCatalog catalog)
         {
             var parent = new GameObject("Kitchen");
@@ -1124,6 +1258,10 @@ namespace Worktown.Game.Editor
             Station fryer = CreateStation(catalog, parent.transform, stations.Count, StationKind.Fryer, FryerName, FryerX, KitchenZ, 0f, stoveMat, 0,
                 FryerArt.Width);
             stations.Add(fryer);
+            // Spec 030: the griddle, between prep and the fryer (appended last, so the earlier station indices stay).
+            Station griddle = CreateStation(catalog, parent.transform, stations.Count, StationKind.Griddle, GriddleName, GriddleX, KitchenZ, 0f,
+                stoveMat, 0, GriddleArtRules.Width);
+            stations.Add(griddle);
 
             // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, the pass at the
             // right end (spec 029b: it stood between the stoves; created in the same order, so the surface indices stay),
@@ -1143,6 +1281,9 @@ namespace Worktown.Game.Editor
             PlaceSurface last = CreateWorktop(parent.transform, PlateShelfX + half, PlateShelfX + half + BetweenWidth, height, surfaces.Count,
                 worktopMat, catalog);
             surfaces.Add(last);
+            // Spec 030: the griddle's deck behind its plate (appended, so the earlier surface indices stay): the spatula's home.
+            PlaceSurface griddleDeck = CreateGriddleDeck(griddle, surfaces.Count);
+            surfaces.Add(griddleDeck);
             CreateFrontCounter(parent.transform, catalog);
             CreateShopWalls(parent.transform);
             SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
@@ -1156,13 +1297,19 @@ namespace Worktown.Game.Editor
             fryer.gameObject.AddComponent<NetworkObject>();
             fryer.gameObject.AddComponent<StationContents>();
             BuildFryer(catalog, fryer, parent.transform);
+            griddle.gameObject.AddComponent<NetworkObject>();
+            griddle.gameObject.AddComponent<StationContents>();
+            BuildGriddle(catalog, griddle, parent.transform);
 
             // Spec 021: the cookware lying on top at the start (each one's home spot, where a lost one comes back).
             NetworkObject Prefab(VesselKind kind) => vesselPrefabs.Find(p => p.GetComponent<Vessel>().Kind == kind);
             // Spec 027a: the board and the knife on the prep run, the plates next to the plate shelf, the bowl after it.
             // Spec 028b: the board at the prep run's stock end (about 1 m from the fridge, 2.2 m from the shelf).
-            PlaceOnSpot(Prefab(VesselKind.Board), prep, SpotNear(prep, -0.5f, -0.125f), "Cutting board");
-            PlaceOnSpot(knifePrefab, prep, SpotNear(prep, 0.25f, -0.125f), "Knife");
+            // Spec 030: the prep run is one board wide: the board in its middle at the front, the knife behind it on the right.
+            PlaceOnSpot(Prefab(VesselKind.Board), prep, SpotNear(prep, 0f, -0.125f), "Cutting board");
+            PlaceOnSpot(knifePrefab, prep, SpotNear(prep, 0.25f, 0.375f), "Knife");
+            // Spec 030: the spatula on the griddle's deck, right behind the plate (its home spot).
+            PlaceOnSpot(spatulaPrefab, griddleDeck, SpotNear(griddleDeck, 0.375f, 0.125f), "Spatula");
             PlaceOnSpot(Prefab(VesselKind.Pan), burnersA[0], 0, "Pan");
             PlaceOnSpot(Prefab(VesselKind.Pot), burnersB[0], 0, "Pot");
             PlaceOnSpot(Prefab(VesselKind.Plate), plating, SpotNear(plating, -0.3f, -0.125f), "Plate 1");
@@ -1184,6 +1331,7 @@ namespace Worktown.Game.Editor
             SetField(kitchen, "_feed", feed);
             SetField(kitchen, "_stations", stations);
             SetField(kitchen, "_knifePrefab", knifePrefab); // spec 019: replaces a lost knife
+            SetField(kitchen, "_spatulaPrefab", spatulaPrefab); // spec 030: replaces a lost spatula
             SetField(kitchen, "_vesselPrefabs", vesselPrefabs); // spec 021: respawns and the plate shelf
 
             // Spec 009: market board (global, like the feed) and the server-side economy.
@@ -1431,7 +1579,7 @@ namespace Worktown.Game.Editor
                 // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules. Spec 028b: the
                 // stock models are built at their own size (StockArt).
                 // Spec 029: the graybox fryer is built at its own size too.
-                if (!stock && kind != StationKind.Fryer)
+                if (!stock && kind != StationKind.Fryer && kind != StationKind.Griddle) // spec 030: the graybox griddle too
                     visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(width / StationWidth, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
                 // Spec 028b: the fridge's open doors stand out of the body; the sign stays on the body's front.

@@ -59,6 +59,9 @@ namespace Worktown.Sim.Cooking
 
             // 3. params
             if (!TryResolve(op, parameters, out var resolved)) return Fail(OperationError.InvalidParam);
+            // Spec 030: a griddle op's "time" is the shorter side (Griddle.Params), so one item has one hash whichever side went first.
+            if (op.Heat?.Grill != null && NumberOf(resolved, "time") > NumberOf(resolved, Griddle.LongSideParam))
+                return Fail(OperationError.InvalidParam);
 
             // 4. canonical order
             if (op.Commutative) flat.Sort(ItemCanonical.CompareItems);
@@ -88,6 +91,10 @@ namespace Worktown.Sim.Cooking
                     // Spec 029: the basket shapes the input ("{drain} {time} fries", "... falafel balls").
                     if (op.Heat!.Fry != null && DeepFry.TryGetShape(flat[0], out DeepFryShape shaped))
                         template = "{" + DeepFry.DrainParam + "} {time} " + shaped.Name;
+                    // Spec 030: the griddle names the item from its two sides' buckets ("grilled seitan strips").
+                    if (op.Heat.Grill != null)
+                        template = Griddle.NameTemplate(BucketOf(resolved, "time"), BucketOf(resolved, Griddle.LongSideParam),
+                            op.Heat.Grill.Toasts, Griddle.TryGetShape(flat[0], out DeepFryShape cut) ? cut.Name : null);
                     break;
                 default:
                     Combine(flat, out stats, out surface, out components, out factor);
@@ -122,6 +129,18 @@ namespace Worktown.Sim.Cooking
                 stats, surface, Array.AsReadOnly(components.ToArray()), DistinctSorted(tags), depth,
                 op.Kind, string.Empty, template, new ReadOnlyDictionary<string, string>(labels), factor);
             return new OperationResult(item, OperationError.None);
+        }
+
+        private static float NumberOf(List<Resolved> resolved, string name)
+        {
+            foreach (var r in resolved) if (r.Name == name) return r.Number;
+            return 0f;
+        }
+
+        private static string BucketOf(List<Resolved> resolved, string name)
+        {
+            foreach (var r in resolved) if (r.Name == name) return r.Bucket.Id;
+            return string.Empty;
         }
 
         private sealed class Resolved
@@ -164,12 +183,13 @@ namespace Worktown.Sim.Cooking
         {
             var profile = op.Heat!;
             float temp = profile.FixedTemperatureC ?? 0f;
-            float time = 0f;
+            float time = 0f, longSide = 0f;
             bool shaken = false, greasy = false;
             foreach (var r in resolved)
             {
                 if (r.Name == "temp") temp = r.Number;
                 else if (r.Name == "time") time = r.Number;
+                else if (r.Name == Griddle.LongSideParam) longSide = r.Number;
                 else if (r.Name == DeepFry.ShakeParam) shaken = r.Bucket.Id == DeepFry.Shaken;
                 else if (r.Name == DeepFry.DrainParam) greasy = r.Bucket.Id == DeepFry.Greasy;
             }
@@ -178,7 +198,25 @@ namespace Worktown.Sim.Cooking
             float g;
             components = new List<ItemComponent>(src.Components.Count);
             float doneSum = 0f;
-            if (profile.Fry != null)
+            if (profile.Grill != null)
+            {
+                // Spec 030: each side along its curve (time = the shorter side, longSide the longer), combined per component; the
+                // stat changes follow the mean of the two sides, saturating at the end of the window.
+                g = 0f;
+                foreach (var c in src.Components)
+                {
+                    FryCurve curve = profile.Grill.CurveFor(c.BaseId);
+                    float a = Griddle.SideDoneness(curve, c.Ideal, c.Doneness, time);
+                    float b = Griddle.SideDoneness(curve, c.Ideal, c.Doneness, longSide);
+                    float d = Griddle.CombineSides(a, b, c.Ideal);
+                    doneSum += d;
+                    components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
+                    g += 0.5f * (Math.Min(1f, time / curve.WindowMaxAt) + Math.Min(1f, longSide / curve.WindowMaxAt));
+                }
+                g /= Math.Max(1, src.Components.Count);
+                factor = src.QualityFactor;
+            }
+            else if (profile.Fry != null)
             {
                 // Spec 029: each component along its fry curve; the stat changes saturate at the end of its window.
                 float seconds = DeepFry.EffectiveSeconds(time, temp);

@@ -76,7 +76,7 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(kitchen.IsCooking(Pot));
             Assert.AreEqual(CookOutcome.TooShort, kitchen.TryPreviewHeatTake(Pot, Start + 9000, Rate, out Item back));
             Assert.AreEqual(potato.Hash, back.Hash, "nothing happened");
-            Assert.AreEqual("potato · raw", kitchen.DescribeHeat(Pot, Start + 9000, Rate));
+            Assert.AreEqual("potato", kitchen.DescribeHeat(Pot, Start + 9000, Rate), "spec 030: what a take gives (unchanged)");
         }
 
         [Test]
@@ -110,12 +110,13 @@ namespace Worktown.Game.Tests
         [Test]
         public void Labels_ShowEachIngredientsOwnDoneness()
         {
-            KitchenState kitchen = KitchenWith(out _, out _);
+            KitchenState kitchen = KitchenWith(out Item potato, out _);
             HeatTestKit.SwitchOn(kitchen, Pot, Burner);
             kitchen.TryPutInto(1, Pot, VesselKind.Pot, Start);
             kitchen.TryPutInto(2, Pot, VesselKind.Pot, Start + 1400);
-            // Spec 029b: player words from each food's zone (the potato is still cooking, the onion just went in).
-            CollectionAssert.AreEqual(new[] { "potato · warm", "onion · raw" }, kitchen.HeatNames(Pot, Start + 1500, Rate));
+            // Spec 030 (orchestrator decision): each line is the name that food gets when poured now (the potato boiled so far,
+            // the onion just went in: too short, its own name).
+            CollectionAssert.AreEqual(new[] { KitchenState.NameOf(Boil(potato, Seconds(1500))), "onion" }, kitchen.HeatNames(Pot, Start + 1500, Rate));
             IReadOnlyList<FoodLook> looks = kitchen.HeatLooks(Pot, Start + 1500, Rate);
             Assert.AreEqual(2, looks.Count);
             Assert.AreEqual(FoodLook.HeatBoiled, looks[0].Heat);
