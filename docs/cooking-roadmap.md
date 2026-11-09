@@ -112,3 +112,10 @@ tuned later by the human.
 - 032 review (CHANGES REQUESTED): double pay on hand-over failure (must-fix) and register decisions (any cook works the
   head payment; self-settled payments pay no tip; head untouched 30 s auto-settles) in the 032 fix round. Process:
   future rounds commit spec and review fixes as separate commits.
+- 033 review (CHANGES REQUESTED, fixed in the 034 round): plate op added "cup" to every plated dish; cups into an
+  empty bowl server-side; pour hardening; tab close order; GuestTab.Serve guard. Later: a drink line when the drink
+  market has no open demand; near-empty cups profitable to NPC demand (037 pricing).
+- 034 (feels off): terminal rows small and buttons dim; taps, rack and cup stack show counts only in prompts; a
+  sauce dispenser's open bottle is not visible to the client; third-person carried box has no arm pose; the delivery
+  knock replays for late joiners; packs are expensive next to the start money (037); old money-only wallet paths can
+  be removed once every scene has a SupplyService.
