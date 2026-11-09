@@ -32,10 +32,13 @@ namespace Worktown.Game.Net.Rules
         public readonly bool IsBurner;
         /// <summary>Spec 020: the target is beyond reach (the ray sees it, the server would refuse): no action, "Too far".</summary>
         public readonly bool IsTooFar;
+        /// <summary>Spec 029, cookware: its synced mode byte (a basket's <see cref="FryerRules.Mode"/>).</summary>
+        public readonly byte Mode;
 
         private AimTarget(AimKind kind, StationKind station, VesselKind vessel, int contentCount, string contentName, int option,
-            byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar)
+            byte stoveFlags, string name, long price, int spotIndex, bool burner, bool tooFar, byte mode = 0)
         {
+            Mode = mode;
             Kind = kind;
             Station = station;
             Vessel = vessel;
@@ -60,12 +63,15 @@ namespace Worktown.Game.Net.Rules
 
         private AimTarget With(bool tooFar)
         {
-            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar);
+            return new AimTarget(Kind, Station, Vessel, ContentCount, ContentName, Option, StoveFlags, Name, Price, SpotIndex, IsBurner, tooFar, Mode);
         }
 
-        public static AimTarget Button(int option, byte stoveFlags)
+        public static AimTarget Button(int option, byte stoveFlags) => Button(StationKind.Stove, option, stoveFlags);
+
+        /// <summary>Spec 029: a button of any station (the stove's or the fryer's), with that station's synced flags.</summary>
+        public static AimTarget Button(StationKind station, int option, byte flags)
         {
-            return new AimTarget(AimKind.Button, StationKind.Stove, default, 0, null, option, stoveFlags, null, -1, PlaceSpots.None, false, false);
+            return new AimTarget(AimKind.Button, station, default, 0, null, option, flags, null, -1, PlaceSpots.None, false, false);
         }
 
         /// <summary>A station other than a crate: the counter, a stove's body, the plate shelf.</summary>
@@ -86,10 +92,10 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>Spec 021: cookware lying somewhere, with <paramref name="contentCount"/> things in it.</summary>
-        public static AimTarget Cookware(VesselKind kind, int contentCount, string contentName)
+        public static AimTarget Cookware(VesselKind kind, int contentCount, string contentName, byte mode = 0)
         {
             return new AimTarget(AimKind.Vessel, default, kind, contentCount, contentName, 0, 0, "the " + VesselRules.Name(kind), -1,
-                PlaceSpots.None, false, false);
+                PlaceSpots.None, false, false, mode);
         }
 
         /// <summary>A place surface; <paramref name="spotIndex"/> is the chosen free spot or PlaceSpots.None (full).</summary>

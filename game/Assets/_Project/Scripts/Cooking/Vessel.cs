@@ -25,7 +25,8 @@ namespace Worktown.Game.Cooking
         public readonly SyncList<FoodLook> Looks = new SyncList<FoodLook>();
         /// <summary>What taking, pouring or selling would give ("crispy fried potato sticks"), empty when empty.</summary>
         public readonly SyncVar<string> Title = new SyncVar<string>(string.Empty);
-        /// <summary>Pan only: <see cref="ModeFry"/> or <see cref="ModeSaute"/>.</summary>
+        /// <summary>Pan: <see cref="ModeFry"/> or <see cref="ModeSaute"/>. Spec 029, basket: its state and shake counter
+        /// (<see cref="FryerRules.Mode"/>). 0 for the rest.</summary>
         public readonly SyncVar<byte> Mode = new SyncVar<byte>(ModeFry);
         /// <summary>Spec 027c: 0-255, the share of the way to the end of the good window (the good window starts at
         /// <see cref="HeatZoneRules.GoodShare"/>).</summary>
@@ -57,6 +58,8 @@ namespace Worktown.Game.Cooking
 
         /// <summary>Name of the child where the contents are drawn.</summary>
         public const string ContentsName = "Contents";
+        /// <summary>Spec 029: the child of a fryer basket that moves between the oil and the hook (its model and contents).</summary>
+        public const string RigName = "Rig";
         private Transform _contents;
         private bool _contentsLooked;
 
@@ -69,6 +72,8 @@ namespace Worktown.Game.Cooking
                 {
                     _contentsLooked = true;
                     _contents = transform.Find(ContentsName);
+                    // Spec 029: a fryer basket draws its contents inside its moving rig (BasketView).
+                    if (_contents == null) _contents = transform.Find(RigName + "/" + ContentsName);
                 }
                 return _contents;
             }
@@ -100,8 +105,8 @@ namespace Worktown.Game.Cooking
             if (HeatZone.Value != zone) HeatZone.Value = zone;
         }
 
-        /// <summary>Server: publish the contents; only what changed is sent.</summary>
-        internal void ServerSet(IReadOnlyList<string> names, IReadOnlyList<FoodLook> looks, string title, bool saute)
+        /// <summary>Server: publish the contents and the mode byte; only what changed is sent.</summary>
+        internal void ServerSet(IReadOnlyList<string> names, IReadOnlyList<FoodLook> looks, string title, byte mode)
         {
             if (!SameNames(names))
             {
@@ -117,7 +122,6 @@ namespace Worktown.Game.Cooking
             }
             string t = title ?? string.Empty;
             if (Title.Value != t) Title.Value = t;
-            byte mode = saute ? ModeSaute : ModeFry;
             if (Mode.Value != mode) Mode.Value = mode;
         }
 

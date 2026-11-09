@@ -18,6 +18,8 @@ namespace Worktown.Game.Cooking
         public const int ActionUse = 0;
         public const int ActionStroke = 1;
         public const int ActionTurn = 2;
+        /// <summary>Spec 029: shake a lowered fryer basket (empty hands).</summary>
+        public const int ActionShake = 3;
 
         /// <summary>How many things it holds: board and pan one (open question 2), pot four, plate and bowl the sim limits.</summary>
         public static int Capacity(VesselKind kind)
@@ -29,12 +31,16 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Pot: return PotCapacity;
                 case VesselKind.Plate: return CookingLimits.MaxPlateInputs;
                 case VesselKind.Bowl: return CookingLimits.MaxMixInputs;
+                case VesselKind.Basket: return 1; // spec 029: one portion
                 default: return 0;
             }
         }
 
-        /// <summary>Pan and pot cook over time while they stand on a burner that is on.</summary>
-        public static bool IsHeat(VesselKind kind) => kind == VesselKind.Pan || kind == VesselKind.Pot;
+        /// <summary>Pan and pot cook over time while they stand on a burner that is on; spec 029: a basket while it is in the oil.</summary>
+        public static bool IsHeat(VesselKind kind) => kind == VesselKind.Pan || kind == VesselKind.Pot || kind == VesselKind.Basket;
+
+        /// <summary>Spec 029: the cookware that cooks on a burner (pan, pot); a basket hangs in its fryer.</summary>
+        public static bool StandsOnBurner(VesselKind kind) => kind == VesselKind.Pan || kind == VesselKind.Pot;
 
         /// <summary>Plate and bowl combine what is put in (sim plate / mix).</summary>
         public static bool IsAssembly(VesselKind kind) => kind == VesselKind.Plate || kind == VesselKind.Bowl;
@@ -64,11 +70,11 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public static bool TakesOutByHand(VesselKind kind)
         {
-            return kind == VesselKind.Board || kind == VesselKind.Pan || kind == VesselKind.Bowl;
+            return kind == VesselKind.Board || kind == VesselKind.Pan || kind == VesselKind.Bowl || kind == VesselKind.Basket;
         }
 
         /// <summary>Plates do not come back when lost (the shelf gives new ones); all other cookware has a home spot.</summary>
-        public static bool RespawnsAtHome(VesselKind kind) => kind != VesselKind.Plate;
+        public static bool RespawnsAtHome(VesselKind kind) => kind != VesselKind.Plate && kind != VesselKind.Basket; // spec 029: fixed
 
         /// <summary>Lower-case name for prompts: "board", "pan", "pot", "plate", "bowl".</summary>
         public static string Name(VesselKind kind)
@@ -80,6 +86,7 @@ namespace Worktown.Game.Cooking
                 case VesselKind.Pot: return "pot";
                 case VesselKind.Plate: return "plate";
                 case VesselKind.Bowl: return "bowl";
+                case VesselKind.Basket: return "basket";
                 default: return "it";
             }
         }

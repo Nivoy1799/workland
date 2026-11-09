@@ -84,6 +84,8 @@ namespace Worktown.Game.Dev
             float standZ = laneZ;
             Vector3 atA = new Vector3(stoveA.transform.position.x, 0f, standZ);
             Vector3 atB = new Vector3(stoveB.transform.position.x, 0f, standZ);
+            // Spec 029 (AC5, AC6): first an order of fries from potato to the counter, through the fryer.
+            if (capture != null) yield return FryFries(actor, capture, laneZ);
             Debug.Log("[Demo] walking to the first stove (" + Time.time.ToString("0.0") + " s)");
             yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(new Vector3(atA.x, 0f, laneZ), false, false);
@@ -253,6 +255,194 @@ namespace Worktown.Game.Dev
             if (!board.Title.Value.Contains("slice")) actor.CountTimeout("cook: the cucumber is not sliced (" + board.Title.Value + ")");
         }
 
+        /// <summary>Spec 029: seconds between the shots while the basket fries, and the longest it waits for a zone.</summary>
+        public const float FryShotEvery = 5f;
+        public const float FryWait = 60f;
+        public const float DrainFramesSeconds = 1.5f;
+
+        /// <summary>
+        /// Spec 029 AC5/AC6: fries from potato to the counter. A potato from the shelf onto the board, the knife cuts sticks (two
+        /// strokes, a turn, a stroke), the knife goes back, the sticks go into basket 0, the fryer goes on, the basket goes down
+        /// (frames of the arc), the ring fills (a shot every <see cref="FryShotEvery"/> s with the zone), one shake in the good
+        /// window, the basket comes up at Perfect (frames of the arc and the drips), the fries come out once drained, onto a plate
+        /// on the plating worktop (the fries box), and the plate is served at the counter (the orders waiting are logged first).
+        /// </summary>
+        private static IEnumerator FryFries(TourActor actor, CookCapture capture, float laneZ)
+        {
+            const float frames = TourRules.ClickFramesSeconds;
+            PickupInteractor me = actor.Interactor;
+            StockSlot potatoSlot = FindSlot("potato");
+            Vessel board = null, plate = null;
+            Station fryer = null, counter = null;
+            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
+            {
+                if (s.Kind == StationKind.Fryer) fryer = s;
+                else if (s.Kind == StationKind.Counter) counter = s;
+            }
+            Vessel basket = null;
+            foreach (FryerBasket fb in UnityEngine.Object.FindObjectsByType<FryerBasket>(FindObjectsSortMode.None))
+                if (fb.Basket == 0 && fb.Fryer == fryer) basket = fb.GetComponent<Vessel>();
+            foreach (Vessel v in UnityEngine.Object.FindObjectsByType<Vessel>(FindObjectsSortMode.None))
+            {
+                if (v.Kind == VesselKind.Board) board = v;
+                else if (v.Kind == VesselKind.Plate && fryer != null
+                         && (plate == null || Distance(v, fryer) < Distance(plate, fryer))) plate = v;
+            }
+            Knife knife = UnityEngine.Object.FindFirstObjectByType<Knife>();
+            StationButton power = null, lower = null;
+            foreach (StationButton b in UnityEngine.Object.FindObjectsByType<StationButton>(FindObjectsSortMode.None))
+            {
+                if (b.Station != fryer || fryer == null) continue;
+                if (b.Option == FryerRules.PowerOption) power = b;
+                else if (b.Option == FryerRules.BasketOption(0)) lower = b;
+            }
+            if (potatoSlot == null || board == null || plate == null || fryer == null || counter == null || basket == null || knife == null
+                || power == null || lower == null)
+            {
+                Debug.LogWarning("[Demo] fries: the potato slot, board, plate, fryer, counter, basket, knife or a fryer button is missing");
+                actor.CountTimeout("cook: fryer setup missing");
+                yield break;
+            }
+            NetworkObject boardObject = board.NetworkObject, basketObject = basket.NetworkObject, plateObject = plate.NetworkObject;
+            NetworkObject knifeObject = knife.GetComponent<NetworkObject>();
+            Vector3 knifeHome = knife.transform.position;
+            Vector3 atFryer = new Vector3(fryer.transform.position.x, 0f, laneZ);
+
+            // Potato, board, sticks.
+            Debug.Log("[Demo] fries: start (" + Time.time.ToString("0.0") + " s)");
+            yield return Buy(actor, "take a potato for fries", potatoSlot, laneZ);
+            yield return actor.WalkTo(new Vector3(board.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("put the potato on the board", ContentPoint(board), InteractionAction.PutInto,
+                () => me.DevSendUse(boardObject, VesselRules.ActionUse));
+            yield return actor.Use("pick up the knife", knife.transform.position, InteractionAction.PickUp, () => me.DevSendPickup(knifeObject));
+            yield return actor.AimAt(ContentPoint(board), 0.6f);
+            foreach (int action in new[] { VesselRules.ActionStroke, VesselRules.ActionStroke, VesselRules.ActionTurn, VesselRules.ActionStroke })
+            {
+                me.DevSendUse(boardObject, action);
+                yield return new WaitForSeconds(0.7f);
+            }
+            Debug.Log("[Demo] fries: the board holds " + board.Title.Value);
+            yield return capture.Shot("fries-sticks");
+            if (!board.Title.Value.Contains("stick")) actor.CountTimeout("cook: the potato is not cut into sticks (" + board.Title.Value + ")");
+            PlaceSurface prep = SurfaceUnder(knifeHome);
+            if (prep != null)
+            {
+                int spot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
+                yield return actor.Use("put the knife back", prep.SpotWorldPosition(spot), InteractionAction.Place,
+                    () => me.DevSendPlace(prep.Index, spot));
+            }
+            yield return actor.Use("take the sticks", ContentPoint(board), InteractionAction.Take, () => me.DevSendUse(boardObject, VesselRules.ActionUse));
+
+            // The fryer: on, sticks in, down.
+            yield return actor.LevelView();
+            yield return actor.WalkTo(atFryer, false, false);
+            yield return capture.Shot("fryer");
+            yield return actor.Use("switch the fryer on", power.transform.position, InteractionAction.Press,
+                () => me.DevSendStation(fryer.Index, FryerRules.PowerOption), capture.Before("fryer-power-aim", null, 0f));
+            yield return actor.Use("put the sticks into the basket", ContentPoint(basket), InteractionAction.PutInto,
+                () => me.DevSendUse(basketObject, VesselRules.ActionUse), capture.Before("basket-aim", "basket-in", frames));
+            yield return actor.Use("lower the basket", lower.transform.position, InteractionAction.Press,
+                () => me.DevSendStation(fryer.Index, FryerRules.BasketOption(0)), capture.Before("basket-button-aim", "basket-lower", frames));
+            float start = Time.unscaledTime;
+            Debug.Log("[Demo] fries: the basket is down (" + Time.time.ToString("0.0") + " s)");
+            yield return actor.AimAt(ContentPoint(basket) + Vector3.up * WatchAbove, 0.8f);
+
+            // The ring fills; one shake in the good window; up at Perfect.
+            float nextShot = 0f;
+            bool shaken = false;
+            while (Time.unscaledTime - start < FryWait)
+            {
+                float at = Time.unscaledTime - start;
+                HeatZone zone = basket.Zone;
+                if (!shaken && zone == HeatZone.Good)
+                {
+                    shaken = true;
+                    LogBasket("shake", at, basket);
+                    yield return actor.Use("shake the basket", ContentPoint(basket), InteractionAction.Shake,
+                        () => me.DevSendUse(basketObject, VesselRules.ActionShake), capture.Before("shake-aim", "shake", 0.6f));
+                    yield return actor.AimAt(ContentPoint(basket) + Vector3.up * WatchAbove, 0.5f);
+                    continue;
+                }
+                if (zone == HeatZone.Perfect && Time.unscaledTime - start > 1f && shaken)
+                {
+                    LogBasket("perfect", at, basket);
+                    yield return new WaitForSecondsRealtime(1f);
+                    break;
+                }
+                if (at >= nextShot)
+                {
+                    LogBasket("shot", at, basket);
+                    yield return capture.Shot("fry-" + Mathf.RoundToInt(at).ToString("00") + "s-" + zone.ToString().ToLowerInvariant());
+                    nextShot += FryShotEvery;
+                }
+                yield return null;
+            }
+            if (!shaken || basket.Zone != HeatZone.Perfect) actor.CountTimeout("cook: the basket did not reach Perfect with a shake (" + basket.Zone + ")");
+            yield return actor.Use("raise the basket", lower.transform.position, InteractionAction.Press,
+                () => me.DevSendStation(fryer.Index, FryerRules.BasketOption(0)), capture.Before("raise-aim", "basket-raise", frames));
+            yield return actor.AimAt(ContentPoint(basket), 0.2f);
+            if (capture.Frames != null) yield return capture.Frames("drain-drips", DrainFramesSeconds);
+            float drainStart = Time.unscaledTime;
+            while (FryerRules.StateOf(basket.Mode.Value) != BasketState.Raised && Time.unscaledTime - drainStart < 5f) yield return null;
+            yield return new WaitForSecondsRealtime(0.3f);
+            yield return capture.Shot("drained");
+            yield return actor.Use("take the fries out", ContentPoint(basket), InteractionAction.Take,
+                () => me.DevSendUse(basketObject, VesselRules.ActionUse));
+            Debug.Log("[Demo] fries: in the hands: " + HeldName(me));
+            yield return capture.Shot("fries-in-hand");
+
+            // Onto a plate at the plating table (the fries box), then to the counter.
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(plate.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.Use("put the fries on the plate", ContentPoint(plate), InteractionAction.PutInto,
+                () => me.DevSendUse(plateObject, VesselRules.ActionUse), capture.Before("plate-aim", "fries-onto-plate", frames));
+            yield return actor.AimAt(ContentPoint(plate), 0.6f);
+            yield return capture.Shot("fries-box-on-plate");
+            yield return actor.Use("pick up the plate", ContentPoint(plate), InteractionAction.PickUp, () => me.DevSendPickup(plateObject));
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
+            LogOrders();
+            Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
+            yield return actor.Use("serve the fries at the counter", counterTop, InteractionAction.Sell,
+                () => me.DevSendStation(counter.Index, 0), capture.Before("fries-serve-aim", "fries-served", RewardFramesSeconds));
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            yield return new WaitForSecondsRealtime(0.5f);
+            string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
+            Debug.Log("[Demo] fries: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
+            if (!latest.Contains("Fries order: exact order")) Debug.LogWarning("[Demo] fries: no exact Fries order was served");
+        }
+
+        private static float Distance(Component a, Component b) => Vector3.Distance(a.transform.position, b.transform.position);
+
+        /// <summary>The place surface whose top is under <paramref name="point"/> (the knife's worktop), or null.</summary>
+        private static PlaceSurface SurfaceUnder(Vector3 point)
+        {
+            foreach (PlaceSurface s in UnityEngine.Object.FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
+            {
+                Vector2 local = s.ToTopPlane(point);
+                if (s.IsBurner || Mathf.Abs(local.x) > s.Size.x * 0.5f || Mathf.Abs(local.y) > s.Size.y * 0.5f) continue;
+                return s;
+            }
+            return null;
+        }
+
+        /// <summary>Spec 029 AC6: the orders the waiting customers show (their synced dish).</summary>
+        private static void LogOrders()
+        {
+            var orders = new List<string>();
+            foreach (Worktown.Game.Npc.Customer c in UnityEngine.Object.FindObjectsByType<Worktown.Game.Npc.Customer>(FindObjectsSortMode.None))
+                orders.Add(Worktown.Game.Npc.Menu.NameOf(c.Dish.Value));
+            Debug.Log("[Demo] fries: orders in the queue: " + string.Join(", ", orders));
+        }
+
+        private static void LogBasket(string what, float at, Vessel basket)
+        {
+            var bubbles = basket.GetComponent<Worktown.Game.Art.FryerBubbles>();
+            var view = basket.GetComponent<Worktown.Game.Art.BasketView>();
+            Debug.Log("[Fry] " + what + " at " + at.ToString("0.0") + " s: " + Describe(basket) + ", " + FryerRules.StateOf(basket.Mode.Value)
+                + ", bubbles " + (bubbles != null ? bubbles.Rate.ToString("0") : "-") + "/s, pose " + (view != null ? view.Pose.ToString("0.00") : "-"));
+        }
+
         /// <summary>Spec 027c: the zone, progress and ring of the pan and pot, for the tour log.</summary>
         private static void LogHeat(string what, float at, Vessel pan, Vessel pot)
         {
@@ -324,6 +514,7 @@ namespace Worktown.Game.Dev
         /// <summary>Where a vessel draws its contents (inside the pot, on the board); its position if none.</summary>
         private static Vector3 ContentPoint(Component vessel)
         {
+            if (vessel is Vessel v) return v.ContentPoint; // spec 029: a basket draws its contents inside its rig
             Transform anchor = vessel.transform.Find("Contents");
             return anchor != null ? anchor.position : vessel.transform.position + Vector3.up * 0.05f;
         }

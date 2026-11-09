@@ -265,6 +265,10 @@ namespace Worktown.Game.Player
                 case PredictionKind.PutInto:
                     if (!now.Exists) return PredictionPhase.Confirmed;
                     return now.Holder != me ? PredictionPhase.Denied : PredictionPhase.Pending;
+                case PredictionKind.Basket:
+                    // Spec 029: confirmed once the synced basket is on the other side of the oil line.
+                    if (!now.Exists) return PredictionPhase.Denied;
+                    return now.VesselCount != start.VesselCount ? PredictionPhase.Confirmed : PredictionPhase.Pending;
                 default:
                     return PredictionPhase.Pending;
             }

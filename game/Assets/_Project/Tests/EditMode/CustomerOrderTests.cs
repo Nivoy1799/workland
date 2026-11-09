@@ -129,7 +129,7 @@ namespace Worktown.Game.Tests
             CollectionAssert.AreEqual(first, DrawMany(CustomerRules.OrderSeed, 40));
             CollectionAssert.AreNotEqual(first, DrawMany(CustomerRules.OrderSeed + 1, 40), "another seed, other orders");
             var kinds = new HashSet<byte>(first);
-            Assert.AreEqual(6, kinds.Count, "40 orders use the whole menu");
+            Assert.AreEqual(Menu.All.Count, kinds.Count, "40 orders use the whole menu");
         }
 
         [Test]

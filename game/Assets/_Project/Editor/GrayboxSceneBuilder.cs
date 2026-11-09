@@ -83,7 +83,10 @@ namespace Worktown.Game.Editor
         private const float KitchenMinX = StockShelfX - StationHalfGap - LandingWidth;
         private const float PrepWidth = 1.8f;
         private const float BetweenWidth = 1.26f;
-        private const float StoveAX = PrepStartX + PrepWidth + StationHalfGap;
+        // Spec 029: the deep fryer joins the back line between prep and the stoves (dish flow: stock, prep, fryer, stoves, plates).
+        private const float FryerHalfGap = FryerArt.Width * 0.5f + WorktopGapMargin;
+        private const float FryerX = PrepStartX + PrepWidth + FryerHalfGap;
+        private const float StoveAX = FryerX + FryerHalfGap + StationHalfGap;
         private const float StoveBX = StoveAX + 2f * StationHalfGap + BetweenWidth;
         private const float PlateShelfX = StoveBX + 2f * StationHalfGap + BetweenWidth;
         private const float KitchenMaxX = PlateShelfX + StationHalfGap + BetweenWidth;
@@ -919,6 +922,125 @@ namespace Worktown.Game.Editor
             SetField(visual, "_rings", rings);
         }
 
+        /// <summary>Spec 029: the fryer's name (its sign and the server log) and its baskets' object names.</summary>
+        public const string FryerName = "Fryer";
+        public const string FryerBasketName = "Fryer basket";
+
+        /// <summary>
+        /// Spec 029: the fryer's front and baskets (<see cref="FryerArt"/>). The body's collider stops under the wells, so the aim
+        /// finds a lowered basket. On the front face: the power knob in the middle and a lower/raise button under each basket
+        /// (StationButtons, option FryerRules.PowerOption / BasketOption), labels and a pilot light, coloured by a
+        /// FryerButtonVisual. On the back deck a stack of empty fries boxes (Kenney fries-empty). Each basket is its own scene
+        /// NetworkObject next to the fryer (never moves; no Pickup): a Vessel of kind Basket with its FryerBasket, the "Rig" that
+        /// BasketView swings (wire basket, collider, contents drawn loose), steam and smoke, the ring and the oil bubbles.
+        /// </summary>
+        private static void BuildFryer(ArtCatalog catalog, Station fryer, Transform parent)
+        {
+            float rootY = fryer.transform.localPosition.y; // the station root sits at half its height
+            BoxCollider body = fryer.transform.Find("Body").GetComponent<BoxCollider>();
+            float height = FryerArt.Height;
+            body.size = new Vector3(1f, FryerArt.BodyColliderTop / height, 1f);
+            body.center = new Vector3(0f, (FryerArt.BodyColliderTop * 0.5f - height * 0.5f) / height, 0f);
+
+            Material material = CreateMaterial(StoveButtonMaterialPath, Color.white);
+            var visual = fryer.gameObject.AddComponent<FryerButtonVisual>();
+            SetField(visual, "_contents", fryer.GetComponent<StationContents>());
+            float frontZ = -FryerArt.Depth * 0.5f - 0.04f;
+            float buttonY = FryerArt.ButtonHeight - rootY, labelY = FryerArt.LabelHeight - rootY;
+            SetField(visual, "_power", CreateButton(fryer, "Power", new Vector3(FryerArt.PowerX, buttonY, frontZ), FryerRules.PowerOption, material));
+            // The labels over the controls, small: the three sit 19 cm apart (the station sign is under the knob).
+            CreateButtonLabel(fryer, "PowerLabel", new Vector3(FryerArt.PowerX, labelY, frontZ - 0.04f), "on/off").characterSize = 0.014f;
+            var baskets = new List<UnityEngine.Object>();
+            for (int b = 0; b < FryerRules.BasketsPerFryer; b++)
+            {
+                float x = FryerArt.BasketX[b];
+                baskets.Add(CreateButton(fryer, "Basket button " + b, new Vector3(x, buttonY, frontZ), FryerRules.BasketOption(b), material));
+                CreateButtonLabel(fryer, "BasketLabel " + b, new Vector3(x, labelY, frontZ - 0.04f), "basket").characterSize = 0.014f;
+            }
+            SetField(visual, "_baskets", baskets);
+            GameObject pilot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            pilot.name = "Pilot light";
+            UnityEngine.Object.DestroyImmediate(pilot.GetComponent<Collider>());
+            pilot.transform.SetParent(fryer.transform, false);
+            pilot.transform.localPosition = new Vector3(FryerArt.PowerX + 0.095f, buttonY + 0.045f, frontZ + 0.02f);
+            pilot.transform.localScale = Vector3.one * 0.035f;
+            pilot.GetComponent<MeshRenderer>().sharedMaterial = material;
+            SetField(visual, "_pilot", pilot.GetComponent<MeshRenderer>());
+
+            if (catalog != null && catalog.TryGet(ArtKey.PropFriesBox, out GameObject box))
+            {
+                for (int i = 0; i < FryerArt.BoxCount; i++)
+                {
+                    var instance = (GameObject)PrefabUtility.InstantiatePrefab(box, fryer.transform);
+                    instance.name = "Fries box " + (i + 1);
+                    instance.transform.localPosition = new Vector3((i - (FryerArt.BoxCount - 1) * 0.5f) * 0.17f, height - rootY, FryerArt.BoxesZ);
+                    instance.transform.localRotation = ArtFrontRotation * Quaternion.Euler(0f, (i - 1) * 9f, 0f);
+                    SetStaticRecursive(instance);
+                }
+            }
+
+            Material steam = CreateSteamMaterial();
+            for (int b = 0; b < FryerRules.BasketsPerFryer; b++) CreateFryerBasket(catalog, fryer, b, parent, steam);
+        }
+
+        private static void CreateFryerBasket(ArtCatalog catalog, Station fryer, int basket, Transform parent, Material steam)
+        {
+            float rootY = fryer.transform.localPosition.y;
+            var root = new GameObject(FryerBasketName + " " + basket);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(
+                fryer.transform.TransformPoint(new Vector3(FryerArt.BasketX[basket], FryerArt.BasketBottom - rootY, FryerArt.BasketZ)),
+                fryer.transform.rotation);
+            var rig = new GameObject(Vessel.RigName);
+            rig.transform.SetParent(root.transform, false);
+            if (catalog != null && catalog.TryGet(ArtKey.ToolFryerBasket, out GameObject wrapper))
+            {
+                var art = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, rig.transform);
+                art.transform.localRotation = ArtFrontRotation; // the handle towards the aisle
+            }
+            else Debug.LogError("[Graybox] no fryer basket model in the art catalog");
+            // The collider moves with the rig (the aim follows the drawn basket); the handle runs towards -z.
+            float bh = FryerArt.BasketHeight + FryerArt.HandleRise + 0.03f, bl = FryerArt.BasketLength + FryerArt.HandleLength;
+            var collider = rig.AddComponent<BoxCollider>();
+            collider.size = new Vector3(FryerArt.BasketWidth + 0.02f, bh, bl);
+            collider.center = new Vector3(0f, bh * 0.5f, -FryerArt.HandleLength * 0.5f);
+
+            var anchor = new GameObject(Vessel.ContentsName);
+            anchor.transform.SetParent(rig.transform, false);
+            anchor.transform.localPosition = new Vector3(0f, FryerArt.ContentsHeight, 0f);
+            var food = anchor.AddComponent<FoodVisual>();
+            SetField(food, "_catalog", catalog);
+            SetField(food, "_partScale", 0.75f);
+            SetField(food, "_partRadius", 0.05f);
+            SetField(food, "_loose", true);
+
+            TextMesh label = CreateLabel(root.transform, new Vector3(0f, FryerArt.Height - FryerArt.BasketBottom + 0.42f, 0f), 40, 0.03f);
+            label.text = string.Empty;
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            var vessel = root.AddComponent<Vessel>();
+            SetField(vessel, "_kind", (int)VesselKind.Basket);
+            SetField(vessel, "_label", label);
+            SetField(vessel, "_visual", food);
+            var marker = root.AddComponent<FryerBasket>();
+            SetField(marker, "_fryer", fryer);
+            SetField(marker, "_basket", basket);
+            var view = root.AddComponent<BasketView>();
+            SetField(view, "_rig", rig.transform);
+            SetField(view, "_raisedOffset", FryerArt.RaisedOffset);
+            SetField(view, "_raisedTilt", FryerArt.RaisedTilt);
+            SetField(view, "_particleMaterial", steam);
+            float oil = FryerArt.OilHeight - FryerArt.BasketBottom;
+            var steamView = root.AddComponent<VesselSteam>();
+            SetField(steamView, "_material", steam);
+            SetField(steamView, "_steamHeight", oil + 0.02f);
+            var bubbles = root.AddComponent<FryerBubbles>();
+            SetField(bubbles, "_material", steam);
+            SetField(bubbles, "_oilHeight", oil);
+            SetField(bubbles, "_area", new Vector2(FryerArt.WellWidth - 0.04f, FryerArt.WellBack - FryerArt.WellFront - 0.06f));
+        }
+
         private static Renderer CreateButton(Station station, string name, Vector3 localPosition, int option, Material material)
         {
             GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube); // keeps its BoxCollider for the aim ray
@@ -995,6 +1117,10 @@ namespace Worktown.Game.Editor
                 CreateMaterial(Root + "/Settings/Station_Plating.mat", Palette.WoodLight), 0);
             CreatePlateStack(catalog, shelf);
             stations.Add(shelf);
+            // Spec 029: the fryer, after prep (appended last, so the earlier station indices stay).
+            Station fryer = CreateStation(catalog, parent.transform, stations.Count, StationKind.Fryer, FryerName, FryerX, KitchenZ, 0f, stoveMat, 0,
+                FryerArt.Width);
+            stations.Add(fryer);
 
             // Worktops at the stove top's height: the landing by the staff gap, the prep run after the crates, between the
             // stoves, between the second stove and the plate shelf, after the shelf.
@@ -1022,6 +1148,9 @@ namespace Worktown.Game.Editor
             }
             AddStoveButtons(stoveA, burnersA);
             AddStoveButtons(stoveB, burnersB);
+            fryer.gameObject.AddComponent<NetworkObject>();
+            fryer.gameObject.AddComponent<StationContents>();
+            BuildFryer(catalog, fryer, parent.transform);
 
             // Spec 021: the cookware lying on top at the start (each one's home spot, where a lost one comes back).
             NetworkObject Prefab(VesselKind kind) => vesselPrefabs.Find(p => p.GetComponent<Vessel>().Kind == kind);
@@ -1296,7 +1425,8 @@ namespace Worktown.Game.Editor
                 visual.transform.localRotation = ArtFrontRotation; // spec 027a: the model's front (knobs, oven door) on the controls' side
                 // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules. Spec 028b: the
                 // stock models are built at their own size (StockArt).
-                if (!stock)
+                // Spec 029: the graybox fryer is built at its own size too.
+                if (!stock && kind != StationKind.Fryer)
                     visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(width / StationWidth, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
                 // Spec 028b: the fridge's open doors stand out of the body; the sign stays on the body's front.

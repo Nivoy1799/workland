@@ -121,8 +121,10 @@ namespace Worktown.Game.Tests
                 // (x 2.36 and 3.60, 1.8 m high, 0.5 and 0.62 m deep, their backs on the back line's back at z 14.9), then the two
                 // stoves, the serving counter (in the front counter at z 11.85, 0.7 m deep, opposite the plate shelf) and the plate
                 // shelf; the back line at z 14.3.
-                float[] fixedX = { 2.36f, 3.60f, 6.64f, 9.14f, 11.64f, 11.64f };
-                StationKind[] kinds = { StationKind.Shelf, StationKind.Fridge, StationKind.Stove, StationKind.Stove, StationKind.Counter, StationKind.PlateShelf };
+                // Spec 029: the fryer (index 6, 0.8 m wide) after the prep run moved the stoves, the counter and the shelf 0.84 m right.
+                float[] fixedX = { 2.36f, 3.60f, 7.48f, 9.98f, 12.48f, 12.48f, 6.44f };
+                StationKind[] kinds = { StationKind.Shelf, StationKind.Fridge, StationKind.Stove, StationKind.Stove, StationKind.Counter, StationKind.PlateShelf,
+                    StationKind.Fryer };
                 int count = 0;
                 foreach (GameObject root in scene.GetRootGameObjects())
                 {
@@ -137,14 +139,18 @@ namespace Worktown.Game.Tests
                             : stock ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                         float depth = station.Kind == StationKind.Counter ? 0.7f : stock ? StockArt.DepthOf(station.Kind) : 1.2f;
                         float z = station.Kind == StationKind.Counter ? 11.85f : stock ? 14.9f - depth * 0.5f : 14.3f;
-                        var expected = new Vector3(x, height * 0.5f, z);
+                        bool fryer = station.Kind == StationKind.Fryer;
+                        float width = fryer ? FryerArt.Width : 1.2f;
+                        // Spec 029: the fryer's collider stops under its oil wells (the aim finds a lowered basket).
+                        float colliderHeight = fryer ? FryerArt.BodyColliderTop : height;
+                        var expected = new Vector3(x, colliderHeight * 0.5f, z);
                         Transform body = station.transform.Find("Body");
                         Assert.IsNotNull(body, station.name + " lost its Body");
                         Assert.AreEqual(Vector3.zero, body.localPosition, station.name);
                         var box = body.GetComponent<BoxCollider>();
                         Assert.IsNotNull(box, station.name + " lost its BoxCollider");
-                        Assert.AreEqual(Vector3.one, box.size);
-                        Assert.AreEqual(new Vector3(1.2f, height, depth), body.localScale); // spec 027a: the counter is 0.7 m deep
+                        Assert.AreEqual(fryer ? new Vector3(1f, colliderHeight / height, 1f) : Vector3.one, box.size);
+                        Assert.AreEqual(new Vector3(width, height, depth), body.localScale); // spec 027a: the counter is 0.7 m deep
                         Vector3 colliderCenter = box.bounds.center;
                         Assert.AreEqual(0f, Vector3.Distance(expected, colliderCenter), 0.001f, station.name + " moved");
                         Assert.IsNull(body.GetComponent<MeshRenderer>(), station.name + " still shows the cube");
@@ -166,7 +172,7 @@ namespace Worktown.Game.Tests
                         if (stock) Assert.AreEqual(box.bounds.size.y, b.size.y, 0.01f, station.name + " cabinet as high as its body");
                     }
                 }
-                Assert.AreEqual(6, count, "the dry shelf, the fridge, two stoves, the counter and the plate shelf");
+                Assert.AreEqual(7, count, "the dry shelf, the fridge, two stoves, the counter, the plate shelf and (spec 029) the fryer");
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
         }

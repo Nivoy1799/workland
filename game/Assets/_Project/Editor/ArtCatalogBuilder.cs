@@ -96,6 +96,10 @@ namespace Worktown.Game.Editor
             // not downloaded), so they are graybox boxes in palette colours at their StockArt size, fronts on +Z like the kit.
             new Def { Key = ArtKey.StationFridge, Mode = Fit.Graybox },
             new Def { Key = ArtKey.StationShelf, Mode = Fit.Graybox },
+            // Spec 029: no fryer model exists in the packs: a graybox fryer (steel body, two oil wells, a hook bar) and its wire
+            // basket, fronts on +Z like the kit (the scene builder turns them to the aisle).
+            new Def { Key = ArtKey.StationFryer, Mode = Fit.Graybox },
+            new Def { Key = ArtKey.ToolFryerBasket, Mode = Fit.Graybox },
 
             Fitted(ArtKey.Road, Roads + "road-straight.fbx", Fit.Tile),
             Fitted(ArtKey.RoadCrossroad, Roads + "road-crossroad.fbx", Fit.Tile),
@@ -141,6 +145,9 @@ namespace Worktown.Game.Editor
             Piece(ArtKey.FoodPieceSlice, PrimitiveType.Cylinder, new Vector3(0.07f, 0.01f, 0.07f)),
             Piece(ArtKey.FoodPieceStick, PrimitiveType.Cube, new Vector3(0.015f, 0.015f, 0.09f)),
             Piece(ArtKey.FoodPieceCube, PrimitiveType.Cube, new Vector3(0.03f, 0.03f, 0.03f)),
+            // Spec 029: a falafel ball (tinted brown by FoodVisual) and the empty fries box stacked at the fryer.
+            Piece(ArtKey.FoodFalafelBall, PrimitiveType.Sphere, new Vector3(0.035f, 0.035f, 0.035f)),
+            FoodDef(ArtKey.PropFriesBox, "fries-empty.fbx"),
             // Cookware (real size x1.15).
             FoodDef(ArtKey.FoodPlate, "plate.fbx"),
             FoodDef(ArtKey.FoodBowl, "bowl.fbx"),
@@ -798,6 +805,8 @@ namespace Worktown.Game.Editor
         /// </summary>
         private static GameObject BuildGraybox(ArtKey key, Transform parent)
         {
+            if (key == ArtKey.StationFryer) return BuildFryer(parent);
+            if (key == ArtKey.ToolFryerBasket) return BuildBasket(parent);
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -863,6 +872,94 @@ namespace Worktown.Game.Editor
                 for (int b = 0; b < StockArt.ShelfRowHeights.Length; b++)
                     Box(cabinet, "Board " + (b + 1), new Vector3(0f, StockArt.ShelfRowHeights[b] - t * 0.5f, t * 0.5f), new Vector3(w - 2f * t, t, d - t), wood);
             }
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 029: the graybox deep fryer as the wrapper's "Model" (<see cref="FryerArt"/>, station z mirrored: the front on +Z):
+        /// a steel cabinet, a darker front panel for the controls, two oil wells with a golden oil surface between steel rims and
+        /// a divider, a deck behind them and a hook bar the raised baskets hang in front of.
+        /// </summary>
+        private static GameObject BuildFryer(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            Material panel = GrayboxMaterial("FryerPanel", Palette.Shade(Palette.Steel, 0.78f));
+            Material oil = GrayboxMaterial("FryerOil", Color.Lerp(Palette.Mustard, Palette.WoodDark, 0.4f));
+            Material dark = GrayboxMaterial("FryerDark", Palette.Charcoal);
+            const float w = FryerArt.Width, d = FryerArt.Depth, h = FryerArt.Height, floor = FryerArt.WellFloor;
+            float Z(float stationZ) => -stationZ; // the wrapper's front is +Z
+            float front = -d * 0.5f + FryerArt.FrontPanel;
+            Box(model, "Cabinet", new Vector3(0f, floor * 0.5f, 0f), new Vector3(w, floor, d), steel);
+            Box(model, "Front panel", new Vector3(0f, (floor + h) * 0.5f - 0.01f, Z(-d * 0.5f + FryerArt.FrontPanel * 0.5f)),
+                new Vector3(w, h - floor - 0.02f, FryerArt.FrontPanel), panel);
+            Box(model, "Front deck", new Vector3(0f, (floor + h) * 0.5f, Z((front + FryerArt.WellFront) * 0.5f)),
+                new Vector3(w, h - floor, FryerArt.WellFront - front), steel);
+            Box(model, "Back deck", new Vector3(0f, (floor + h) * 0.5f, Z((FryerArt.WellBack + d * 0.5f) * 0.5f)),
+                new Vector3(w, h - floor, d * 0.5f - FryerArt.WellBack), steel);
+            float wellLength = FryerArt.WellBack - FryerArt.WellFront, wellZ = Z((FryerArt.WellBack + FryerArt.WellFront) * 0.5f);
+            float half = FryerArt.WellWidth * 0.5f;
+            float left = FryerArt.BasketX[0] - half, right = FryerArt.BasketX[1] + half;
+            float innerLeft = FryerArt.BasketX[0] + half, innerRight = FryerArt.BasketX[1] - half;
+            float wallY = (floor + h) * 0.5f, wallH = h - floor;
+            Box(model, "Side left", new Vector3((-w * 0.5f + left) * 0.5f, wallY, wellZ), new Vector3(left + w * 0.5f, wallH, wellLength), steel);
+            Box(model, "Side right", new Vector3((w * 0.5f + right) * 0.5f, wallY, wellZ), new Vector3(w * 0.5f - right, wallH, wellLength), steel);
+            Box(model, "Divider", new Vector3((innerLeft + innerRight) * 0.5f, wallY, wellZ), new Vector3(innerRight - innerLeft, wallH, wellLength), steel);
+            for (int b = 0; b < FryerArt.BasketX.Length; b++)
+            {
+                float x = FryerArt.BasketX[b];
+                Box(model, "Well " + b, new Vector3(x, floor + 0.005f, wellZ), new Vector3(FryerArt.WellWidth, 0.01f, wellLength), dark);
+                Box(model, "Oil " + b, new Vector3(x, FryerArt.OilHeight - 0.005f, wellZ), new Vector3(FryerArt.WellWidth, 0.01f, wellLength), oil);
+            }
+            // A low rail behind the wells (the worktop stays at 0.90 m): the raised baskets hang in front of it.
+            float barZ = Z(FryerArt.WellBack + 0.03f);
+            Box(model, "Rail", new Vector3(0f, h + 0.006f, barZ), new Vector3(w - 0.06f, 0.012f, 0.02f), dark);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 029: the graybox wire basket as the wrapper's "Model": a cage of thin steel bars (rims, uprights, a floor grid) with
+        /// a handle rising from its front (+Z) and a dark grip. The pivot is the middle of its floor.
+        /// </summary>
+        private static GameObject BuildBasket(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material wire = GrayboxMaterial("Wire", Palette.Steel);
+            Material grip = GrayboxMaterial("Grip", Palette.Charcoal);
+            const float bw = FryerArt.BasketWidth, bl = FryerArt.BasketLength, bh = FryerArt.BasketHeight, t = FryerArt.WireThickness;
+            foreach (float y in new[] { t * 0.5f, bh - t * 0.5f })
+            {
+                Box(model, "Rim front", new Vector3(0f, y, bl * 0.5f), new Vector3(bw + t, t * 1.4f, t * 1.4f), wire);
+                Box(model, "Rim back", new Vector3(0f, y, -bl * 0.5f), new Vector3(bw + t, t * 1.4f, t * 1.4f), wire);
+                Box(model, "Rim left", new Vector3(-bw * 0.5f, y, 0f), new Vector3(t * 1.4f, t * 1.4f, bl + t), wire);
+                Box(model, "Rim right", new Vector3(bw * 0.5f, y, 0f), new Vector3(t * 1.4f, t * 1.4f, bl + t), wire);
+            }
+            const float step = 0.045f;
+            int along = Mathf.RoundToInt(bl / step), across = Mathf.RoundToInt(bw / step);
+            for (int i = 1; i < along; i++)
+            {
+                float z = -bl * 0.5f + bl * i / along;
+                Box(model, "Upright left " + i, new Vector3(-bw * 0.5f, bh * 0.5f, z), new Vector3(t, bh, t), wire);
+                Box(model, "Upright right " + i, new Vector3(bw * 0.5f, bh * 0.5f, z), new Vector3(t, bh, t), wire);
+                Box(model, "Floor across " + i, new Vector3(0f, t * 0.5f, z), new Vector3(bw, t, t), wire);
+            }
+            for (int i = 1; i < across; i++)
+            {
+                float x = -bw * 0.5f + bw * i / across;
+                Box(model, "Upright front " + i, new Vector3(x, bh * 0.5f, bl * 0.5f), new Vector3(t, bh, t), wire);
+                Box(model, "Upright back " + i, new Vector3(x, bh * 0.5f, -bl * 0.5f), new Vector3(t, bh, t), wire);
+                Box(model, "Floor along " + i, new Vector3(x, t * 0.5f, 0f), new Vector3(t, t, bl), wire);
+            }
+            // The handle: a rod rising from the front rim towards the aisle, the grip on its end.
+            float length = Mathf.Sqrt(FryerArt.HandleLength * FryerArt.HandleLength + FryerArt.HandleRise * FryerArt.HandleRise);
+            Quaternion rise = Quaternion.Euler(-Mathf.Atan2(FryerArt.HandleRise, FryerArt.HandleLength) * Mathf.Rad2Deg, 0f, 0f);
+            Vector3 start = new Vector3(0f, bh, bl * 0.5f), end = start + new Vector3(0f, FryerArt.HandleRise, FryerArt.HandleLength);
+            GameObject rod = Box(model, "Handle", (start + end) * 0.5f, new Vector3(t * 1.6f, t * 1.6f, length), wire);
+            rod.transform.localRotation = rise;
+            GameObject hold = Box(model, "Grip", start + (end - start) * 0.75f, new Vector3(0.024f, 0.024f, length * 0.5f), grip);
+            hold.transform.localRotation = rise;
             return model;
         }
 

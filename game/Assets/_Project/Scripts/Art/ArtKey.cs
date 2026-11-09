@@ -85,6 +85,12 @@ namespace Worktown.Game.Art
 
         // Spec 028b: the stock stations (graybox: the Furniture Kit in the repo has no fridge and no bookcase).
         StationFridge,
-        StationShelf
+        StationShelf,
+
+        // Spec 029: the deep fryer (graybox: steel body, oil wells), its wire basket, a falafel ball and the empty fries box.
+        StationFryer,
+        ToolFryerBasket,
+        FoodFalafelBall,
+        PropFriesBox
     }
 }

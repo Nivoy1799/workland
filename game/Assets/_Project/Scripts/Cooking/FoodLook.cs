@@ -25,6 +25,8 @@ namespace Worktown.Game.Cooking
         public const byte HeatNone = 0;
         public const byte HeatFried = 1;
         public const byte HeatBoiled = 2;
+        /// <summary>Spec 029: from the fryer's basket (fries, falafel balls); golden like fried.</summary>
+        public const byte HeatDeepFried = 3;
 
         public const byte KindSingle = 0;
         public const byte KindPlated = 1;
@@ -39,7 +41,7 @@ namespace Worktown.Game.Cooking
         public byte Shape;
         /// <summary>0 raw, 1 short, 2 medium, 3 long (from the last heat op's time bucket).</summary>
         public byte Doneness;
-        /// <summary>0 none, 1 fried (fry or saute), 2 boiled: picks the golden shift (spec 017 open question 3).</summary>
+        /// <summary>0 none, 1 fried (fry or saute), 2 boiled, 3 deep-fried (spec 029): picks the golden shift (spec 017 open question 3).</summary>
         public byte Heat;
         /// <summary>0 single, 1 plated, 2 mixed.</summary>
         public byte Kind;

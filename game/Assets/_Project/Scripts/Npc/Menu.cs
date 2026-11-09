@@ -6,7 +6,8 @@ using Worktown.Sim.Core;
 namespace Worktown.Game.Npc
 {
     /// <summary>
-    /// The spec 022 menu: six dishes the spec 021 kitchen can cook from the crate ingredients, and the seeded draw of a
+    /// The spec 022 menu: six dishes the spec 021 kitchen can cook from the crate ingredients (spec 029: fries from the fryer, and
+    /// "Falafel (4)"), and the seeded draw of a
     /// customer's order. Pure and deterministic (no RNG of its own, no mutable state).
     /// </summary>
     public static class Menu
@@ -20,11 +21,15 @@ namespace Worktown.Game.Npc
         public const byte TomatoSalad = 4;
         public const byte FriedApple = 5;
         public const byte VeggieMix = 6;
+        /// <summary>Spec 029: four falafel balls from the fryer.</summary>
+        public const byte Falafel = 7;
 
         private static readonly IReadOnlyList<string> Sticks = new[] { "sticks" };
         private static readonly IReadOnlyList<string> Slices = new[] { "slices" };
         private static readonly IReadOnlyList<string> SlicesOrHalves = new[] { "halves", "slices" };
-        private static readonly IReadOnlyList<string> FryOp = new[] { "fry" };
+        /// <summary>Spec 029: fries come from the fryer now (the pan still makes them, as before).</summary>
+        private static readonly IReadOnlyList<string> FriesOps = new[] { Worktown.Sim.Cooking.DeepFry.OperationId, "fry" };
+        private static readonly IReadOnlyList<string> DeepFryOp = new[] { Worktown.Sim.Cooking.DeepFry.OperationId };
         private static readonly IReadOnlyList<string> SauteOp = new[] { "saute" };
         private static readonly IReadOnlyList<string> BoilOp = new[] { "boil" };
 
@@ -35,7 +40,7 @@ namespace Worktown.Game.Npc
         public static readonly IReadOnlyList<MenuDish> All = new[]
         {
             new MenuDish(Fries, "Fries", "snack", "potato",
-                new[] { new DishNeed("potato", Sticks, FryOp, "medium") }, false, false, 1),
+                new[] { new DishNeed("potato", Sticks, FriesOps, "medium") }, false, false, 1),
             new MenuDish(PotatoSoup, "Potato soup", "snack", "potato",
                 new[] { new DishNeed("potato", DishNeed.AnyCut, BoilOp, "medium") }, false, false, 1),
             new MenuDish(OnionSoup, "Onion soup", "meal", "onion",
@@ -50,6 +55,8 @@ namespace Worktown.Game.Npc
                     new DishNeed(null, DishNeed.AnyCut, null, null), new DishNeed(null, DishNeed.AnyCut, null, null),
                     new DishNeed(null, DishNeed.AnyCut, null, null),
                 }, false, false, 4),
+            new MenuDish(Falafel, "Falafel (4)", "snack", "falafel_mix",
+                new[] { new DishNeed("falafel_mix", null, DeepFryOp, "medium") }, false, false, 1),
         };
 
         /// <summary>What the crates sell (spec 007 demo ingredients): potato, apple, tomato, onion.</summary>

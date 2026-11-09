@@ -89,7 +89,41 @@ namespace Worktown.Sim.Cooking
                     Array.Empty<ParamDef>(), null, plated, none, "{in} mix"),
                 new OperationDef("plate", "counter", OperationKind.Plate, true, 1, CookingLimits.MaxPlateInputs,
                     Array.Empty<ParamDef>(), null, plated, plated, "plate of {in}"),
+                DeepFryOperation(plated, none),
             });
+        }
+
+        /// <summary>
+        /// Spec 029: the fryer's <c>deep_fry</c> heat op: oil temperature and time (sim seconds) like the pan, plus the server's
+        /// "shake" (one shake in the good window: <see cref="DeepFry.ShakeBonus"/>) and "drain" (taken out before the basket
+        /// drained: <see cref="DeepFry.GreasyPenalty"/>) choices. Doneness follows <see cref="DeepFry.DefaultProfile"/>.
+        /// </summary>
+        private static OperationDef DeepFryOperation(string[] plated, string[] none)
+        {
+            var oilTemp = new ParamDef("temp", ParamKind.Number, 150f, 190f, new[]
+            {
+                new BucketDef("medium", 150f, ""),
+                new BucketDef("hot", 175f, ""),
+            });
+            var fryTime = new ParamDef("time", ParamKind.Number, 6f, 600f, new[]
+            {
+                new BucketDef("short", 6f, "pale"),
+                new BucketDef("medium", 120f, "golden"),
+                new BucketDef("long", 240f, "dark"),
+            });
+            var shake = new ParamDef(DeepFry.ShakeParam, ParamKind.Choice, 0f, 1f, new[]
+            {
+                new BucketDef(DeepFry.NotShaken, 0f, ""),
+                new BucketDef(DeepFry.Shaken, 1f, ""),
+            });
+            var drain = new ParamDef(DeepFry.DrainParam, ParamKind.Choice, 0f, 1f, new[]
+            {
+                new BucketDef(DeepFry.Drained, 0f, ""),
+                new BucketDef(DeepFry.Greasy, 1f, "greasy"),
+            });
+            return new OperationDef(DeepFry.OperationId, "fryer", OperationKind.Heat, false, 1, 1, new[] { oilTemp, fryTime, shake, drain },
+                new HeatProfile(null, 0.45f, -0.6f, 0.7f, 0.15f, 0f, DeepFry.DefaultProfile), plated, none,
+                "{" + DeepFry.DrainParam + "} {time} deep-fried {in}");
         }
 
         private static void Validate(OperationDef op)
@@ -160,6 +194,23 @@ namespace Worktown.Sim.Cooking
                 bool hasTemp = temp != null && temp.Kind == ParamKind.Number;
                 if (hasTemp == op.Heat.FixedTemperatureC.HasValue)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs exactly one of a 'temp' param or a fixed temperature.", p);
+                if (h.Fry != null)
+                {
+                    // Spec 029: a deep fry op has the server's shake and drain choices and finite, ordered curves.
+                    bool Choice(string name, string a, string b)
+                    {
+                        var pd = Find(name);
+                        if (pd == null || pd.Kind != ParamKind.Choice || pd.Buckets.Count != 2) return false;
+                        return pd.Buckets[0].Id == a && pd.Buckets[1].Id == b;
+                    }
+                    if (!Choice(DeepFry.ShakeParam, DeepFry.NotShaken, DeepFry.Shaken) || !Choice(DeepFry.DrainParam, DeepFry.Drained, DeepFry.Greasy))
+                        throw new ArgumentException($"Deep fry operation '{op.Id}' needs the 'shake' and 'drain' choices.", p);
+                    var curves = new List<FryCurve>(h.Fry.Curves) { h.Fry.Fallback };
+                    foreach (var c in curves)
+                        if (c == null || !(c.WindowMinAt > 0f && c.WindowMaxAt > c.WindowMinAt && c.BurntAt > c.WindowMaxAt)
+                            || !Fin(c.BurntAt))
+                            throw new ArgumentException($"Deep fry operation '{op.Id}' has an invalid fry curve.", p);
+                }
             }
         }
     }

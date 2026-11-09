@@ -103,7 +103,10 @@ namespace Worktown.Game.Tests
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
                 var items = new List<Component>();
                 items.AddRange(All<Knife>(scene));
-                items.AddRange(VesselTestKit.AllOf(scene, VesselTestKit.VesselType));
+                List<Component> vessels = VesselTestKit.AllOf(scene, VesselTestKit.VesselType);
+                // Spec 029: the fryer baskets hang in their fryer (no spot, never carried).
+                Assert.AreEqual(2, vessels.RemoveAll(v => VesselTestKit.KindOf(v) == VesselKind.Basket), "two fryer baskets");
+                items.AddRange(vessels);
                 Assert.AreEqual(1 + 6, items.Count, "knife, board, pan, pot, bowl and two plates");
                 foreach (Component item in items)
                 {

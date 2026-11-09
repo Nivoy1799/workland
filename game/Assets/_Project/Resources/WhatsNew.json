@@ -444,6 +444,25 @@
         "With something in your hands, or without money, a take is refused: does the item fly back with a short sound?",
         "Cook a full dish: are the fridge, the shelf and the board a few steps apart?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-029",
+      "date": "2026-11-09",
+      "title": "Deep fryer: fries and falafel",
+      "items": [
+        "A fryer with two baskets stands between the board and the stoves: switch it on with the middle knob",
+        "Put potato sticks or a falafel mix portion into a raised basket, press its button: the basket swings into the oil and bubbles",
+        "Watch the ring and listen: good at about 25 s, perfect at 30 s, burnt at 45 s (falafel 20, 25 and 38 s)",
+        "Click the basket in the oil once while it is good to shake it: an even fry is worth more",
+        "Press the button again: the basket lifts and drips for 2 s; take the food out before that and it is greasy",
+        "Fries go on a plate in their box; the menu now has Falafel (4)"
+      ],
+      "test": [
+        "Cut a potato into sticks, fry them and serve them to a customer who ordered Fries: does it feel quick and clear?",
+        "Do the basket arc, the bubbles and the sounds tell you when to shake and when to lift without looking at a timer?",
+        "Lift a basket and take the fries at once: does the prompt warn you that it is still dripping?",
+        "Is the fryer close enough to the board and the plates?"
+      ]
     }
   ]
 }

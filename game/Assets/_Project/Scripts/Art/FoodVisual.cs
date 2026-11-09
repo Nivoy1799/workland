@@ -28,6 +28,8 @@ namespace Worktown.Game.Art
         [Tooltip("Height the parts sit at on a plate / in a bowl (set by the scene builder from the model).")]
         [SerializeField] private float _plateContentHeight = 0.015f;
         [SerializeField] private float _bowlContentHeight = 0.03f;
+        [Tooltip("Spec 029: the fryer basket's contents: fries are loose sticks there, not the box.")]
+        [SerializeField] private bool _loose;
 
         private readonly Dictionary<GameObject, Stack<GameObject>> _pool = new Dictionary<GameObject, Stack<GameObject>>();
         private readonly List<GameObject> _active = new List<GameObject>();
@@ -154,8 +156,10 @@ namespace Worktown.Game.Art
 
         private bool AddPile(FoodLook look, Vector3 offset, float scale)
         {
-            if (!FoodArtRules.TryGetPiece(look, out FoodPiece piece)) return false;
+            if (!FoodArtRules.TryGetPiece(look, _loose, out FoodPiece piece)) return false;
             if (!TryGetPrefab(piece.Key, out _)) return false;
+            // Spec 029: a part that stands on its own (the fries box) keeps more of its size on a plate.
+            if (scale < 1f) scale = Mathf.Min(1f, scale * FoodArtRules.PartBoost(piece.Key));
             for (int i = 0; i < piece.Count; i++)
             {
                 Vector3 position = offset + FoodArtRules.PilePosition(i, piece.Count) * scale;

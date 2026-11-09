@@ -206,7 +206,7 @@ namespace Worktown.Game.Audio
             {
                 VesselSteam steam = _hotCandidates[i];
                 if (steam == null || steam.Vessel == null) continue;
-                SoundKey key = steam.Vessel.Kind == VesselKind.Pot ? SoundKey.Bubble : SoundKey.Sizzle;
+                SoundKey key = SoundRules.LoopOf(steam.Vessel.Kind); // spec 029: the fryer basket fries
                 if (!_loops.TryGetValue(steam, out LoopState loop))
                 {
                     if (!steam.IsHot) continue;
@@ -220,7 +220,7 @@ namespace Worktown.Game.Audio
                 float target = SoundRules.LoopLevel(steam.IsHot, zone);
                 loop.Level = Mathf.MoveTowards(loop.Level, target, LoopFadePerSecond * dt);
                 loop.Source.volume = loop.Level * SoundCatalog.MasterVolume * SoundCatalog.GainOf(key);
-                loop.Source.pitch = Mathf.MoveTowards(loop.Source.pitch, SoundRules.LoopPitch(zone), dt);
+                loop.Source.pitch = Mathf.MoveTowards(loop.Source.pitch, SoundRules.LoopPitchOf(steam.Vessel.Kind, zone), dt);
                 if (loop.Level > 0f && !loop.Source.isPlaying && loop.Source.clip != null) loop.Source.Play();
                 else if (loop.Level <= 0f && loop.Source.isPlaying) loop.Source.Pause();
             }

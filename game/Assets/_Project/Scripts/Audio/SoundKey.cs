@@ -19,6 +19,10 @@ namespace Worktown.Game.Audio
         Perfect,
         Warning,
         Burnt,
-        Coin
+        Coin,
+        /// <summary>Spec 029: the fryer's deep oil bubbling (loop), a basket's shake rattle and its drain drips.</summary>
+        Fryer,
+        Rattle,
+        Drip
     }
 }

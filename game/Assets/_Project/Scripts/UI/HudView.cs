@@ -303,6 +303,9 @@ namespace Worktown.Game.UI
                 case CookOutcome.CannotPour: return "That does not pour in there";
                 case CookOutcome.PourInstead: return "Pour it onto a plate or into a bowl";
                 case CookOutcome.NoPlatesLeft: return "No clean plates left: sell a meal first";
+                case CookOutcome.FryerOff: return "Switch the fryer on first"; // spec 029
+                case CookOutcome.BasketLowered: return "Raise the basket first";
+                case CookOutcome.NotLowered: return "Lower the basket with food first";
                 default: return outcome.ToString();
             }
         }

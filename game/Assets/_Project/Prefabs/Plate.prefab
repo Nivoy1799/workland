@@ -385,6 +385,7 @@ MonoBehaviour:
   _bowlPartRadius: 0.04
   _plateContentHeight: 0.015
   _bowlContentHeight: 0.03
+  _loose: 0
 --- !u!1001 &6281240930832454640
 PrefabInstance:
   m_ObjectHideFlags: 0

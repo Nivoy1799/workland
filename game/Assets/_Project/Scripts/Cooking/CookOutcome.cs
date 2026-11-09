@@ -41,6 +41,12 @@ namespace Worktown.Game.Cooking
         NoPlatesLeft,
         /// <summary>Review of spec 027b: the request came faster than the server's rate limit allows and was not carried out.
         /// Answered anyway, so the client's request numbering stays in step; the client shows nothing for it.</summary>
-        TooFast
+        TooFast,
+        /// <summary>Spec 029: a basket goes into the oil only while the fryer is on.</summary>
+        FryerOff,
+        /// <summary>Spec 029: the basket is in the oil; raise it first to put food in or take it out.</summary>
+        BasketLowered,
+        /// <summary>Spec 029: a shake needs a lowered basket with food.</summary>
+        NotLowered
     }
 }

@@ -54,6 +54,20 @@ namespace Worktown.Game.Audio
             return null;
         }
 
+        /// <summary>Spec 029: the loop a hot vessel plays: the pot bubbles, a fryer basket fries (deep oil), the pan sizzles.</summary>
+        public static SoundKey LoopOf(VesselKind kind)
+        {
+            switch (kind)
+            {
+                case VesselKind.Pot: return SoundKey.Bubble;
+                case VesselKind.Basket: return SoundKey.Fryer;
+                default: return SoundKey.Sizzle;
+            }
+        }
+
+        /// <summary>Spec 029: the fryer loop sits lower than the pan's sizzle (deep oil), and rises with the zone like it.</summary>
+        public static float LoopPitchOf(VesselKind kind, HeatZone zone) => (kind == VesselKind.Basket ? 0.85f : 1f) * LoopPitch(zone);
+
         /// <summary>The material of cookware: pan, pot and knife metal; plate and bowl ceramic; board wood.</summary>
         public static SoundMaterial MaterialOf(VesselKind kind)
         {
@@ -61,6 +75,7 @@ namespace Worktown.Game.Audio
             {
                 case VesselKind.Pan:
                 case VesselKind.Pot:
+                case VesselKind.Basket: // spec 029: a wire basket
                     return SoundMaterial.Metal;
                 case VesselKind.Plate:
                 case VesselKind.Bowl:

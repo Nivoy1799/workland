@@ -77,6 +77,8 @@ namespace Worktown.Game.Cooking
                 // Spec 028b: a slot is picked by aiming, so the fridge and the shelf are used in first person.
                 case StationKind.Fridge:
                 case StationKind.Shelf: return stationName + ": pick an item in first person (V)";
+                // Spec 029: the fryer's knob, basket buttons and baskets are aimed at.
+                case StationKind.Fryer: return stationName + ": fry in first person (V)";
                 default: return stationName;
             }
         }

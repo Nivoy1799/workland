@@ -40,6 +40,8 @@ namespace Worktown.Game.Player
             public LabelKind Kind;
             public Vector3 BaseScale;
             public Pickup Pickup;
+            /// <summary>Spec 029: a fryer basket (a vessel without a Pickup), for "aimed".</summary>
+            public Vessel Fixed;
             public Customer Customer;
             public Transform Back;
             public MeshRenderer BackRenderer;
@@ -129,7 +131,8 @@ namespace Worktown.Game.Player
                 Vector3 to = entry.Transform.position - eye;
                 float distance = to.magnitude;
                 entry.Distance = distance;
-                bool aimed = entry.Pickup != null && target != null && target.transform == entry.Pickup.transform;
+                bool aimed = target != null && ((entry.Pickup != null && target.transform == entry.Pickup.transform)
+                    || (entry.Pickup == null && entry.Fixed != null && target.transform == entry.Fixed.transform));
                 bool held = entry.Pickup != null && entry.Pickup.IsHeld && entry.Pickup.IsOwner;
                 float facing = LabelRules.IsOneSided(entry.Kind) && distance > 0.0001f
                     ? Vector3.Dot(-entry.Transform.forward, -to / distance) : 1f;
@@ -211,6 +214,7 @@ namespace Worktown.Game.Player
                     Kind = kind,
                     BaseScale = text.transform.localScale,
                     Pickup = text.GetComponentInParent<Pickup>(),
+                    Fixed = text.GetComponentInParent<Vessel>(),
                     Customer = text.GetComponentInParent<Customer>()
                 };
                 if (entry.Renderer == null) continue;
@@ -237,8 +241,14 @@ namespace Worktown.Game.Player
             if (text.GetComponentInParent<Customer>() != null) { kind = LabelKind.Bubble; return true; }
             if (text.GetComponentInParent<TicketRailView>() != null) { kind = LabelKind.Rail; return true; }
             if (text.GetComponentInParent<Pickup>() != null) { kind = LabelKind.Item; return true; }
+            // Spec 029: a fryer basket is an item that is never carried; its label behaves like the pan's.
+            if (text.GetComponentInParent<Vessel>() != null) { kind = LabelKind.Item; return true; }
             string name = text.name;
-            if (name.StartsWith("SwitchLabel") || name.StartsWith("ModeLabel")) { kind = LabelKind.Button; return true; }
+            if (name.StartsWith("SwitchLabel") || name.StartsWith("ModeLabel") || name.StartsWith("PowerLabel") || name.StartsWith("BasketLabel"))
+            {
+                kind = LabelKind.Button;
+                return true;
+            }
             return false; // emote bubbles, ping markers and the like keep their own way
         }
 

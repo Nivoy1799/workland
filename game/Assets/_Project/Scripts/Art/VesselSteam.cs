@@ -11,7 +11,8 @@ namespace Worktown.Game.Art
     /// shows a small steam particle system above it while it is. One pooled system per vessel, at most
     /// <see cref="MaxParticles"/> particles, built once. The headless server does nothing.
     /// Spec 027c: once the food is Burnt (the vessel's synced zone) the steam turns into dark smoke with a puff on entry,
-    /// and this component adds the vessel's <see cref="HeatRingView"/>.
+    /// and this component adds the vessel's <see cref="HeatRingView"/>. Spec 029: also on a fryer basket (hot while lowered into a
+    /// fryer that is on).
     /// </summary>
     public sealed class VesselSteam : MonoBehaviour
     {
@@ -34,6 +35,8 @@ namespace Worktown.Game.Art
         private StationContents[] _stoves = new StationContents[0];
         private float _nextCheck;
         private bool _smoking;
+        // Spec 029: a fryer basket is hot while it is lowered into a fryer that is on.
+        private StationContents _fryer;
 
         /// <summary>The vessel holds something and stands on a burner that is on.</summary>
         public bool IsHot { get; private set; }
@@ -53,7 +56,12 @@ namespace Worktown.Game.Art
         private void Start()
         {
             if (!enabled || _vessel == null) return;
-            if (_vessel.Kind != VesselKind.Pan && _vessel.Kind != VesselKind.Pot)
+            if (_vessel.Kind == VesselKind.Basket)
+            {
+                FryerBasket basket = GetComponent<FryerBasket>();
+                if (basket != null && basket.Fryer != null) _fryer = basket.Fryer.GetComponent<StationContents>();
+            }
+            else if (_vessel.Kind != VesselKind.Pan && _vessel.Kind != VesselKind.Pot)
             {
                 enabled = false;
                 return;
@@ -106,6 +114,9 @@ namespace Worktown.Game.Art
         private bool ComputeHot()
         {
             if (_vessel.ContentCount == 0 || (_pickup != null && _pickup.IsHeld)) return false;
+            if (_vessel.Kind == VesselKind.Basket)
+                return _fryer != null && FryerRules.IsOn(_fryer.StoveFlags.Value)
+                    && FryerRules.StateOf(_vessel.Mode.Value) == BasketState.Lowered;
             Vector3 position = transform.position;
             for (int i = 0; i < _burners.Length; i++)
             {
@@ -162,10 +173,14 @@ namespace Worktown.Game.Art
             renderer.sharedMaterial = SteamMaterial();
         }
 
-        private Material SteamMaterial()
+        private Material SteamMaterial() => DotMaterial(_material);
+
+        /// <summary>Spec 029: a particle material with the soft dot (a copy of <paramref name="source"/>, or the URP particle
+        /// shader); the caller owns it.</summary>
+        internal static Material DotMaterial(Material source)
         {
             Material material;
-            if (_material != null) material = new Material(_material);
+            if (source != null) material = new Material(source);
             else
             {
                 Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Sprites/Default");
@@ -178,7 +193,7 @@ namespace Worktown.Game.Art
         }
 
         /// <summary>A soft white round sprite, shared by all vessels (a cache of a read-only texture).</summary>
-        private static Texture2D SoftDot()
+        internal static Texture2D SoftDot()
         {
             if (_dot != null) return _dot;
             const int n = 32;

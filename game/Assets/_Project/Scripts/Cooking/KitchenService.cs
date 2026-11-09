@@ -51,6 +51,9 @@ namespace Worktown.Game.Cooking
         private uint _lastLabelTick;
         // Spec 027c: the heat bytes' rate gate per pan and pot, and the tick they were last looked at.
         private readonly Dictionary<Vessel, HeatSync> _heatSync = new Dictionary<Vessel, HeatSync>();
+        // Spec 029: the fryer baskets (key: fryer station index and basket), found on the first server frame.
+        private readonly Dictionary<long, Vessel> _baskets = new Dictionary<long, Vessel>();
+        private readonly List<Vessel> _basketList = new List<Vessel>();
         private uint _lastHeatTick;
         private bool _heatChecked;
 
@@ -93,6 +96,8 @@ namespace Worktown.Game.Cooking
                 _burnerSurface.Clear();
                 _heatSync.Clear();
                 _heatChecked = false;
+                _baskets.Clear();
+                _basketList.Clear();
             }
         }
 
@@ -116,6 +121,7 @@ namespace Worktown.Game.Cooking
             {
                 case StationKind.Counter: return Serve(player, station);
                 case StationKind.Stove: return UseBurner(station, option);
+                case StationKind.Fryer: return UseFryer(station, option);
                 case StationKind.PlateShelf: return TakePlate(player);
                 default: return CookOutcome.UnknownStation;
             }
@@ -137,6 +143,52 @@ namespace Worktown.Game.Cooking
             return changed;
         }
 
+        /// <summary>
+        /// Spec 029: the fryer's front: the power knob (FryerRules.PowerOption) or a basket's lower/raise button
+        /// (FryerRules.BasketOption). Lowering needs food in the basket and the fryer on; raising is always allowed.
+        /// </summary>
+        private CookOutcome UseFryer(Station fryer, int option)
+        {
+            uint tick = Tick;
+            if (option == FryerRules.PowerOption)
+            {
+                _kitchen.TryToggleFryer(fryer.Index, tick);
+                RefreshFryer(fryer);
+                for (int b = 0; b < FryerRules.BasketsPerFryer; b++)
+                    if (_baskets.TryGetValue(BurnerKey(fryer.Index, b), out Vessel v)) RefreshVessel(v);
+                Debug.Log("[Kitchen] " + fryer.DisplayName + " " + (_kitchen.FryerIsOn(fryer.Index) ? "on" : "off"));
+                return CookOutcome.Ok;
+            }
+            if (!FryerRules.TryParseBasketOption(option, out int basket)
+                || !_baskets.TryGetValue(BurnerKey(fryer.Index, basket), out Vessel vessel) || vessel == null)
+                return CookOutcome.InvalidOption;
+            CookOutcome moved = _kitchen.TryToggleBasket(vessel.ObjectId, tick, TickRate);
+            if (moved != CookOutcome.Ok) return moved;
+            RefreshVessel(vessel);
+            RefreshFryer(fryer);
+            Debug.Log("[Kitchen] " + fryer.DisplayName + " basket " + basket + ": " + _kitchen.BasketStateOf(vessel.ObjectId, tick));
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 029: the fryer's light byte (on, lowered baskets).</summary>
+        private void RefreshFryer(Station fryer)
+        {
+            if (fryer == null || !fryer.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
+            contents.ServerSetStoveFlags(_kitchen.FryerFlags(fryer.Index, Tick));
+        }
+
+        /// <summary>Spec 029: a shake of a lowered basket, with empty hands.</summary>
+        private CookOutcome Shake(PickupInteractor player, Vessel basket)
+        {
+            if (basket.Kind != VesselKind.Basket) return CookOutcome.InvalidOption;
+            if (_pickups.TryGetHeld(player, out _)) return CookOutcome.HandsFull;
+            CookOutcome shaken = _kitchen.TryShake(basket.ObjectId, Tick, TickRate);
+            if (shaken != CookOutcome.Ok) return shaken;
+            RefreshVessel(basket);
+            Debug.Log("[Kitchen] player " + player.OwnerId + " shook the basket" + (_kitchen.BasketShaken(basket.ObjectId) ? " (even fry)" : string.Empty));
+            return CookOutcome.Ok;
+        }
+
         // ---- cookware (RequestUse) ----
 
         /// <summary>
@@ -147,13 +199,15 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public CookOutcome TryUseVessel(PickupInteractor player, NetworkObject target, int action)
         {
-            if (target == null || !target.IsSpawned || !target.TryGetComponent(out Vessel vessel)
-                || !target.TryGetComponent(out Pickup pickup) || pickup.IsHeld)
+            if (target == null || !target.IsSpawned || !target.TryGetComponent(out Vessel vessel)) return CookOutcome.NotAVessel;
+            // Spec 029: a fryer basket has no Pickup (it never leaves its fryer); all other cookware must lie free.
+            if (vessel.Kind != VesselKind.Basket && (!target.TryGetComponent(out Pickup pickup) || pickup.IsHeld))
                 return CookOutcome.NotAVessel;
             if (!StationRules.IsInReach(player.transform.position, target.transform.position)) return CookOutcome.TooFar;
             EnsureInitialized();
 
             if (action == VesselRules.ActionStroke || action == VesselRules.ActionTurn) return Cut(player, vessel, action);
+            if (action == VesselRules.ActionShake) return Shake(player, vessel);
             if (action != VesselRules.ActionUse) return CookOutcome.InvalidOption;
 
             if (!_pickups.TryGetHeld(player, out NetworkObject held)) return TakeOut(player, vessel);
@@ -237,7 +291,7 @@ namespace Worktown.Game.Cooking
         private void OnItemMoved(NetworkObject item, PlaceSurface surface)
         {
             if (item == null || !_networkManager.IsServerStarted || !item.TryGetComponent(out Vessel vessel)) return;
-            if (!VesselRules.IsHeat(vessel.Kind)) return;
+            if (!VesselRules.StandsOnBurner(vessel.Kind)) return;
             int burner = surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner;
             _kitchen.SetVesselBurner(vessel.ObjectId, burner, Tick);
             RefreshVessel(vessel);
@@ -250,8 +304,11 @@ namespace Worktown.Game.Cooking
             uint tick = Tick;
             double rate = TickRate;
             int id = vessel.ObjectId;
+            byte mode = 0;
+            if (vessel.Kind == VesselKind.Pan) mode = _kitchen.PanIsSaute(id) ? Vessel.ModeSaute : Vessel.ModeFry;
+            else if (vessel.Kind == VesselKind.Basket) mode = _kitchen.BasketMode(id, tick); // spec 029
             vessel.ServerSet(_kitchen.ContentNames(id, vessel.Kind, tick, rate), _kitchen.ContentLooks(id, vessel.Kind, tick, rate),
-                _kitchen.ResultName(id, vessel.Kind, tick, rate), vessel.Kind == VesselKind.Pan && _kitchen.PanIsSaute(id));
+                _kitchen.ResultName(id, vessel.Kind, tick, rate), mode);
         }
 
         /// <summary>Server: the stove's knob and button lights (two bits per burner).</summary>
@@ -298,8 +355,22 @@ namespace Worktown.Game.Cooking
             }
             foreach (Knife knife in FindObjectsByType<Knife>(FindObjectsSortMode.None))
                 if (knife.TryGetComponent(out NetworkObject nob) && nob.IsSpawned) _homes.Add(Home(nob, _knifePrefab));
+            // Spec 029: the fryer baskets (scene objects next to their fryer).
+            _baskets.Clear();
+            _basketList.Clear();
+            foreach (FryerBasket fb in FindObjectsByType<FryerBasket>(FindObjectsSortMode.None))
+            {
+                if (fb.Fryer == null || !fb.TryGetComponent(out Vessel basket) || !basket.IsSpawned) continue;
+                _kitchen.RegisterBasket(basket.ObjectId, fb.Fryer.Index, fb.Basket);
+                _baskets[BurnerKey(fb.Fryer.Index, fb.Basket)] = basket;
+                _basketList.Add(basket);
+                RefreshVessel(basket);
+            }
             foreach (Station station in _stations)
+            {
                 if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
+                else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
+            }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
         }
 
@@ -310,7 +381,7 @@ namespace Worktown.Game.Cooking
 
         private void PlaceOnBurnerIfThere(Vessel vessel)
         {
-            if (!VesselRules.IsHeat(vessel.Kind)) return;
+            if (!VesselRules.StandsOnBurner(vessel.Kind)) return;
             PlaceSurface surface = _pickups.SurfaceUnder(vessel.transform.position);
             _kitchen.SetVesselBurner(vessel.ObjectId, surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner, Tick);
         }
@@ -409,6 +480,12 @@ namespace Worktown.Game.Cooking
             {
                 _heatChecked = true;
                 _lastHeatTick = tick;
+                // Spec 029: a raised basket that has drained is raised again (the server timer).
+                for (int i = 0; i < _basketList.Count; i++)
+                {
+                    Vessel basket = _basketList[i];
+                    if (basket != null && _kitchen.SettleDrain(basket.ObjectId, tick)) RefreshVessel(basket);
+                }
                 PublishHeat(tick, tickRate);
             }
             WatchHomes();
