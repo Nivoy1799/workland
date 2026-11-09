@@ -43,12 +43,12 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(ArtKey.CharacterPlayerFemale, ArtCatalogRules.PlayerCharacterKey(1), "odd owner id");
             Assert.AreEqual(ArtKey.CharacterPlayerMale, ArtCatalogRules.PlayerCharacterKey(2));
             var customers = new HashSet<ArtKey>();
-            for (int id = 0; id < 2; id++) customers.Add(ArtCatalogRules.CustomerCharacterKey(id));
-            Assert.AreEqual(2, customers.Count, "two ids in a row show two different customers");
-            Assert.AreEqual(ArtCatalogRules.CustomerCharacterKey(1), ArtCatalogRules.CustomerCharacterKey(5));
+            for (int id = 0; id < 6; id++) customers.Add(ArtCatalogRules.CustomerCharacterKey(id));
+            Assert.AreEqual(ArtCatalogRules.CustomerCharacterKeys().Length, customers.Count, "ids in a row show different customers (spec 027d: six looks)");
+            Assert.AreEqual(ArtCatalogRules.CustomerCharacterKey(1), ArtCatalogRules.CustomerCharacterKey(7));
             foreach (ArtKey key in ArtCatalogRules.PlayerCharacterKeys())
                 Assert.IsFalse(customers.Contains(key), key + " is a player character, not a customer");
-            Assert.AreEqual(4, new HashSet<ArtKey>(AllCharacterKeys()).Count);
+            Assert.AreEqual(2 + ArtCatalogRules.CustomerCharacterKeys().Length, new HashSet<ArtKey>(AllCharacterKeys()).Count);
         }
 
         [Test]

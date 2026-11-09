@@ -149,6 +149,7 @@ namespace Worktown.Game.Editor
             EnsureFolder(Root + "/Prefabs");
             EnsureFolder(Root + "/Scenes");
             EnsureFolder(Root + "/Settings");
+            EnsureLabelMaterials(); // spec 027d
 
             ArtCatalog builtCatalog = ArtCatalogBuilder.Build(); // spec 015: wrappers and catalog first
             // Spec 026: palette colours; graybox fallbacks are Plaster (walls, floors) and Steel (machines).
@@ -1195,7 +1196,7 @@ namespace Worktown.Game.Editor
             body.isStatic = true;
 
             // Spec 015 swap layer: the cube body and its collider stay; the catalog visual is a sibling.
-            float labelY = height * 0.5f + 0.6f;
+            float frontZ = -depth * 0.5f; // spec 027d: the front-most surface (the stove model stands out of its cube)
             if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(kind), out GameObject wrapper))
             {
                 UnityEngine.Object.DestroyImmediate(body.GetComponent<MeshRenderer>());
@@ -1205,13 +1206,22 @@ namespace Worktown.Game.Editor
                 // Spec 027a: the serving counter is squashed to the front counter's depth, like the worktop modules.
                 visual.transform.localScale = Vector3.Scale(visual.transform.localScale, new Vector3(1f, 1f, depth / StationWidth));
                 SetStaticRecursive(visual);
-                // Raise the label only when the model is taller than the cube.
-                float top = ArtCatalogBuilder.TopOf(visual) - height * 0.5f;
-                labelY = Mathf.Max(labelY, top + 0.1f);
+                foreach (Renderer r in visual.GetComponentsInChildren<Renderer>())
+                {
+                    Bounds wb = r.bounds;
+                    for (int c = 0; c < 8; c++)
+                    {
+                        var corner = new Vector3((c & 1) == 0 ? wb.min.x : wb.max.x, (c & 2) == 0 ? wb.min.y : wb.max.y, (c & 4) == 0 ? wb.min.z : wb.max.z);
+                        frontZ = Mathf.Min(frontZ, root.transform.InverseTransformPoint(corner).z);
+                    }
+                }
             }
 
             // Spec 020: no keys on the world labels any more (first person clicks; the prompts say how).
-            TextMesh label = CreateLabel(root.transform, new Vector3(0f, labelY, 0f), 60, 0.05f);
+            // Spec 027d: a small sign on the cook side of the front face (never a name floating above the station).
+            TextMesh label = CreateLabel(root.transform, StationSign.LocalPosition(height, frontZ), 60, 0.05f);
+            label.transform.localScale = Vector3.one * StationSign.BaseScale;
+            label.gameObject.AddComponent<StationSign>();
             string price = string.Empty;
             if (kind == StationKind.Crate
                 && GrocerPrices.TryGetGrocerPrice(DemoIngredients.All[ingredientIndex].Id, out long dollars))
@@ -1239,6 +1249,25 @@ namespace Worktown.Game.Editor
         {
             if (catalog == null || !catalog.TryGet(container, out GameObject prefab)) return 0.02f;
             return ArtCatalogBuilder.HeightOf(prefab) * fill;
+        }
+
+        /// <summary>Spec 027d: the text and panel materials WorldLabelFade copies at run time (in Resources, so the shader is in every build).</summary>
+        private static void EnsureLabelMaterials()
+        {
+            EnsureFolder(Root + "/Resources/Labels");
+            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(Root + "/Resources/Labels/WorldText.shader");
+            if (shader == null) throw new InvalidOperationException("WorldText.shader is missing");
+            foreach (string name in new[] { "WorldText", "WorldPanel" })
+            {
+                string path = Root + "/Resources/Labels/" + name + ".mat";
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null)
+                {
+                    material = new Material(shader);
+                    AssetDatabase.CreateAsset(material, path);
+                }
+                else if (material.shader != shader) material.shader = shader;
+            }
         }
 
         private static TextMesh CreateLabel(Transform parent, Vector3 localPosition, int fontSize, float characterSize)

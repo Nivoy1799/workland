@@ -67,7 +67,11 @@ orchestrator under the human's 24 h grant.
 Sign size; the 8 m bubble range; full text only for the queue head and the next guest; the 15° centre-free zone.
 
 ## Implementation notes
-(Builder fills this in.)
+- WorldLabelFade is now the single label manager (finds every sign, item, bubble, rail and button TextMesh every 0.5 s). Text uses a new depth-tested shader (Resources/Labels/WorldText.shader, materials made by the scene builder); the built-in font shader drew through walls. Panels are separate quads (not children) so highlight, tween and ghost never pick them up. Culled labels get zero alpha through a property block, so their bounds stay valid.
+- Heat rings: HeatRingView got TryGetScreenRect; rings have priority 2 (below aimed and held, above every label) and are never hidden.
+- Item status is the existing name and stars text, shown only for the aimed or owner-held item (no separate icon art yet). Bubbles: rank by distance to the counter; ranks 0 and 1 show full text, the others the first letter (an icon in text form), still on the Panel.
+- Customer looks: 6 (3 per skin). The atlas is recoloured (shirt, trousers, hair) in SkinRecolourRules from palette colours; PNGs under _Project/Art/CharacterSkins, Kenney files untouched. Customer wish tint kept at 0.4. Existing CharacterArtTests lines assumed 2 customer variants and were updated to 6 (not weakened); WhatsNewTests 027c is no longer the newest.
+- Stove signs sit at the model front (builder measures the model bounds). Follow-ups: a real icon sprite for items and bubbles; the signs from the guests side are visible when facing them across the counter.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

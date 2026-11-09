@@ -394,6 +394,23 @@
         "Serve a dish while the other player watches from the street: do both of you see the stars and the money?",
         "First person: does the ring ever get in the way when you look at the pan?"
       ]
+    },
+    {
+      "id": "2026-11-09-spec-027d",
+      "date": "2026-11-09",
+      "title": "Readable world text and a varied crowd",
+      "items": [
+        "Station and crate names are small signs on the front, readable from the cook side only, never through walls or mirrored",
+        "Order bubbles above guests no longer overlap: the first two in the queue show the full order, the others a letter",
+        "Item names and stars show only for the item you aim at or carry; nothing floats across the middle of the first-person view",
+        "Guests come in six looks (shirt, trousers and hair colours), each guest keeps its look"
+      ],
+      "test": [
+        "Stand in the street and look at the queue: can you read the first guest's order, and is nothing overlapping?",
+        "First person at a stove: is there any big text across the view?",
+        "Walk behind the counter and stove row: do the signs face you and stay clear of the knobs?",
+        "Do neighbouring guests in the queue look different?"
+      ]
     }
   ]
 }

@@ -57,7 +57,12 @@ namespace Worktown.Game.Art
 
         /// <summary>Spec 024: the customer characters, in variant order (index = <see cref="CharacterVariant"/> of the object id).</summary>
         public static ArtKey[] CustomerCharacterKeys() =>
-            new[] { ArtKey.CharacterCustomerMale, ArtKey.CharacterCustomerFemale };
+            new[]
+            {
+                ArtKey.CharacterCustomerMale, ArtKey.CharacterCustomerFemale,
+                ArtKey.CharacterCustomerMale2, ArtKey.CharacterCustomerFemale2,
+                ArtKey.CharacterCustomerMale3, ArtKey.CharacterCustomerFemale3
+            };
 
         /// <summary>
         /// Spec 024: which of <paramref name="count"/> character variants an id shows (owner client id for players, object

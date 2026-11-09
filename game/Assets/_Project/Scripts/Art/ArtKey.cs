@@ -63,6 +63,11 @@ namespace Worktown.Game.Art
         CharacterPlayerMale,
         CharacterPlayerFemale,
         CharacterCustomerMale,
-        CharacterCustomerFemale
+        CharacterCustomerFemale,
+        // Spec 027d: more customer looks (same body and skins, recoloured shirt, trousers and hair; see CustomerLooks).
+        CharacterCustomerMale2,
+        CharacterCustomerFemale2,
+        CharacterCustomerMale3,
+        CharacterCustomerFemale3
     }
 }

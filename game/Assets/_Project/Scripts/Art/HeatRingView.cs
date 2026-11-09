@@ -33,6 +33,7 @@ namespace Worktown.Game.Art
         private MaterialPropertyBlock _block;
         private PlayerCameraRig _rig;
         private float _lastHot = float.NegativeInfinity;
+        private Rect _screenRect;
         private int _shownProgress = -1;
         private HeatZone _shownZone = HeatZone.None;
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -41,6 +42,13 @@ namespace Worktown.Game.Art
 
         /// <summary>True while the ring is drawn (for tests and the tour log).</summary>
         public bool IsShown => _renderer != null && _renderer.enabled;
+
+        /// <summary>Spec 027d: the ring's screen rectangle in pixels while it is drawn; world labels give way to it (it is never culled).</summary>
+        public bool TryGetScreenRect(out Rect rect)
+        {
+            rect = _screenRect;
+            return IsShown;
+        }
 
         /// <summary>Called once by the vessel's <see cref="VesselSteam"/> (client only).</summary>
         public void Init(Vessel vessel, VesselSteam steam, Material source)
@@ -114,6 +122,9 @@ namespace Worktown.Game.Art
 
             int progress = _vessel.HeatProgress.Value;
             if (progress != _shownProgress || zone != _shownZone) Rebuild(progress, zone);
+            Vector3 ringScreen = cam.WorldToScreenPoint(centre);
+            float halfPixels = HeatRingRules.RingPixels * 0.5f;
+            _screenRect = new Rect(ringScreen.x - halfPixels, ringScreen.y - halfPixels, halfPixels * 2f, halfPixels * 2f);
             _ring.transform.SetPositionAndRotation(centre, view.rotation);
             _ring.transform.localScale = Vector3.one * radius;
 
