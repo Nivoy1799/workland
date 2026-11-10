@@ -29,6 +29,11 @@ TIMES = {
         "sun": ("#8FA6FF", 0.5, 35, 30), "ambient": 0.22, "glow": 4.0, "haze": 0.012,
         "sky": ("#1E0B10", "#7A2A22"),
     },
+    # Round 3: a grey, soft day. Big soft sun, strong sky light, a little haze.
+    "overcast": {
+        "sun": ("#EEF2F4", 1.6, 55, -30), "ambient": 1.0, "glow": 0.8, "haze": 0.0012,
+        "sky": ("#9DA9B0", "#D3D8D6"), "sun_angle": 40.0,
+    },
 }
 
 
@@ -125,7 +130,7 @@ def add_sun(time_id, azimuth_offset=0.0):
     data = bpy.data.lights.new("Sun", "SUN")
     data.color = palettes.hex_to_linear(hex_)[:3]
     data.energy = strength
-    data.angle = math.radians(4.0)
+    data.angle = math.radians(TIMES[time_id].get("sun_angle", 4.0))
     obj = bpy.data.objects.new("Sun", data)
     bpy.context.scene.collection.objects.link(obj)
     # Direction the light travels: from (azimuth, elevation) towards the scene.

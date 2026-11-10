@@ -43,6 +43,13 @@ class Look:
     beard: bool = False
     prop: str = ""              # "", "spoon", "bag", "tote", "cane"
     prop_colour: str = "#C9734F"
+    # Round 3, lived-in: expression and wear.
+    expression: str = "smile"   # smile, neutral, focused, tired, yawn, grin
+    seed: int = 0               # small asymmetries in the face
+    apron_stains: bool = False
+    untucked: bool = False      # a shirt worn out over the trousers
+    messy: bool = False         # stray hair locks
+    rolled: bool = False        # trouser legs rolled up once
     extras: dict = field(default_factory=dict)
 
 
@@ -145,7 +152,7 @@ def person(look, loc=(0, 0, 0), yaw=0.0, name="Person"):
     # Layering, inside to outside, with at least 1.5 cm between layers so nothing pokes through:
     # skin arms < sleeves; tucked top < trousers waist < apron; tights < skirt; top < cardigan or vest.
     trousers = look.bottom_style == "trousers"
-    tucked = look.top_style in ("shirt", "blouse")
+    tucked = look.top_style in ("shirt", "blouse") and not look.untucked
 
     # Legs and pelvis (trousers, or tights under a skirt).
     leg_mat = bottom if trousers else _m(look.legs or look.skin, 0.6)
@@ -168,6 +175,12 @@ def person(look, loc=(0, 0, 0), yaw=0.0, name="Person"):
         belt = b.torus("belt", 1.0, 0.014, (0, bd.waist.y, 1.0 * s), 32, 6, _m("#3A2A22", 0.5))
         belt.scale = (0.163 * w, 0.118 * w, 1)
         p.add(belt)
+    if trousers and look.rolled:
+        for side in (1, -1):
+            cuff = b.torus("trouser_cuff", 0.05, 0.016, (side * bd.ankle.x, bd.ankle.y, bd.ankle.z + 0.07), 16, 6,
+                           bottom)
+            cuff.scale = (1.0, 1.05, 1.0)
+            p.add(cuff)
 
     # Shoes: a rounded upper with a raised heel cap on a slightly wider sole, toe forward (-Y).
     for side in (1, -1):
@@ -295,11 +308,12 @@ def _apron(bd, look):
              [z_waist + (z_top - z_waist) * i / 5 for i in range(1, 6)]
     cols = 13
     bm = bmesh.new()
+    extra = 0.016 if (look.untucked or look.top_style == "tee") else 0.0
     for z in levels:
         if z <= z_waist:
             t = (z_waist - z) / (z_waist - z_bottom)
             half = math.radians(78)
-            rx, ry = 0.185 * w + 0.03 * t, 0.135 * w + 0.025 * t
+            rx, ry = 0.185 * w + 0.03 * t + extra, 0.135 * w + 0.025 * t + extra
             yc = bd.waist.y
         else:
             t = (z - z_waist) / (z_top - z_waist)
@@ -348,8 +362,19 @@ def _apron(bd, look):
         p.add(strap)
     pz = z_bottom + (z_waist - z_bottom) * 0.5
     t = (z_waist - pz) / (z_waist - z_bottom)
-    py = bd.waist.y - (0.135 * w + 0.025 * t) - 0.012
+    py = bd.waist.y - (0.135 * w + 0.025 * t + extra) - 0.012
     p.add(b.box("apron_pocket", (0.17, 0.012, 0.1), (0, py, pz - 0.05), 0.012, 2, _m(look.top, 0.7)))
+    if look.apron_stains:
+        # Wiped hands, a tomato splash and an old grease mark on the skirt.
+        from . import mess
+        for k, (sx, sz, r, col) in enumerate(((0.1, 0.18, 0.035, "#8E5A3A"), (-0.07, 0.3, 0.025, "#B8452F"),
+                                              (0.02, 0.08, 0.045, "#7A6A4A"), (0.12, 0.26, 0.02, "#8E5A3A"))):
+            zz = z_bottom + sz
+            tt = (z_waist - zz) / (z_waist - z_bottom)
+            yy = bd.waist.y - (0.135 * w + 0.025 * tt + extra) - 0.011
+            mess.stain(p, (sx, yy, zz), r, col, "y", look.seed * 7 + k, 0.6)
+        mess.splatter(p, (-0.02, bd.waist.y - 0.15 * w - extra - 0.011, z_bottom + 0.22), 0.06, 7, "#B8452F", "y",
+                      look.seed + 3, 0.7)
     return p
 
 
@@ -368,18 +393,34 @@ def _head(bd, look):
     def on_face(x, z, out=0.0):
         return Vector((c.x + x, c.y + _front(a, bb, cc, x, z) - out, c.z + z))
 
-    # Eyes: dark ovals with a small highlight; older people get soft upper lids.
+    import random as _r
+    rng = _r.Random(look.seed * 31 + 5)
+    ex = look.expression
+    # Brow tilt per expression (degrees, positive lifts the inner end), lid cover (0 open .. 1 closed).
+    brow_tilt = {"smile": -10, "grin": -14, "neutral": -4, "focused": 14, "tired": -22, "yawn": -18}[ex]
+    lid_cover = {"smile": 0.0, "grin": 0.0, "neutral": 0.15, "focused": 0.3, "tired": 0.55, "yawn": 1.0}[ex]
+    if look.eyelids:
+        lid_cover = max(lid_cover, 0.35)
+    # Eyes: dark ovals with a highlight; upper lids cover them by expression; closed eyes are soft arcs.
     for side in (1, -1):
-        e = on_face(side * 0.032, 0.012, 0.0)
-        eye = b.sphere("eye", 0.0125, tuple(e), 14, (0.85, 0.55, 1.15), dark)
-        p.add(eye)
-        p.add(b.sphere("eye_hi", 0.0035, tuple(e + Vector((side * -0.003, -0.006, 0.005))), 8,
-                       material=_m("#FFFFFF", 0.2)))
-        if look.eyelids:
-            lid = b.sphere("lid", 0.0145, tuple(e + Vector((0, 0.0015, 0.004))), 14, (0.95, 0.65, 0.55), skin)
-            p.add(lid)
-        brow = b.capsule("brow", 0.0045, 0.03, tuple(on_face(side * 0.047, 0.04, 0.002)), 8, hair, rad(0, 90, 0))
-        brow.rotation_euler = rad(0, 90 - side * 12, 0)
+        jitter = Vector((rng.uniform(-0.002, 0.002), 0, rng.uniform(-0.0025, 0.0025)))
+        e = on_face(side * 0.032, 0.012, 0.0) + jitter
+        if lid_cover < 0.95:
+            p.add(b.sphere("eye", 0.0125, tuple(e), 14, (0.85, 0.55, 1.15), dark))
+            p.add(b.sphere("eye_hi", 0.0035, tuple(e + Vector((side * -0.003, -0.006, 0.005))), 8,
+                           material=_m("#FFFFFF", 0.2)))
+            if lid_cover > 0.05:
+                lid = b.sphere("lid", 0.0148, tuple(e + Vector((0, 0.002, 0.016 - 0.02 * lid_cover))), 14,
+                               (0.95, 0.62, 0.62 + 0.35 * lid_cover), skin)
+                p.add(lid)
+        else:
+            closed = b.torus("eye_closed", 0.011, 0.0025, tuple(e + Vector((0, -0.001, 0.004))), 12, 4, dark,
+                             rad(90, 0, 0), arc=150)
+            closed.rotation_euler = rad(90, 195, 0)
+            p.add(closed)
+        bl = on_face(side * 0.047, 0.042, 0.002) + Vector((0, 0, rng.uniform(-0.003, 0.004)))
+        brow = b.capsule("brow", 0.0045, 0.03, tuple(bl), 8, hair, rad(0, 90, 0))
+        brow.rotation_euler = rad(0, 90 + side * brow_tilt, 0)
         brow.location.x = c.x + side * 0.047 - 0.015
         p.add(brow)
         ear = b.sphere("ear", 0.024, (c.x + side * (a - 0.004), c.y + 0.008, c.z + 0.002), 12, (0.35, 0.7, 1.15), skin)
@@ -394,11 +435,26 @@ def _head(bd, look):
     nose.location.y += 0.004
     nose.location.z -= 0.02
     p.add(nose)
-    # Mouth: a smile arc.
-    m = on_face(0, -0.045, 0.001)
-    smile = b.torus("smile", 0.019, 0.0035, tuple(m), 14, 6, _m("#8E4A3A", 0.5), rad(90, 0, 0), arc=140)
-    smile.rotation_euler = rad(90, 200, 0)
-    p.add(smile)
+    # Mouth by expression, a little off-centre.
+    mouth_m = _m("#8E4A3A", 0.5)
+    m = on_face(rng.uniform(-0.004, 0.004), -0.045, 0.001)
+    if ex in ("smile", "grin"):
+        r_ = 0.019 if ex == "smile" else 0.024
+        smile = b.torus("smile", r_, 0.0035, tuple(m), 14, 6, mouth_m, rad(90, 0, 0), arc=140 if ex == "smile" else 160)
+        smile.rotation_euler = rad(90, 200 + rng.uniform(-6, 6), 0)
+        p.add(smile)
+    elif ex == "yawn":
+        p.add(b.sphere("mouth_open", 0.016, tuple(m + Vector((0, 0.004, -0.006))), 14, (1.0, 0.5, 1.4),
+                       _m("#4A2420", 0.6)))
+    elif ex == "tired":
+        frown = b.torus("frown", 0.016, 0.003, tuple(m + Vector((0, 0, -0.012))), 14, 6, mouth_m, rad(90, 0, 0),
+                        arc=110)
+        frown.rotation_euler = rad(90, 35, 0)
+        p.add(frown)
+    else:
+        line = b.capsule("mouth_line", 0.003, 0.026, tuple(m + Vector((-0.013, 0, 0))), 8, mouth_m, rad(0, 90, 0))
+        line.rotation_euler = rad(0, 90 + rng.uniform(-6, 6) + (4 if ex == "focused" else 0), 0)
+        p.add(line)
     if look.beard:
         p.add(_ellipsoid("beard", a * 0.95, bb * 0.75, cc * 0.45, (c.x, c.y - 0.03, c.z - 0.065), hair))
     if look.glasses:
@@ -483,6 +539,20 @@ def _hair(c, look, mat):
             if y < -0.02 and z < 0.06:
                 continue
             p.add(b.sphere("curl", 0.026, (c.x + x, c.y + y, c.z + z), 10, material=mat))
+    if look.messy:
+        import random
+        # Uneven tufts on the hair surface break the clean silhouette (no spikes).
+        rng = random.Random(look.seed + 40)
+        for i in range(9):
+            th = rng.uniform(0, 2 * math.pi)
+            ph = rng.uniform(0.25, 1.0)
+            d = Vector((math.cos(th) * math.sin(ph), math.sin(th) * math.sin(ph) * 1.05, math.cos(ph)))
+            if d.y < -0.4 and d.z < 0.75:
+                continue
+            pos = Vector((c.x + d.x * HEAD_A * 1.08, c.y + d.y * HEAD_B * 1.08, c.z + d.z * HEAD_C * 1.06))
+            tuft = b.sphere("tuft", rng.uniform(0.018, 0.026), tuple(pos), 10, (1.0, 0.55, 0.45), mat)
+            tuft.rotation_euler = d.to_track_quat("Z", "Y").to_euler()
+            p.add(tuft)
     return p
 
 
@@ -531,6 +601,19 @@ def _prop(bd, look):
         p.add(b.torus("cane_hook", 0.035, 0.012, (hand.x + 0.01, hand.y - 0.05 + 0.035, 0.86 * bd.s), 12, 6,
                       _m("#6B4A33", 0.45), rad(90, 0, 90), arc=180))
     return p
+
+
+def cast_lived(palette):
+    """Round 3: the same people on a normal working day, plus a helper. Mixed expressions and wear."""
+    base = cast(palette)
+    base["cook"].expression, base["cook"].apron_stains, base["cook"].messy, base["cook"].seed = "focused", True, True, 1
+    base["older_woman"].expression, base["older_woman"].seed = "smile", 2
+    base["older_man"].expression, base["older_man"].seed = "neutral", 3
+    base["younger"].expression, base["younger"].seed = "yawn", 4
+    base["helper"] = Look(height=1.7, build=1.16, shoulders=1.04, skin="#C99272", hair="#3A2A22", hair_style="bob",
+                          top="#8CC5AC", top_style="tee", bottom="#5E554D", apron="#F3E9D2", apron_stains=True,
+                          shoes="#2C2826", expression="grin", seed=5, rolled=True, messy=True)
+    return base
 
 
 # --- the cast --------------------------------------------------------------------------------------------------------

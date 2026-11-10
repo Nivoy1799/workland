@@ -16,7 +16,9 @@ def _room(p, wall_role="wall", floor=True, width=10.0):
 
 
 def _cast_looks():
-    return character.cast(palettes.PALETTES[b.palette_id()])
+    pal = palettes.PALETTES[b.palette_id()]
+    # Round 3 (grit above 0): the same people on a normal working day.
+    return character.cast_lived(pal) if b.grit() > 0 else character.cast(pal)
 
 
 def shot_cast(variant, time_id):

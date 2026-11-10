@@ -30,6 +30,8 @@ Round 2 (people, hero models, themes) has its own entry point, same options exce
 "/c/Program Files/Blender Foundation/Blender 5.3/blender.exe" -b --factory-startup -P tools/blender/stylelab/render_round2.py
 ```
 
+Round 3 (lived-in pass, the climb) the same way with `render_round3.py`. File names end in `_gNN` (grit x 10).
+
 ## Layout
 
 | File | What it holds |
@@ -45,6 +47,9 @@ Round 2 (people, hero models, themes) has its own entry point, same options exce
 | `lab/hero.py` | round 2 stove, both cars and the shop front at full detail |
 | `lab/themes.py` | business themes (one grammar, many dialects) and themed kitchen palettes |
 | `lab/scene2.py` | round 2 shots |
+| `lab/mess.py` | round 3 wear and mess kit (decals and small props) |
+| `lab/climb.py` | round 3 food cart (stage 1) and delivery van |
+| `lab/scene3.py` | round 3 shots: grit levels, mid-rush kitchen, the climb, lived-in street |
 | `lab/post.py` | greyscale, colour-blind simulation (Machado 2009), pixel compare |
 
 ## Rules the scripts keep

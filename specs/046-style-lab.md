@@ -159,6 +159,24 @@ Round 1 compared styles with quick primitive models. Round 2 shows the quality c
 Same folders as round 1. Output `docs/art/stylelab/round-2/` and a new comparison page. Round 1 pictures stay as
 they are (made with commit 3552759; the scripts move on).
 
+## Round 3 (human, 2026-11-10: "it looks like marketing ... some roughness is missing ... when all looks glossy it
+gets creepy")
+A lived-in pass, tied to the climb in `docs/game-design.md` (food corner, first restaurant, services, automation):
+1. **Grit as a setting** (0 clean, 1 lived-in, 2 rough) instead of hand-placed dirt: mostly matte materials, small
+   colour differences between objects, grime where it collects (floor level, corners, around the stove), brushed
+   chrome. Game equivalent: baked occlusion plus a shared dirt texture and decals.
+2. **Wear and mess kit:** stains and splatter, chipped and missing tiles, cracked plaster, a faded poster, pavement
+   cracks with weeds, crates, boxes, a trash bag, dirty dishes, a puddle under a drip, duct tape, a dented bin,
+   crooked signs, handwritten paper signs.
+3. **People:** mixed expressions (neutral, focused, tired, small smile, yawn), slight asymmetry, more body variety,
+   wear on clothes (apron stains, untucked shirt, messy hair).
+4. **Light and camera:** eye-level, slightly off-centre framing; an overcast light.
+5. **The climb in pictures:** stage 1 food corner (a new scrappy cart with stools, cash tin, taped menu), stage 2 a
+   worn rented shop with the last tenant's leftovers, a later stage kept up but lived-in with a delivery van (new
+   model). Plus the same kitchen clean and mid-rush, to show a dirt layer the game can switch on and off.
+
+Same folders. Output `docs/art/stylelab/round-3/` and a new comparison page.
+
 ## Open questions
 0. **Real-world cultures in the town?** So far the world has only its own fictional history (D27, D28). Can a
    business be "Mexican-inspired" or "Japanese-inspired", or do we invent fictional regional cuisines that echo real
@@ -211,6 +229,22 @@ Round 2 (2026-11-10, Opus):
 - Known weak spots, listed on the page: stiff pose, not rigged or animated, chunky shoes, apron bib off the chest
   from the side, simple shop interiors, dark nights. Round 1 can no longer be re-rendered exactly (scripts moved on;
   its pictures are from commit 3552759).
+
+Round 3 (2026-11-10, Opus):
+- Page: https://claude.ai/artifact/85pVE6NdKNjyJt1jBc1A4w (source `docs/art/stylelab/round-3/compare.html`),
+  15 pictures, rendered by `tools/blender/stylelab/render_round3.py`.
+- Grit (`build.set_grit`): per-object colour drift (Object Info random), grime from occlusion and a band at the foot
+  of upright faces, broken up by noise, rougher and uneven gloss. Grit 0 leaves rounds 1 and 2 unchanged.
+- `lab/mess.py`: stains, splatter, cracks, tape, handwritten paper signs (Windows Ink Free font, mock-up only),
+  faded posters, puddles, gum, weeds, crates, boxes, trash bags, a dented bin, dish stacks, a dripping pipe, stools,
+  cables.
+- People: six expressions (brows, lids, mouth), small asymmetries, apron stains, untucked shirts, rolled trousers,
+  hair tufts; a new helper.
+- `lab/climb.py`: the stage 1 food cart and a delivery van. Overcast light added.
+- Shots: grit 0/1/2, clean versus mid-rush kitchen, stage 1 (noon, sunset), stage 2 (overcast), a later stage
+  (noon, sunset), the cart, the van, the round 2 street lived-in.
+- For the game later: decals and a prop kit for the mess, a spec for the dirt layer (when it appears, how cleaning
+  removes it), a licensed handwriting font.
 
 ## Blockers
 (none)

@@ -18,6 +18,7 @@ def reset(palette_id):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     _material_cache.clear()
     _palette_id = palette_id
+    set_grit(0.0)
 
 
 def palette_id():
@@ -36,6 +37,96 @@ def rad(x, y=0.0, z=0.0):
 
 # --- materials -------------------------------------------------------------------------------------------------------
 
+_grit = 0.0
+
+
+def set_grit(level):
+    """0 clean (rounds 1 and 2), 1 lived-in, 2 rough. Set before building; changes every material made after it."""
+    global _grit
+    _grit = level
+    _material_cache.clear()
+
+
+def grit():
+    return _grit
+
+
+GRIME = "#3B2E22"
+
+
+def _add_grit(m, col, rough, metal):
+    """Lived-in surface: per-object colour drift, grime in occluded spots and near the floor, rougher, uneven gloss."""
+    g = _grit
+    nt = m.node_tree
+    bsdf = nt.nodes.get("Principled BSDF")
+    L = nt.links
+    info = nt.nodes.new("ShaderNodeObjectInfo")
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    rgb = nt.nodes.new("ShaderNodeRGB")
+    rgb.outputs[0].default_value = col
+
+    def map_range(src, a, bb, c, d):
+        n = nt.nodes.new("ShaderNodeMapRange")
+        n.clamp = True
+        L.new(src, n.inputs["Value"])
+        n.inputs["From Min"].default_value, n.inputs["From Max"].default_value = a, bb
+        n.inputs["To Min"].default_value, n.inputs["To Max"].default_value = c, d
+        return n.outputs["Result"]
+
+    def math(op, a, bb=None, value=None):
+        n = nt.nodes.new("ShaderNodeMath")
+        n.operation = op
+        n.use_clamp = op in ("MULTIPLY_ADD",)
+        if isinstance(a, float):
+            n.inputs[0].default_value = a
+        else:
+            L.new(a, n.inputs[0])
+        if bb is not None:
+            if isinstance(bb, float):
+                n.inputs[1].default_value = bb
+            else:
+                L.new(bb, n.inputs[1])
+        return n.outputs[0]
+
+    # Colour drift per object: a touch of hue, saturation and value.
+    hsv = nt.nodes.new("ShaderNodeHueSaturation")
+    L.new(map_range(info.outputs["Random"], 0, 1, 0.5 - 0.012 * g, 0.5 + 0.012 * g), hsv.inputs["Hue"])
+    L.new(map_range(info.outputs["Random"], 0, 1, 1 - 0.08 * g, 1 + 0.04 * g), hsv.inputs["Saturation"])
+    L.new(map_range(info.outputs["Random"], 0, 1, 1 - 0.07 * g, 1 + 0.03 * g), hsv.inputs["Value"])
+    L.new(rgb.outputs[0], hsv.inputs["Color"])
+    # Grime: occlusion plus a band near the floor, broken up by noise.
+    ao = nt.nodes.new("ShaderNodeAmbientOcclusion")
+    ao.inputs["Distance"].default_value = 0.35
+    noise = nt.nodes.new("ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = 3.5
+    noise.inputs["Detail"].default_value = 6.0
+    L.new(geo.outputs["Position"], noise.inputs["Vector"])
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    L.new(geo.outputs["Position"], sep.inputs[0])
+    floor_band = map_range(sep.outputs["Z"], 0.0, 0.6, 1.0, 0.0)
+    # The band is for upright faces (wall feet, cabinet plinths); floors and worktops only get a trace of it.
+    nsep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    L.new(geo.outputs["Normal"], nsep.inputs[0])
+    upright = map_range(math("ABSOLUTE", nsep.outputs["Z"]), 0.3, 0.9, 1.0, 0.15)
+    floor_band = math("MULTIPLY", floor_band, upright)
+    occl = map_range(ao.outputs["AO"], 0.35, 1.0, 1.0, 0.0)
+    dirt = math("ADD", math("MULTIPLY", occl, 0.9), math("MULTIPLY", floor_band, 0.55))
+    patchy = map_range(noise.outputs["Fac"], 0.38, 0.68, 0.15, 1.4)
+    fac = math("MULTIPLY", math("MULTIPLY", dirt, patchy), 0.42 * g)
+    fac_c = math("MINIMUM", fac, 0.75)
+    mix = nt.nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.blend_type = "MULTIPLY" if metal < 0.5 else "MIX"
+    L.new(fac_c, mix.inputs["Factor"])
+    L.new(hsv.outputs["Color"], mix.inputs[6])
+    mix.inputs[7].default_value = palettes.hex_to_linear(GRIME)
+    L.new(mix.outputs[2], bsdf.inputs["Base Color"])
+    # Rougher, with uneven gloss (fingerprints, wipe marks).
+    base_r = (rough + 0.15 * g) if metal >= 0.5 else max(rough, 0.48 + 0.12 * g)
+    rmap = map_range(noise.outputs["Fac"], 0.3, 0.7, base_r - 0.08 * g, base_r + 0.1 * g)
+    L.new(math("ADD", rmap, math("MULTIPLY", fac_c, 0.4)), bsdf.inputs["Roughness"])
+
+
 def mat(role, metal=0.0, rough=0.55, emit=0.0, alpha=1.0, hex_override=None):
     """A Principled material for a palette role (or a fixed hex). Cached by its settings."""
     hex_str = hex_override or palettes.colour(_palette_id, role)
@@ -49,6 +140,8 @@ def mat(role, metal=0.0, rough=0.55, emit=0.0, alpha=1.0, hex_override=None):
     bsdf.inputs["Base Color"].default_value = col
     bsdf.inputs["Metallic"].default_value = metal
     bsdf.inputs["Roughness"].default_value = rough
+    if _grit > 0 and emit <= 0 and alpha >= 1.0:
+        _add_grit(m, col, rough, metal)
     if emit > 0:
         bsdf.inputs["Emission Color"].default_value = col
         bsdf.inputs["Emission Strength"].default_value = emit
