@@ -41,11 +41,12 @@ COMMON = {
 
 PALETTES = {
     "P1": {
+        # Round 2: more lightness steps for older eyes. Wall about L*92, doors about L*74, cabinets about L*58.
         "name": "Garden pastel",
-        "wall": "#C5D3C0",
+        "wall": "#E2EADD",
         "wall_out": "#F1E6CF",
-        "main": "#8CC5AC",
-        "main_dark": "#5E9C86",
+        "main": "#4F9A85",
+        "main_dark": "#2F6E5E",
         "accent": "#E3AE45",
         "accent2": "#E58436",
         "cream": "#F3E9D2",
@@ -93,6 +94,12 @@ PALETTES = {
         "sky_bottom": "#F2D9B8",
     },
 }
+
+
+# Round 1 P1 as it was, kept to show the contrast change side by side.
+PALETTES["P1r1"] = dict(PALETTES["P1"], wall="#C5D3C0", main="#8CC5AC", main_dark="#5E9C86", trim="#5E9C86",
+                        name="Garden pastel (round 1)")
+PALETTES["P1"]["trim"] = "#2F6E5E"
 
 
 def colour(palette_id, role):

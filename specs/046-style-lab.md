@@ -141,7 +141,29 @@ belongs to spec 040, once Unity and MCP are connected.
 - [ ] AC7: After the pick, `docs/art-direction.md` is rewritten as described, decision lines are added and spec 040 is
       amended. The human approves the new guide.
 
+## Round 2 (human, 2026-11-10: "I wanna see the best you can")
+Round 1 compared styles with quick primitive models. Round 2 shows the quality ceiling before the human picks.
+1. **People.** A character generator: smooth bodies grown from a stick skeleton (Blender Skin modifier, rig-ready),
+   shoulders, waist, bent elbows and knees, posture by age, mitten hands with a thumb, shoes with soles, layered
+   clothes (collar, rolled sleeves, an apron that wraps and ties), friendly faces (eyes with a highlight, nose, ears,
+   brows), several hair meshes. Cast: the cook, an older woman, an older man, a younger customer (no children in this round). Shots: a lineup, a turnaround (front, three-quarter, side, back) and face close-ups.
+2. **Detail pass** on three hero models at "ship" quality: the stove, both cars (the soft car redesigned), the shop
+   front (window with a visible interior, door panels, plinth, cornice, window boxes, menu board, wall lamps).
+3. **Personalisation demo: one grammar, many dialects.** Fixed for everyone: shape language, bevels, proportions,
+   light, palette structure (a base family plus one accent). Free per business: a theme colour set, patterns,
+   signature props, a sign (name, retro font, neon colour). Shown on the same shop front and kitchen corner in three
+   themes: the default, a Mexican-inspired one and a Japanese-inspired one. Themes are respectful and inspired by the
+   cuisine and its craft (tiles, textiles, lanterns), never caricatures. Fictional shop names.
+4. **P1 contrast fix:** darker cabinets, lighter wall, checked in greyscale.
+
+Same folders as round 1. Output `docs/art/stylelab/round-2/` and a new comparison page. Round 1 pictures stay as
+they are (made with commit 3552759; the scripts move on).
+
 ## Open questions
+0. **Real-world cultures in the town?** So far the world has only its own fictional history (D27, D28). Can a
+   business be "Mexican-inspired" or "Japanese-inspired", or do we invent fictional regional cuisines that echo real
+   ones? Default for round 2: "inspired-by" themes with fictional shop names, no real place names in the game; needs a
+   decision line before it goes into the game.
 1. **Older adults as the main players:** is that the right reading of "focused on older generation"? It also shapes
    UI text size and controls later (not in this spec). Default: yes.
 2. **Characters:** if the chosen style is far from the Quaternius people, our own characters need rigging and
@@ -175,6 +197,20 @@ Round 1 (2026-11-10, Opus, branch `spec/046-style-lab`):
 
 Acceptance status: AC1, AC2, AC3, AC5 done. AC4 page published (inbox link at merge). AC6 and AC7 wait for the
 human's pick.
+
+Round 2 (2026-11-10, Opus):
+- Page: https://claude.ai/artifact/84rWfWi2tKQ81W5FYA37rk (source `docs/art/stylelab/round-2/compare.html`),
+  25 pictures, rendered by `tools/blender/stylelab/render_round2.py` in about 30 s.
+- `lab/character.py`: Skin-modifier bodies (rig-ready), layered clothes with at least 1.5 cm between layers, faces,
+  six hair styles, hats, glasses, props. Cast of four: cook, older woman, older man, younger customer.
+- `lab/hero.py`: stove, soft bubble car (redesigned), streamline rocket car, shop front with a room behind the
+  window (boolean cut-outs parented to the shop).
+- `lab/themes.py`: default, Casa Nopal (Mexican-inspired) and Yuzu Noodles (Japanese-inspired) shop themes and
+  themed kitchen palettes. Open question 0 (real-world cultures) is still open.
+- P1 contrast: cabinets #4F9A85, wall #E2EADD; round 1 values kept as `P1r1` for the before/after shots.
+- Known weak spots, listed on the page: stiff pose, not rigged or animated, chunky shoes, apron bib off the chest
+  from the side, simple shop interiors, dark nights. Round 1 can no longer be re-rendered exactly (scripts moved on;
+  its pictures are from commit 3552759).
 
 ## Blockers
 (none)

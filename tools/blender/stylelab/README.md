@@ -24,6 +24,12 @@ Output: `docs/art/stylelab/round-<n>/*.jpg` (JPEG, quality 92, 1600 x 1000) plus
 
 A full round takes about 30 seconds on the GPU.
 
+Round 2 (people, hero models, themes) has its own entry point, same options except `--round`:
+
+```bash
+"/c/Program Files/Blender Foundation/Blender 5.3/blender.exe" -b --factory-startup -P tools/blender/stylelab/render_round2.py
+```
+
 ## Layout
 
 | File | What it holds |
@@ -35,6 +41,10 @@ A full round takes about 30 seconds on the GPU.
 | `lab/people.py` | the cook and the older customer, potato and tomato (whole and cut) |
 | `lab/street.py` | car, shop-house, street lamp, tree, ground |
 | `lab/scene.py` | shots, cameras, the three light moods, render settings |
+| `lab/character.py` | round 2 people: Skin-modifier bodies, layered clothes, faces, hair, props, the cast |
+| `lab/hero.py` | round 2 stove, both cars and the shop front at full detail |
+| `lab/themes.py` | business themes (one grammar, many dialects) and themed kitchen palettes |
+| `lab/scene2.py` | round 2 shots |
 | `lab/post.py` | greyscale, colour-blind simulation (Machado 2009), pixel compare |
 
 ## Rules the scripts keep

@@ -268,20 +268,25 @@ def floor_tiles(p, x0, x1, y0, y1, tile=0.3, seed=11):
 
 
 def backsplash(p, x0, x1, z0, z1, y, tile=0.15):
+    """Wall tiles behind the worktop; a palette with a "splash" list gets a checker of those colours."""
+    from . import palettes
+    splash = palettes.PALETTES[b.palette_id()].get("splash")
     nx = int(round((x1 - x0) / tile))
     nz = int(round((z1 - z0) / tile))
     for i in range(nx):
         for j in range(nz):
+            m = b.mat("splash", rough=0.3, hex_override=splash[(i + j) % len(splash)]) if splash else \
+                b.mat("cream", rough=0.3)
             p.add(b.box("splash", (tile - 0.006, 0.01, tile - 0.006), (x0 + (i + 0.5) * tile, y, z0 + j * tile + 0.003),
-                        0.002, 1, b.mat("cream", rough=0.3)))
+                        0.002, 1, m))
 
 
-def kitchen_corner(shape, small, with_room=True):
+def kitchen_corner(shape, small, with_room=True, stove_fn=None, plant_on=True):
     """Kitchen corner centred on x = 0: cabinet, stove, cabinet, cabinet; wall units, hood, plant, worktop."""
     p = Parts()
     x_left = -0.9
     base_cabinet(shape, p, x_left, 0.6)
-    st = stove(shape, x_left + 0.6)
+    st = (stove_fn or stove)(shape, x_left + 0.6)
     p.items += st.items
     base_cabinet(shape, p, x_left + 1.2, 0.6)
     base_cabinet(shape, p, x_left + 1.8, 0.6)
@@ -294,7 +299,8 @@ def kitchen_corner(shape, small, with_room=True):
     wall_cabinets(shape, p, x_left, 1 if shape.streamline else 1, 1.5)
     wall_cabinets(shape, p, x_left + 1.2, 2, 1.5)
     hood(shape, p, x_left + 0.9)
-    plant(p, (x_left + 2.2, 0.35, WORKTOP_H - 0.01), seed=5)
+    if plant_on:
+        plant(p, (x_left + 2.2, 0.35, WORKTOP_H - 0.01), seed=5)
     if with_room:
         p.add(b.box("wall", (8.0, 0.1, 3.0), (0.0, DEPTH + 0.07, 0.0), 0.0, 1, b.mat("wall", rough=0.85)))
         backsplash(p, x_left, x_left + 2.4, WORKTOP_H - 0.01, 1.47, DEPTH + 0.015)
