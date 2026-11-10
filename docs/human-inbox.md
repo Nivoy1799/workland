@@ -103,5 +103,8 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- 2026-11-10 play-test: the register / payment terminal works great ("insane"). Problems found and drafted as specs:
+  039 (every counter accepts items, items are not stairs, tools handle towards you), 040 (readable at a glance:
+  better models, labels from every angle), 041 (mouse-first: left does, right puts down, no Q).
 - 2026-11-08: 24 h autonomy granted; CC0 downloads from Kenney/Quaternius OK; old Mini Characters may be deleted;
   feel comes first ("counter on the wrong side, buttons on the back, everything feels off").
