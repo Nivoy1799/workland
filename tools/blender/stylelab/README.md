@@ -32,6 +32,9 @@ Round 2 (people, hero models, themes) has its own entry point, same options exce
 
 Round 3 (lived-in pass, the climb) the same way with `render_round3.py`. File names end in `_gNN` (grit x 10).
 
+Round 4 (vibe frames with ink outlines) with `render_round4.py`; `--only morning,guest` picks frames, `--no-ink`
+renders without outlines. Several frames run in separate Blender processes.
+
 ## Layout
 
 | File | What it holds |
@@ -50,6 +53,8 @@ Round 3 (lived-in pass, the climb) the same way with `render_round3.py`. File na
 | `lab/mess.py` | round 3 wear and mess kit (decals and small props) |
 | `lab/climb.py` | round 3 food cart (stage 1) and delivery van |
 | `lab/scene3.py` | round 3 shots: grit levels, mid-rush kitchen, the climb, lived-in street |
+| `lab/concept.py` | round 4 concept kit: robots, dining, crowd, animals, town blocks, dome, monorail |
+| `lab/scene4.py` | round 4 vibe frames and the ink-outline look |
 | `lab/post.py` | greyscale, colour-blind simulation (Machado 2009), pixel compare |
 
 ## Rules the scripts keep

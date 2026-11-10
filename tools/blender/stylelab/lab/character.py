@@ -50,6 +50,7 @@ class Look:
     untucked: bool = False      # a shirt worn out over the trousers
     messy: bool = False         # stray hair locks
     rolled: bool = False        # trouser legs rolled up once
+    sit: bool = False           # seated on a 0.45 m chair or bench, hands forward on a table
     extras: dict = field(default_factory=dict)
 
 
@@ -134,6 +135,17 @@ class Body:
         self.hip = Vector((0.088 * w, 0.0, 0.9 * s))
         self.knee = Vector((0.095, -0.015, 0.5 * s))
         self.ankle = Vector((0.1, 0.015, 0.095 * s))
+        self.dz = 0.0
+        if look.sit:
+            # Seated: the upper body drops onto the seat, thighs forward, shins down, hands forward on a table.
+            self.dz = 0.5 - 0.94 * s
+            for name in ("pelvis", "waist", "chest", "upper", "neck", "head", "shoulder"):
+                getattr(self, name).z += self.dz
+            self.elbow = Vector((self.elbow.x, -0.12, self.elbow.z + self.dz + 0.04))
+            self.wrist = Vector((self.wrist.x - 0.04, -0.36, 0.78))
+            self.hip = Vector((self.hip.x, 0.0, 0.48))
+            self.knee = Vector((0.1, -0.43, 0.5))
+            self.ankle = Vector((0.1, -0.46, 0.095))
 
 
 def _sym(p):
@@ -156,11 +168,12 @@ def person(look, loc=(0, 0, 0), yaw=0.0, name="Person"):
 
     # Legs and pelvis (trousers, or tights under a skirt).
     leg_mat = bottom if trousers else _m(look.legs or look.skin, 0.6)
+    dz = bd.dz
     if trousers:
-        verts = [bd.pelvis, Vector((0, bd.waist.y, 1.035 * s))]
+        verts = [bd.pelvis, Vector((0, bd.waist.y, 1.035 * s + dz))]
         radii = [(0.162 * w, 0.116 * w), (0.156 * w, 0.112 * w)]
     else:
-        verts = [bd.pelvis, Vector((0, bd.waist.y, 1.0 * s))]
+        verts = [bd.pelvis, Vector((0, bd.waist.y, 1.0 * s + dz))]
         radii = [(0.13 * w, 0.095 * w), (0.12 * w, 0.088 * w)]
     edges = [(0, 1)]
     for side in (1, -1):
@@ -172,7 +185,7 @@ def person(look, loc=(0, 0, 0), yaw=0.0, name="Person"):
         radii += [(0.09 * w * r, 0.092 * w * r), (0.057 * r, 0.06 * r), (0.047 * r, 0.047 * r)]
     p.add(skin_object("legs", verts, edges, radii, leg_mat))
     if trousers and tucked:
-        belt = b.torus("belt", 1.0, 0.014, (0, bd.waist.y, 1.0 * s), 32, 6, _m("#3A2A22", 0.5))
+        belt = b.torus("belt", 1.0, 0.014, (0, bd.waist.y, 1.0 * s + dz), 32, 6, _m("#3A2A22", 0.5))
         belt.scale = (0.163 * w, 0.118 * w, 1)
         p.add(belt)
     if trousers and look.rolled:
@@ -185,16 +198,17 @@ def person(look, loc=(0, 0, 0), yaw=0.0, name="Person"):
     # Shoes: a rounded upper with a raised heel cap on a slightly wider sole, toe forward (-Y).
     for side in (1, -1):
         x = side * bd.ankle.x
+        fy = bd.ankle.y - 0.015
         sm = _m(look.shoes, 0.45)
-        p.add(b.box("sole", (0.102, 0.262, 0.022), (x, -0.035, 0.0), 0.01, 2, _m(look.sole, 0.7)))
-        p.add(b.box("shoe", (0.094, 0.245, 0.07), (x, -0.038, 0.018), 0.033, 4, sm))
-        p.add(b.box("shoe_heel", (0.088, 0.1, 0.1), (x, 0.03, 0.018), 0.035, 4, sm))
+        p.add(b.box("sole", (0.102, 0.262, 0.022), (x, fy - 0.035, 0.0), 0.01, 2, _m(look.sole, 0.7)))
+        p.add(b.box("shoe", (0.094, 0.245, 0.07), (x, fy - 0.038, 0.018), 0.033, 4, sm))
+        p.add(b.box("shoe_heel", (0.088, 0.1, 0.1), (x, fy + 0.03, 0.018), 0.035, 4, sm))
 
     # Torso and sleeves in the top colour. A tucked top starts inside the trousers; a tee hangs over them.
     if tucked:
-        start, r0 = Vector((0, bd.waist.y, 0.975 * s)), (0.132 * w, 0.094 * w)
+        start, r0 = Vector((0, bd.waist.y, 0.975 * s + dz)), (0.132 * w, 0.094 * w)
     else:
-        start, r0 = Vector((0, 0.0, 0.9 * s)), (0.182 * w, 0.132 * w)
+        start, r0 = Vector((0, 0.0, 0.9 * s + dz)), (0.182 * w, 0.132 * w)
     verts = [start, bd.waist, bd.chest, bd.upper, bd.neck]
     edges = [(0, 1), (1, 2), (2, 3), (3, 4)]
     waist_r = (0.14 * w, 0.1 * w) if tucked else (0.17 * w, 0.122 * w)
@@ -242,7 +256,7 @@ def person(look, loc=(0, 0, 0), yaw=0.0, name="Person"):
 
     # Skirt.
     if look.bottom_style == "skirt":
-        z0, z1 = bd.waist.z - 0.01, 0.45 * s
+        z0, z1 = bd.waist.z - 0.01, (0.45 * s if not look.sit else 0.42)
         prof = [(0.165 * w, z0 - z1), (0.19 * w, (z0 - z1) * 0.75), (0.225 * w, (z0 - z1) * 0.25), (0.24 * w, 0.0)]
         prof = [(r, z) for r, z in reversed(prof)]
         sk = b.lathe("skirt", prof, 28, (0, 0.005, z1), bottom, scale=(1.0, 0.78, 1.0))
@@ -259,7 +273,7 @@ def person(look, loc=(0, 0, 0), yaw=0.0, name="Person"):
     # Cardigan or vest: a second, slightly bigger torso shell, open at the front for a cardigan.
     if look.layer:
         lay = _m(look.layer, 0.85)
-        low = 0.93 * s if look.bottom_style == "skirt" else 0.96 * s
+        low = (0.93 * s if look.bottom_style == "skirt" else 0.96 * s) + dz
         verts = [Vector((0, bd.waist.y, low)), bd.waist, bd.chest, bd.upper]
         edges = [(0, 1), (1, 2), (2, 3)]
         radii = [(0.19 * w, 0.138 * w), (0.165 * w, 0.122 * w), (0.185 * bd.sh, 0.13), (0.172 * bd.sh, 0.117)]
@@ -303,7 +317,7 @@ def _apron(bd, look):
     w = bd.w
     am = _m(look.apron, 0.7)
     rows = []
-    z_bottom, z_waist, z_top = 0.52 * bd.s, bd.waist.z - 0.01, bd.upper.z - 0.01
+    z_bottom, z_waist, z_top = 0.52 * bd.s + bd.dz, bd.waist.z - 0.01, bd.upper.z - 0.01
     levels = [z_bottom + (z_waist - z_bottom) * i / 6 for i in range(7)] + \
              [z_waist + (z_top - z_waist) * i / 5 for i in range(1, 6)]
     cols = 13

@@ -29,6 +29,16 @@ TIMES = {
         "sun": ("#8FA6FF", 0.5, 35, 30), "ambient": 0.22, "glow": 4.0, "haze": 0.012,
         "sky": ("#1E0B10", "#7A2A22"),
     },
+    # Round 4: early morning, low warm sun from the side, long shadows.
+    "morning": {
+        "sun": ("#FFD9B0", 3.4, 16, -75), "ambient": 0.75, "glow": 0.5, "haze": 0.002,
+        "sky": ("#9FC0D3", "#F6DCC0"),
+    },
+    # Round 4: inside a room; the scene adds its own lamps.
+    "interior": {
+        "sun": ("#FFF1DC", 0.0, 45, -30), "ambient": 0.35, "glow": 1.6, "haze": 0.0,
+        "sky": ("#E8DCC8", "#F1E6CF"),
+    },
     # Round 3: a grey, soft day. Big soft sun, strong sky light, a little haze.
     "overcast": {
         "sun": ("#EEF2F4", 1.6, 55, -30), "ambient": 1.0, "glow": 0.8, "haze": 0.0012,

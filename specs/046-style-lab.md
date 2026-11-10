@@ -177,6 +177,20 @@ A lived-in pass, tied to the climb in `docs/game-design.md` (food corner, first 
 
 Same folders. Output `docs/art/stylelab/round-3/` and a new comparison page.
 
+## Round 4: vibe frames (human, 2026-11-10: "what's still missing is the vibe the players get ... how it all clicks
+together is more important than the models")
+Concept frames, not models: quick scenes from the existing kit plus simple new pieces, rendered with an illustration
+look (ink outlines, warmer grade) so nobody mistakes them for final art. Six frames:
+1. **Morning clean-up:** small cleaning robots sweep the pavement, shops open, a neighbour walks a dog, a hen crosses.
+2. **The automat hall (stage 4):** a wall of little lit windows with dishes, a robot arm at the stove, a conveyor,
+   players supervising.
+3. **The guest's view:** from a seat at a table: a plate in front, booths, other guests, the pass with cooks, a robot
+   runner with a tray, the street through the window.
+4. **Rush hour, co-op:** many players in one kitchen, tickets everywhere, steam.
+5. **The festival competition (stage 5):** night, two rival booths, judges, a crowd, a split-flap scoreboard.
+6. **The town from above:** restaurants, rooftop gardens, a greenhouse dome, a monorail, at sunset.
+Animals live in the town as neighbours (D27). Output `docs/art/stylelab/round-4/` and a vibe page.
+
 ## Open questions
 0. **Real-world cultures in the town?** So far the world has only its own fictional history (D27, D28). Can a
    business be "Mexican-inspired" or "Japanese-inspired", or do we invent fictional regional cuisines that echo real
@@ -245,6 +259,16 @@ Round 3 (2026-11-10, Opus):
   (noon, sunset), the cart, the van, the round 2 street lived-in.
 - For the game later: decals and a prop kit for the mess, a spec for the dirt layer (when it appears, how cleaning
   removes it), a licensed handwriting font.
+
+Round 4 (2026-11-10, Opus):
+- Page: https://claude.ai/artifact/EgwBtyTz9JF99gQ2fvY8Bu (source `docs/art/stylelab/round-4/compare.html`),
+  six frames rendered by `tools/blender/stylelab/render_round4.py` (one Blender process per frame; a single process
+  crashed on the sixth frame after the outline passes).
+- `lab/concept.py`: sweeper and runner robots, a robot arm, plated dishes, drinks, tables, booths, chairs, pendants,
+  steam, ticket rail, string lights, a random crowd, a dog, hens, birds, town blocks, a garden dome, a monorail.
+- People can sit (`Look.sit`): the body drops onto a 0.45 m seat, thighs forward, hands on the table.
+- `lab/scene4.py`: the six frames and the illustration look (Freestyle ink outlines; the haze box is excluded).
+  New lights: morning and interior.
 
 ## Blockers
 (none)
