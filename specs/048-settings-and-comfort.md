@@ -1,7 +1,7 @@
 ---
 id: 048
 title: Settings and comfort (graphics, audio, controls, rebinding)
-status: draft
+status: approved
 owner: architect
 builder: sonnet
 ---

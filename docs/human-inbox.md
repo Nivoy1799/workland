@@ -55,8 +55,14 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+11. **Spec 046 v2 (town time, shifts, progression).** Rewritten after your feedback: a town clock that never skips,
+    personal clock in and out with a shift summary, three gratification loops (every order with streaks, your shift,
+    long term: player levels plus shop reputation), owner cash and helper wages. Decisions, with defaults in brackets:
+    game mode for EA [co-op sessions now, persistent town later with the same rules], progress tied to [player and
+    shop], day length [48 real minutes], helper wage [fixed per game hour, owner can change it]. 046 is built only
+    after you approve it.
 10. **Early Access plan (your new goal).** See docs/early-access.md. After the current queue Claude builds 006 (AI
-    gateway, already approved). Four new drafts need your OK: **046** days and progression (save, rating, unlocks),
+    gateway, already approved). Approved 2026-11-10: **047** and **048**. Still need your OK: **046** (now v2, question 11) days and progression (save, rating, unlocks),
     **047** main menu and joining (Steam invite, lobby, rejoin), **048** settings and comfort, **049** release
     stability. Default: Claude waits for your approval before building them. Also open for you: O4 backend, O5 hoster,
     O6 moderation, O7 player cap (after the load test in 045).

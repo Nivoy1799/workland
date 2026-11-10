@@ -1,7 +1,7 @@
 ---
 id: 047
 title: Main menu and joining (title screen, host, join via Steam or IP, lobby, rejoin)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
