@@ -210,6 +210,9 @@ namespace Worktown.Game.Net
         /// <summary>True while a predicted look is drawn (pending, or confirmed and waiting for the state to catch up).</summary>
         internal bool HasPrediction => _look.HasPrediction;
 
+        /// <summary>041 review: a predicted place or drop of this item is still waiting for the server.</summary>
+        internal bool HasRestPrediction => _look.HasRestPrediction;
+
         /// <summary>The prediction is over (see <see cref="ItemLook.EndPrediction"/>).</summary>
         internal void EndPrediction(bool confirmed) => _look.EndPrediction(confirmed, Time.unscaledTime);
 

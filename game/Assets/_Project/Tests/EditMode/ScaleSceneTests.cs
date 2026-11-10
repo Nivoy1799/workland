@@ -87,9 +87,17 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(2, stoves);
 
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(24, surfaces.Count); // spec 030: the griddle's deck; spec 039: twelve more tops
+                Assert.AreEqual(27, surfaces.Count); // spec 030: the griddle's deck; spec 039: twelve more tops; spec 042: three cup spots
                 foreach (PlaceSurface surface in surfaces)
                 {
+                    if (surface.IsCupSpot)
+                    {
+                        // Spec 042: a tap's cup spot is the drink dispenser's drip tray on the front counter.
+                        Assert.AreEqual(1, surface.SpotCount, surface.name + ": one cup");
+                        Assert.AreEqual(ArtSizeTable.ServingCounterHeight + DrinkArtRules.TrayTop, surface.SpotWorldPosition(0).y, 0.005f,
+                            surface.name + " rests on the drip tray");
+                        continue;
+                    }
                     // Spec 039: the front counter's tops rest on the counter (1.05 m), every other top on the worktop height.
                     Transform run = FrontRunOf(surface);
                     float height = run != null ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;

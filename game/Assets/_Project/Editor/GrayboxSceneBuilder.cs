@@ -1599,6 +1599,39 @@ namespace Worktown.Game.Editor
             return station;
         }
 
+        /// <summary>Spec 042: the object name of a tap's cup spot ("Cup spot 0" under the lemonade tap).</summary>
+        public const string CupSpotName = "Cup spot";
+        /// <summary>Spec 042: a cup spot's top (m): one spot (PlaceSpots: under both margins), narrower than the taps' spacing.</summary>
+        public const float CupSpotSize = 0.16f;
+
+        /// <summary>
+        /// Spec 042: a one-spot place surface on the drip tray under each tap (DrinkArtRules.CupUnderTap, where the stream lands), flagged
+        /// as that tap's cup spot: a cup put there snaps under the spout and the tap pours into it. A child of the dispenser, so its spot
+        /// turns with it; a thin aim collider at the tray's top (inside the dispenser's aim box: the interactor aims at it through the body).
+        /// </summary>
+        private static void CreateCupSpots(List<PlaceSurface> surfaces, Station dispenser)
+        {
+            Vector3 down = new Vector3(0f, -DrinkArtRules.Height * 0.5f, 0f); // DrinkArtRules' positions start at the counter top
+            for (int tap = 0; tap < DrinkRules.TapCount; tap++)
+            {
+                var go = new GameObject(CupSpotName + " " + tap);
+                go.transform.SetParent(dispenser.transform, false);
+                go.transform.localPosition = DrinkArtRules.CupUnderTap(tap) + down;
+                var box = go.AddComponent<BoxCollider>();
+                box.size = new Vector3(CupSpotSize, 0.02f, CupSpotSize);
+                box.center = new Vector3(0f, -0.005f, 0f);
+                go.isStatic = true;
+                var surface = go.AddComponent<PlaceSurface>();
+                SetField(surface, "_index", surfaces.Count);
+                SetField(surface, "_size", new Vector2(CupSpotSize, CupSpotSize));
+                SetField(surface, "_topY", 0f);
+                SetField(surface, "_isCupSpot", true);
+                SetField(surface, "_dispenserIndex", dispenser.Index);
+                SetField(surface, "_tap", tap);
+                surfaces.Add(surface);
+            }
+        }
+
         // ---- Spec 036: the seitan spit ----
 
         public const string SpitName = "Spit";
@@ -2076,7 +2109,8 @@ namespace Worktown.Game.Editor
             // Spec 032: the register on the front counter next to the serving counter (appended last, so the earlier indices stay).
             stations.Add(CreateRegister(catalog, parent.transform, stations.Count));
             // Spec 033: the drink dispenser on the front counter, left of the serving counter (appended last, so the earlier indices stay).
-            stations.Add(CreateDrinkDispenser(catalog, parent.transform, stations.Count));
+            Station drinks = CreateDrinkDispenser(catalog, parent.transform, stations.Count);
+            stations.Add(drinks);
             // Spec 034: the ordering terminal on the back wall above the landing worktop (appended last, so the earlier indices stay).
             stations.Add(CreateTerminal(catalog, parent.transform, stations.Count));
             // Spec 035: the cleaning stations (appended last, so the earlier indices stay): the dish return on the front counter, the sink
@@ -2122,6 +2156,8 @@ namespace Worktown.Game.Editor
             Transform[] frontRuns = CreateFrontCounter(parent.transform, catalog);
             // Spec 039: every counter-height top takes items (PlaceCoverage); appended, so no earlier index moves.
             CreatePlaceAnywhereTops(surfaces, frontRuns, stoveA, stoveB, fryer, assembly, sink, shelf);
+            // Spec 042: a cup spot under each tap of the drink dispenser (appended, so no earlier index moves).
+            CreateCupSpots(surfaces, drinks);
             CreateShopWalls(parent.transform);
             Transform[] deliverySpots = CreateBackDoor(parent.transform); // spec 034
             SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);

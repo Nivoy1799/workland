@@ -20,6 +20,8 @@ namespace Worktown.Game.Tutorial
         private StationButton _fryerPower, _spitKnob;
         private readonly StationButton[] _fryerButtons = new StationButton[FryerRules.BasketsPerFryer];
         private readonly Vessel[] _baskets = new Vessel[FryerRules.BasketsPerFryer];
+        private Worktown.Game.Net.PlaceSurface _lemonadeSpot; // spec 042: the lemonade tap's cup spot
+        private static readonly Collider[] CupProbe = new Collider[8];
         private float _nextLookup;
         private bool _found;
         private readonly List<Vessel> _plates = new List<Vessel>();
@@ -42,7 +44,8 @@ namespace Worktown.Game.Tutorial
         /// <summary>Finds the objects (at most once a second while one is missing).</summary>
         public void Refresh(float now)
         {
-            if (_found && _board != null && _assembly != null && _fryer != null && _counter != null && _baskets[0] != null) return;
+            if (_found && _board != null && _assembly != null && _fryer != null && _counter != null && _baskets[0] != null && _lemonadeSpot != null)
+                return;
             if (now < _nextLookup) return;
             _nextLookup = now + 1f;
             foreach (StockSlot slot in Object.FindObjectsByType<StockSlot>(FindObjectsSortMode.None))
@@ -91,6 +94,8 @@ namespace Worktown.Game.Tutorial
                 else if (b.Station == _spit && b.Option == SpitRules.KnobOption) _spitKnob = b;
             }
             _knife = Object.FindFirstObjectByType<Knife>();
+            foreach (Worktown.Game.Net.PlaceSurface spot in Object.FindObjectsByType<Worktown.Game.Net.PlaceSurface>(FindObjectsSortMode.None))
+                if (spot.IsCupSpot && spot.CupTap == 0 && (_drinks == null || spot.DispenserIndex == _drinks.Index)) _lemonadeSpot = spot;
             _found = true;
         }
 
@@ -122,8 +127,30 @@ namespace Worktown.Game.Tutorial
                 case TutorialTarget.Terminal: return _terminal;
                 case TutorialTarget.SpitKnob: return _spitKnob != null ? (Component)_spitKnob : _spit;
                 case TutorialTarget.SpitCone: return Slot(_spit, SpitRules.ConeTool);
+                case TutorialTarget.LemonadeCup: // spec 042
+                {
+                    Food cup = LemonadeSpotCup();
+                    return cup != null ? (Component)cup : Slot(_drinks, 0);
+                }
                 default: return null;
             }
+        }
+
+        /// <summary>Spec 042: the cup standing on the lemonade tap's spot (what lies there, a cup), or null.</summary>
+        public Food LemonadeSpotCup()
+        {
+            if (_lemonadeSpot == null) return null;
+            Worktown.Game.Net.Pickup item = Worktown.Game.Net.PickupService.OccupantAt(_lemonadeSpot.SpotWorldPosition(0), CupProbe);
+            return item != null && item.TryGetComponent(out Food food) && FoodLookRules.IsCup(food.Look.Value) ? food : null;
+        }
+
+        /// <summary>Spec 042: <see cref="LemonadeSpotCup"/> as the tutorial's rules see it (DrinkRules.SpotByte).</summary>
+        public byte LemonadeSpotByte()
+        {
+            Food cup = LemonadeSpotCup();
+            if (cup == null) return DrinkRules.NoSpotCup;
+            FoodLook look = cup.Look.Value;
+            return DrinkRules.SpotByte(true, look.Kind == FoodLook.KindLidded, DrinkRules.TapOfDrinkByte(look.Ingredient), look.Shape);
         }
 
         private static Component Slot(Station station, int option)

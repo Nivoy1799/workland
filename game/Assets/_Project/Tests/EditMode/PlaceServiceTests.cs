@@ -88,6 +88,61 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(PickupOutcome.Ok, Place(spots, Potato, 3));
         }
 
+        /// <summary>
+        /// 041 review: the server's whole place step (PickupService.PlanPlace, which TryPlace runs before it moves anything): the packed
+        /// wheel turn reaches the rest pose, and a step out of range is refused before any check or move.
+        /// </summary>
+        [Test]
+        public void TryPlace_TurnTwo_TurnsTheRestNinetyDegrees_StepEight_IsRefusedWithNothingMoved()
+        {
+            var go = new GameObject("Worktop under test");
+            try
+            {
+                go.transform.SetPositionAndRotation(new Vector3(2f, 0f, 3f), Quaternion.Euler(0f, 30f, 0f));
+                var surface = go.AddComponent<PlaceSurface>();
+                var so = new UnityEditor.SerializedObject(surface);
+                so.FindProperty("_index").intValue = Surface;
+                so.FindProperty("_size").vector2Value = new Vector2(1f, 0.6f);
+                so.FindProperty("_topY").floatValue = 0.9f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                Assert.Greater(surface.SpotCount, 1);
+                var spots = new PlaceSpots();
+                Vector3 player = surface.SpotWorldPosition(1) + go.transform.rotation * new Vector3(0f, -0.9f, -0.8f);
+                Quaternion tilt = Quaternion.Euler(90f, 0f, 0f); // a knife lies flat
+                int probes = 0;
+                bool Occupied(Vector3 at)
+                {
+                    probes++;
+                    return false;
+                }
+
+                Assert.AreEqual(PickupOutcome.Ok, PickupService.PlanPlace(spots, true, Surface, surface, PlaceTurn.Pack(1, 0), player, false, tilt,
+                    0.02f, Occupied, out int plain, out Pose rest));
+                Assert.AreEqual(1, plain);
+                Assert.AreEqual(PickupOutcome.Ok, PickupService.PlanPlace(spots, true, Surface, surface, PlaceTurn.Pack(1, 2), player, false, tilt,
+                    0.02f, Occupied, out int turnedSpot, out Pose turned));
+                Assert.AreEqual(1, turnedSpot, "the turn rides above the spot, the spot is the same");
+                Assert.AreEqual(Vector3.Distance(rest.position, turned.position), 0f, 1e-5f, "it lands on the same spot");
+                Assert.AreEqual(0f, Vector3.Distance(surface.SpotWorldPosition(1) + go.transform.up * 0.02f, rest.position), 1e-5f, "its bottom on the top");
+                Vector3 a = rest.rotation * Vector3.up, b = turned.rotation * Vector3.up; // the knife's long side, lying flat
+                Assert.AreEqual(90f, Vector3.SignedAngle(Vector3.ProjectOnPlane(a, Vector3.up), Vector3.ProjectOnPlane(b, Vector3.up), Vector3.up), 0.01f,
+                    "two wheel steps turn the rest 90 degrees about the vertical");
+                Assert.AreEqual(Vector3.Angle(a, Vector3.up), Vector3.Angle(b, Vector3.up), 0.01f, "the tilt stays");
+
+                int outOfRange = 1 | (PlaceTurn.Steps << PlaceTurn.SpotBits);
+                probes = 0;
+                Assert.AreEqual(PickupOutcome.NotFound, PickupService.PlanPlace(spots, true, Surface, surface, outOfRange, player, false, tilt,
+                    0.02f, Occupied, out int refused, out Pose none));
+                Assert.AreEqual(-1, refused);
+                Assert.AreEqual(default(Pose), none, "no rest pose: nothing to move it to");
+                Assert.AreEqual(0, probes, "refused before the spot is even looked at");
+                Assert.IsFalse(spots.IsTaken(Surface, 1), "no spot taken");
+                Assert.AreEqual(PickupOutcome.NothingHeld, PickupService.PlanPlace(spots, false, Surface, surface, PlaceTurn.Pack(1, 2), player,
+                    false, tilt, 0.02f, Occupied, out _, out _), "the other checks still run in their order");
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
         [Test]
         public void ReachIsTheSameRuleAsPickups()
         {

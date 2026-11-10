@@ -7,13 +7,15 @@ namespace Worktown.Game.Cooking
     /// (prompts, the stream, the cup's level). The dispenser has <see cref="ToolCount"/> tools, each a slot of the station
     /// (<see cref="StockSlot"/>, slot option = tool): three taps (lemonade, iced tea, soda), the cup stack and the lid stack.
     /// Requests (RequestStation, no new RPC), exactly like the 031 sauce dispenser: a tap's <see cref="PourStartOption"/> on press and
-    /// <see cref="PourStopOption"/> on release (the server measures the time between their arrivals with its own ticks; the cup in the
-    /// hands fills at <see cref="Drinks.PourRate"/>, the server stops it at <see cref="Drinks.MaxMl"/>); the cup stack's
-    /// <see cref="CupOption"/> (empty hands take a cup) and the lid stack's <see cref="LidOption"/> (a filled cup in the hands gets
+    /// <see cref="PourStopOption"/> on release (the server measures the time between their arrivals with its own ticks; the cup on the
+    /// tap's spot fills at <see cref="Drinks.PourRate"/>, the server stops it at <see cref="Drinks.MaxMl"/>); the cup stack's
+    /// <see cref="CupOption"/> (empty hands take a cup) and the lid stack's <see cref="LidOption"/> (a filled cup in the hands, else on a spot, gets
     /// its lid). The station's StationContents byte: a pouring bit per tap and the spill bit (<see cref="SpillBit"/>, set by a pour
     /// over the brim; spec 035's cleaning will clear it). A cup's coarse look: <see cref="FoodLook.KindCup"/> or
     /// <see cref="FoodLook.KindLidded"/>, the drink in the ingredient byte (<see cref="DrinkByte"/>), the level bucket in the shape
     /// byte (<see cref="LevelOf(string)"/>). Millilitres never leave the server (D21); the pouring player predicts its own.
+    /// Spec 042: a tap pours into the cup standing on its spot on the drip tray (a one-spot place surface per tap), not into the hands;
+    /// the lid stack lids the cup in the hands, else the first filled open cup on a spot.
     /// </summary>
     public static class DrinkRules
     {
@@ -162,8 +164,9 @@ namespace Worktown.Game.Cooking
         // ---- what a client may offer (the server checks again) ----
 
         /// <summary>
-        /// Whether tap <paramref name="tap"/> can pour into what the hands hold, as clients see it: a cup (empty, or open with the same
-        /// drink and room left), and the tap free (<paramref name="flags"/>; the interactor clears its own pour's bit).
+        /// Whether tap <paramref name="tap"/> can pour into a cup, as clients see it: a cup (empty, or open with the same drink and room
+        /// left), and the tap free (<paramref name="flags"/>; the interactor clears its own pour's bit). Spec 042: the cup is the one on
+        /// that tap's spot (<see cref="CanPourOnSpot"/>), never the one in the hands.
         /// </summary>
         public static CookOutcome CanPour(bool holdsCup, bool lidded, int cupTap, byte level, int tap, byte flags)
         {
@@ -174,6 +177,49 @@ namespace Worktown.Game.Cooking
             if (level >= LevelSpilled) return CookOutcome.CupFull;
             return IsPouring(flags, tap) ? CookOutcome.DispenserBusy : CookOutcome.Ok;
         }
+
+        // ---- Spec 042: a cup spot on the drip tray under each tap ----
+
+        /// <summary>
+        /// Spec 042: what a client sees of the cup standing on a tap's spot, in one byte (no synced field: it is read from the cup's own
+        /// look and position): <see cref="SpotCupBit"/> a cup stands there, <see cref="SpotLidBit"/> its lid, bits 3-5 its drink byte
+        /// (<see cref="DrinkByte"/>: 0 empty, 1 + tap), bits 0-2 its level.
+        /// </summary>
+        public const byte SpotCupBit = 0x80, SpotLidBit = 0x40;
+
+        /// <summary>No cup on the spot.</summary>
+        public const byte NoSpotCup = 0;
+
+        public static byte SpotByte(bool cup, bool lidded, int cupTap, byte level)
+        {
+            if (!cup) return NoSpotCup;
+            int drink = IsTap(cupTap) ? 1 + cupTap : 0;
+            return (byte)(SpotCupBit | (lidded ? SpotLidBit : 0) | (drink << 3) | (level & 0x07));
+        }
+
+        public static bool HasSpotCup(byte spot) => (spot & SpotCupBit) != 0;
+        public static bool SpotLidded(byte spot) => HasSpotCup(spot) && (spot & SpotLidBit) != 0;
+        public static int SpotCupTap(byte spot) => HasSpotCup(spot) ? TapOfDrinkByte((byte)((spot >> 3) & 0x07)) : -1;
+        public static byte SpotLevel(byte spot) => HasSpotCup(spot) ? (byte)(spot & 0x07) : LevelEmpty;
+
+        /// <summary>
+        /// Spec 042: whether a cup fits on tap <paramref name="tap"/>'s spot (server and clients): an empty cup, or an open cup of that
+        /// tap's drink (full or not: it may come back to be lidded or topped up). NeedsCup (not a cup), CupClosed (lidded), OtherDrink.
+        /// </summary>
+        public static CookOutcome CanStand(bool isCup, bool lidded, int cupTap, byte level, int tap)
+        {
+            if (!IsTap(tap)) return CookOutcome.InvalidOption;
+            if (!isCup) return CookOutcome.NeedsCup;
+            if (lidded) return CookOutcome.CupClosed;
+            return level != LevelEmpty && cupTap != tap ? CookOutcome.OtherDrink : CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 042: whether tap <paramref name="tap"/> can pour into the cup on its spot (<paramref name="spot"/>, as clients see it).</summary>
+        public static CookOutcome CanPourOnSpot(byte spot, int tap, byte flags) =>
+            CanPour(HasSpotCup(spot), SpotLidded(spot), SpotCupTap(spot), SpotLevel(spot), tap, flags);
+
+        /// <summary>Spec 042: whether a lid fits the cup on a spot (<paramref name="spot"/>): a filled, open cup.</summary>
+        public static CookOutcome CanLidOnSpot(byte spot) => CanLid(HasSpotCup(spot), SpotLidded(spot), SpotLevel(spot));
 
         /// <summary>Whether a lid fits what the hands hold: an open cup with a drink in it.</summary>
         public static CookOutcome CanLid(bool holdsCup, bool lidded, byte level)

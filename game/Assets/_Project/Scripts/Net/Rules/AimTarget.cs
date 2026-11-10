@@ -149,11 +149,43 @@ namespace Worktown.Game.Net.Rules
         /// the tool, <see cref="StoveFlags"/> the dispenser's byte (who pours, the spill; the interactor clears its own pour's bit),
         /// <see cref="Name"/> the tap's drink, <see cref="Price"/> the price shown (a cup with a full pour of the drink, or -1).
         /// </summary>
-        public static AimTarget DrinkTool(int tool, byte flags, string name, long price)
+        public static AimTarget DrinkTool(int tool, byte flags, string name, long price) => DrinkTool(tool, flags, name, price, DrinkRules.NoSpotCup);
+
+        /// <summary>
+        /// Spec 042: <see cref="DrinkTool(int, byte, string, long)"/> with the cup on a spot as this client sees it in <see cref="Mode"/>
+        /// (DrinkRules.SpotByte): for a tap, the cup on that tap's spot; for the lid stack, the first filled open cup on a spot.
+        /// </summary>
+        public static AimTarget DrinkTool(int tool, byte flags, string name, long price, byte spotCup)
         {
             return new AimTarget(AimKind.Station, StationKind.DrinkDispenser, default, 0, null, tool, flags, name, price, PlaceSpots.None,
-                false, false);
+                false, false, spotCup);
         }
+
+        /// <summary>
+        /// Spec 042: a tap's cup spot on the drip tray (a one-spot place surface): <see cref="Station"/> the drink dispenser,
+        /// <see cref="Option"/> the tap, <see cref="SpotIndex"/> its spot (PlaceSpots.None when a cup stands there), <see cref="Name"/>
+        /// the tap's drink.
+        /// </summary>
+        public static AimTarget CupSpot(int spotIndex, int tap)
+        {
+            return new AimTarget(AimKind.Spot, StationKind.DrinkDispenser, default, 0, null, tap, 0, DrinkRules.DrinkName(tap), -1,
+                spotIndex < 0 ? PlaceSpots.None : spotIndex, false, false);
+        }
+
+        /// <summary>Spec 042: a cup spot target (<see cref="CupSpot"/>).</summary>
+        public bool IsCupSpot => Kind == AimKind.Spot && Station == StationKind.DrinkDispenser;
+
+        /// <summary>
+        /// Spec 042: a cup standing on a tap's spot that another player pours into (<see cref="IsBusy"/>): it cannot be taken until the pour
+        /// ends (the server refuses it too).
+        /// </summary>
+        public static AimTarget BusyCup(string name)
+        {
+            return new AimTarget(AimKind.Pickup, StationKind.DrinkDispenser, default, 0, null, 1, 0, name, -1, PlaceSpots.None, false, false);
+        }
+
+        /// <summary>Spec 042: a pickup someone else is using (<see cref="BusyCup"/>).</summary>
+        public bool IsBusy => Kind == AimKind.Pickup && Station == StationKind.DrinkDispenser && Option == 1;
 
         /// <summary>
         /// Spec 032: a slot of the register (Shop.RegisterRules: <see cref="Option"/> the slot), with what clients see of the payment:

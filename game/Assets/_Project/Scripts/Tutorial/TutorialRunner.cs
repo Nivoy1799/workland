@@ -353,6 +353,7 @@ namespace Worktown.Game.Tutorial
             s.SinkBasin = CleaningRules.BasinOf(ByteOf(_targets.Sink));
             s.DirtyWaiting = ByteOf(_targets.DishReturn);
             s.SpitFlags = ByteOf(_targets.Spit);
+            s.LemonadeSpot = _targets.LemonadeSpotByte(); // spec 042
             int tray = SpitTray();
             _events |= _watch.Observe(_player.ResultVersion, _player.LastCookOutcome == CookOutcome.Ok, s.SinkBasin, tray, now);
             s.Events = _events;

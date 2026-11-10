@@ -38,8 +38,9 @@ namespace Worktown.Game.Net.Rules
             {
                 case AimKind.Button: return InteractionAction.Press;
                 case AimKind.Spot:
+                    if (target.IsCupSpot && CupSpotCheck(held, target) != CookOutcome.Ok) return InteractionAction.None; // spec 042
                     return held.IsHolding && target.SpotIndex >= 0 ? InteractionAction.Place : InteractionAction.None;
-                case AimKind.Pickup: return held.IsHolding ? InteractionAction.None : InteractionAction.PickUp;
+                case AimKind.Pickup: return held.IsHolding || target.IsBusy ? InteractionAction.None : InteractionAction.PickUp; // 042: busy cup
                 case AimKind.Vessel: return VesselAction(held, target);
                 case AimKind.Station: return StationAction(held, target);
                 default: return InteractionAction.None;
@@ -217,8 +218,9 @@ namespace Worktown.Game.Net.Rules
         // ---- Spec 033: the drink dispenser ----
 
         /// <summary>
-        /// Spec 033, a tool of the drink dispenser: a tap fills the cup in the hands (an empty cup, or an open cup of its drink with room;
-        /// the tap free), the cup stack gives empty hands a cup, the lid stack lids a filled open cup. A pick-up in flight gets nothing.
+        /// Spec 033, a tool of the drink dispenser: a tap fills the cup on its spot (spec 042: an empty cup, or an open cup of its drink
+        /// with room, standing on the drip tray under it; the tap free; whatever the hands hold), the cup stack gives empty hands a cup,
+        /// the lid stack lids the filled open cup in the hands, else the first one on a spot. A pick-up in flight gets nothing.
         /// </summary>
         private static InteractionAction DrinkToolAction(Held held, AimTarget target)
         {
@@ -236,7 +238,7 @@ namespace Worktown.Game.Net.Rules
             int tool = target.Option;
             if (DrinkRules.IsTap(tool))
             {
-                CookOutcome pour = DrinkRules.CanPour(held.IsCup, held.CupLidded, held.CupTap, held.CupLevel, tool, target.StoveFlags);
+                CookOutcome pour = DrinkRules.CanPourOnSpot(target.Mode, tool, target.StoveFlags); // spec 042: the cup on its spot
                 return pour == CookOutcome.Ok && IsOutOfStock(target) ? CookOutcome.OutOfStock : pour; // spec 034: the tap's kegs
             }
             if (tool == DrinkRules.CupTool)
@@ -244,9 +246,38 @@ namespace Worktown.Game.Net.Rules
                 CookOutcome cup = DrinkRules.CanTakeCup(held.IsHolding);
                 return cup == CookOutcome.Ok && IsOutOfStock(target) ? CookOutcome.OutOfStock : cup; // spec 034: the stack's cups
             }
-            if (tool == DrinkRules.LidTool) return DrinkRules.CanLid(held.IsCup, held.CupLidded, held.CupLevel);
+            if (tool == DrinkRules.LidTool) // spec 042: the cup in the hands, else the first filled open cup on a spot
+                return held.IsCup ? DrinkRules.CanLid(true, held.CupLidded, held.CupLevel) : DrinkRules.CanLidOnSpot(target.Mode);
             return CookOutcome.InvalidOption;
         }
+
+        /// <summary>Spec 042: whether what the hands hold goes on this cup spot (DrinkRules.CanStand), as the server would answer it.</summary>
+        private static CookOutcome CupSpotCheck(Held held, AimTarget target)
+        {
+            if (!held.IsHolding) return CookOutcome.HandsFull; // nothing to put down (no prompt)
+            return DrinkRules.CanStand(held.IsCup, held.CupLidded, held.CupTap, held.CupLevel, target.Option);
+        }
+
+        /// <summary>Spec 042: why the held thing does not go on a cup spot, or null.</summary>
+        private static string CupSpotReason(Held held, AimTarget target)
+        {
+            if (held.IsPending) return null;
+            switch (CupSpotCheck(held, target))
+            {
+                case CookOutcome.NeedsCup: return "Only a cup goes under the tap";
+                case CookOutcome.CupClosed: return "It has its lid";
+                case CookOutcome.OtherDrink: return "That cup has another drink";
+                case CookOutcome.Ok: return target.SpotIndex < 0 ? "A cup is already there" : null;
+                default: return null;
+            }
+        }
+
+        /// <summary>Spec 042: "Left click · put the empty cup under the lemonade tap".</summary>
+        public static string CupSpotPrompt(Held held, AimTarget target) =>
+            Click("put " + (string.IsNullOrEmpty(held.Name) ? "the cup" : held.Name) + " under the " + DrinkRules.DrinkName(target.Option) + " tap");
+
+        /// <summary>Spec 042: a cup another player pours into cannot be taken now.</summary>
+        public const string BusyCupText = "Someone is pouring into it";
 
         /// <summary>Spec 033: why a dispenser tool does nothing now (shown grey), or null.</summary>
         public static string DrinkToolReason(Held held, AimTarget target)
@@ -254,7 +285,9 @@ namespace Worktown.Game.Net.Rules
             if (held.IsPending) return null;
             switch (DrinkCheck(held, target))
             {
-                case CookOutcome.NeedsCup: return held.IsHolding ? "That needs a cup" : "Take a cup first";
+                case CookOutcome.NeedsCup: // spec 042: a tap needs a cup on its spot; the lid stack a filled cup
+                    if (DrinkRules.IsTap(target.Option)) return held.IsCup ? "Put the cup on the tray under the tap" : "Put a cup under the tap first";
+                    return held.IsHolding ? "That needs a cup" : "Take a cup first";
                 case CookOutcome.CupClosed: return "It has its lid";
                 case CookOutcome.OtherDrink: return "That cup has another drink";
                 case CookOutcome.CupFull: return "The cup is full";
@@ -577,7 +610,10 @@ namespace Worktown.Game.Net.Rules
                 return OutOfStockText; // spec 034: also with full hands (it says why the slot looks empty)
             switch (target.Kind)
             {
-                case AimKind.Spot: return held.IsHolding ? "No room here" : null;
+                case AimKind.Spot:
+                    if (target.IsCupSpot) return CupSpotReason(held, target); // spec 042
+                    return held.IsHolding ? "No room here" : null;
+                case AimKind.Pickup: return target.IsBusy && !held.IsHolding ? BusyCupText : null; // spec 042
                 case AimKind.Vessel: return VesselReason(held, target);
                 case AimKind.Station:
                     if (Worktown.Game.Shop.CleaningRules.IsCleaningStation(target.Station) || target.Station == StationKind.PlateShelf
@@ -654,6 +690,7 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));
                 case InteractionAction.Pour: return Click("pour into the " + VesselRules.Name(target.Vessel));
                 case InteractionAction.Sell: return Click("sell " + (held.IsVessel ? held.ContentName ?? "the plate" : held.Name));
+                case InteractionAction.Place when target.IsCupSpot: return CupSpotPrompt(held, target); // spec 042: no turn for a round cup
                 case InteractionAction.Place:
                     // Spec 041: the right click is the put-down button (the left click places too); the wheel turns it first.
                     return RightClickKey + " · put " + held.Name + (target.IsBurner ? " on the burner" : " here") + "   " + WheelKey + " · turn";

@@ -103,12 +103,14 @@ namespace Worktown.Game.Cooking
         {
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
             if (_pickups != null) _pickups.ItemMoved += OnItemMoved;
+            if (_pickups != null) _pickups.SetGuards(CanTakeItem, CanPlaceItem); // spec 042: the cup spots
             if (_cleaning != null) _cleaning.Bind(this); // spec 035
         }
 
         private void OnDestroy()
         {
             if (_pickups != null) _pickups.ItemMoved -= OnItemMoved;
+            if (_pickups != null) _pickups.SetGuards(null, null);
             if (_networkManager != null && _networkManager.ServerManager != null)
                 _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
         }
@@ -520,8 +522,8 @@ namespace Worktown.Game.Cooking
         /// <summary>
         /// Spec 033: the dispenser's tools (RequestStation; reach was checked but for a release): a tap's press and release
         /// (<see cref="DrinkRules.PourStartOption"/> / <see cref="DrinkRules.PourStopOption"/>), the server measuring the time between
-        /// their arrivals in its own ticks and filling the cup in the hands; the cup stack (<see cref="DrinkRules.CupOption"/>) and the lid
-        /// stack (<see cref="DrinkRules.LidOption"/>).
+        /// their arrivals in its own ticks and filling the cup on that tap's spot (spec 042); the cup stack (<see cref="DrinkRules.CupOption"/>)
+        /// and the lid stack (<see cref="DrinkRules.LidOption"/>: the cup in the hands, else the first filled open cup on a spot).
         /// </summary>
         private CookOutcome UseDrinks(PickupInteractor player, Station dispenser, int option)
         {
@@ -529,7 +531,7 @@ namespace Worktown.Game.Cooking
             if (DrinkRules.TryParsePour(option, out int tap, out bool start))
                 return start ? StartPour(player, dispenser, tap) : StopPour(player, dispenser, tap);
             if (option == DrinkRules.CupOption) return TakeCup(player);
-            if (option == DrinkRules.LidOption) return PutLid(player);
+            if (option == DrinkRules.LidOption) return PutLid(player, dispenser);
             return CookOutcome.InvalidOption;
         }
 
@@ -543,8 +545,7 @@ namespace Worktown.Game.Cooking
 
         private CookOutcome StartPour(PickupInteractor player, Station dispenser, int tap)
         {
-            int cup = HeldFoodId(player, out _);
-            CookOutcome started = DrinkSteps.Press(dispenser.Index, tap, player.OwnerId, cup, Tick, DrinkWalletOf(player));
+            CookOutcome started = DrinkSteps.Press(dispenser.Index, tap, player.OwnerId, Tick, DrinkWalletOf(player));
             if (started != CookOutcome.Ok) return started;
             _pourers[DrinkDesk.KeyOf(dispenser.Index, tap)] = player;
             RefreshDrinks(dispenser);
@@ -552,7 +553,7 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
-        /// The release: the cup in the hands gets the drink for the time held (or its top-up), the pour is charged once first (the cup when
+        /// The release: the cup on the tap's spot gets the drink for the time held (or its top-up), the pour is charged once first (the cup when
         /// it was empty plus the drink's share; DrinkDesk); a refused step changes nothing and charges nothing. A release with no pour of
         /// this player (refused at the press, or already stopped by the server) is harmless: Ok, nothing happens.
         /// </summary>
@@ -572,10 +573,10 @@ namespace Worktown.Game.Cooking
         private CookOutcome EndPour(PickupInteractor player, Station dispenser, int tap)
         {
             _pourers.Remove(DrinkDesk.KeyOf(dispenser.Index, tap));
-            int cup = HeldFoodId(player, out Food food);
-            CookOutcome made = DrinkSteps.End(dispenser.Index, tap, player.OwnerId, Tick, TickRate, cup, DrinkWalletOf(player), out DrinkDesk.PourResult r);
+            CookOutcome made = DrinkSteps.End(dispenser.Index, tap, player.OwnerId, Tick, TickRate, DrinkWalletOf(player), out DrinkDesk.PourResult r);
             RefreshDrinks(dispenser);
             if (made != CookOutcome.Ok) return made;
+            Food food = FoodById(r.CupObjectId);
             if (food != null) Publish(food, r.Cup);
             Debug.Log("[Kitchen] player " + player.OwnerId + " poured " + DrinkRules.DrinkOf(tap) + ": " + r.Poured.ToString("0") + " ml ("
                 + EconomyRules.Money(r.Cost) + "), the cup holds " + r.Total.ToString("0") + " ml: " + KitchenState.NameOf(r.Cup) + " q="
@@ -640,15 +641,59 @@ namespace Worktown.Game.Cooking
             }
         }
 
-        /// <summary>Spec 033: the lid stack puts a lid on the filled cup in the hands (free; a lid only on a filled cup, once).</summary>
-        private CookOutcome PutLid(PickupInteractor player)
+        /// <summary>
+        /// Spec 033: the lid stack puts a lid on the filled cup in the hands (free; a lid only on a filled cup, once). Spec 042: with no cup
+        /// in the hands, on the first filled open cup on a spot of this dispenser (DrinkDesk.LidTarget).
+        /// </summary>
+        private CookOutcome PutLid(PickupInteractor player, Station dispenser)
         {
-            int cup = HeldFoodId(player, out Food food);
+            int cup = DrinkSteps.LidTarget(dispenser.Index, HeldFoodId(player, out _));
             CookOutcome lidded = DrinkSteps.Lid(cup, out Item item);
             if (lidded != CookOutcome.Ok) return lidded;
+            Food food = FoodById(cup);
             if (food != null) Publish(food, item);
             Debug.Log("[Kitchen] player " + player.OwnerId + " put a lid on " + KitchenState.NameOf(item) + " q=" + KitchenState.QualityOf(item).ToString("0.00"));
             return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 042: the spawned food object <paramref name="objectId"/>, or null.</summary>
+        private Food FoodById(int objectId)
+        {
+            if (objectId < 0 || !_networkManager.ServerManager.Objects.Spawned.TryGetValue(objectId, out NetworkObject nob) || nob == null) return null;
+            return nob.TryGetComponent(out Food food) ? food : null;
+        }
+
+        /// <summary>Spec 042, server: PickupService's veto on a pick-up: not a cup another player pours into.</summary>
+        private bool CanTakeItem(PickupInteractor player, NetworkObject item)
+        {
+            if (player == null || item == null) return true;
+            CookOutcome can = DrinkSteps.CanTake(item.ObjectId, player.OwnerId);
+            if (can != CookOutcome.Ok) Debug.Log("[Kitchen] player " + player.OwnerId + " cannot take that cup: someone pours into it");
+            return can == CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 042, server: PickupService's veto on a place: a tap's cup spot takes only a cup that fits that tap.</summary>
+        private bool CanPlaceItem(NetworkObject item, PlaceSurface surface)
+        {
+            if (item == null || surface == null || !surface.IsCupSpot) return true;
+            CookOutcome can = DrinkSteps.CanPlace(item.ObjectId, surface.CupTap);
+            if (can != CookOutcome.Ok) Debug.Log("[Kitchen] that does not go under the " + DrinkRules.DrinkName(surface.CupTap) + " tap: " + can);
+            return can == CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 042, server: a food item was put on a cup spot, or moved anywhere else (picked up, handed over, dropped). Off its spot
+        /// mid-pour, the pour stops without a charge and the tap's bit goes off.
+        /// </summary>
+        private void OnFoodMoved(NetworkObject item, PlaceSurface surface)
+        {
+            bool onSpot = surface != null && surface.IsCupSpot;
+            if (!DrinkSteps.Moved(item.ObjectId, onSpot, onSpot ? surface.DispenserIndex : -1, onSpot ? surface.CupTap : -1,
+                    out int station, out int tap))
+                return;
+            _pourers.Remove(DrinkDesk.KeyOf(station, tap));
+            RefreshDrinks(station >= 0 && station < _stations.Length ? _stations[station] : null);
+            Debug.Log("[Kitchen] the cup was taken off the " + DrinkRules.DrinkName(tap) + " tap mid-pour: the pour stopped, nothing charged");
         }
 
         /// <summary>Spec 033: the player's wallet for a pour (free without an economy). Spec 034: from the tap's keg with the shop's stock.</summary>
@@ -1112,7 +1157,9 @@ namespace Worktown.Game.Cooking
 
         private void OnItemMoved(NetworkObject item, PlaceSurface surface)
         {
-            if (item == null || !_networkManager.IsServerStarted || !item.TryGetComponent(out Vessel vessel)) return;
+            if (item == null || !_networkManager.IsServerStarted) return;
+            if (item.TryGetComponent(out Food _)) OnFoodMoved(item, surface); // spec 042: the cup spots
+            if (!item.TryGetComponent(out Vessel vessel)) return;
             if (!VesselRules.StandsOnBurner(vessel.Kind)) return;
             int burner = surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner;
             _kitchen.SetVesselBurner(vessel.ObjectId, burner, Tick);

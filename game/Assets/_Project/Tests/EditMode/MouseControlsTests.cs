@@ -236,8 +236,11 @@ namespace Worktown.Game.Tests
             {
                 Assert.IsFalse(step.Text.Contains("Q "), step.Id + " still names Q");
                 Assert.IsFalse(step.Text.Contains("right click turns"), step.Id + " still turns with the right click");
-                Assert.IsFalse(step.Text.StartsWith("Click"), step.Id + " says which button");
+                // 041 review: every click names its button ("left click", "right click"), anywhere in the text.
+                Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(step.Text, @"(?<!left |right )click",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase), step.Id + " has a click without its button: " + step.Text);
             }
+            StringAssert.Contains("left click the terminal", TutorialSteps.Default[(int)TutorialStepId.TakePayment].Text);
             StringAssert.Contains("right click", TutorialSteps.FryKnifeText);
             Assert.IsFalse(TutorialSteps.FryKnifeText.Contains("Q "));
             TutorialStep cut = null;

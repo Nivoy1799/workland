@@ -33,6 +33,18 @@ namespace Worktown.Game.Net
         /// </summary>
         public event System.Action<NetworkObject, PlaceSurface> ItemMoved;
 
+        // Spec 042, server: the kitchen's vetoes (null: anything goes). A cup under another player's running pour cannot be taken; a
+        // tap's cup spot takes only a cup that fits that tap.
+        private System.Func<PickupInteractor, NetworkObject, bool> _canTake;
+        private System.Func<NetworkObject, PlaceSurface, bool> _canPlace;
+
+        /// <summary>Spec 042, server: sets the kitchen's vetoes on picking up (<paramref name="canTake"/>) and on placing (<paramref name="canPlace"/>).</summary>
+        public void SetGuards(System.Func<PickupInteractor, NetworkObject, bool> canTake, System.Func<NetworkObject, PlaceSurface, bool> canPlace)
+        {
+            _canTake = canTake;
+            _canPlace = canPlace;
+        }
+
         private readonly PickupRegistry _registry = new PickupRegistry();
         private readonly PlaceSpots _spots = new PlaceSpots();
         private readonly Collider[] _probe = new Collider[8];
@@ -71,6 +83,7 @@ namespace Worktown.Game.Net
                 return PickupOutcome.AlreadyHolding;
             if (!PickupRules.IsInReach(player.transform.position, pickup.transform.position))
                 return PickupOutcome.TooFar;
+            if (_canTake != null && !_canTake(player, target)) return PickupOutcome.Taken; // spec 042: someone pours into that cup
             if (!_registry.TryClaim(target.ObjectId, clientId))
                 return PickupOutcome.Taken;
 
@@ -93,31 +106,60 @@ namespace Worktown.Game.Net
         /// </summary>
         public PickupOutcome TryPlace(PickupInteractor player, int surfaceIndex, int packedSpot)
         {
-            if (!PlaceTurn.TryUnpack(packedSpot, out int spotIndex, out int turn)) spotIndex = -1;
             int clientId = player.Owner.ClientId;
             bool holding = _registry.TryGetHeldItem(clientId, out int itemId);
             PlaceSurface surface = surfaceIndex >= 0 && surfaceIndex < _surfaces.Length ? _surfaces[surfaceIndex] : null;
-            int spotCount = surface != null ? surface.SpotCount : 0;
-            bool validSpot = spotIndex >= 0 && spotIndex < spotCount;
-            Vector3 spot = validSpot ? surface.SpotWorldPosition(spotIndex) : Vector3.zero;
-            bool inReach = validSpot && PickupRules.IsInReach(player.transform.position, spot);
-            if (validSpot) FreeIfStale(surfaceIndex, spotIndex, spot);
-
-            PickupOutcome check = _spots.CheckPlace(holding, surface != null, spotCount, surfaceIndex, spotIndex, inReach);
-            if (check != PickupOutcome.Ok) return check;
-            if (IsSpotOccupied(spot, _probe)) return PickupOutcome.Taken;
-            if (!_networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out NetworkObject item)
-                || !item.TryGetComponent(out Pickup pickup))
-                return PickupOutcome.NotFound;
+            if (PlaceTurn.TryUnpack(packedSpot, out int unpacked, out _) && surface != null && unpacked >= 0 && unpacked < surface.SpotCount)
+                FreeIfStale(surfaceIndex, unpacked, surface.SpotWorldPosition(unpacked));
+            Pickup pickup = null;
+            NetworkObject item = null;
+            bool found = holding && _networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out item) && item.TryGetComponent(out pickup);
+            PickupOutcome planned = PlanPlace(_spots, holding, surfaceIndex, surface, packedSpot, player.transform.position,
+                found && pickup.IsHandleTool, found ? pickup.RestTilt : Quaternion.identity, found ? pickup.BottomOffset : 0f,
+                _isOccupied ??= spot => IsSpotOccupied(spot, _probe), out int spotIndex, out Pose rest);
+            if (planned != PickupOutcome.Ok) return planned;
+            if (!found) return PickupOutcome.NotFound;
+            // Spec 042: a tap's cup spot takes only a cup that fits its tap (the kitchen decides; nothing moves on a no).
+            if (_canPlace != null && !_canPlace(item, surface)) return PickupOutcome.Taken;
 
             _registry.TryRelease(itemId, clientId);
             item.RemoveOwnership();
-            // Spec 039: a tool lies with its handle towards where the server has the player (ToolRest); anything else as before.
-            Quaternion rest = PlaceTurn.Apply(ToolRest.RestRotation(pickup.IsHandleTool, pickup.RestTilt, surface.transform.rotation,
-                player.transform.position, spot), turn); // spec 041: the player's wheel turn on top of the server's rest
-            pickup.ServerPlaceAt(spot + surface.transform.up * pickup.BottomOffset, rest);
+            pickup.ServerPlaceAt(rest.position, rest.rotation);
             _spots.TryTake(surfaceIndex, spotIndex, itemId);
             ItemMoved?.Invoke(item, surface);
+            return PickupOutcome.Ok;
+        }
+
+        private System.Func<Vector3, bool> _isOccupied;
+
+        /// <summary>
+        /// 041 review, server, without the network: every check of <see cref="TryPlace"/> and where the item comes to rest, in its order.
+        /// The packed spot is unpacked first (PlaceTurn; a step of 8 or more is refused like an unknown spot, NotFound); then
+        /// PlaceSpots.CheckPlace (hands, surface, spot, reach to the spot from <paramref name="playerPosition"/>, the spot table), then
+        /// <paramref name="occupied"/> (something else lies there: Taken). On Ok, <paramref name="rest"/> is the item's pose on the spot:
+        /// its bottom (<paramref name="bottomOffset"/>) on the top, the resting tilt turned with the surface's yaw, a handle tool's handle
+        /// towards the player (ToolRest), turned by the wheel's steps (PlaceTurn.Apply). Changes nothing: the caller moves the item and
+        /// takes the spot.
+        /// </summary>
+        public static PickupOutcome PlanPlace(PlaceSpots spots, bool holding, int surfaceIndex, PlaceSurface surface, int packedSpot,
+            Vector3 playerPosition, bool handleTool, Quaternion restTilt, float bottomOffset, System.Func<Vector3, bool> occupied,
+            out int spotIndex, out Pose rest)
+        {
+            rest = default;
+            if (!PlaceTurn.TryUnpack(packedSpot, out spotIndex, out int turn)) spotIndex = -1;
+            int spotCount = surface != null ? surface.SpotCount : 0;
+            bool validSpot = spotIndex >= 0 && spotIndex < spotCount;
+            Vector3 spot = validSpot ? surface.SpotWorldPosition(spotIndex) : Vector3.zero;
+            bool inReach = validSpot && PickupRules.IsInReach(playerPosition, spot);
+            PickupOutcome check = spots != null
+                ? spots.CheckPlace(holding, surface != null, spotCount, surfaceIndex, spotIndex, inReach)
+                : PickupOutcome.NotFound;
+            if (check != PickupOutcome.Ok) return check;
+            if (occupied != null && occupied(spot)) return PickupOutcome.Taken;
+            // Spec 039: a tool lies with its handle towards where the server has the player (ToolRest); anything else as before.
+            Quaternion rotation = PlaceTurn.Apply(ToolRest.RestRotation(handleTool, restTilt, surface.transform.rotation, playerPosition, spot),
+                turn); // spec 041: the player's wheel turn on top of the server's rest
+            rest = new Pose(spot + surface.transform.up * bottomOffset, rotation);
             return PickupOutcome.Ok;
         }
 
@@ -126,16 +168,19 @@ namespace Worktown.Game.Net
         /// collider. Used by the server and by the client to pick a free spot (clients cannot see the server's
         /// spot table, but they see the items).
         /// </summary>
-        public static bool IsSpotOccupied(Vector3 spot, Collider[] buffer)
+        public static bool IsSpotOccupied(Vector3 spot, Collider[] buffer) => OccupantAt(spot, buffer) != null;
+
+        /// <summary>Spec 042: the free (not held) item lying on the spot (the same probe as <see cref="IsSpotOccupied"/>), or null.</summary>
+        public static Pickup OccupantAt(Vector3 spot, Collider[] buffer)
         {
             int count = Physics.OverlapSphereNonAlloc(spot + Vector3.up * (SpotProbeRadius + 0.005f), SpotProbeRadius, buffer,
                 PhysicsLayers.Interact, QueryTriggerInteraction.Ignore); // spec 039: items lie on their own layer
             for (int i = 0; i < count; i++)
             {
                 Pickup pickup = buffer[i] != null ? buffer[i].GetComponentInParent<Pickup>() : null;
-                if (pickup != null && !pickup.IsHeld) return true;
+                if (pickup != null && !pickup.IsHeld) return pickup;
             }
-            return false;
+            return null;
         }
 
         /// <summary>A spot whose recorded item is gone, held or lies elsewhere is free again (object ids are reused).</summary>

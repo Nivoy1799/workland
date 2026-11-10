@@ -503,7 +503,8 @@ namespace Worktown.Game.Net
         /// </summary>
         private void PutDownWithLook(Pickup held)
         {
-            if (held == null) return;
+            // 041 review: an item already flying to a predicted place sends no second place request (no pose jump).
+            if (held == null || held.HasRestPrediction) return;
             if (PutDownSurface != null && PutDownSpot >= 0) PlaceWithLook(held, PutDownSurface, PutDownSpot, PutDownPosition);
             else DropWithLook(held);
         }
@@ -514,6 +515,12 @@ namespace Worktown.Game.Net
         {
             SendPlace(surface.Index, PlaceTurn.Pack(spot, _restTurn));
             if (held == null) return;
+            if (surface.IsCupSpot) // spec 042: it stands under the tap for us now (a press right after it pours into it)
+            {
+                _placedCup = held;
+                _placedSpot = surface;
+                _placedUntil = Time.unscaledTime + PlacedCupSeconds;
+            }
             Predict(PredictionKind.Place, held, null);
             held.PredictRest(PlacePose(held, surface, spot, transform.position, _restTurn));
             PlaySound(SoundRules.PlaceSound(SoundRules.MaterialOf(held), surface.IsBurner), spotPosition);
@@ -766,32 +773,23 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>
-        /// Spec 027b, owner side: where the held item would land with a click now (a place spot, or into cookware), for
-        /// the placement ghost. False when the click does not put it anywhere. Spec 041: turned by the wheel; where nothing else
-        /// is offered, the right click's put-down spot.
+        /// Spec 027b, owner side: where the held item would land now, for the placement ghost. False when nothing would put it anywhere.
+        /// 041 review: the left click's own spot when it places (turned by the wheel); whenever the left click would not place (nothing,
+        /// or into the pot), the right click's put-down spot, so the ghost never shows a landing the right click would not give.
         /// </summary>
         public bool TryGetLandingPose(out Pickup held, out Pose pose)
         {
             pose = default;
-            held = null;
-            // Spec 041: with nothing for the left click to do, the ghost shows where the right click puts it down.
-            bool putDown = CurrentAction == InteractionAction.None && PutDownSurface != null && PutDownSpot >= 0;
-            if (CurrentAction != InteractionAction.Place && CurrentAction != InteractionAction.PutInto && !putDown) return false;
             held = FindHeldPickup();
             if (held == null || held.HasPrediction) return false;
-            if (putDown)
-            {
-                pose = PlacePose(held, PutDownSurface, PutDownSpot, transform.position, _restTurn);
-                return true;
-            }
             if (CurrentAction == InteractionAction.Place && Target is PlaceSurface surface && TargetSpot >= 0)
             {
                 pose = PlacePose(held, surface, TargetSpot, transform.position, _restTurn);
                 return true;
             }
-            if (CurrentAction == InteractionAction.PutInto && Target is Vessel vessel)
+            if (PutDownSurface != null && PutDownSpot >= 0)
             {
-                pose = new Pose(vessel.ContentPoint, PlaceSpots.RestRotation(held.ClientRestTilt, vessel.transform.rotation));
+                pose = PlacePose(held, PutDownSurface, PutDownSpot, transform.position, _restTurn);
                 return true;
             }
             return false;
@@ -1081,7 +1079,7 @@ namespace Worktown.Game.Net
                         flags = FryerRules.WithLowered(flags, seenBasket, SeenLowered(button.Station, seenBasket, flags));
                     return AimTarget.Button(button.Station != null ? button.Station.Kind : StationKind.Stove, button.Option, flags);
                 case PlaceSurface surface:
-                    return AimTarget.Spot(TargetSpot, surface.IsBurner);
+                    return SpotTarget(surface, TargetSpot); // spec 042: a tap's cup spot says which tap
                 case Vessel vessel:
                     // Spec 031: the build as this client sees it (its own pending fold or packaging first), so a second click never repeats it.
                     if (vessel.Kind == VesselKind.Assembly && vessel.TryGetComponent(out Worktown.Game.Art.BuildStackView stackView))
@@ -1112,7 +1110,11 @@ namespace Worktown.Game.Net
                     if (pickup.TryGetComponent(out Worktown.Game.Shop.SupplyBox delivery) && delivery.TryGetContents(out Worktown.Game.Shop.BoxContents inBox))
                         return AimTarget.Item(delivery.PickupName(inBox));
                     if (pickup.TryGetComponent(out Food food))
-                        return AimTarget.Item(food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food");
+                    {
+                        string foodName = food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food";
+                        // Spec 042: a cup on a tap's spot that another player pours into cannot be taken now.
+                        return IsBusySpotCup(pickup, food) ? AimTarget.BusyCup(foodName) : AimTarget.Item(foodName);
+                    }
                     return AimTarget.Item("box");
                 default:
                     return AimTarget.Nothing;
@@ -1669,8 +1671,10 @@ namespace Worktown.Game.Net
                 _thirdPersonView = null;
                 _thirdPersonSpot = needsSpot ? BuildSpotOf(board, out _thirdPersonView) : null;
             }
-            StockSlot tool = _thirdPersonTool;
             bool drinks = board != null && board.Kind == StationKind.DrinkDispenser;
+            // Spec 042: the tap held is the nearest one with a cup on its spot (kept while it pours).
+            if (drinks && !wipe && !_squeeze.Held) _thirdPersonTool = BestTap(board);
+            StockSlot tool = _thirdPersonTool;
             InteractionAction offeredAction = tool == null ? InteractionAction.None : InteractionRules.ActionFor(hands,
                 IsCleaningHold(tool) || IsSpitHold(tool) ? Describe(tool) : drinks ? DescribeDrinkTool(tool) : DescribeTool(tool, _thirdPersonSpot, _thirdPersonView));
             bool offered = offeredAction == InteractionAction.Squeeze || offeredAction == InteractionAction.Fill // spec 033: a tap too
@@ -1762,19 +1766,23 @@ namespace Worktown.Game.Net
                 if (OwnSqueeze(dispenser.Index, tool)) flags = (byte)(flags & ~Worktown.Game.Shop.CleaningRules.WipingBit);
                 if (slot.TryGetComponent(out Worktown.Game.Art.SpillWipeView wipe) && wipe.SeenWiped) flags = DrinkRules.WithSpill(flags, false);
             }
-            return AimTarget.DrinkTool(tool, flags, DrinkRules.IsTap(tool) ? DrinkRules.DrinkName(tool) : tool == DrinkRules.CupTool ? "a cup" : "a lid", -1);
+            // Spec 042: a tap pours into the cup on its spot; the lid stack lids the first filled open cup on a spot (or the one in the hands).
+            byte spot = DrinkRules.IsTap(tool) ? SpotByteOf(SpotCup(dispenser, tool))
+                : tool == DrinkRules.LidTool ? SpotByteOf(LiddableSpotCup(dispenser, flags)) : DrinkRules.NoSpotCup;
+            return AimTarget.DrinkTool(tool, flags, DrinkRules.IsTap(tool) ? DrinkRules.DrinkName(tool) : tool == DrinkRules.CupTool ? "a cup" : "a lid", -1,
+                spot);
         }
 
         /// <summary>
-        /// Spec 033: our press on a drink tap: the cup in the hands goes under the tap and its liquid starts rising in this frame, from what
-        /// we see in it (docs/feel.md 1); the server measures the real pour.
+        /// Spec 033: our press on a drink tap: the liquid starts rising in this frame, from what we see in the cup (docs/feel.md 1); the
+        /// server measures the real pour. Spec 042: the cup is the one standing on that tap's spot (the tap's view draws its level and the
+        /// stream into it every frame), the hands stay free.
         /// </summary>
         private void StartPourLook(StockSlot tap, double now)
         {
             StopPourLook(true);
             _pourTap = tap.GetComponent<Worktown.Game.Art.DrinkTapView>();
-            Pickup held = FindHeldPickup();
-            _pourCup = held != null && held.TryGetComponent(out Food cup) && FoodLookRules.IsCup(cup.Look.Value) ? cup : null;
+            _pourCup = SpotCup(tap.Station, tap.Option);
             _lastPourCup = _pourCup;
             float start = 0f;
             if (_pourCup != null)
@@ -1783,25 +1791,11 @@ namespace Worktown.Game.Net
                 start = _pourCup.Visual != null && _pourCup.Visual.PredictedMl >= 0f ? _pourCup.Visual.PredictedMl : DrinkRules.SeenMl(seen.CupLevel);
                 if (_pourCup.Visual != null) _pourCup.Visual.SetPredictedTap(tap.Option);
             }
-            if (_pourTap != null) _pourTap.PredictFrom(start, now);
-            if (_heldView != null && _pourTap != null && _pourCup != null) _heldView.SetPourPose(true, _pourTap.CupPose);
-            UpdatePourLook();
+            if (_pourTap != null) _pourTap.PredictFrom(start, now, _pourCup);
         }
 
-        /// <summary>Every frame while we pour: the cup's predicted level and where the stream lands in it.</summary>
-        private void UpdatePourLook()
-        {
-            if (_pourTap == null || _pourCup == null) return;
-            float ml = _pourTap.PredictedMl(Time.unscaledTimeAsDouble);
-            if (_pourCup.Visual != null) _pourCup.Visual.PredictMl(ml, true);
-            Pose under = _pourTap.CupPose;
-            if (_heldView != null) _heldView.SetPourPose(true, under);
-            _pourTap.SetStreamEnd(under.position + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight
-                * Worktown.Game.Art.DrinkArtRules.CupLiquidHeight(DrinkRules.DrawnFill(ml))));
-        }
-
-        /// <summary>Our pour's look ends: the cup comes back to the hand; <paramref name="keepLevel"/> keeps its predicted level (a release),
-        /// else (a refusal) it goes back to the synced one.</summary>
+        /// <summary>Our pour's look ends; <paramref name="keepLevel"/> keeps the cup's predicted level (a release), else (a refusal) it goes
+        /// back to the synced one.</summary>
         private void StopPourLook(bool keepLevel)
         {
             if (_pourTap != null && _pourCup != null && _pourCup.Visual != null)
@@ -1809,20 +1803,236 @@ namespace Worktown.Game.Net
                 if (keepLevel) _pourCup.Visual.PredictMl(_pourTap.PredictedMl(Time.unscaledTimeAsDouble), false);
                 else _pourCup.Visual.EndPrediction();
             }
-            if (_heldView != null) _heldView.SetPourPose(false, default);
             _pourTap = null;
             _pourCup = null;
         }
 
-        /// <summary>Spec 033: the lid stack: the lid snaps onto the held cup at the click (sound and look), RequestStation goes out.</summary>
+        /// <summary>
+        /// Spec 033: the lid stack: the lid snaps onto the cup at the click (sound and look), RequestStation goes out. Spec 042: the cup in
+        /// the hands, else the first filled open cup on a spot (the server's order).
+        /// </summary>
         private void LidWithLook(Station dispenser)
         {
             Pickup held = FindHeldPickup();
-            _lidCup = held != null && held.TryGetComponent(out Food cup) ? cup : null;
-            PlaySound(SoundKey.LidClick, held != null ? held.transform.position : dispenser.transform.position);
+            Food cup = held != null && held.TryGetComponent(out Food inHands) && FoodLookRules.IsCup(inHands.Look.Value) ? inHands : null;
+            if (cup == null) cup = LiddableSpotCup(dispenser, DispenserFlags(dispenser));
+            _lidCup = cup;
+            PlaySound(SoundKey.LidClick, cup != null ? cup.transform.position : dispenser.transform.position);
             if (_lidCup != null && _lidCup.Visual != null) _lidCup.Visual.PredictLid(true);
             SendStation(dispenser.Index, DrinkRules.LidOption);
             _lidRequest = _lastRequest;
+        }
+
+        // ---- Spec 042: the cup spots on the drip tray (owner side) ----
+
+        /// <summary>A ray over the dispenser means the cup on a spot (or the free spot) it passes within this distance of (m).</summary>
+        private const float CupAimRadius = 0.08f;
+        /// <summary>How long our own place on a cup spot counts as standing there before the server's answer (s).</summary>
+        private const float PlacedCupSeconds = 2f;
+
+        private readonly List<PlaceSurface> _cupSpotList = new List<PlaceSurface>();
+        private PlaceSurface[] _cupSpotsFrom;
+        private readonly Collider[] _cupProbe = new Collider[8];
+        private readonly Food[] _spotCupSeen = new Food[DrinkRules.TapCount];
+        private readonly bool[] _spotCupKnown = new bool[DrinkRules.TapCount];
+        private int _spotCupFrame = -1;
+        private int _spotCupStation = -1;
+        private Pickup _placedCup;
+        private PlaceSurface _placedSpot;
+        private float _placedUntil;
+
+        /// <summary>The cup spot of tap <paramref name="tap"/> of <paramref name="dispenser"/>, or null.</summary>
+        private PlaceSurface CupSpotOf(Station dispenser, int tap)
+        {
+            if (dispenser == null || !DrinkRules.IsTap(tap)) return null;
+            EnsureCupSpots();
+            for (int i = 0; i < _cupSpotList.Count; i++)
+            {
+                PlaceSurface spot = _cupSpotList[i];
+                if (spot != null && spot.DispenserIndex == dispenser.Index && spot.CupTap == tap) return spot;
+            }
+            return null;
+        }
+
+        /// <summary>The scene's cup spots, found again only when the place surfaces were looked up again.</summary>
+        private void EnsureCupSpots()
+        {
+            RefreshInteractables();
+            if (_cupSpotsFrom == _allSurfaces) return;
+            _cupSpotsFrom = _allSurfaces;
+            _cupSpotList.Clear();
+            foreach (PlaceSurface surface in _allSurfaces)
+                if (surface != null && surface.IsCupSpot) _cupSpotList.Add(surface);
+        }
+
+        /// <summary>
+        /// The cup standing on tap <paramref name="tap"/>'s spot as this client sees it (the item lying there, or our own place on its way
+        /// for <see cref="PlacedCupSeconds"/>; an item flying away is gone), or null. One probe per spot and frame.
+        /// </summary>
+        private Food SpotCup(Station dispenser, int tap)
+        {
+            PlaceSurface spot = CupSpotOf(dispenser, tap);
+            if (spot == null) return null;
+            if (_spotCupFrame != Time.frameCount || _spotCupStation != dispenser.Index)
+            {
+                _spotCupFrame = Time.frameCount;
+                _spotCupStation = dispenser.Index;
+                for (int t = 0; t < _spotCupKnown.Length; t++) _spotCupKnown[t] = false;
+            }
+            if (_spotCupKnown[tap]) return _spotCupSeen[tap];
+            _spotCupKnown[tap] = true;
+            Pickup item = PickupService.OccupantAt(spot.SpotWorldPosition(0), _cupProbe);
+            if (item != null && item != _placedCup && item.HasPrediction) item = null; // our own take: on its way to the hands
+            if (item == null && _placedCup != null && _placedSpot == spot && Time.unscaledTime < _placedUntil && _placedCup.IsSpawned
+                && _placedCup.HasRestPrediction) item = _placedCup;
+            Food cup = item != null && item.TryGetComponent(out Food food) && FoodLookRules.IsCup(food.Look.Value) ? food : null;
+            _spotCupSeen[tap] = cup;
+            return cup;
+        }
+
+        /// <summary>A cup as the rules see it in one byte (DrinkRules.SpotByte; our own pour's level and lid first), or no cup.</summary>
+        private static byte SpotByteOf(Food cup)
+        {
+            if (cup == null) return DrinkRules.NoSpotCup;
+            Held seen = DescribeCup(cup, cup.Look.Value);
+            return DrinkRules.SpotByte(true, seen.CupLidded, seen.CupTap, seen.CupLevel);
+        }
+
+        /// <summary>The dispenser's synced byte as this client sees it.</summary>
+        private static byte DispenserFlags(Station dispenser) =>
+            dispenser != null && dispenser.TryGetComponent(out StationContents contents) ? contents.StoveFlags.Value : (byte)0;
+
+        /// <summary>
+        /// The cup a click on the lid stack lids when the hands hold no cup, as the server picks it (KitchenState.LiddableSpotCup): the
+        /// first tap's filled open cup nobody pours into; else the first cup on a spot (for its reason), else null.
+        /// </summary>
+        private Food LiddableSpotCup(Station dispenser, byte flags)
+        {
+            Food first = null;
+            for (int t = 0; t < DrinkRules.TapCount; t++)
+            {
+                Food cup = SpotCup(dispenser, t);
+                if (cup == null) continue;
+                if (first == null) first = cup;
+                bool pouring = DrinkRules.IsPouring(flags, t) || _squeeze.Involves(dispenser.Index, t);
+                if (!pouring && DrinkRules.CanLidOnSpot(SpotByteOf(cup)) == CookOutcome.Ok) return cup;
+            }
+            return first;
+        }
+
+        /// <summary>A place surface as the rules see it: a tap's cup spot says which tap (spec 042).</summary>
+        private static AimTarget SpotTarget(PlaceSurface surface, int spot) =>
+            surface.IsCupSpot ? AimTarget.CupSpot(spot, surface.CupTap) : AimTarget.Spot(spot, surface.IsBurner);
+
+        /// <summary>Whether <paramref name="hands"/> may go on <paramref name="surface"/> (only a fitting cup on a tap's cup spot).</summary>
+        private static bool SpotFits(PlaceSurface surface, Held hands) =>
+            !surface.IsCupSpot || DrinkRules.CanStand(hands.IsCup, hands.CupLidded, hands.CupTap, hands.CupLevel, surface.CupTap) == CookOutcome.Ok;
+
+        /// <summary>Whether <paramref name="pickup"/> is a cup on a tap's spot that someone else pours into (the tap's bit, not our own pour).</summary>
+        private bool IsBusySpotCup(Pickup pickup, Food food)
+        {
+            if (!FoodLookRules.IsCup(food.Look.Value)) return false;
+            EnsureCupSpots();
+            for (int i = 0; i < _cupSpotList.Count; i++)
+            {
+                PlaceSurface spot = _cupSpotList[i];
+                if (spot == null) continue;
+                Vector3 offset = pickup.transform.position - spot.SpotWorldPosition(0);
+                offset.y = 0f;
+                if (offset.sqrMagnitude > 0.05f * 0.05f) continue;
+                Station dispenser = StationAt(spot.DispenserIndex);
+                return dispenser != null && DrinkRules.IsPouring(DispenserFlags(dispenser), spot.CupTap) && !OwnSqueeze(dispenser.Index, spot.CupTap);
+            }
+            return false;
+        }
+
+        /// <summary>The station with index <paramref name="index"/> as this client knows it, or null.</summary>
+        private Station StationAt(int index)
+        {
+            if (_stations == null) _stations = FindObjectsByType<Station>(FindObjectsSortMode.None);
+            foreach (Station s in _stations)
+                if (s != null && s.Index == index) return s;
+            return null;
+        }
+
+        /// <summary>
+        /// The exact ray hit the drink dispenser's body (its taps and tray lie inside its aim box): with empty hands a cup standing on a
+        /// spot the ray passes (closer than any tool) is the target; holding a cup, the free spot under the tap it aims at (the tap, or
+        /// the spot itself). True when it added the hit; false leaves the tools' rule (a tap pours into its spot's cup).
+        /// </summary>
+        private bool AddDrinkSpotHit(Station dispenser, Ray ray, Pickup held, float distance, Vector3 point)
+        {
+            StockSlot tool = ToolOnRay(dispenser, ray, out float toolDistance);
+            int nearest = -1;
+            float best = CupAimRadius * CupAimRadius;
+            for (int t = 0; t < DrinkRules.TapCount; t++)
+            {
+                PlaceSurface spot = CupSpotOf(dispenser, t);
+                if (spot == null) continue;
+                Vector3 anchor = spot.SpotWorldPosition(0) + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight * 0.5f);
+                float sqr = Vector3.Cross(ray.direction, anchor - ray.origin).sqrMagnitude;
+                if (sqr >= best) continue;
+                best = sqr;
+                nearest = t;
+            }
+            bool nearCup = nearest >= 0 && Mathf.Sqrt(best) < toolDistance;
+            if (held == null)
+            {
+                Food cup = nearCup ? SpotCup(dispenser, nearest) : null;
+                if (cup == null || !cup.TryGetComponent(out Pickup item)) return false;
+                _aimHits.Add(new AimHit(distance, AimKind.Pickup, item.transform.position));
+                _aimSources.Add(item);
+                _aimPoints.Add(AimAnchor(item)); // a hit on the body in front of the cup means the cup itself
+                return true;
+            }
+            if (!Hands(held).IsCup) return false;
+            int tap = nearCup ? nearest : tool != null && DrinkRules.IsTap(tool.Option) ? tool.Option : -1;
+            PlaceSurface free = tap >= 0 && SpotCup(dispenser, tap) == null ? CupSpotOf(dispenser, tap) : null;
+            if (free == null) return false;
+            _aimHits.Add(AimHit.Spot(distance, free.SpotWorldPosition(0), free.Index, 0));
+            _aimSources.Add(free);
+            _aimPoints.Add(point);
+            return true;
+        }
+
+        /// <summary>Third person: the free cup spot nearest the player that the held cup fits (DrinkRules.CanStand), or null.</summary>
+        private PlaceSurface NearestFreeCupSpot(Station dispenser, Held hands)
+        {
+            PlaceSurface best = null;
+            float bestSqr = float.MaxValue;
+            for (int t = 0; t < DrinkRules.TapCount; t++)
+            {
+                PlaceSurface spot = CupSpotOf(dispenser, t);
+                if (spot == null || SpotCup(dispenser, t) != null || !SpotFits(spot, hands)) continue;
+                float sqr = (spot.SpotWorldPosition(0) - transform.position).sqrMagnitude;
+                if (sqr >= bestSqr) continue;
+                bestSqr = sqr;
+                best = spot;
+            }
+            return best;
+        }
+
+        /// <summary>Third person: the tap to hold, the nearest one with a cup it can pour into on its spot, else the nearest tap.</summary>
+        private StockSlot BestTap(Station dispenser)
+        {
+            byte flags = DispenserFlags(dispenser);
+            StockSlot best = null, nearest = null;
+            float bestSqr = float.MaxValue, nearestSqr = float.MaxValue;
+            for (int t = 0; t < DrinkRules.TapCount; t++)
+            {
+                if (!dispenser.TryGetSlot(t, out StockSlot slot) || slot == null) continue;
+                float sqr = (slot.transform.position - transform.position).sqrMagnitude;
+                if (sqr < nearestSqr)
+                {
+                    nearestSqr = sqr;
+                    nearest = slot;
+                }
+                byte seen = OwnSqueeze(dispenser.Index, t) ? DrinkRules.WithPouring(flags, t, false) : flags;
+                if (DrinkRules.CanPourOnSpot(SpotByteOf(SpotCup(dispenser, t)), t, seen) != CookOutcome.Ok || sqr >= bestSqr) continue;
+                bestSqr = sqr;
+                best = slot;
+            }
+            return best ?? nearest;
         }
 
         /// <summary>The station kind of station index <paramref name="index"/> as this client knows it (Crate when unknown).</summary>
@@ -1868,7 +2078,6 @@ namespace Worktown.Game.Net
                     if (_devSqueeze && _squeeze.Idle) _devSqueeze = false;
                     break;
             }
-            UpdatePourLook(); // spec 033: every frame of our own pour (the tours' held tap too)
             UpdateWipeLook(); // spec 035: and of our own wipe
             return _squeeze.Held;
         }
@@ -1998,7 +2207,7 @@ namespace Worktown.Game.Net
         private Component FindAimTarget(Pickup held)
         {
             bool holding = held != null;
-            Component exact = FindExactTarget(holding, out bool direct, out Ray ray);
+            Component exact = FindExactTarget(held, out bool direct, out Ray ray);
             int exactSpot = TargetSpot;
             Vector3 exactSpotPosition = TargetSpotPosition;
             bool exactTooFar = TargetTooFar;
@@ -2092,8 +2301,9 @@ namespace Worktown.Game.Net
 
         /// <summary>Spec 018–021: the exact camera-centre ray (see <see cref="FindAimTarget"/>); <paramref name="direct"/>
         /// when it landed on the target's body.</summary>
-        private Component FindExactTarget(bool holding, out bool direct, out Ray ray)
+        private Component FindExactTarget(Pickup held, out bool direct, out Ray ray)
         {
+            bool holding = held != null;
             direct = false;
             ray = default;
             TargetSpot = PlaceSpots.None;
@@ -2127,7 +2337,8 @@ namespace Worktown.Game.Net
                     int spot = NearestFreeSpot(surface, point, out Vector3 spotPosition);
                     // Spec 041: the nearest surface on the ray with a free spot in reach is where a right click puts things down,
                     // even behind what the ray aims at (the pot: next to it on the counter).
-                    if (holding && spot >= 0 && distance < putDownDistance && PickupRules.IsInReach(transform.position, spotPosition))
+                    if (holding && spot >= 0 && distance < putDownDistance && PickupRules.IsInReach(transform.position, spotPosition)
+                        && SpotFits(surface, Hands(held))) // spec 042: only a fitting cup goes on a tap's cup spot
                     {
                         putDownDistance = distance;
                         _rayPutDownSurface = surface;
@@ -2158,6 +2369,9 @@ namespace Worktown.Game.Net
                     continue;
                 }
                 Station station = hitCollider.GetComponentInParent<Station>();
+                // Spec 042: the drink dispenser's aim box holds its drip tray: a cup on a spot, or the free spot for the cup in the hands.
+                if (station != null && station.Kind == StationKind.DrinkDispenser && AddDrinkSpotHit(station, ray, held, distance, _rayHits[i].point))
+                    continue;
                 Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
                 StockSlot slot = station != null && station.SlotCount > 0 ? station.NearestSlot(_rayHits[i].point) : null;
                 // Spec 031: on the assembly board a ray means a tool only near it (elsewhere it is the board itself).
@@ -2367,7 +2581,7 @@ namespace Worktown.Game.Net
                         Vector3 to = anchor - ray.origin;
                         if (FeelRules.AngleTo(ray.direction, to) > feel.AimCone || to.magnitude > range) continue;
                         if (SpotTaken(surface, spot)) continue;
-                        AddCone(ray, surface, spot, anchor, hands, AimTarget.Spot(spot, surface.IsBurner), range, feel.AimCone);
+                        AddCone(ray, surface, spot, anchor, hands, SpotTarget(surface, spot), range, feel.AimCone); // spec 042
                     }
                 }
             }
@@ -2447,6 +2661,8 @@ namespace Worktown.Game.Net
                 if (self != null && c.transform.IsChildOf(self)) continue;
                 if (c.GetComponentInParent<Pickup>() != null || c.TryGetComponent(out PlaceSurface _) || c.TryGetComponent(out StationButton _)) continue;
                 if (own != null && c.GetComponentInParent<Station>() == own) continue;
+                // Spec 042: an item standing inside a station's aim box (a cup on the drink dispenser's tray) is not hidden by it.
+                if (candidate is Pickup && c.bounds.Contains(anchor) && c.GetComponentInParent<Station>() != null) continue;
                 return false;
             }
             return true;
@@ -2588,16 +2804,44 @@ namespace Worktown.Game.Net
                     return HandleSpitKey(station, holding); // spec 036
                 case StationKind.DrinkDispenser:
                 {
-                    // Spec 033, third person: a tap of E takes a cup with empty hands or lids the filled cup in them (holding E pours).
-                    Held hands = Hands(FindHeldPickup());
-                    if (!holding)
+                    // Spec 033/042, third person (holding E pours into the cup on the nearest tap's spot): a tap of E with a cup puts it
+                    // under the nearest free tap it fits, else lids it; with empty hands it lids a filled cup on a spot, takes a lidded one
+                    // off, else takes a cup from the stack.
+                    Pickup heldItem = FindHeldPickup();
+                    Held hands = Hands(heldItem);
+                    if (holding)
                     {
-                        if (station.TryGetSlot(DrinkRules.CupTool, out StockSlot cups)) TakeWithLook(cups, DrinkRules.CupOption, "empty cup");
-                        else SendStation(station.Index, DrinkRules.CupOption);
+                        PlaceSurface free = hands.IsCup ? NearestFreeCupSpot(station, hands) : null;
+                        if (free != null && hands.CupLevel == DrinkRules.LevelEmpty)
+                        {
+                            PlaceWithLook(heldItem, free, 0, free.SpotWorldPosition(0));
+                            return true;
+                        }
+                        if (DrinkRules.CanLid(hands.IsCup, hands.CupLidded, hands.CupLevel) == CookOutcome.Ok)
+                        {
+                            LidWithLook(station);
+                            return true;
+                        }
+                        if (free == null) return false;
+                        PlaceWithLook(heldItem, free, 0, free.SpotWorldPosition(0));
                         return true;
                     }
-                    if (DrinkRules.CanLid(hands.IsCup, hands.CupLidded, hands.CupLevel) != CookOutcome.Ok) return false;
-                    LidWithLook(station);
+                    byte flags = DispenserFlags(station);
+                    Food liddable = LiddableSpotCup(station, flags);
+                    if (liddable != null && DrinkRules.CanLidOnSpot(SpotByteOf(liddable)) == CookOutcome.Ok)
+                    {
+                        LidWithLook(station);
+                        return true;
+                    }
+                    for (int t = 0; t < DrinkRules.TapCount; t++)
+                    {
+                        Food done = SpotCup(station, t);
+                        if (done == null || !DrinkRules.SpotLidded(SpotByteOf(done)) || !done.TryGetComponent(out Pickup lidded)) continue;
+                        PickUpWithLook(lidded);
+                        return true;
+                    }
+                    if (station.TryGetSlot(DrinkRules.CupTool, out StockSlot cups)) TakeWithLook(cups, DrinkRules.CupOption, "empty cup");
+                    else SendStation(station.Index, DrinkRules.CupOption);
                     return true;
                 }
                 case StationKind.Register:

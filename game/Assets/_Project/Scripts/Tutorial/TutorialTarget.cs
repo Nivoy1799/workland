@@ -29,6 +29,8 @@ namespace Worktown.Game.Tutorial
         Sink,
         Terminal,
         SpitKnob,
-        SpitCone
+        SpitCone,
+        /// <summary>Spec 042: the cup standing on the lemonade tap's spot (take it once it has its lid).</summary>
+        LemonadeCup
     }
 }

@@ -4,6 +4,8 @@ Hop in whenever you like. Answer by writing under a question (or just tell Claud
 every question has a default, and work continues on other items until you answer. Newest first.
 
 ## Status (updated 2026-11-10 20:45)
+- **Merged in run 2:** 039 (every counter accepts items, items are not stairs, tools handle towards you) and 041
+  (left click does, right click puts down, the wheel turns).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045, 040 in that order, each merged when green.
 - **Next (only when you say so):** 037 pricing, then the follow-up lists at the end of docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
@@ -55,6 +57,8 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+15. **Gamepad turn (spec 041).** The bumpers already open the emote wheel (LB) and ping (RB), so turning stays on Y.
+    Default: keep it on Y. Say if you'd rather move the emote wheel or the ping.
 14. **Setting (2026-11-10 brainstorm):** the year 2222 as imagined in 1950–80 (retro-futurism), with a little
     steampunk in the kitchen machines; robots and AI exist, but people work by passion; native vegan. Money question,
     default **C**:

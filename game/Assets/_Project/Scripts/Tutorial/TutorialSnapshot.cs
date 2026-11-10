@@ -38,6 +38,8 @@ namespace Worktown.Game.Tutorial
         public int DirtyWaiting;
         /// <summary>The spit's byte (SpitRules: the level bits 0-1) and its cone is loaded.</summary>
         public byte SpitFlags;
+        /// <summary>Spec 042: the cup on the lemonade tap's spot as this client sees it (DrinkRules.SpotByte; no cup: 0).</summary>
+        public byte LemonadeSpot;
         /// <summary>What happened since the last snapshot (<see cref="TutorialWatch"/>).</summary>
         public TutorialEvents Events;
     }

@@ -41,10 +41,10 @@ namespace Worktown.Game.Tutorial
             new TutorialStep(TutorialStepId.ServeGuest, "Serve a guest: carry the fries or the wrap to the serving counter and left click it.", false,
                 HasServed, ServeTarget),
             new TutorialStep(TutorialStepId.TakePayment,
-                "The guest pays at the register. Cash: left click coins and notes until the change is right, then hand it over. Card: click the terminal.",
+                "The guest pays at the register. Cash: left click coins and notes until the change is right, and hand it over. Card: left click the terminal.",
                 false, HasPaid, PayTarget),
             new TutorialStep(TutorialStepId.FillLemonade,
-                "Take a cup, hold left click on the lemonade tap until it is full, then left click the lids. Serve it with the wrap.",
+                "Put a cup on the lemonade tap's tray, hold left click on the tap until it is full, left click the lids, then take it to the wrap's guest.",
                 false, HasLemonade, LemonadeTarget),
             new TutorialStep(TutorialStepId.WashPlate,
                 "Guests who eat in bring their plate back. Take it from the dish return, put it in the sink and hold left click to scrub.",
@@ -169,10 +169,17 @@ namespace Worktown.Game.Tutorial
 
         private static TutorialTarget PayTarget(in TutorialSnapshot s) => TutorialTarget.Register;
 
+        /// <summary>
+        /// Spec 042: a cup from the stack, onto the lemonade tap's tray (the tap points there), held on the tap until it is at the line, the
+        /// lids, then the lidded cup taken off the tray. A filled open cup in the hands still gets its lid at the stack.
+        /// </summary>
         public static TutorialTarget LemonadeTarget(in TutorialSnapshot s)
         {
-            if (!s.Held.IsCup) return TutorialTarget.CupStack;
-            return s.Held.CupLevel == DrinkRules.LevelEmpty ? TutorialTarget.LemonadeTap : TutorialTarget.LidStack;
+            if (s.Held.IsCup) return s.Held.CupLevel == DrinkRules.LevelEmpty ? TutorialTarget.LemonadeTap : TutorialTarget.LidStack;
+            if (!DrinkRules.HasSpotCup(s.LemonadeSpot)) return TutorialTarget.CupStack;
+            if (DrinkRules.SpotLidded(s.LemonadeSpot)) return TutorialTarget.LemonadeCup;
+            byte level = DrinkRules.SpotLevel(s.LemonadeSpot);
+            return level == DrinkRules.LevelEmpty || level == DrinkRules.LevelLow ? TutorialTarget.LemonadeTap : TutorialTarget.LidStack;
         }
 
         public static TutorialTarget WashTarget(in TutorialSnapshot s) =>
