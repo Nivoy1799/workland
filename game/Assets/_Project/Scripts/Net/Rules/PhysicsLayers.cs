@@ -8,8 +8,9 @@ namespace Worktown.Game.Net.Rules
     /// customers on <see cref="Npc"/>. The collision matrix (DynamicsManager.asset) lets neither of them touch Items, so a
     /// CharacterController walks through a tomato on the floor instead of climbing it; Items still meet the static world.
     /// The matrix is a project setting, the same on the server and every client, so prediction and the server agree.
-    /// Queries that must see items (the aim, the place spots, the server's overlap checks) use <see cref="Interact"/>, which
-    /// names Items explicitly.
+    /// Queries that must see items (the aim, the place spots, the server's overlap checks) use <see cref="Interact"/>. It equals
+    /// Physics.DefaultRaycastLayers (every layer but Ignore Raycast, so Items is in it already); the named mask only says what the
+    /// queries need.
     /// </summary>
     public static class PhysicsLayers
     {
@@ -23,7 +24,8 @@ namespace Worktown.Game.Net.Rules
 
         public const int ItemsMask = 1 << Items;
 
-        /// <summary>The aim ray, the place-spot probe and the pickup searches: everything raycastable, items included.</summary>
+        /// <summary>The aim ray, the place-spot probe and the pickup searches: everything raycastable. The same value as
+        /// Physics.DefaultRaycastLayers (it holds Items already); ItemsMask is named only so the intent reads (039 review).</summary>
         public const int Interact = Physics.DefaultRaycastLayers | ItemsMask;
 
         /// <summary>

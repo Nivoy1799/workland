@@ -687,6 +687,28 @@
         "Put the knife down on the front counter and on a back worktop: does the handle point at you?",
         "Does anything still refuse without a reason?"
       ]
+    },
+    {
+      "id": "2026-11-10-spec-041",
+      "date": "2026-11-10",
+      "title": "Mouse-first controls: left click does, right click puts down",
+      "items": [
+        "Left click does the obvious thing with what you aim at: pick up, take, press, put into the pot, slide onto the plate, cut, flip, serve. Hold left click to squeeze, pour, scrub, shave and wipe, as before",
+        "Right click always puts down what you hold: on the counter spot you aim at (the green ghost shows where; aiming at a pot or pan puts it next to it), or at your feet when you aim at no counter. It never does anything else",
+        "The mouse wheel turns: the food on the cutting board while you hold the knife (it was the right click), and what you hold in 45 degree steps before you put it down (the ghost turns with it)",
+        "A flip on the griddle is a left click with the spatula now, like every tool. The right click no longer flips",
+        "Third person: left click and E act on the nearest thing, right click drops what you hold",
+        "Prompts name the button ('Left click · put potato into the pot', 'Right click · put knife here'); the tutorial and the F1 menu show the new controls. Q still puts down, but it is no longer shown",
+        "Gamepad: right trigger = left click, left trigger = right click, Y turns"
+      ],
+      "test": [
+        "Hold a plate and right click on the front counter: does it land where the ghost was? Right click while looking at the floor: does it drop at your feet?",
+        "Hold a pan, aim at a pot on the stove and right click: does the pan go next to it, not into it?",
+        "Hold the knife over the board with a potato: does the wheel turn the potato, and does dragging down still cut?",
+        "Hold the knife over a counter and roll the wheel: does the ghost turn in 45 degree steps, and does the knife lie that way after the right click?",
+        "With the spatula, left click a seitan strip on the griddle: does it flip? Does a right click there only put the spatula down (never a flip)?",
+        "Play a whole shift with the mouse only: is there anything you still need a key for?"
+      ]
     }
   ]
 }

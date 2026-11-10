@@ -373,9 +373,9 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(lettuce, Target(3, folded)));
             Assert.AreEqual("It is closed", InteractionRules.PromptFor(lettuce, Target(3, folded)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(lettuce, Target(CookingLimits.MaxBuildLayers, open)));
-            Assert.AreEqual("Click · put lettuce slices on the board", InteractionRules.PromptFor(lettuce, Target(3, open)));
+            Assert.AreEqual("Left click · put lettuce slices on the board", InteractionRules.PromptFor(lettuce, Target(3, open)));
             Assert.AreEqual(InteractionAction.Fold, InteractionRules.ActionFor(Held.Nothing, Target(3, open)));
-            Assert.AreEqual("Click · fold falafel wrap", InteractionRules.PromptFor(Held.Nothing, Target(3, open)));
+            Assert.AreEqual("Left click · fold falafel wrap", InteractionRules.PromptFor(Held.Nothing, Target(3, open)));
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, Target(1, open)), "a lone wrap comes back");
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, Target(3, folded)));
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, Target(3, loose)), "no bread: nothing to fold");
@@ -392,7 +392,7 @@ namespace Worktown.Game.Tests
             byte folded = BuildRules.Mode(BuildRules.CloseFolded, BuildRules.PackNone, true);
             AimTarget Tool(int tool, int layers, byte mode) => AimTarget.AssemblyTool(tool, 0, tool == 0 ? "garlic-herb sauce" : "x", 35, layers, mode);
             Assert.AreEqual(InteractionAction.Squeeze, InteractionRules.ActionFor(Held.Nothing, Tool(0, 3, open)));
-            Assert.AreEqual("Hold · squeeze garlic-herb sauce", InteractionRules.PromptFor(Held.Nothing, Tool(0, 3, open)));
+            Assert.AreEqual("Hold left click · squeeze garlic-herb sauce", InteractionRules.PromptFor(Held.Nothing, Tool(0, 3, open)));
             Assert.AreEqual(InteractionAction.Squeeze, InteractionRules.ActionFor(Held.Food("lettuce", false), Tool(0, 3, open)), "any hands");
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, Tool(0, 0, 0)));
             Assert.AreEqual("Start with a wrap or flatbread on the board", InteractionRules.PromptFor(Held.Nothing, Tool(0, 0, 0)));
@@ -401,7 +401,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, Tool(paper, 3, open)));
             Assert.AreEqual("Fold it first", InteractionRules.PromptFor(Held.Nothing, Tool(paper, 3, open)));
             Assert.AreEqual(InteractionAction.Pack, InteractionRules.ActionFor(Held.Nothing, Tool(paper, 3, folded)));
-            Assert.AreEqual("Click · wrap in paper ($35)", InteractionRules.PromptFor(Held.Nothing, Tool(paper, 3, folded)));
+            Assert.AreEqual("Left click · wrap in paper ($35)", InteractionRules.PromptFor(Held.Nothing, Tool(paper, 3, folded)));
             int box = BuildRules.DispenserCount + BuildRules.Box;
             Assert.AreEqual(InteractionAction.Pack, InteractionRules.ActionFor(Held.Nothing,
                 Tool(box, 3, BuildRules.Mode(BuildRules.CloseOpen, BuildRules.PackNone, false))));

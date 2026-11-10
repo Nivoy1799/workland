@@ -109,28 +109,24 @@ namespace Worktown.Game.Tests
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
             try
             {
-                Station counter = null, plates = null;
                 var tools = new List<Component>();
+                var surfaces = new List<PlaceSurface>();
                 foreach (GameObject root in scene.GetRootGameObjects())
                 {
-                    foreach (Station s in root.GetComponentsInChildren<Station>(true))
-                    {
-                        if (s.Kind == StationKind.Counter) counter = s;
-                        if (s.Kind == StationKind.PlateShelf) plates = s;
-                    }
+                    surfaces.AddRange(root.GetComponentsInChildren<PlaceSurface>(true));
                     tools.AddRange(root.GetComponentsInChildren<Knife>(true));
                     tools.AddRange(root.GetComponentsInChildren<Spatula>(true));
                     tools.AddRange(root.GetComponentsInChildren<WipeCloth>(true));
                 }
-                Assert.IsNotNull(counter);
-                Assert.IsNotNull(plates);
                 Assert.AreEqual(3, tools.Count, "the knife, the spatula and the cloth");
-                // Into the aisle: from the back line (the plate shelf) towards the front counter (the serving counter).
-                Vector3 aisle = counter.transform.position - plates.transform.position;
-                aisle.y = 0f;
-                aisle.Normalize();
                 foreach (Component tool in tools)
                 {
+                    // 039 review: into the aisle is the cook side of the surface the tool lies on (its local -Z), else world -Z.
+                    PlaceSurface under = SurfaceUnder(surfaces, tool.transform.position);
+                    Vector3 aisle = under != null ? -under.transform.forward : Vector3.back;
+                    aisle.y = 0f;
+                    aisle.Normalize();
+                    Assert.IsNotNull(under, tool.name + " lies on a place surface at home");
                     Assert.IsTrue(IsHandleTool(tool.GetComponent(typeof(Pickup))), tool.name);
                     float angle = Vector3.Angle(aisle, ToolRest.HandleDirection(tool.transform.rotation));
                     Assert.LessOrEqual(angle, 15f, tool.name + "'s handle is " + angle.ToString("0") + " degrees off the aisle");
@@ -139,6 +135,18 @@ namespace Worktown.Game.Tests
                 }
             }
             finally { EditorSceneManager.CloseScene(scene, true); }
+        }
+
+        /// <summary>The surface with a spot right under <paramref name="position"/> (within 0.1 m across, up to 0.3 m above), or null.</summary>
+        private static PlaceSurface SurfaceUnder(List<PlaceSurface> surfaces, Vector3 position)
+        {
+            foreach (PlaceSurface s in surfaces)
+                for (int i = 0; i < s.SpotCount; i++)
+                {
+                    Vector3 d = position - s.SpotWorldPosition(i);
+                    if (new Vector2(d.x, d.z).magnitude < 0.1f && d.y > -0.05f && d.y < 0.3f) return s;
+                }
+            return null;
         }
     }
 }

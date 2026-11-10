@@ -43,5 +43,25 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(source.Crouch);
             Assert.AreEqual(ViewMode.ThirdPerson, source.View);
         }
+
+        [Test]
+        public void HandInputs_AreOneShot_AndWheelStepsAddUp()
+        {
+            // Spec 041: a scripted left click, right click and wheel steps, each read once (the next frame), like the mouse's.
+            var source = new ScriptedIntentSource();
+            Assert.IsFalse(source.ConsumeLeftClick());
+            Assert.IsFalse(source.ConsumeRightClick());
+            Assert.AreEqual(0, source.ConsumeTurn());
+            source.LeftClick();
+            source.RightClick();
+            source.Turn(1);
+            source.Turn(2);
+            Assert.IsTrue(source.ConsumeLeftClick());
+            Assert.IsFalse(source.ConsumeLeftClick(), "one click, once");
+            Assert.IsTrue(source.ConsumeRightClick());
+            Assert.IsFalse(source.ConsumeRightClick());
+            Assert.AreEqual(3, source.ConsumeTurn());
+            Assert.AreEqual(0, source.ConsumeTurn());
+        }
     }
 }

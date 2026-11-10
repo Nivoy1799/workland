@@ -80,16 +80,16 @@ the way a cook leaves them:
 - `WhatsNew.json`, this spec.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes; RPC surface tests unchanged.
-- [ ] AC2: `PlaceCoverageTests`:
+- [x] AC1: `bash scripts/verify.sh` passes; RPC surface tests unchanged.
+- [x] AC2: `PlaceCoverageTests`:
   - it samples a 0.1 m grid over the top face of every counter-height collider in the shop;
   - each sample is either inside a PlaceSurface's footprint at that top height, or inside a listed exception;
   - it fails and names the object and the point otherwise.
-- [ ] AC3: Every new surface has at least one spot reachable from where a cook can stand (2.5 m reach).
-- [ ] AC4: Visual check: an item placed and then picked up again on the front counter (both runs), next to the
-      register, next to the drink dispenser, on the fryer deck and on the fridge top.
+- [x] AC3: Every new surface has at least one spot reachable from where a cook can stand (2.5 m reach).
+- [x] AC4: Visual check: an item placed and then picked up again on the front counter (both runs), next to the
+      register, next to the drink dispenser and on the fryer deck (not the fridge top: Q2 keeps the 1.8 m tops out).
 - [ ] AC5 (manual, human): put things down on every counter you find; nothing refuses without a reason.
-- [ ] AC6: `WhatsNew.json` entry `spec-039`.
+- [x] AC6: `WhatsNew.json` entry `spec-039`.
 
 ## Open questions (answered 2026-11-10: human approved all defaults)
 1. Should the guest side of the front counter (the side customers stand at) also accept items? **No**, only the cook
@@ -147,7 +147,7 @@ exact, or the name followed by " <digit>", so "Counter" does not match "Counter 
   coverage test samples it.
 
 **Tools on station tops (aim):** the assembly's back strip lies behind the bottles, so a ray aimed at a bottle hits the strip.
-When a ray hits a place surface on the assembly board, register or dispenser, `PickupInteractor.ToolNearRay` asks `ToolOnRay`.
+When a ray hits a place surface on the assembly board, `PickupInteractor.ToolNearRay` asks `ToolOnRay` (the register and dispenser cases were dead: removed in the 041 round).
 The tool wins when the ray passes it closer than the hit lies to the nearest free spot. The first run, where the tool always
 won, made the middle back spot (straight behind the chili bottle) unreachable; that was the one look-tour aim fallback.
 

@@ -40,7 +40,6 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(Physics.GetIgnoreLayerCollision(PhysicsLayers.Player, PhysicsLayers.Npc));
             Assert.AreEqual(0, PhysicsLayers.BodyMask(PhysicsLayers.Player) & PhysicsLayers.ItemsMask, "the ground probe ignores items too");
             Assert.AreNotEqual(0, PhysicsLayers.BodyMask(PhysicsLayers.Player) & 1, "and sees the floor");
-            Assert.AreNotEqual(0, PhysicsLayers.Interact & PhysicsLayers.ItemsMask, "the aim, the spot probe and the searches see items");
         }
 
         [Test]

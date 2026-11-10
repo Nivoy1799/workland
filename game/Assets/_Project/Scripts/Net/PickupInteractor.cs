@@ -16,7 +16,8 @@ namespace Worktown.Game.Net
     /// allowed reach in third person, so requests from 2.5 to 4 m reach the server and get refused there (spec 003 AC4).
     /// Spec 018: in first person the target is what the camera centre looks at (AimRules), within the same reach the
     /// server checks. Spec 020: first person uses the mouse; one pure rule (InteractionRules) turns what you hold and
-    /// what the dot points at into the click's action, and the prompt and the highlight show the same action. Q drops.
+    /// what the dot points at into the click's action, and the prompt and the highlight show the same action. Spec 041: one meaning
+    /// per input (ControlRules): left click does, hold left holds, the right click puts down (Q its hidden alias), the wheel turns.
     /// Spec 021: the board, pan, pot, plates and bowl are cookware you carry. Using what you hold on a piece of
     /// cookware (put food in, pour, take out, a knife stroke or turn) is the one new request, RequestUse(target,
     /// action): an object and an int, never a value. Crates, the counter, the plate shelf and the stove knobs keep
@@ -135,7 +136,18 @@ namespace Worktown.Game.Net
         private readonly List<PendingLook> _ending = new List<PendingLook>();
         private System.Func<PendingLook, ItemSnapshot> _snapshotOf;
 
-        private enum QueuedKind : byte { None, Click, Drop, Key, Flip } // 030 review: the right-click flip queues too
+        // Spec 041: the right click (or Q) puts down (on the aimed free spot, else at the feet); the right-click flip is gone.
+        private enum QueuedKind : byte { None, Click, Drop, Key, PutDown }
+
+        // Spec 041: the wheel's turn of the held item's rest rotation (PlaceTurn steps; back to 0 when the hands change), the wheel
+        // itself, and where a right click puts the held item down (first person; null: it drops at the feet).
+        private readonly WheelSteps _wheel = new WheelSteps();
+        private int _restTurn;
+        private Pickup _restTurnItem;
+        private PlaceSurface _rayPutDownSurface;
+        private int _rayPutDownSpot = PlaceSpots.None;
+        private Vector3 _rayPutDownPosition;
+        private bool _coneBuilt;
 
         private struct SpotState
         {
@@ -199,6 +211,19 @@ namespace Worktown.Game.Net
         /// <summary>Spec 020, owner side, first person: <see cref="Target"/> is seen but beyond reach (no action, "Too far").</summary>
         public bool TargetTooFar { get; private set; }
 
+        /// <summary>
+        /// Spec 041, owner side, first person: the surface a right click puts the held item on (the aimed free spot: the click's own
+        /// spot when the click places, else the free spot nearest where the ray meets a surface behind what it aims at, e.g. next to
+        /// the pot, else the best free spot in the aim cone), or null: a right click drops it at your feet.
+        /// </summary>
+        public PlaceSurface PutDownSurface { get; private set; }
+        /// <summary>Spec 041: the spot of <see cref="PutDownSurface"/> (PlaceSpots.None without one).</summary>
+        public int PutDownSpot { get; private set; } = PlaceSpots.None;
+        /// <summary>Spec 041: the world position of <see cref="PutDownSpot"/>.</summary>
+        public Vector3 PutDownPosition { get; private set; }
+        /// <summary>Spec 041, owner side: the held item's rest rotation from the wheel, in PlaceTurn steps (0 = the server's own rest).</summary>
+        public int RestTurn => _restTurn;
+
         public override void OnStartServer()
         {
             _service = NetworkManager.GetComponent<PickupService>();
@@ -255,14 +280,22 @@ namespace Worktown.Game.Net
             UpdatePrediction();
             // Spec 018: first person aims with the camera centre; third person keeps the nearest station.
             if (!firstPerson) TargetTooFar = false;
+            _coneBuilt = false;
             Target = firstPerson ? KeepShown(FindAimTarget(held)) : FindNearestStation();
             UpdateInteraction(firstPerson, held);
+            UpdatePutDown(firstPerson, held); // spec 041: where a right click puts it
+            if (held != _restTurnItem)
+            {
+                _restTurnItem = held; // spec 041: a new item in the hands starts at the server's own rest rotation
+                _restTurn = 0;
+            }
 
             if (_inputReader == null) _inputReader = FindFirstObjectByType<Worktown.Game.Player.PlayerInputReader>();
             Keyboard keyboard = Keyboard.current;
             Gamepad gamepad = Gamepad.current;
             Mouse mouse = Mouse.current;
             bool locked = Cursor.lockState == CursorLockMode.Locked;
+            ConsumeScripted(out _scriptedLeft, out _scriptedRight, out _scriptedTurn); // spec 041: the tours' inputs, this frame only
             // Spec 012: while quick chat (T) or the emote wheel (G / LB) is held, the keys belong to them; the
             // wheel then owns the camera freeze, so the knife lets go of it without writing it.
             bool wheel = (keyboard != null && keyboard.gKey.isPressed) || (gamepad != null && gamepad.leftShoulder.isPressed);
@@ -296,12 +329,26 @@ namespace Worktown.Game.Net
                 _click.Reset();
                 if (_queuedKind != QueuedKind.None && _queuedFirstPerson) ClearQueuedClick(); // the view changed
                 SetLookSuppressed(false);
+                _wheel.Reset(); // the wheel zooms the camera in third person
+                // Spec 041: the left button is E in third person (the mouse orbits the camera, so it acts on the nearest target);
+                // the first press on a free cursor only locks it.
+                bool leftDown = mouse != null && locked && mouse.leftButton.isPressed;
+                bool leftPressed = mouse != null && locked && _lockedLastFrame && mouse.leftButton.wasPressedThisFrame;
                 // 031b: holding E (or the right trigger) at the assembly board squeezes its nearest dispenser. 031b review: only after
                 // a 0.2 s hold (SqueezeHoldGate); a tap keeps its normal E meaning and is queued when it is let go.
-                bool squeezing = UpdateThirdPersonSqueeze(keyboard, gamepad, out bool tapped);
+                bool squeezing = UpdateThirdPersonSqueeze(keyboard, gamepad, leftDown, leftPressed, out bool tapped);
+                bool act = keyboard.eKey.wasPressedThisFrame || leftPressed || _scriptedLeft
+                    || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame);
                 // Spec 020 AC7: E acts in third person only. Spec 027b review: through the click buffer as well.
-                if (InteractionRules.KeysActInView(firstPerson) && (tapped || (!squeezing && keyboard.eKey.wasPressedThisFrame)))
+                if (InteractionRules.KeysActInView(firstPerson) && (tapped || (!squeezing && act))
+                    && ControlRules.IntentFor(HandInput.KeyE, false, InteractionAction.None, held != null, false) == HandIntent.Act)
                     Queue(QueuedKind.Key, false);
+                // Spec 041: the right click (left trigger, Q, X) drops what you hold; it never does anything else.
+                bool right = RightPressed(mouse, gamepad, locked) || _scriptedRight;
+                bool q = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
+                if ((right || q) && ControlRules.IntentFor(right ? HandInput.RightClick : HandInput.KeyQ, false, InteractionAction.None,
+                        held != null, false) == HandIntent.Drop)
+                    Queue(QueuedKind.Drop, false);
                 SendQueuedClick(false);
             }
             _lockedLastFrame = locked;
@@ -329,10 +376,20 @@ namespace Worktown.Game.Net
             }
         }
 
+        // Spec 041: the tours' scripted presses of this frame (development builds; always false / 0 in a release build).
+        private bool _scriptedLeft;
+        private bool _scriptedRight;
+        private int _scriptedTurn;
+
+        private static bool RightPressed(Mouse mouse, Gamepad gamepad, bool locked) =>
+            (mouse != null && locked && mouse.rightButton.wasPressedThisFrame) || (gamepad != null && gamepad.leftTrigger.wasPressedThisFrame);
+
         /// <summary>
         /// Spec 020, first person: the left click does <see cref="CurrentAction"/> (on release, see ClickGesture); with
-        /// the knife over a board with food the left button drags strokes instead and the right button turns the food
-        /// (spec 019). Q drops. Gamepad: right trigger click (or stroke), Y turn, X drop. No E, no digits.
+        /// the knife over a board with food the left button drags strokes instead (spec 019). Spec 041 (ControlRules): the right
+        /// click only puts down what you hold (on <see cref="PutDownSurface"/>, else at your feet; Q and X are hidden aliases); the
+        /// wheel turns the food on the board with the knife, else the held item's rest rotation. Gamepad: right trigger click (or
+        /// stroke), left trigger put down, Y one turn step. No E, no digits.
         /// </summary>
         private void UpdateFirstPerson(Keyboard keyboard, Gamepad gamepad, Mouse mouse, bool locked, Pickup held)
         {
@@ -354,32 +411,47 @@ namespace Worktown.Game.Net
                 click = false;
             }
 
+            bool holding = held != null;
+            bool spot = PutDownSurface != null;
             if (armed)
             {
                 if (stroke) _click.Cancel();
                 if (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame) stroke = true;
                 Vessel board = Target as Vessel;
-                if (stroke) SendKnife(board, VesselRules.ActionStroke);
-                bool turn = (mouse != null && locked && mouse.rightButton.wasPressedThisFrame)
-                    || (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame);
-                if (turn) SendKnife(board, VesselRules.ActionTurn);
+                if (stroke && ControlRules.IntentFor(HandInput.HoldLeft, true, CurrentAction, holding, spot) == HandIntent.Stroke)
+                    SendKnife(board, VesselRules.ActionStroke);
             }
-            else if (click || (!squeezing && gamepad != null && gamepad.rightTrigger.wasPressedThisFrame))
+            else if (click || _scriptedLeft || (!squeezing && gamepad != null && gamepad.rightTrigger.wasPressedThisFrame))
             {
-                // Spec 027b: inside the request interval the click waits (never swallowed).
-                Queue(QueuedKind.Click, true);
-            }
-            else if (((mouse != null && locked && mouse.rightButton.wasPressedThisFrame) || (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame))
-                     && InteractionRules.RightClickFlips(CurrentAim) && Target is Vessel)
-            {
-                // Spec 030: the right click on a griddle spot flips; without the spatula the server answers "Use the spatula".
-                // 030 review: through the click buffer like a left click, so a right click inside the request interval waits and is
-                // never swallowed.
-                Queue(QueuedKind.Flip, true);
+                // Spec 027b: inside the request interval the click waits (never swallowed). Spec 030's right-click flip is gone
+                // (spec 041): a flip is this left click with the spatula, like every tool use.
+                if (ControlRules.IntentFor(HandInput.LeftClick, true, CurrentAction, holding, spot) == HandIntent.Act)
+                    Queue(QueuedKind.Click, true);
             }
 
-            bool drop = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
-            if (drop && InteractionRules.DropKeyActs(true) && held != null) Queue(QueuedKind.Drop, true);
+            // Spec 041: the right click (left trigger; Q and X as hidden aliases) puts down what you hold, nothing else.
+            bool right = RightPressed(mouse, gamepad, locked) || _scriptedRight;
+            bool q = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
+            if (right || q)
+            {
+                HandIntent put = ControlRules.IntentFor(right ? HandInput.RightClick : HandInput.KeyQ, true, CurrentAction, holding, spot);
+                if (put == HandIntent.PutDown || put == HandIntent.Drop) Queue(QueuedKind.PutDown, true);
+            }
+
+            // Spec 041: the wheel (gamepad Y: one step) turns the food on the board with the knife, else the held item's rest rotation.
+            int steps = _scriptedTurn + (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame ? 1 : 0);
+            if (armed || holding) steps += _wheel.Update(locked && _inputReader != null ? _inputReader.Zoom : 0f);
+            else _wheel.Reset();
+            if (steps == 0) return;
+            switch (ControlRules.IntentFor(HandInput.Wheel, true, CurrentAction, holding, spot))
+            {
+                case HandIntent.TurnFood:
+                    SendKnife(Target as Vessel, VesselRules.ActionTurn); // one turn request, however far the wheel rolled
+                    break;
+                case HandIntent.TurnRest:
+                    _restTurn = PlaceTurn.Add(_restTurn, steps);
+                    break;
+            }
         }
 
         /// <summary>
@@ -398,8 +470,9 @@ namespace Worktown.Game.Net
             _queuedKind = kind;
             _queuedFirstPerson = firstPerson;
             _queuedAction = CurrentAction;
-            _queuedTarget = TargetId(Target);
-            _queuedSpot = TargetSpot;
+            // Spec 041: a queued put-down remembers where it was aimed (a surface and spot, or the feet).
+            _queuedTarget = kind == QueuedKind.PutDown ? TargetId(PutDownSurface) : TargetId(Target);
+            _queuedSpot = kind == QueuedKind.PutDown ? PutDownSpot : TargetSpot;
         }
 
         private static int TargetId(Component target) => target != null ? target.GetInstanceID() : 0;
@@ -418,11 +491,32 @@ namespace Worktown.Game.Net
                 case QueuedKind.Key:
                     HandleThirdPersonKey(FindHeldPickup() != null);
                     break;
-                case QueuedKind.Flip:
-                    // 030 review: a right-click flip, sent now or after the request interval (still on the same spot with food).
-                    if (InteractionRules.RightClickFlips(CurrentAim) && Target is Vessel spot) FlipWithLook(spot);
+                case QueuedKind.PutDown:
+                    PutDownWithLook(FindHeldPickup()); // spec 041: the right click
                     break;
             }
+        }
+
+        /// <summary>
+        /// Spec 041: the right click. On <see cref="PutDownSurface"/>'s spot (the place request, with the wheel's turn and the
+        /// predicted rest), else the drop at the feet. Nothing without something in the hands.
+        /// </summary>
+        private void PutDownWithLook(Pickup held)
+        {
+            if (held == null) return;
+            if (PutDownSurface != null && PutDownSpot >= 0) PlaceWithLook(held, PutDownSurface, PutDownSpot, PutDownPosition);
+            else DropWithLook(held);
+        }
+
+        /// <summary>Spec 020/027b: the place request for <paramref name="spot"/> with its predicted rest and sound; spec 041: turned by
+        /// the wheel's <see cref="RestTurn"/> (packed into the spot int, PlaceTurn).</summary>
+        private void PlaceWithLook(Pickup held, PlaceSurface surface, int spot, Vector3 spotPosition)
+        {
+            SendPlace(surface.Index, PlaceTurn.Pack(spot, _restTurn));
+            if (held == null) return;
+            Predict(PredictionKind.Place, held, null);
+            held.PredictRest(PlacePose(held, surface, spot, transform.position, _restTurn));
+            PlaySound(SoundRules.PlaceSound(SoundRules.MaterialOf(held), surface.IsBurner), spotPosition);
         }
 
         /// <summary>Spec 027b: sends the queued click, Q or E once the request interval has passed, if still aimed alike.</summary>
@@ -436,7 +530,8 @@ namespace Worktown.Game.Net
                 return; // review of spec 027b: the target, the spot or the action changed since the click
 
             if (kind == QueuedKind.Key && !firstPerson && TargetId(Target) != _queuedTarget) return;
-            if (kind == QueuedKind.Flip && TargetId(Target) != _queuedTarget) return; // 030 review: aimed elsewhere since
+            // Spec 041: a queued put-down goes only where it was aimed (the same spot, or still the feet).
+            if (kind == QueuedKind.PutDown && (TargetId(PutDownSurface) != _queuedTarget || PutDownSpot != _queuedSpot)) return;
             Act(kind);
         }
 
@@ -562,16 +657,7 @@ namespace Worktown.Game.Net
                     break;
                 case InteractionAction.Place:
                     if (Target is PlaceSurface surface && TargetSpot >= 0)
-                    {
-                        Pickup held = FindHeldPickup();
-                        SendPlace(surface.Index, TargetSpot);
-                        if (held != null)
-                        {
-                            Predict(PredictionKind.Place, held, null);
-                            held.PredictRest(PlacePose(held, surface, TargetSpot, transform.position));
-                            PlaySound(SoundRules.PlaceSound(SoundRules.MaterialOf(held), surface.IsBurner), TargetSpotPosition);
-                        }
-                    }
+                        PlaceWithLook(FindHeldPickup(), surface, TargetSpot, TargetSpotPosition);
                     break;
                 case InteractionAction.PickUp:
                     if (Target is Vessel cookware) PickUpWithLook(cookware.GetComponent<Pickup>());
@@ -646,7 +732,7 @@ namespace Worktown.Game.Net
                 flying ? Describe(_pendingPickUp) : (Held?)null);
         }
 
-        /// <summary>Spec 027b: a drop request (Q, or E in third person) with its predicted fall in front of you.</summary>
+        /// <summary>Spec 027b: a drop request (the right click with no spot aimed at, Q, or E in third person) with its predicted fall.</summary>
         private void DropWithLook(Pickup held)
         {
             SendDrop();
@@ -662,13 +748,14 @@ namespace Worktown.Game.Net
         /// <summary>Spec 027b: where an item lands on spot <paramref name="spot"/> of <paramref name="surface"/>, as the
         /// server places it (PickupService.TryPlace): its bottom on the spot, its resting tilt, the surface's yaw; spec 039: a
         /// tool's handle towards <paramref name="placer"/> (the same ToolRest rule the server applies to its own copy of
-        /// the player's position, so the predicted look does not jump).</summary>
-        private static Pose PlacePose(Pickup item, PlaceSurface surface, int spot, Vector3 placer)
+        /// the player's position, so the predicted look does not jump). Spec 041: turned by <paramref name="turn"/> wheel steps, as the
+        /// server turns it (PlaceTurn.Apply).</summary>
+        private static Pose PlacePose(Pickup item, PlaceSurface surface, int spot, Vector3 placer, int turn)
         {
             Vector3 spotPosition = surface.SpotWorldPosition(spot);
             Vector3 position = spotPosition + surface.transform.up * item.BottomOffset;
-            return new Pose(position, ToolRest.RestRotation(item.IsHandleTool, item.ClientRestTilt, surface.transform.rotation, placer,
-                spotPosition));
+            return new Pose(position, PlaceTurn.Apply(ToolRest.RestRotation(item.IsHandleTool, item.ClientRestTilt, surface.transform.rotation,
+                placer, spotPosition), turn));
         }
 
         /// <summary>Spec 027b: just above the cookware's contents, where food is dropped in from.</summary>
@@ -680,18 +767,26 @@ namespace Worktown.Game.Net
 
         /// <summary>
         /// Spec 027b, owner side: where the held item would land with a click now (a place spot, or into cookware), for
-        /// the placement ghost. False when the click does not put it anywhere.
+        /// the placement ghost. False when the click does not put it anywhere. Spec 041: turned by the wheel; where nothing else
+        /// is offered, the right click's put-down spot.
         /// </summary>
         public bool TryGetLandingPose(out Pickup held, out Pose pose)
         {
             pose = default;
             held = null;
-            if (CurrentAction != InteractionAction.Place && CurrentAction != InteractionAction.PutInto) return false;
+            // Spec 041: with nothing for the left click to do, the ghost shows where the right click puts it down.
+            bool putDown = CurrentAction == InteractionAction.None && PutDownSurface != null && PutDownSpot >= 0;
+            if (CurrentAction != InteractionAction.Place && CurrentAction != InteractionAction.PutInto && !putDown) return false;
             held = FindHeldPickup();
             if (held == null || held.HasPrediction) return false;
+            if (putDown)
+            {
+                pose = PlacePose(held, PutDownSurface, PutDownSpot, transform.position, _restTurn);
+                return true;
+            }
             if (CurrentAction == InteractionAction.Place && Target is PlaceSurface surface && TargetSpot >= 0)
             {
-                pose = PlacePose(held, surface, TargetSpot, transform.position);
+                pose = PlacePose(held, surface, TargetSpot, transform.position, _restTurn);
                 return true;
             }
             if (CurrentAction == InteractionAction.PutInto && Target is Vessel vessel)
@@ -1431,15 +1526,15 @@ namespace Worktown.Game.Net
         private const float ToolAimRadius = 0.12f;
 
         /// <summary>
-        /// Spec 039: the tool of the station a place surface sits on (assembly board, register, drink dispenser) that the ray passes,
-        /// or null (any other surface, or no tool near the ray).
+        /// Spec 039: the tool of the assembly board a place surface sits on (its back strip) that the ray passes, or null (any other
+        /// surface, or no tool near the ray). 039 review: only the assembly board has a surface on it (the register and the drink
+        /// dispenser have their tops beside them, not on them).
         /// </summary>
         private static StockSlot ToolNearRay(PlaceSurface surface, Ray ray, out float distance)
         {
             distance = float.PositiveInfinity;
             Station station = surface.GetComponentInParent<Station>();
-            if (station == null || (station.Kind != StationKind.Assembly && station.Kind != StationKind.Register
-                && station.Kind != StationKind.DrinkDispenser)) return null;
+            if (station == null || station.Kind != StationKind.Assembly) return null;
             return ToolOnRay(station, ray, out distance);
         }
 
@@ -1551,7 +1646,7 @@ namespace Worktown.Game.Net
         /// now), so E still picks up and drops at the board. Returns true while the gate owns the input (no E action from it).
         /// The board's nearest dispenser and its build spot are cached per target (no slot scan per frame).
         /// </summary>
-        private bool UpdateThirdPersonSqueeze(Keyboard keyboard, Gamepad gamepad, out bool tapped)
+        private bool UpdateThirdPersonSqueeze(Keyboard keyboard, Gamepad gamepad, bool leftDown, bool leftPressed, out bool tapped)
         {
             tapped = false;
             Station board = Target is Station s && (s.Kind == StationKind.Assembly || s.Kind == StationKind.DrinkDispenser
@@ -1581,9 +1676,10 @@ namespace Worktown.Game.Net
             bool offered = offeredAction == InteractionAction.Squeeze || offeredAction == InteractionAction.Fill // spec 033: a tap too
                 || offeredAction == InteractionAction.Scrub || offeredAction == InteractionAction.Wipe // spec 035
                 || offeredAction == InteractionAction.Shave; // spec 036
-            bool down = (keyboard != null && keyboard.eKey.isPressed) || (gamepad != null && gamepad.rightTrigger.isPressed);
+            // Spec 041: the left button holds like E in third person.
+            bool down = (keyboard != null && keyboard.eKey.isPressed) || (gamepad != null && gamepad.rightTrigger.isPressed) || leftDown;
             bool pressedNow = (keyboard != null && keyboard.eKey.wasPressedThisFrame)
-                || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame);
+                || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame) || leftPressed;
             if (_devSqueeze) return PollSqueeze();
             SqueezeHoldGate.Step step = _thirdPersonGate.Update(offered, down, pressedNow, Time.unscaledTimeAsDouble);
             tapped = step == SqueezeHoldGate.Step.Tap;
@@ -1916,6 +2012,77 @@ namespace Worktown.Game.Net
             return Stick(exact);
         }
 
+        // ---- Spec 041: where a right click puts the held item down ----
+
+        private void ClearRayPutDown()
+        {
+            _rayPutDownSurface = null;
+            _rayPutDownSpot = PlaceSpots.None;
+            _rayPutDownPosition = default;
+        }
+
+        /// <summary>
+        /// Spec 041, first person with something in the hands: the click's own spot when the click places; else the free spot nearest
+        /// where the aim ray meets a surface (behind cookware or a station on it, never through a wall); else the free spot nearest
+        /// the ray in the aim cone (in sight and reach). None of them: the right click drops at the feet.
+        /// </summary>
+        private void UpdatePutDown(bool firstPerson, Pickup held)
+        {
+            PutDownSurface = null;
+            PutDownSpot = PlaceSpots.None;
+            PutDownPosition = default;
+            if (!firstPerson || held == null) return;
+            if (CurrentAction == InteractionAction.Place && Target is PlaceSurface aimed && TargetSpot >= 0)
+                SetPutDown(aimed, TargetSpot, TargetSpotPosition);
+            else if (_rayPutDownSurface != null)
+                SetPutDown(_rayPutDownSurface, _rayPutDownSpot, _rayPutDownPosition);
+            else if (BestConeSpot(out PlaceSurface surface, out int spot, out Vector3 position))
+                SetPutDown(surface, spot, position);
+        }
+
+        private void SetPutDown(PlaceSurface surface, int spot, Vector3 position)
+        {
+            PutDownSurface = surface;
+            PutDownSpot = spot;
+            PutDownPosition = position;
+        }
+
+        /// <summary>Spec 041: the free spot of this frame's aim cone nearest the ray that is in sight (the cone checks reach), if any.</summary>
+        private bool BestConeSpot(out PlaceSurface surface, out int spot, out Vector3 position)
+        {
+            surface = null;
+            spot = PlaceSpots.None;
+            position = default;
+            if (!_coneBuilt) return false;
+            Camera cam = Camera.main;
+            if (cam == null) return false;
+            float best = float.PositiveInfinity;
+            for (int i = 0; i < _coneSources.Count; i++)
+            {
+                if (!(_coneSources[i] is PlaceSurface s) || _coneSpots[i] < 0 || _cone[i].Angle >= best) continue;
+                if (!InSight(cam.transform.position, _coneAnchors[i], s)) continue;
+                best = _cone[i].Angle;
+                surface = s;
+                spot = _coneSpots[i];
+                position = _coneAnchors[i];
+            }
+            return surface != null;
+        }
+
+        /// <summary>Spec 041: the tours' scripted left click, right click and wheel steps of this frame (none in a release build).</summary>
+        private void ConsumeScripted(out bool left, out bool right, out int turn)
+        {
+            left = false;
+            right = false;
+            turn = 0;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (_handIntents == null) return;
+            left = _handIntents.ConsumeLeftClick();
+            right = _handIntents.ConsumeRightClick();
+            turn = _handIntents.ConsumeTurn();
+#endif
+        }
+
         private Component Stick(Component target)
         {
             _sticky = TargetTooFar ? null : target;
@@ -1931,6 +2098,7 @@ namespace Worktown.Game.Net
             ray = default;
             TargetSpot = PlaceSpots.None;
             TargetTooFar = false;
+            ClearRayPutDown();
             Camera cam = Camera.main;
             if (cam == null) return null;
             ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
@@ -1938,6 +2106,7 @@ namespace Worktown.Game.Net
             _aimHits.Clear();
             _aimSources.Clear();
             _aimPoints.Clear();
+            float putDownDistance = float.PositiveInfinity, wallDistance = float.PositiveInfinity;
             for (int i = 0; i < count; i++)
             {
                 Collider hitCollider = _rayHits[i].collider;
@@ -1956,6 +2125,15 @@ namespace Worktown.Game.Net
                 {
                     Vector3 point = _rayHits[i].point;
                     int spot = NearestFreeSpot(surface, point, out Vector3 spotPosition);
+                    // Spec 041: the nearest surface on the ray with a free spot in reach is where a right click puts things down,
+                    // even behind what the ray aims at (the pot: next to it on the counter).
+                    if (holding && spot >= 0 && distance < putDownDistance && PickupRules.IsInReach(transform.position, spotPosition))
+                    {
+                        putDownDistance = distance;
+                        _rayPutDownSurface = surface;
+                        _rayPutDownSpot = spot;
+                        _rayPutDownPosition = spotPosition;
+                    }
                     // Spec 039: a top on a station with tools (the assembly board's back) lies behind them. The ray means the tool
                     // when it passes the tool closer than the hit lies to the nearest free spot (as when it reached the body).
                     StockSlot tool = ToolNearRay(surface, ray, out float toolDistance);
@@ -1996,10 +2174,15 @@ namespace Worktown.Game.Net
                 else if (pickup != null && !pickup.IsHeld)
                     AddAimHit(distance, AimKind.Pickup, pickup);
                 else
+                {
                     AddAimHit(distance, AimKind.Other, null);
+                    if (pickup == null) wallDistance = Mathf.Min(wallDistance, distance); // spec 041: no putting down through a wall
+                }
                 _aimPoints.Add(_rayHits[i].point);
             }
-            int picked = AimRules.Pick(_aimHits, transform.position, holding, out int outOfReach);
+            if (_rayPutDownSurface != null && wallDistance < putDownDistance) ClearRayPutDown();
+            // 039 review (must-fix): with empty hands the place surfaces' thin aim colliders are transparent (nothing to put down).
+            int picked = AimRules.Pick(_aimHits, transform.position, holding, !holding, out int outOfReach);
             // Spec 020: a target the ray sees but the hands cannot reach is shown grey with "Too far".
             TargetTooFar = picked == AimRules.None && outOfReach != AimRules.None;
             if (TargetTooFar) picked = outOfReach;
@@ -2131,6 +2314,7 @@ namespace Worktown.Game.Net
             _coneSources.Clear();
             _coneSpots.Clear();
             _coneAnchors.Clear();
+            _coneBuilt = true; // spec 041: the put-down looks at this frame's cone
             float range = ViewRules.AimRange;
             foreach (Pickup pickup in Pickup.ClientList)
             {
@@ -2670,6 +2854,26 @@ namespace Worktown.Game.Net
         // ---- Spec 027: hooks for the dev tours and -demo-cookware (Scripts/Dev), development builds only ----
         // The tour clicks like a player (DevClick: the action under the dot) or, when the aim fails, sends the same
         // request the click would have sent. All of them go through the normal ServerRpcs; the server decides as always.
+
+        /// <summary>
+        /// Spec 041, development builds only: the hand inputs a tour gives instead of the mouse (a whole left click, a right click,
+        /// wheel steps), each read once in the next frame and routed exactly like the device's (ControlRules, the click buffer).
+        /// </summary>
+        public interface IHandIntentSource
+        {
+            bool ConsumeLeftClick();
+            bool ConsumeRightClick();
+            int ConsumeTurn();
+        }
+
+        private IHandIntentSource _handIntents;
+
+        /// <summary>Spec 041, owner only: the tour's hand inputs (added to the devices'); null for none.</summary>
+        public IHandIntentSource HandIntentSource
+        {
+            get => _handIntents;
+            set => _handIntents = value;
+        }
 
         /// <summary>Spec 027: does what a left click does now (<see cref="CurrentAction"/> on <see cref="Target"/>).</summary>
         public void DevClick() => ExecuteAction();

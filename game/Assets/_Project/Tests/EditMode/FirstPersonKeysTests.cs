@@ -5,8 +5,8 @@ using Worktown.Game.Net.Rules;
 namespace Worktown.Game.Tests
 {
     /// <summary>
-    /// Spec 019 AC7 / spec 020 AC7: first person has no E and no digit keys (the mouse does it, Q drops); third person
-    /// keeps E. Spec 021: the stations with digit options (board, pan, pot) became carried cookware, so no station has
+    /// Spec 019 AC7 / spec 020 AC7: first person has no E and no digit keys (the mouse does it; spec 041: Q is the right
+    /// click's hidden alias); third person keeps E. Spec 021: the stations with digit options (board, pan, pot) became carried cookware, so no station has
     /// digit options any more; the stove buttons and their flags byte are per burner.
     /// </summary>
     public class FirstPersonKeysTests
@@ -19,10 +19,16 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void QDrops_InFirstPersonOnly()
+        public void Q_IsTheRightClicksHiddenAlias_InBothViews()
         {
-            Assert.IsTrue(InteractionRules.DropKeyActs(firstPerson: true));
-            Assert.IsFalse(InteractionRules.DropKeyActs(firstPerson: false), "third person drops with E as before");
+            // Spec 041 (replaces spec 020's "Q drops in first person only"): Q puts down like the right click, in both views.
+            foreach (bool firstPerson in new[] { true, false })
+                foreach (bool onSpot in new[] { true, false })
+                    Assert.AreEqual(ControlRules.IntentFor(HandInput.RightClick, firstPerson, InteractionAction.None, true, onSpot),
+                        ControlRules.IntentFor(HandInput.KeyQ, firstPerson, InteractionAction.None, true, onSpot), firstPerson + " " + onSpot);
+            Assert.AreEqual(HandIntent.Drop, ControlRules.IntentFor(HandInput.KeyQ, true, InteractionAction.None, true, false));
+            Assert.AreEqual(HandIntent.Drop, ControlRules.IntentFor(HandInput.KeyQ, false, InteractionAction.None, true, false));
+            Assert.AreEqual(HandIntent.None, ControlRules.IntentFor(HandInput.KeyQ, true, InteractionAction.None, false, false), "empty hands");
         }
 
         [Test]
@@ -38,13 +44,13 @@ namespace Worktown.Game.Tests
         {
             byte off = 0;
             byte secondOnSaute = StationRules.BurnerFlags(1, true, true);
-            Assert.AreEqual("Click · burner on", InteractionRules.ButtonPrompt(StationRules.StoveOption(0, StationRules.StoveSwitch), off));
-            Assert.AreEqual("Click · fry → sauté", InteractionRules.ButtonPrompt(StationRules.StoveOption(0, StationRules.PanMode), off));
-            Assert.AreEqual("Click · burner on", InteractionRules.ButtonPrompt(StationRules.StoveOption(0, StationRules.StoveSwitch), secondOnSaute),
+            Assert.AreEqual("Left click · burner on", InteractionRules.ButtonPrompt(StationRules.StoveOption(0, StationRules.StoveSwitch), off));
+            Assert.AreEqual("Left click · fry → sauté", InteractionRules.ButtonPrompt(StationRules.StoveOption(0, StationRules.PanMode), off));
+            Assert.AreEqual("Left click · burner on", InteractionRules.ButtonPrompt(StationRules.StoveOption(0, StationRules.StoveSwitch), secondOnSaute),
                 "burner 0 is still off");
-            Assert.AreEqual("Click · burner off", InteractionRules.ButtonPrompt(StationRules.StoveOption(1, StationRules.StoveSwitch), secondOnSaute));
-            Assert.AreEqual("Click · sauté → fry", InteractionRules.ButtonPrompt(StationRules.StoveOption(1, StationRules.PanMode), secondOnSaute));
-            Assert.AreEqual("Click · press", InteractionRules.ButtonPrompt(9, off));
+            Assert.AreEqual("Left click · burner off", InteractionRules.ButtonPrompt(StationRules.StoveOption(1, StationRules.StoveSwitch), secondOnSaute));
+            Assert.AreEqual("Left click · sauté → fry", InteractionRules.ButtonPrompt(StationRules.StoveOption(1, StationRules.PanMode), secondOnSaute));
+            Assert.AreEqual("Left click · press", InteractionRules.ButtonPrompt(9, off));
         }
 
         [Test]

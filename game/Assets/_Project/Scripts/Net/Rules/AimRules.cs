@@ -43,6 +43,19 @@ namespace Worktown.Game.Net.Rules
         /// </summary>
         public static int Pick(IReadOnlyList<AimHit> hits, Vector3 playerPosition, bool pickupsTransparent, out int outOfReach)
         {
+            return Pick(hits, playerPosition, pickupsTransparent, false, out outOfReach);
+        }
+
+        /// <summary>
+        /// 039 review (must-fix): as <see cref="Pick(IReadOnlyList{AimHit}, Vector3, bool, out int)"/>; with
+        /// <paramref name="spotsTransparent"/> (the hands are empty, so nothing can be put down) a <see cref="AimKind.Spot"/>
+        /// neither is a target nor blocks, like pickups with full hands: the ray reaches the station under a surface's thin aim
+        /// collider (the plate shelf, the sink, the stove front, the assembly back, the fryer deck). The interactor passes
+        /// <c>pickupsTransparent = holding</c> and <c>spotsTransparent = !holding</c>.
+        /// </summary>
+        public static int Pick(IReadOnlyList<AimHit> hits, Vector3 playerPosition, bool pickupsTransparent, bool spotsTransparent,
+            out int outOfReach)
+        {
             outOfReach = None;
             if (hits == null) return None;
             int best = None;
@@ -50,6 +63,7 @@ namespace Worktown.Game.Net.Rules
             for (int i = 0; i < hits.Count; i++)
             {
                 if (pickupsTransparent && hits[i].Kind == AimKind.Pickup) continue;
+                if (spotsTransparent && hits[i].Kind == AimKind.Spot) continue;
                 float distance = hits[i].Distance;
                 if (float.IsNaN(distance) || distance < 0f || distance > bestDistance) continue;
                 if (distance == bestDistance && hits[i].Kind != AimKind.Button) continue;

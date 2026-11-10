@@ -12,7 +12,11 @@ namespace Worktown.Game.Net.Rules
     /// </summary>
     public static class InteractionRules
     {
-        public const string ClickKey = "Click";
+        public const string ClickKey = "Left click"; // spec 041: every prompt names the mouse button
+        /// <summary>Spec 041: the put-down button's word ("Right click · put the knife here").</summary>
+        public const string RightClickKey = "Right click";
+        /// <summary>Spec 041: the turn's word ("Wheel · turn").</summary>
+        public const string WheelKey = "Wheel";
         public const string TooFarText = "Too far";
 
         /// <summary>
@@ -75,7 +79,7 @@ namespace Worktown.Game.Net.Rules
         /// <summary>
         /// Spec 030, a griddle spot (fixed to its griddle, never picked up): the spatula flips the food on it, food that fits goes
         /// on, a plate or bowl with room takes the food (the spot's Take, like a basket's tip), empty hands take it off.
-        /// Anything else (the knife, a box) does nothing. A flip by hand is the right click (refused: "Use the spatula").
+        /// Anything else (the knife, a box) does nothing. Spec 041: the flip is the left click with the spatula.
         /// </summary>
         private static InteractionAction GriddleAction(Held held, AimTarget target, bool hasFood)
         {
@@ -135,8 +139,8 @@ namespace Worktown.Game.Net.Rules
 
         // ---- Spec 031: the assembly board ----
 
-        /// <summary>Spec 031: the key word of a held action ("Hold · squeeze garlic-herb sauce").</summary>
-        public const string HoldKey = "Hold";
+        /// <summary>Spec 031: the key word of a held action ("Hold left click · squeeze garlic-herb sauce").</summary>
+        public const string HoldKey = "Hold left click"; // spec 041: names the button
 
         /// <summary>
         /// Spec 031, the build spot (fixed to its board, never picked up): food goes on as the next layer while the build is open
@@ -280,16 +284,16 @@ namespace Worktown.Game.Net.Rules
         public const string UseTheSpatula = "Use the spatula";
 
         /// <summary>
-        /// Spec 030: a right click on a griddle spot with food asks for a flip whatever the hands hold (the server checks the
-        /// spatula: without it the answer is "Use the spatula"). False for anything else and beyond reach.
+        /// Spec 030: a griddle spot with food in reach, where the spatula flips. Spec 041: the flip is the left click with the spatula
+        /// (<see cref="InteractionAction.Flip"/>); the right click only puts down, so a flip by hand is no longer asked for.
         /// </summary>
-        public static bool RightClickFlips(AimTarget target)
+        public static bool IsFlipTarget(AimTarget target)
         {
             return !target.IsTooFar && target.Kind == AimKind.Vessel && target.Vessel == VesselKind.Griddle && target.ContentCount > 0;
         }
 
         /// <summary>Spec 030: a flip is predicted (the arc at the click) only with the spatula in the hands; the server would refuse it otherwise.</summary>
-        public static bool PredictsFlip(Held held, AimTarget target) => held.IsSpatula && !held.IsPending && RightClickFlips(target);
+        public static bool PredictsFlip(Held held, AimTarget target) => held.IsSpatula && !held.IsPending && IsFlipTarget(target);
 
         /// <summary>
         /// Spec 029b: holding a plate or bowl with room, a click on a raised basket with food tips the food onto it (the
@@ -646,12 +650,13 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Order:
                 case InteractionAction.Page: return Click(target.Name);
                 case InteractionAction.Flip: return Click("flip " + TakeWhat(target)); // spec 030
-                case InteractionAction.Cut: return "Drag down · cut   Right click · turn";
+                case InteractionAction.Cut: return "Drag down · cut   " + WheelKey + " · turn"; // spec 041: the wheel turns the food
                 case InteractionAction.PutInto: return Click("put " + held.Name + " " + IntoWhat(target.Vessel));
                 case InteractionAction.Pour: return Click("pour into the " + VesselRules.Name(target.Vessel));
                 case InteractionAction.Sell: return Click("sell " + (held.IsVessel ? held.ContentName ?? "the plate" : held.Name));
                 case InteractionAction.Place:
-                    return Click("put " + held.Name + (target.IsBurner ? " on the burner" : " here"));
+                    // Spec 041: the right click is the put-down button (the left click places too); the wheel turns it first.
+                    return RightClickKey + " · put " + held.Name + (target.IsBurner ? " on the burner" : " here") + "   " + WheelKey + " · turn";
                 case InteractionAction.PickUp: return Click("pick up " + (string.IsNullOrEmpty(target.Name) ? "it" : target.Name));
                 case InteractionAction.Buy:
                     string what = string.IsNullOrEmpty(target.Name) ? "one" : target.Name;
@@ -692,13 +697,15 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>
-        /// Spec 020 AC7, key map: E and the digit keys act only in third person (spec 007); first person uses the mouse
-        /// (and Q to drop).
+        /// Spec 020 AC7, key map: E and the digit keys act only in third person (spec 007); first person uses the mouse.
         /// </summary>
         public static bool KeysActInView(bool firstPerson) => !firstPerson;
 
-        /// <summary>Spec 020: Q (gamepad X) drops what you hold, first person only; third person keeps E.</summary>
-        public static bool DropKeyActs(bool firstPerson) => firstPerson;
+        /// <summary>
+        /// Spec 041: the HUD's line with something in the hands and nothing else to say: what the right click does now (put it down
+        /// on the aimed spot, or drop it at your feet). Q is a hidden alias and never named.
+        /// </summary>
+        public static string PutDownPrompt(bool onSpot) => RightClickKey + " · " + (onSpot ? "put down here" : "drop");
 
         private static string Full(VesselKind kind)
         {

@@ -26,34 +26,34 @@ namespace Worktown.Game.Tutorial
             new TutorialStep(TutorialStepId.TakePotato, "Take a potato from the dry shelf: aim at it and left click.", false, HasPotato,
                 PotatoTarget),
             new TutorialStep(TutorialStepId.CutSticks,
-                "Put the potato on the cutting board, pick up the knife and drag down to cut it into sticks (right click turns it).",
+                "Put the potato on the cutting board, pick up the knife and drag down to cut it into sticks (the mouse wheel turns it).",
                 false, HasSticks, CutTarget),
             new TutorialStep(TutorialStepId.FrySticks,
                 "Take the sticks to the fryer: switch it on, put them in the basket and lower it. Shake it once, raise it at perfect.",
                 false, HasFries, FryTarget, FryText),
-            new TutorialStep(TutorialStepId.PlateFries, "Pick up a plate and click the raised basket: the fries tip onto it.", false,
+            new TutorialStep(TutorialStepId.PlateFries, "Pick up a plate and left click the raised basket: the fries tip onto it.", false,
                 HasPlatedFries, PlateTarget),
             new TutorialStep(TutorialStepId.BuildWrap,
                 "Build a falafel wrap on the assembly board: a wrap, falafel from the fryer, sliced lettuce, then hold a sauce for a second.",
                 false, HasBuild, BuildTarget),
-            new TutorialStep(TutorialStepId.FoldAndWrap, "Click the board with empty hands to fold the wrap, then click the wrap paper on the rack.",
+            new TutorialStep(TutorialStepId.FoldAndWrap, "Left click the board with empty hands to fold the wrap, then left click the wrap paper on the rack.",
                 false, HasWrapped, FoldTarget),
-            new TutorialStep(TutorialStepId.ServeGuest, "Serve a guest: carry the fries or the wrap to the serving counter and click it.", false,
+            new TutorialStep(TutorialStepId.ServeGuest, "Serve a guest: carry the fries or the wrap to the serving counter and left click it.", false,
                 HasServed, ServeTarget),
             new TutorialStep(TutorialStepId.TakePayment,
-                "The guest pays at the register. Cash: click coins and notes until the change is right, then hand it over. Card: click the terminal.",
+                "The guest pays at the register. Cash: left click coins and notes until the change is right, then hand it over. Card: click the terminal.",
                 false, HasPaid, PayTarget),
             new TutorialStep(TutorialStepId.FillLemonade,
-                "Take a cup, hold left click on the lemonade tap until it is full, then click the lids. Serve it with the wrap.",
+                "Take a cup, hold left click on the lemonade tap until it is full, then left click the lids. Serve it with the wrap.",
                 false, HasLemonade, LemonadeTarget),
             new TutorialStep(TutorialStepId.WashPlate,
                 "Guests who eat in bring their plate back. Take it from the dish return, put it in the sink and hold left click to scrub.",
                 false, HasWashed, WashTarget),
             new TutorialStep(TutorialStepId.OrderStock,
-                "Stock runs out. Order more at the terminal on the back wall: click a row (the box comes to the back door).",
+                "Stock runs out. Order more at the terminal on the back wall: left click a row (the box comes to the back door).",
                 false, HasOrdered, OrderTarget),
             new TutorialStep(TutorialStepId.ShaveSpit,
-                "Optional: load the spit, turn its knob to high, and when the cone browns hold the knife on it to shave.",
+                "Optional: load the spit, turn its knob to high, and when the cone browns hold left click on it with the knife to shave.",
                 true, HasShaved, SpitTarget),
             new TutorialStep(TutorialStepId.Done, "That is the whole kitchen. Have a good first shift! F1 replays this tutorial.", false, Never,
                 NoTarget),
@@ -128,11 +128,11 @@ namespace Worktown.Game.Tutorial
         }
 
         /// <summary>
-        /// 038b: step 4 while the knife is still in the hands (the target is the board with the sticks): put the knife down first. Q drops
-        /// what is held (the HUD's "Q · drop").
+        /// 038b: step 4 while the knife is still in the hands (the target is the board with the sticks): put the knife down first. Spec 041:
+        /// the right click puts down what is held (the HUD: "Right click · drop" or "put down here").
         /// </summary>
         public const string FryKnifeText =
-            "Put the knife down first (Q drops it). Then take the sticks from the board to the fryer: switch it on, basket in, lower it.";
+            "Put the knife down first (right click). Then take the sticks from the board to the fryer: switch it on, basket in, lower it.";
 
         /// <summary>038b: <see cref="FryKnifeText"/> while the knife is held and the sticks are not in the basket yet, else null.</summary>
         public static string FryText(in TutorialSnapshot s) =>

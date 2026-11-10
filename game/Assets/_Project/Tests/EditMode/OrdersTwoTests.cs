@@ -216,13 +216,13 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("CHANGE $8 / $18", RegisterRules.DisplayText(cash, 8));
             Assert.AreEqual("CARD", RegisterRules.DisplayText(card, 0));
             Assert.AreEqual(InteractionAction.Pay, InteractionRules.ActionFor(Held.Nothing, AimTarget.RegisterSlot(Slot(5), cash, 0)));
-            Assert.AreEqual("Click · give $5", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(5), cash, 0)));
+            Assert.AreEqual("Left click · give $5", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(5), cash, 0)));
             Assert.AreEqual(InteractionAction.Pay, InteractionRules.ActionFor(Held.Food("potato", false), AimTarget.RegisterSlot(Slot(5), cash, 0)),
                 "any hands");
-            Assert.AreEqual("Click · hand over $18", InteractionRules.PromptFor(Held.Nothing,
+            Assert.AreEqual("Left click · hand over $18", InteractionRules.PromptFor(Held.Nothing,
                 AimTarget.RegisterSlot(RegisterRules.GiveChangeOption, cash, 18)));
             Assert.AreEqual("They pay by card", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(5), card, 0)));
-            Assert.AreEqual("Click · card payment", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(RegisterRules.CardOption, card, 0)));
+            Assert.AreEqual("Left click · card payment", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(RegisterRules.CardOption, card, 0)));
             Assert.AreEqual("They pay cash", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(RegisterRules.CardOption, cash, 0)));
             Assert.AreEqual("Nobody is paying", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(1), none, 0)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, AimTarget.RegisterSlot(Slot(1), none, 0).TooFar()));

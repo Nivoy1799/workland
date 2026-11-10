@@ -21,6 +21,10 @@ namespace Worktown.Game.Dev
     public static class PlaceAnywhereSequence
     {
         private const float AisleZ = TourRules.AisleZ;
+        /// <summary>Spec 041 AC3: the top put down on with a right click, and the one turned with the wheel first (two notches).</summary>
+        private const string RightClickTop = "front-west";
+        private const string WheelTop = "beside-drinks";
+        private const int WheelSteps = 2;
 
         /// <summary>The tops to try: the surface's name, its number among those with that name (by index), and the world x to aim near.</summary>
         private static readonly (string Surface, int Nth, float X, string Shot)[] Tops =
@@ -79,11 +83,30 @@ namespace Worktown.Game.Dev
                 yield return actor.LevelView();
                 yield return actor.WalkTo(new Vector3(spotAt.x, 0f, AisleZ), false, false);
                 Pickup held = me.FindHeldPickup();
-                yield return actor.Use("put the knife on " + name + " spot " + spot, spotAt, InteractionAction.Place,
-                    () => me.DevSendPlace(surface.Index, spot), capture.Before("place-" + shot, null, 0f));
+                int turn = 0;
+                if (shot == RightClickTop || shot == WheelTop)
+                {
+                    // Spec 041 AC3: the right click puts it down where the ghost shows; on the second top the wheel turns it first.
+                    if (shot == WheelTop)
+                    {
+                        yield return actor.AimAt(spotAt, 3f, () => me.PutDownSurface == surface);
+                        turn = WheelSteps;
+                        actor.Intents.Turn(turn);
+                        yield return null;
+                        yield return null;
+                        Debug.Log("[Tour] mouse controls: the wheel turned the knife's rest " + me.RestTurn + " steps of " + PlaceTurn.StepDegrees
+                            + " degrees");
+                        if (me.RestTurn != PlaceTurn.Add(0, turn)) actor.CountTimeout("mouse controls: the wheel did not turn the rest");
+                    }
+                    yield return actor.PutDown("right click: the knife on " + name + " spot " + spot, spotAt, true,
+                        () => me.DevSendPlace(surface.Index, PlaceTurn.Pack(spot, turn)), capture.Before("rightclick-" + shot, null, 0f));
+                }
+                else
+                    yield return actor.Use("put the knife on " + name + " spot " + spot, spotAt, InteractionAction.Place,
+                        () => me.DevSendPlace(surface.Index, spot), capture.Before("place-" + shot, null, 0f));
                 yield return actor.AimAt(spotAt + Vector3.up * 0.15f, 0.5f);
                 yield return capture.Shot("placed-" + shot);
-                if (held != null) LogRest(held, actor.Position, name);
+                if (held != null) LogRest(held, actor.Position, name, turn);
                 if (held != null) yield return PickUp(actor, capture, held, "the knife from " + name, "picked-" + shot);
             }
 
@@ -111,14 +134,17 @@ namespace Worktown.Game.Dev
             if (shot != null) yield return capture.Shot(shot);
         }
 
-        /// <summary>Logs how the tool came to rest: the angle between its handle and the way to the player (0 = towards the cook).</summary>
-        private static void LogRest(Pickup item, Vector3 player, string where)
+        /// <summary>Logs how the tool came to rest: the angle between its handle and the way to the player (0 = towards the cook); spec
+        /// 041: with a wheel turn, the expected angle (the turn's degrees, folded into 0..180).</summary>
+        private static void LogRest(Pickup item, Vector3 player, string where, int turn)
         {
             Vector3 to = player - item.transform.position;
             to.y = 0f;
             float angle = Vector3.Angle(to, ToolRest.HandleDirection(item.transform.rotation));
+            float expected = Mathf.Abs(Mathf.DeltaAngle(0f, PlaceTurn.Add(0, turn) * PlaceTurn.StepDegrees));
             Debug.Log("[Tour] place anywhere: " + item.name + " on " + where + " at " + item.transform.position.ToString("F2")
-                + ", handle " + angle.ToString("0") + " degrees off the cook");
+                + ", handle " + angle.ToString("0") + " degrees off the cook"
+                + (turn != 0 ? " (wheel turn " + turn + " steps: expected about " + expected.ToString("0") + ")" : string.Empty));
         }
 
         /// <summary>
@@ -146,8 +172,11 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(new Vector3(5.0f, 0f, AisleZ), false, false);
             yield return actor.Look(90f, -10f, 1f); // facing east, along the aisle
             Pickup dropped = me.FindHeldPickup();
-            me.DevDrop();
-            yield return new WaitForSeconds(1.2f);
+            // Spec 041 AC3: a right click aimed at the floor (no counter spot) drops it at the feet.
+            Vector3 floor = actor.Position + Vector3.right * 2.5f;
+            floor.y = 0f;
+            yield return actor.PutDown("right click: drop the " + tomato.IngredientId + " on the floor", floor, false, me.DevDrop,
+                capture.Before("rightclick-drop", "rightclick-drop-fall", 0.8f));
             if (dropped == null)
             {
                 actor.CountTimeout("place anywhere: nothing to drop");

@@ -56,13 +56,22 @@ namespace Worktown.Game.Tests
 
         private static bool InShop(Bounds area, Vector3 p) => p.x >= area.min.x && p.x <= area.max.x && p.z >= area.min.z && p.z <= area.max.z;
 
-        /// <summary>A loose item, a character or a surface's own aim collider is not furniture.</summary>
+        /// <summary>Below this height (m) a place surface's collider is only its thin aim collider, not a body (039 review).</summary>
+        private const float AimColliderHeight = 0.05f;
+
+        /// <summary>The "standing on the top" rule counts only things that start at most this far below the top (039 review).</summary>
+        private const float StandsBelow = 0.02f;
+
+        /// <summary>
+        /// A loose item, a character or a surface's own thin aim collider is not furniture. 039 review: a place surface whose collider
+        /// is a real body (a worktop is its own top) is furniture, so its top is sampled against its own footprint too.
+        /// </summary>
         private static bool IsFurniture(Collider c)
         {
             if (!c.enabled || !c.gameObject.activeInHierarchy || c.isTrigger) return false;
             if (c is CharacterController) return false;
             if (c.GetComponentInParent(typeof(Pickup)) != null || c.GetComponentInParent(typeof(Worktown.Game.Npc.Customer)) != null) return false;
-            if (c.GetComponent<PlaceSurface>() != null) return false;
+            if (c.GetComponent<PlaceSurface>() != null && c.bounds.size.y < AimColliderHeight) return false;
             return true;
         }
 
@@ -195,7 +204,7 @@ namespace Worktown.Game.Tests
                     {
                         if (d == c) continue;
                         Bounds db = d.bounds;
-                        if (db.max.y > top + StandsAbove && db.min.y < top + StandsFrom && OverFootprint(d, p, PlaceCoverage.Rim)) { covered = true; break; }
+                        if (db.max.y > top + StandsAbove && db.min.y >= top - StandsBelow && db.min.y < top + StandsFrom && OverFootprint(d, p, PlaceCoverage.Rim)) { covered = true; break; }
                     }
                     if (covered) continue;
                     total++;
@@ -257,6 +266,46 @@ namespace Worktown.Game.Tests
             finally { EditorSceneManager.CloseScene(scene, true); }
         }
 
+        /// <summary>
+        /// 039 review: the scan sees a worktop body whose own surface footprint shrank (the bodies are sampled now), and a tall box from
+        /// the floor over the whole footprint does not hide it (only things standing on the top cover it).
+        /// </summary>
+        [Test]
+        public void AShrunkWorktop_FailsTheScan_EvenUnderAFullFootprintBox()
+        {
+            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            try
+            {
+                List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
+                PlaceSurface worktop = surfaces.Find(s => s.name.StartsWith("Worktop") && s.TryGetComponent(out BoxCollider b) && b.bounds.size.y > 0.2f);
+                Assert.IsNotNull(worktop, "a worktop that is its own body");
+                Assert.AreEqual(0, ScanTops(scene, surfaces).Dead, "the scene as built");
+
+                var so = new UnityEditor.SerializedObject(worktop);
+                SerializedPropertyShrink(so.FindProperty("_size"));
+                so.ApplyModifiedPropertiesWithoutUndo();
+                Scan shrunk = ScanTops(scene, surfaces);
+                Assert.Greater(shrunk.Dead, 0, "a worktop whose surface no longer covers its top");
+                StringAssert.Contains(worktop.name, shrunk.Report.ToString());
+
+                Bounds body = worktop.GetComponent<BoxCollider>().bounds;
+                var box = new GameObject("Coverage test box");
+                SceneManager.MoveGameObjectToScene(box, scene);
+                box.transform.position = new Vector3(body.center.x, 0.65f, body.center.z);
+                box.AddComponent<BoxCollider>().size = new Vector3(body.size.x + 0.1f, 1.3f, body.size.z + 0.1f);
+                Scan boxed = ScanTops(scene, surfaces);
+                Assert.Greater(boxed.Dead, 0, "a 1.3 m box from the floor does not stand on the top, so it hides nothing");
+                StringAssert.Contains(worktop.name, boxed.Report.ToString());
+            }
+            finally { EditorSceneManager.CloseScene(scene, true); }
+        }
+
+        private static void SerializedPropertyShrink(UnityEditor.SerializedProperty size)
+        {
+            Assert.IsNotNull(size, "PlaceSurface._size");
+            size.vector2Value = new Vector2(size.vector2Value.x * 0.5f, size.vector2Value.y);
+        }
+
         /// <summary>Rule 2: items rest on the real top of the furniture under the surface (the front counter 1.05 m, worktops 0.90 m).</summary>
         [Test]
         public void EverySurface_RestsOnTheTopUnderIt_AtCounterHeight()
@@ -311,6 +360,8 @@ namespace Worktown.Game.Tests
                         Assert.Less(BoxLocal(runBox, s.SpotWorldPosition(i)).z, 0f, s.name + " spot " + i + " lies on the cook side (local -z)");
                     Bounds aim = s.GetComponent<BoxCollider>().bounds;
                     Assert.AreEqual(runBox.bounds.size.z, aim.size.z, 0.01f, s.name + ": aiming anywhere across the top finds it");
+                    // 039 review: and it lies over the run's whole depth (centred on it), not shifted onto one half.
+                    Assert.AreEqual(runBox.bounds.center.z, aim.center.z, 0.01f, s.name + ": the aim collider is centred on the run's depth");
                 }
                 Assert.GreaterOrEqual(tops, 4);
             }

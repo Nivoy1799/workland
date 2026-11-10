@@ -362,31 +362,31 @@ namespace Worktown.Game.Tests
         {
             byte on = SpitRules.Flags(Spit.High, false, true);
             Assert.AreEqual(InteractionAction.Shave, InteractionRules.ActionFor(Held.Knife, Cone(on)));
-            Assert.AreEqual("Hold · shave the cone: shaved seitan (1/3 in the tray)", InteractionRules.PromptFor(Held.Knife, Cone(on, 1)));
+            Assert.AreEqual("Hold left click · shave the cone: shaved seitan (1/3 in the tray)", InteractionRules.PromptFor(Held.Knife, Cone(on, 1)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Knife, Cone(on, 3)));
             Assert.AreEqual("The tray is full: scoop it first", InteractionRules.PromptFor(Held.Knife, Cone(on, 3)));
             Assert.AreEqual("Someone is shaving", InteractionRules.PromptFor(Held.Knife, Cone(SpitRules.WithShaving(on, true))));
             Assert.AreEqual("Take the knife to shave", InteractionRules.PromptFor(Held.Nothing, Cone(on)));
             byte bare = SpitRules.Flags(Spit.Off, false, false);
             Assert.AreEqual(InteractionAction.Load, InteractionRules.ActionFor(Held.Nothing, Cone(bare)));
-            Assert.AreEqual("Click · load a seitan cone (1 left)", InteractionRules.PromptFor(Held.Nothing, Cone(bare)));
+            Assert.AreEqual("Left click · load a seitan cone (1 left)", InteractionRules.PromptFor(Held.Nothing, Cone(bare)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, Cone(bare, stock: 0)));
             Assert.AreEqual(InteractionRules.OutOfStockText, InteractionRules.PromptFor(Held.Nothing, Cone(bare, stock: 0)));
             Assert.AreEqual("Load a seitan cone first", InteractionRules.PromptFor(Held.Knife, Cone(bare)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Food("tomato", false), Cone(bare)));
             Assert.AreEqual(InteractionAction.Press, InteractionRules.ActionFor(Held.Nothing, AimTarget.Button(StationKind.Spit, SpitRules.KnobOption, bare)));
-            Assert.AreEqual("Click · heat low", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Spit, SpitRules.KnobOption, bare)));
-            Assert.AreEqual("Click · heat off", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Spit, SpitRules.KnobOption, on)));
+            Assert.AreEqual("Left click · heat low", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Spit, SpitRules.KnobOption, bare)));
+            Assert.AreEqual("Left click · heat off", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Spit, SpitRules.KnobOption, on)));
             // A carried box of cones unpacks on the cone.
             Held box = Held.Box("box of 1 seitan cone", StockCatalog.ConeLine, 1);
             Assert.AreEqual(InteractionAction.Unpack, InteractionRules.ActionFor(box, Cone(bare, stock: 0)));
 
             AimTarget tray = AimTarget.Cookware(VesselKind.SpitTray, 2, "shaved seitan");
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, tray));
-            Assert.AreEqual("Click · take shaved seitan", InteractionRules.PromptFor(Held.Nothing, tray));
+            Assert.AreEqual("Left click · take shaved seitan", InteractionRules.PromptFor(Held.Nothing, tray));
             Held wrap = Held.Food("wrap", false, true);
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(wrap, tray));
-            Assert.AreEqual("Click · scoop shaved seitan onto the wrap", InteractionRules.PromptFor(wrap, tray));
+            Assert.AreEqual("Left click · scoop shaved seitan onto the wrap", InteractionRules.PromptFor(wrap, tray));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Food("seitan wrap in paper", true, true), tray), "finished: no");
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Food("tomato", false), tray));
             Assert.AreEqual("Scoop with empty hands or onto a wrap", InteractionRules.PromptFor(Held.Food("tomato", false), tray));

@@ -523,6 +523,24 @@ namespace Worktown.Game.Dev
             yield return actor.AimAt(ContentPoint(board), 0.6f);
             foreach (int action in new[] { VesselRules.ActionStroke, VesselRules.ActionStroke, VesselRules.ActionTurn, VesselRules.ActionStroke })
             {
+                if (action == VesselRules.ActionTurn)
+                {
+                    // Spec 041 AC3: the turn is one notch of the (scripted) mouse wheel with the knife over the board.
+                    yield return actor.AimAt(ContentPoint(board), 1f, () => me.CurrentAction == InteractionAction.Cut);
+                    if (me.CurrentAction == InteractionAction.Cut)
+                    {
+                        Debug.Log("[Demo] fries: wheel turn: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "', the board holds "
+                            + board.Title.Value);
+                        actor.Intents.Turn(1);
+                        if (capture.Frames != null) yield return capture.Frames("wheel-turn", 0.6f);
+                        else yield return new WaitForSeconds(0.7f);
+                        Debug.Log("[Demo] fries: after the wheel turn the board holds " + board.Title.Value);
+                        yield return capture.Shot("wheel-turned");
+                        continue;
+                    }
+                    Debug.LogWarning("[Demo] fries: aiming gave " + me.CurrentAction + " instead of Cut for the wheel turn; sending it directly");
+                    actor.CountFallback();
+                }
                 me.DevSendUse(boardObject, action);
                 yield return new WaitForSeconds(0.7f);
             }
@@ -1035,7 +1053,8 @@ namespace Worktown.Game.Dev
             float bestDistance = float.MaxValue;
             foreach (PlaceSurface s in UnityEngine.Object.FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
             {
-                if (s.IsBurner || s.GetComponentInParent<Station>() != null) continue;
+                // 039 review: a back-line worktop by name (the spec 039 tops, the front counter's, the stove front, are no anchor here).
+                if (s.IsBurner || s.GetComponentInParent<Station>() != null || !s.name.StartsWith("Worktop ")) continue;
                 float d = TourActor.FlatDistance(s.transform.position, spot.transform.position);
                 if (d < bestDistance)
                 {
@@ -1560,7 +1579,8 @@ namespace Worktown.Game.Dev
                     LogGrill("flip " + i, Time.unscaledTime - start, spots);
                     NetworkObject target = spots[i].NetworkObject;
                     yield return actor.Use("flip " + string.Join(" + ", spots[i].Names), ContentPoint(spots[i]), InteractionAction.Flip,
-                        () => me.DevSendUse(target, VesselRules.ActionFlip), i == 0 ? capture.Before("seitan-flip-aim", "seitan-flip", frames) : null);
+                        () => me.DevSendUse(target, VesselRules.ActionFlip), i == 0 ? capture.Before("seitan-flip-aim", "seitan-flip", frames) : null,
+                        viaInput: true); // spec 041 AC3: the flip is a (scripted) left click with the spatula
                     yield return actor.AimAt(watch, 0.2f);
                 }
                 float at = Time.unscaledTime - start;

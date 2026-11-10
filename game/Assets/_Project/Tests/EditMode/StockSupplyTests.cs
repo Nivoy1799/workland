@@ -605,9 +605,9 @@ namespace Worktown.Game.Tests
                 "full hands at a stocked slot: nothing to say, as before");
             AimTarget some = AimTarget.Crate("tomato", 70).WithStock(tomato, 4);
             Assert.AreEqual(InteractionAction.Buy, InteractionRules.ActionFor(Held.Nothing, some));
-            Assert.AreEqual("Click · take tomato (4 left)", InteractionRules.PromptFor(Held.Nothing, some));
+            Assert.AreEqual("Left click · take tomato (4 left)", InteractionRules.PromptFor(Held.Nothing, some));
             AimTarget crate = AimTarget.Crate("potato", 60);
-            Assert.AreEqual("Click · take potato ($60)", InteractionRules.PromptFor(Held.Nothing, crate), "a crate keeps its price");
+            Assert.AreEqual("Left click · take potato ($60)", InteractionRules.PromptFor(Held.Nothing, crate), "a crate keeps its price");
             AimTarget noCups = AimTarget.DrinkTool(DrinkRules.CupTool, 0, "a cup", -1).WithStock(Line(Drinks.CupId), 0);
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, noCups));
             Assert.AreEqual(InteractionRules.OutOfStockText, InteractionRules.PromptFor(Held.Nothing, noCups));
@@ -623,9 +623,9 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(box.IsBox);
             AimTarget slot = AimTarget.Crate("tomato", 70).WithStock(tomato, 8);
             Assert.AreEqual(InteractionAction.Unpack, InteractionRules.ActionFor(box, slot));
-            Assert.AreEqual("Click · unpack 6 tomato (4 fit)", InteractionRules.PromptFor(box, slot));
+            Assert.AreEqual("Left click · unpack 6 tomato (4 fit)", InteractionRules.PromptFor(box, slot));
             AimTarget roomy = AimTarget.Crate("tomato", 70).WithStock(tomato, 0);
-            Assert.AreEqual("Click · unpack 6 tomato", InteractionRules.PromptFor(box, roomy));
+            Assert.AreEqual("Left click · unpack 6 tomato", InteractionRules.PromptFor(box, roomy));
             AimTarget full = AimTarget.Crate("tomato", 70).WithStock(tomato, 12);
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(box, full));
             Assert.AreEqual("That slot is full", InteractionRules.PromptFor(box, full));
@@ -637,7 +637,7 @@ namespace Worktown.Game.Tests
             Held keg = Held.Box("box of lemonade", Line("lemonade"), 1);
             AimTarget tap = AimTarget.DrinkTool(0, 0, "lemonade", -1).WithStock(Line("lemonade"), 20);
             Assert.AreEqual(InteractionAction.Unpack, InteractionRules.ActionFor(keg, tap), "a keg goes into its tap");
-            Assert.AreEqual("Click · unpack a keg of lemonade", InteractionRules.PromptFor(keg, tap));
+            Assert.AreEqual("Left click · unpack a keg of lemonade", InteractionRules.PromptFor(keg, tap));
         }
 
         [Test]
@@ -645,7 +645,7 @@ namespace Worktown.Game.Tests
         {
             AimTarget row = AimTarget.TerminalSlot(2, "order 1 pack of tomato ($336, 1 h)", 336);
             Assert.AreEqual(InteractionAction.Order, InteractionRules.ActionFor(Held.Nothing, row));
-            Assert.AreEqual("Click · order 1 pack of tomato ($336, 1 h)", InteractionRules.PromptFor(Held.Nothing, row));
+            Assert.AreEqual("Left click · order 1 pack of tomato ($336, 1 h)", InteractionRules.PromptFor(Held.Nothing, row));
             Assert.AreEqual(InteractionAction.Order, InteractionRules.ActionFor(Held.Knife, row), "any hands order");
             AimTarget next = AimTarget.TerminalSlot(TerminalRules.NextSlot, "next page (2/4)", -1);
             Assert.AreEqual(InteractionAction.Page, InteractionRules.ActionFor(Held.Nothing, next));
