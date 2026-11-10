@@ -55,6 +55,8 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+15. **Gamepad turn (spec 041).** The bumpers already open the emote wheel (LB) and ping (RB), so turning stays on Y.
+    Default: keep it on Y. Say if you'd rather move the emote wheel or the ping.
 14. **Setting (2026-11-10 brainstorm):** the year 2222 as imagined in 1950–80 (retro-futurism), with a little
     steampunk in the kitchen machines; robots and AI exist, but people work by passion; native vegan. Money question,
     default **C**:
