@@ -3,8 +3,8 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-09 19:45)
-- **The 24 h run is finished.** Read docs/digest-2026-11-09.md first. Everything is merged into main and pushed; verify.sh passes (1120 Unity, 356 sim tests), both builds are fresh in game/Builds. Not built: 037 pricing (waits for question 7).
+## Status (updated 2026-11-10 20:45)
+- **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045, 040 in that order, each merged when green.
 - **Next (only when you say so):** 037 pricing, then the follow-up lists at the end of docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
@@ -55,6 +55,11 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+9. **Blender (you offered it).** Yes, please. With Blender installed, Claude can generate our own low-poly models
+   from code (headless `blender -b -P script.py`, exported as FBX into `game/Assets/_Project/Art/Generated`). One
+   style, our palette and the same bevels everywhere, which is exactly what spec 040 needs. Install it yourself
+   (Claude does not install software): `winget install BlenderFoundation.Blender` (or blender.org, version 4.x LTS),
+   then write "Blender installed" here. **Until then:** 040 runs last and uses code-built stand-ins; no downloads.
 8. **Crash on quit (Direct3D 12).** After the visual-check tours finish, the game sometimes crashes while shutting
    down (4 of 6 runs): an access violation inside Windows' `D3D12Core.dll`, after networking has stopped; no game code
    on the stack. An older dump from 11-07 shows a different shutdown crash. Players would see "Worktown has stopped"
