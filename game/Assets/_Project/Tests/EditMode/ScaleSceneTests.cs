@@ -87,16 +87,19 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(2, stoves);
 
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(12, surfaces.Count); // spec 030: the griddle's deck
+                Assert.AreEqual(24, surfaces.Count); // spec 030: the griddle's deck; spec 039: twelve more tops
                 foreach (PlaceSurface surface in surfaces)
                 {
+                    // Spec 039: the front counter's tops rest on the counter (1.05 m), every other top on the worktop height.
+                    Transform run = FrontRunOf(surface);
+                    float height = run != null ? ArtSizeTable.ServingCounterHeight : ArtSizeTable.WorktopHeight;
                     for (int i = 0; i < surface.SpotCount; i++)
-                        Assert.AreEqual(ArtSizeTable.WorktopHeight, surface.SpotWorldPosition(i).y, HeightTolerance, surface.name + " spot " + i);
+                        Assert.AreEqual(height, surface.SpotWorldPosition(i).y, HeightTolerance, surface.name + " spot " + i);
                     // The top is the furniture under it: nothing floats above it or sinks into it.
                     Station station = surface.GetComponentInParent<Station>();
-                    float furniture = station != null ? FurnitureTop(station) : WorktopModulesTop(surface);
+                    float furniture = station != null ? FurnitureTop(station) : WorktopModulesTop(run != null ? run : surface.transform);
                     Assert.AreEqual(furniture, surface.SpotWorldPosition(0).y, 0.005f, surface.name + " rests on its furniture");
-                    if (station == null)
+                    if (station == null && run == null)
                         Assert.AreEqual(ArtSizeTable.WorktopHeight, surface.GetComponent<BoxCollider>().bounds.max.y, HeightTolerance,
                             surface.name + " collider top");
                 }
@@ -104,11 +107,18 @@ namespace Worktown.Game.Tests
             finally { EditorSceneManager.CloseScene(scene, true); }
         }
 
-        private static float WorktopModulesTop(PlaceSurface worktop)
+        /// <summary>Spec 039: the front counter run a surface lies on, or null.</summary>
+        private static Transform FrontRunOf(PlaceSurface surface)
+        {
+            Transform parent = surface.transform.parent;
+            return parent != null && parent.name.StartsWith("Front counter") ? parent : null;
+        }
+
+        private static float WorktopModulesTop(Transform worktop)
         {
             float top = float.MinValue;
-            foreach (Transform child in worktop.transform)
-                if (child.name.StartsWith("Module ")) top = Mathf.Max(top, RendererBounds(child.gameObject).max.y);
+            foreach (Transform child in worktop)
+                if (child.name.StartsWith("Module ") || child.name.StartsWith("Counter module ")) top = Mathf.Max(top, RendererBounds(child.gameObject).max.y);
             Assert.Greater(top, 0f, worktop.name + " has no modules");
             return top;
         }
@@ -124,7 +134,7 @@ namespace Worktown.Game.Tests
                 int worktops = 0;
                 foreach (PlaceSurface surface in All<PlaceSurface>(scene))
                 {
-                    if (surface.GetComponentInParent<Station>() != null) continue;
+                    if (surface.GetComponentInParent<Station>() != null || FrontRunOf(surface) != null) continue; // spec 039: the counter's tops
                     worktops++;
                     Bounds box = surface.GetComponent<BoxCollider>().bounds;
                     var modules = new List<Transform>();

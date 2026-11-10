@@ -86,10 +86,14 @@ namespace Worktown.Game.Net
         /// <paramref name="surfaceIndex"/>. Checks (PlaceSpots.CheckPlace): something held, the surface exists, the
         /// spot index is valid, the spot is within reach (2.5 m, to the spot), the spot is free; also nothing else
         /// lies there (e.g. the knife at its home spot after a respawn). The item rests on the spot in its resting
-        /// tilt (Pickup.RestTilt, e.g. the knife flat), turned with the surface's yaw.
+        /// tilt (Pickup.RestTilt, e.g. the knife flat), turned with the surface's yaw; spec 039: a tool with a handle turned
+        /// so the handle points to the player (ToolRest). Spec 041: <paramref name="packedSpot"/> also carries the player's wheel turn
+        /// (PlaceTurn: the spot in the low bits, the 45 degree step above); the rest rotation is turned by it, and a step out of range
+        /// is refused like an unknown spot.
         /// </summary>
-        public PickupOutcome TryPlace(PickupInteractor player, int surfaceIndex, int spotIndex)
+        public PickupOutcome TryPlace(PickupInteractor player, int surfaceIndex, int packedSpot)
         {
+            if (!PlaceTurn.TryUnpack(packedSpot, out int spotIndex, out int turn)) spotIndex = -1;
             int clientId = player.Owner.ClientId;
             bool holding = _registry.TryGetHeldItem(clientId, out int itemId);
             PlaceSurface surface = surfaceIndex >= 0 && surfaceIndex < _surfaces.Length ? _surfaces[surfaceIndex] : null;
@@ -108,7 +112,9 @@ namespace Worktown.Game.Net
 
             _registry.TryRelease(itemId, clientId);
             item.RemoveOwnership();
-            Quaternion rest = PlaceSpots.RestRotation(pickup.RestTilt, surface.transform.rotation);
+            // Spec 039: a tool lies with its handle towards where the server has the player (ToolRest); anything else as before.
+            Quaternion rest = PlaceTurn.Apply(ToolRest.RestRotation(pickup.IsHandleTool, pickup.RestTilt, surface.transform.rotation,
+                player.transform.position, spot), turn); // spec 041: the player's wheel turn on top of the server's rest
             pickup.ServerPlaceAt(spot + surface.transform.up * pickup.BottomOffset, rest);
             _spots.TryTake(surfaceIndex, spotIndex, itemId);
             ItemMoved?.Invoke(item, surface);
@@ -123,7 +129,7 @@ namespace Worktown.Game.Net
         public static bool IsSpotOccupied(Vector3 spot, Collider[] buffer)
         {
             int count = Physics.OverlapSphereNonAlloc(spot + Vector3.up * (SpotProbeRadius + 0.005f), SpotProbeRadius, buffer,
-                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                PhysicsLayers.Interact, QueryTriggerInteraction.Ignore); // spec 039: items lie on their own layer
             for (int i = 0; i < count; i++)
             {
                 Pickup pickup = buffer[i] != null ? buffer[i].GetComponentInParent<Pickup>() : null;

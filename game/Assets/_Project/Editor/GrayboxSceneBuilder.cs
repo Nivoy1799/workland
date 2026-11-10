@@ -309,6 +309,7 @@ namespace Worktown.Game.Editor
             SetField(highlight, "_markerMaterial", CreatePlaceMarkerMaterial());
             root.AddComponent<WorldLabelFade>();
 
+            SetLayerRecursive(root, PhysicsLayers.Player); // spec 039: the body walks through items
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PlayerPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -327,6 +328,7 @@ namespace Worktown.Game.Editor
             AddServerAuthoritativeTransform(cube);
             cube.AddComponent<Pickup>();
 
+            SetLayerRecursive(cube, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(cube, PickupPrefabPath);
             UnityEngine.Object.DestroyImmediate(cube);
             return saved;
@@ -351,6 +353,7 @@ namespace Worktown.Game.Editor
             root.AddComponent<PatienceRingView>(); // spec 032
             SetField(root.AddComponent<GuestHandoffView>(), "_catalog", catalog);
 
+            SetLayerRecursive(root, PhysicsLayers.Npc); // spec 039: customers ignore items too
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, CustomerPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -652,6 +655,7 @@ namespace Worktown.Game.Editor
             SetField(food, "_label", label);
             SetField(food, "_visual", visual);
 
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, FoodPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -679,9 +683,10 @@ namespace Worktown.Game.Editor
             // Like the scene cubes: a missed release on disconnect must never despawn the knife.
             SetField(nob, "_preventDespawnOnDisconnect", true);
             AddServerAuthoritativeTransform(root);
-            root.AddComponent<Pickup>();
+            SetField(root.AddComponent<Pickup>(), "_handleTool", true); // spec 039: lies handle towards the cook
             root.AddComponent<Knife>();
 
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, KnifePrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -768,6 +773,7 @@ namespace Worktown.Game.Editor
             if (kind == VesselKind.Pan || kind == VesselKind.Pot)
                 SetField(root.AddComponent<VesselSteam>(), "_material", CreateSteamMaterial());
 
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, VesselPrefabPath(kind));
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -816,7 +822,11 @@ namespace Worktown.Game.Editor
             return new Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
         }
 
-        /// <summary>Spec 021: a scene instance of a prefab (cookware, the knife) resting on a spot of a place surface.</summary>
+        /// <summary>
+        /// Spec 021: a scene instance of a prefab (cookware, the knife) resting on a spot of a place surface. Spec 039: a tool with a
+        /// handle (Pickup.IsHandleTool) lies with its handle straight into the aisle (ToolRest.Home); the server keeps this pose as
+        /// the tool's home, so a lost one comes back the same way.
+        /// </summary>
         private static GameObject PlaceOnSpot(NetworkObject prefab, PlaceSurface surface, int spot, string name)
         {
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab.gameObject);
@@ -824,7 +834,9 @@ namespace Worktown.Game.Editor
             float bottom = 0f;
             var box = instance.GetComponent<BoxCollider>();
             if (box != null) bottom = box.size.y * 0.5f - box.center.y; // the same offset Pickup.BottomOffset uses
-            instance.transform.SetPositionAndRotation(surface.SpotWorldPosition(spot) + Vector3.up * bottom, surface.transform.rotation);
+            bool tool = instance.TryGetComponent(out Pickup pickup) && pickup.IsHandleTool;
+            Quaternion rotation = tool ? ToolRest.Home(surface.transform.rotation) : surface.transform.rotation;
+            instance.transform.SetPositionAndRotation(surface.SpotWorldPosition(spot) + Vector3.up * bottom, rotation);
             return instance;
         }
 
@@ -881,6 +893,128 @@ namespace Worktown.Game.Editor
             var surface = root.AddComponent<PlaceSurface>();
             SetField(surface, "_index", index);
             SetField(surface, "_size", new Vector2(width, StationWidth));
+            SetField(surface, "_topY", height);
+            return surface;
+        }
+
+        // ---- Spec 039: place anywhere ----
+
+        /// <summary>Spec 039: the fryer's solid deck behind its wells (a collider, no renderer).</summary>
+        public const string FryerDeckName = "Deck";
+        /// <summary>Spec 039: the empty fries boxes stand at the deck's back edge (FryerArt.BoxesZ 0.36 was the deck's middle).</summary>
+        private const float FryerBoxesZ = 0.51f;
+        /// <summary>Spec 039: the plate shelf's stack in its back-left corner (station x, z), so the rest of its top takes items.</summary>
+        private static readonly Vector2 PlateStackSpot = new Vector2(-0.3f, 0.3f);
+        /// <summary>Spec 039: the front counter's cook half (m, from the aisle edge) takes items; the guest half does not (Q1).</summary>
+        private const float CookSideDepth = CounterDepth * 0.5f;
+        /// <summary>Spec 039: a front counter top keeps this far from what stands on the counter (m).</summary>
+        private const float CounterTopMargin = WorktopGapMargin;
+        /// <summary>Spec 039: a gap narrower than this between two things on the front counter gets no top (PlaceCoverage.Rim covers it).</summary>
+        private const float MinCounterTop = 0.1f;
+
+        /// <summary>
+        /// Spec 039: the place surfaces that make every counter-height top take items (PlaceCoverage, PlaceCoverageTests), appended
+        /// after the spec 020-030 surfaces in this order: the front counter's cook side between the things standing on it (both runs,
+        /// west to east), the stoves' front strips, the fryer's deck, the assembly board's back, the sink's front and back, and the
+        /// plate shelf's front and back right.
+        /// </summary>
+        private static void CreatePlaceAnywhereTops(List<PlaceSurface> surfaces, Transform[] frontRuns, Station stoveA, Station stoveB,
+            Station fryer, Station assembly, Station sink, Station shelf)
+        {
+            // What stands on the front counter (world x ranges): the spit, the drink dispenser, the register, the dish return.
+            var standing = new List<(float Min, float Max)>
+            {
+                (SpitX - SpitArtRules.Width * 0.5f, SpitX + SpitArtRules.Width * 0.5f),
+                (DrinkDispenserX - DrinkArtRules.Width * 0.5f, DrinkDispenserX + DrinkArtRules.Width * 0.5f),
+                (RegisterX - RegisterArtRules.Width * 0.5f, RegisterX + RegisterArtRules.Width * 0.5f),
+                (DishReturnX - CleaningArtRules.ReturnWidth * 0.5f, DishReturnX + CleaningArtRules.ReturnWidth * 0.5f),
+            };
+            int top = 1;
+            foreach (Transform run in frontRuns)
+            {
+                BoxCollider box = run.GetComponent<BoxCollider>();
+                float half = box.size.x * 0.5f;
+                float runMin = run.position.x - half, runMax = run.position.x + half;
+                foreach ((float min, float max) in CounterSegments(runMin, runMax, standing))
+                    surfaces.Add(CreateCounterTop(run, "Counter top " + top++, min, max, surfaces.Count));
+            }
+
+            // The stoves' front strip, between the stove's front edge and its burners (the hob between them is the burners').
+            float burnerFront = BurnerZ - BurnerSize * 0.5f;
+            foreach (Station stove in new[] { stoveA, stoveB })
+                surfaces.Add(CreateTopSurface(stove, "Stove front", new Vector2(0f, (-StationWidth * 0.5f + burnerFront) * 0.5f),
+                    new Vector2(StationWidth, burnerFront + StationWidth * 0.5f), surfaces.Count));
+
+            // The fryer's deck behind the wells, in front of the fries boxes.
+            float deckFront = FryerArt.WellBack + WorktopGapMargin, deckBack = FryerBoxesZ - 0.09f;
+            surfaces.Add(CreateTopSurface(fryer, "Fryer deck", new Vector2(0f, (deckFront + deckBack) * 0.5f),
+                new Vector2(FryerArt.Width, deckBack - deckFront), surfaces.Count));
+
+            // The assembly board's back strip, behind the dispensers and the rack (its tools win a ray that passes them).
+            const float assemblyBackFront = 0.34f;
+            float assemblyBack = AssemblyArtRules.Depth * 0.5f;
+            surfaces.Add(CreateTopSurface(assembly, "Assembly back", new Vector2(0f, (assemblyBackFront + assemblyBack) * 0.5f),
+                new Vector2(AssemblyArtRules.Width, assemblyBack - assemblyBackFront), surfaces.Count));
+
+            // The sink's front strip (before the basin and the drainboard) and its back strip (behind them, around the faucet).
+            float drainFront = CleaningArtRules.DrainCentre.y - CleaningArtRules.DrainSize.y * 0.5f;
+            float drainBack = CleaningArtRules.DrainCentre.y + CleaningArtRules.DrainSize.y * 0.5f;
+            float sinkHalf = CleaningArtRules.SinkDepth * 0.5f;
+            surfaces.Add(CreateTopSurface(sink, "Sink front", new Vector2(0f, (-sinkHalf + drainFront) * 0.5f),
+                new Vector2(CleaningArtRules.SinkWidth, drainFront + sinkHalf), surfaces.Count));
+            surfaces.Add(CreateTopSurface(sink, "Sink back", new Vector2(0f, (drainBack + sinkHalf) * 0.5f),
+                new Vector2(CleaningArtRules.SinkWidth, sinkHalf - drainBack), surfaces.Count));
+
+            // The plate shelf: its front half, and the back right beside the stack.
+            float shelfHalf = StationWidth * 0.5f;
+            surfaces.Add(CreateTopSurface(shelf, "Plates front", new Vector2(0f, -shelfHalf * 0.5f), new Vector2(StationWidth, shelfHalf),
+                surfaces.Count));
+            surfaces.Add(CreateTopSurface(shelf, "Plates back", new Vector2(shelfHalf * 0.5f, shelfHalf * 0.5f), new Vector2(shelfHalf, shelfHalf),
+                surfaces.Count));
+        }
+
+        /// <summary>
+        /// Spec 039: the free x ranges of a front counter run between the things standing on it (each kept
+        /// <see cref="CounterTopMargin"/> away); gaps narrower than <see cref="MinCounterTop"/> are left out.
+        /// </summary>
+        private static List<(float Min, float Max)> CounterSegments(float runMin, float runMax, List<(float Min, float Max)> standing)
+        {
+            var blocked = new List<(float Min, float Max)>();
+            foreach ((float min, float max) in standing)
+                if (max > runMin && min < runMax) blocked.Add((min - CounterTopMargin, max + CounterTopMargin));
+            blocked.Sort((a, b) => a.Min.CompareTo(b.Min));
+            var free = new List<(float Min, float Max)>();
+            float x = runMin;
+            foreach ((float min, float max) in blocked)
+            {
+                if (min - x >= MinCounterTop) free.Add((x, min));
+                x = Mathf.Max(x, max);
+            }
+            if (runMax - x >= MinCounterTop) free.Add((x, runMax));
+            return free;
+        }
+
+        /// <summary>
+        /// Spec 039: a place surface on a front counter run from world x <paramref name="minX"/> to <paramref name="maxX"/>: its spots on
+        /// the cook half (the run's local -z faces the aisle), its thin aim collider over the whole depth, so aiming at the guest half
+        /// still picks the nearest cook-side spot. Items rest on the counter top (1.05 m). A child of the run, so it is turned like it
+        /// (a pan's handle and a tool's rest face the cook).
+        /// </summary>
+        private static PlaceSurface CreateCounterTop(Transform run, string name, float minX, float maxX, int index)
+        {
+            float height = ArtSizeTable.ServingCounterHeight;
+            float width = maxX - minX;
+            float guestward = (CounterDepth - CookSideDepth) * 0.5f; // from the counter's middle to the cook half's middle
+            var go = new GameObject(name);
+            go.transform.SetParent(run, false);
+            go.transform.position = new Vector3((minX + maxX) * 0.5f, run.position.y, run.position.z) + run.rotation * new Vector3(0f, 0f, -guestward);
+            var box = go.AddComponent<BoxCollider>();
+            box.size = new Vector3(width, 0.02f, CounterDepth);
+            box.center = new Vector3(0f, height + 0.005f - 0.01f, guestward);
+            go.isStatic = true;
+            var surface = go.AddComponent<PlaceSurface>();
+            SetField(surface, "_index", index);
+            SetField(surface, "_size", new Vector2(width, CookSideDepth));
             SetField(surface, "_topY", height);
             return surface;
         }
@@ -1016,6 +1150,16 @@ namespace Worktown.Game.Editor
             body.size = new Vector3(1f, FryerArt.BodyColliderTop / height, 1f);
             body.center = new Vector3(0f, (FryerArt.BodyColliderTop * 0.5f - height * 0.5f) / height, 0f);
 
+            // Spec 039: the solid deck behind the wells (full height, its top at the worktop height) so the aim finds it and the
+            // coverage test samples it; the body's own collider still stops under the wells.
+            var deck = new GameObject(FryerDeckName);
+            deck.transform.SetParent(fryer.transform, false);
+            var deckBox = deck.AddComponent<BoxCollider>();
+            float deckDepth = FryerArt.Depth * 0.5f - FryerArt.WellBack;
+            deckBox.size = new Vector3(FryerArt.Width, height, deckDepth);
+            deckBox.center = new Vector3(0f, height * 0.5f - rootY, FryerArt.WellBack + deckDepth * 0.5f);
+            deck.isStatic = true;
+
             Material material = CreateMaterial(StoveButtonMaterialPath, Color.white);
             var visual = fryer.gameObject.AddComponent<FryerButtonVisual>();
             SetField(visual, "_contents", fryer.GetComponent<StationContents>());
@@ -1047,7 +1191,7 @@ namespace Worktown.Game.Editor
                 {
                     var instance = (GameObject)PrefabUtility.InstantiatePrefab(box, fryer.transform);
                     instance.name = "Fries box " + (i + 1);
-                    instance.transform.localPosition = new Vector3((i - (FryerArt.BoxCount - 1) * 0.5f) * 0.17f, height - rootY, FryerArt.BoxesZ);
+                    instance.transform.localPosition = new Vector3((i - (FryerArt.BoxCount - 1) * 0.5f) * 0.17f, height - rootY, FryerBoxesZ);
                     instance.transform.localRotation = ArtFrontRotation * Quaternion.Euler(0f, (i - 1) * 9f, 0f);
                     SetStaticRecursive(instance);
                 }
@@ -1832,9 +1976,10 @@ namespace Worktown.Game.Editor
             NetworkObject nob = root.AddComponent<NetworkObject>();
             SetField(nob, "_preventDespawnOnDisconnect", true); // like the knife
             AddServerAuthoritativeTransform(root);
-            root.AddComponent<Pickup>();
+            SetField(root.AddComponent<Pickup>(), "_handleTool", true); // spec 039
             root.AddComponent<Spatula>();
 
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, SpatulaPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -1974,7 +2119,9 @@ namespace Worktown.Game.Editor
             // Spec 030: the griddle's deck behind its plate (appended, so the earlier surface indices stay): the spatula's home.
             PlaceSurface griddleDeck = CreateGriddleDeck(griddle, surfaces.Count);
             surfaces.Add(griddleDeck);
-            CreateFrontCounter(parent.transform, catalog);
+            Transform[] frontRuns = CreateFrontCounter(parent.transform, catalog);
+            // Spec 039: every counter-height top takes items (PlaceCoverage); appended, so no earlier index moves.
+            CreatePlaceAnywhereTops(surfaces, frontRuns, stoveA, stoveB, fryer, assembly, sink, shelf);
             CreateShopWalls(parent.transform);
             Transform[] deliverySpots = CreateBackDoor(parent.transform); // spec 034
             SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
@@ -2143,6 +2290,7 @@ namespace Worktown.Game.Editor
             AddServerAuthoritativeTransform(root);
             root.AddComponent<Pickup>();
             root.AddComponent<DirtyDish>();
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, DirtyDishPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -2187,6 +2335,7 @@ namespace Worktown.Game.Editor
             AddServerAuthoritativeTransform(root);
             root.AddComponent<Pickup>();
             root.AddComponent<TrashBag>();
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, TrashBagPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -2230,8 +2379,9 @@ namespace Worktown.Game.Editor
             NetworkObject nob = root.AddComponent<NetworkObject>();
             SetField(nob, "_preventDespawnOnDisconnect", true); // like the knife
             AddServerAuthoritativeTransform(root);
-            root.AddComponent<Pickup>();
+            SetField(root.AddComponent<Pickup>(), "_handleTool", true); // spec 039: the striped hem towards the cook
             root.AddComponent<WipeCloth>();
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, WipeClothPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -2677,6 +2827,7 @@ namespace Worktown.Game.Editor
             SetField(box, "_label", label);
             SetField(box, "_model", model.transform);
 
+            SetLayerRecursive(root, PhysicsLayers.Items); // spec 039: items are never stairs
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, DeliveryBoxPrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             return saved.GetComponent<NetworkObject>();
@@ -2713,17 +2864,19 @@ namespace Worktown.Game.Editor
         /// squashed in depth like the serving counter. Cabinet modules like the worktops, turned so their doors face the aisle (the cook side); one box
         /// collider per run, no place surface (the place surfaces stay at worktop height).
         /// </summary>
-        private static void CreateFrontCounter(Transform parent, ArtCatalog catalog)
+        private static Transform[] CreateFrontCounter(Transform parent, ArtCatalog catalog)
         {
             Material material = CreateMaterial(Root + "/Settings/Station_Counter.mat", Palette.WoodLight);
             float height = ArtSizeTable.ServingCounterHeight;
             // Spec 035: the west run starts after the trash can's place by the staff gap.
             var runs = new[] { (KitchenMinX + TrashSpace, CounterX - StationHalfGap), (CounterX + StationHalfGap, KitchenMaxX) };
+            var roots = new Transform[runs.Length];
             for (int r = 0; r < runs.Length; r++)
             {
                 (float minX, float maxX) = runs[r];
                 float width = maxX - minX;
                 var root = new GameObject(FrontCounterName + " " + (r + 1));
+                roots[r] = root.transform;
                 root.transform.SetParent(parent, false);
                 root.transform.SetPositionAndRotation(new Vector3((minX + maxX) * 0.5f, 0f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
                 var box = root.AddComponent<BoxCollider>();
@@ -2756,6 +2909,7 @@ namespace Worktown.Game.Editor
                 }
                 SetStaticRecursive(root);
             }
+            return roots;
         }
 
         /// <summary>Spec 027a: names of the shop's walls (graybox Plaster boxes with colliders).</summary>
@@ -2883,7 +3037,7 @@ namespace Worktown.Game.Editor
             float step = Mathf.Max(ArtCatalogBuilder.HeightOf(plate) * 0.6f, 0.015f);
             var stack = new GameObject("PlateStack");
             stack.transform.SetParent(shelf.transform, false);
-            stack.transform.localPosition = new Vector3(0f, top, -0.1f);
+            stack.transform.localPosition = new Vector3(PlateStackSpot.x, top, PlateStackSpot.y); // spec 039: the rest of the top takes items
             var plates = new Transform[PlateStackCount];
             for (int i = 0; i < PlateStackCount; i++)
             {
@@ -3227,6 +3381,13 @@ namespace Worktown.Game.Editor
         {
             foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
                 t.gameObject.isStatic = true;
+        }
+
+        /// <summary>Spec 039: puts the object and all its children on a physics layer (PhysicsLayers).</summary>
+        private static void SetLayerRecursive(GameObject root, int layer)
+        {
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                t.gameObject.layer = layer;
         }
 
         private static GameObject PlaceArt(ArtCatalog catalog, Transform parent, ArtKey key, Vector3 position, float yaw)

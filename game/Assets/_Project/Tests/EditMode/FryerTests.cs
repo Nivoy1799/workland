@@ -222,7 +222,7 @@ namespace Worktown.Game.Tests
             }
             foreach (int bad in new[] { -1, 0, FryerRules.PowerOption, 6, 99 })
                 Assert.IsFalse(FryerRules.TryParseBasketOption(bad, out _, out _), "option " + bad);
-            Assert.AreEqual("Click · lower the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(0), FryerRules.FryerFlags(true, false, false)));
+            Assert.AreEqual("Left click · lower the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(0), FryerRules.FryerFlags(true, false, false)));
         }
 
         // ---- spec 029b: the use request on a basket, the answer kind, the tip ----
@@ -376,22 +376,22 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionAction.Shake, InteractionRules.ActionFor(Held.Nothing, AimTarget.Cookware(VesselKind.Basket, 1, "fries", down)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(food, AimTarget.Cookware(VesselKind.Basket, 1, "fries", down)));
             Assert.AreEqual("Raise the basket first", InteractionRules.PromptFor(food, AimTarget.Cookware(VesselKind.Basket, 1, "fries", down)));
-            Assert.AreEqual("Click · shake the basket", InteractionRules.PromptFor(Held.Nothing, AimTarget.Cookware(VesselKind.Basket, 1, "fries", down)));
-            Assert.AreEqual("Click · take golden fries (still dripping)",
+            Assert.AreEqual("Left click · shake the basket", InteractionRules.PromptFor(Held.Nothing, AimTarget.Cookware(VesselKind.Basket, 1, "fries", down)));
+            Assert.AreEqual("Left click · take golden fries (still dripping)",
                 InteractionRules.PromptFor(Held.Nothing, AimTarget.Cookware(VesselKind.Basket, 1, "golden fries", dripping)));
-            Assert.AreEqual("Click · put potato sticks into the basket", InteractionRules.PromptFor(food, AimTarget.Cookware(VesselKind.Basket, 0, null, up)));
+            Assert.AreEqual("Left click · put potato sticks into the basket", InteractionRules.PromptFor(food, AimTarget.Cookware(VesselKind.Basket, 0, null, up)));
         }
 
         [Test]
         public void FryerButtons_SayWhatTheyDo()
         {
             byte off = FryerRules.FryerFlags(false, false, false), on = FryerRules.FryerFlags(true, true, false);
-            Assert.AreEqual("Click · fryer on", InteractionRules.FryerButtonPrompt(FryerRules.PowerOption, off));
-            Assert.AreEqual("Click · fryer off", InteractionRules.FryerButtonPrompt(FryerRules.PowerOption, on));
-            Assert.AreEqual("Click · raise the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(0), on));
-            Assert.AreEqual("Click · lower the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(1), on));
+            Assert.AreEqual("Left click · fryer on", InteractionRules.FryerButtonPrompt(FryerRules.PowerOption, off));
+            Assert.AreEqual("Left click · fryer off", InteractionRules.FryerButtonPrompt(FryerRules.PowerOption, on));
+            Assert.AreEqual("Left click · raise the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(0), on));
+            Assert.AreEqual("Left click · lower the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(1), on));
             Assert.AreEqual(InteractionAction.Press, InteractionRules.ActionFor(Held.Nothing, AimTarget.Button(StationKind.Fryer, 2, on)));
-            Assert.AreEqual("Click · raise the basket", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Fryer, 2, on)));
+            Assert.AreEqual("Left click · raise the basket", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Fryer, 2, on)));
             Assert.IsTrue(FryerRules.TryParseBasketOption(3, out int b) && b == 1);
             Assert.IsFalse(FryerRules.TryParseBasketOption(FryerRules.PowerOption, out _));
             Assert.IsTrue(FryerRules.TryParseBasketOption(4, out int r, out bool lower) && r == 0 && !lower, "4 raises basket 0");

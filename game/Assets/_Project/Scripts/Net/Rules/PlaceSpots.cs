@@ -20,10 +20,14 @@ namespace Worktown.Game.Net.Rules
         private readonly Dictionary<long, int> _occupant = new Dictionary<long, int>();
         private readonly Dictionary<int, long> _spotOf = new Dictionary<int, long>();
 
-        /// <summary>Spots along one side of <paramref name="length"/> metres (0 when it is shorter than both margins).</summary>
+        /// <summary>
+        /// Spots along one side of <paramref name="length"/> metres. Spec 039 rule 3: a side shorter than both margins still has
+        /// one spot, in its middle (0 only for no length at all).
+        /// </summary>
         public static int CountAlong(float length)
         {
-            if (float.IsNaN(length) || length < 2f * EdgeMargin) return 0;
+            if (float.IsNaN(length) || length <= 0f) return 0;
+            if (length < 2f * EdgeMargin) return 1;
             return Mathf.FloorToInt((length - 2f * EdgeMargin) / Spacing + 0.0001f) + 1;
         }
 

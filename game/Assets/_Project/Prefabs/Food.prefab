@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 5625399462916987291}
   - component: {fileID: 5276539883305381502}
   - component: {fileID: 1023770033934099191}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Food
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -179,6 +179,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 1698876027610052551}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 0
 --- !u!114 &1023770033934099191
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -207,7 +208,7 @@ GameObject:
   - component: {fileID: 6537980373492287716}
   - component: {fileID: 5884430078428683314}
   - component: {fileID: 3779689391742051835}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Label
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -310,7 +311,7 @@ GameObject:
   m_Component:
   - component: {fileID: 8024044072780084396}
   - component: {fileID: 1857873916777271491}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -364,7 +365,7 @@ GameObject:
   - component: {fileID: 5228155914122306726}
   - component: {fileID: 1066104475992528794}
   - component: {fileID: 7055529193940710884}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Body
   m_TagString: Untagged
   m_Icon: {fileID: 0}

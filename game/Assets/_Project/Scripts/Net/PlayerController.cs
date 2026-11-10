@@ -3,6 +3,7 @@ using FishNet.Object.Synchronizing;
 using FishNet.Transporting;
 using FishNet.Utility.Template;
 using UnityEngine;
+using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
 
 namespace Worktown.Game.Net
@@ -80,6 +81,8 @@ namespace Worktown.Game.Net
         [SerializeField] private Transform _eyes;
 
         private CharacterController _controller;
+        // Spec 039: the ground and headroom probes see what the controller collides with (the matrix row of the player layer).
+        private int _bodyMask = Physics.DefaultRaycastLayers;
         private Vector3 _velocity;
         private float _verticalVelocity;
         private float _yaw;
@@ -128,6 +131,7 @@ namespace Worktown.Game.Net
         private void Awake()
         {
             _controller = GetComponent<CharacterController>();
+            _bodyMask = PhysicsLayers.BodyMask(gameObject.layer); // spec 039: what the body meets (not items)
             SetTickCallbacks(TickCallback.Tick | TickCallback.PostTick);
         }
 
@@ -272,7 +276,7 @@ namespace Worktown.Game.Net
             float radius = _controller.radius * 0.95f;
             Vector3 center = transform.position + Vector3.up * (radius - 0.08f);
             _controller.enabled = false; // do not hit ourselves
-            bool grounded = Physics.CheckSphere(center, radius, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            bool grounded = Physics.CheckSphere(center, radius, _bodyMask, QueryTriggerInteraction.Ignore);
             _controller.enabled = true;
             return grounded;
         }
@@ -283,7 +287,7 @@ namespace Worktown.Game.Net
             Vector3 bottom = transform.position + Vector3.up * (radius + 0.05f);
             Vector3 top = transform.position + Vector3.up * (MovementRules.StandHeight - radius);
             _controller.enabled = false; // do not hit ourselves
-            bool blocked = Physics.CheckCapsule(bottom, top, radius, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            bool blocked = Physics.CheckCapsule(bottom, top, radius, _bodyMask, QueryTriggerInteraction.Ignore);
             _controller.enabled = true;
             return !blocked;
         }

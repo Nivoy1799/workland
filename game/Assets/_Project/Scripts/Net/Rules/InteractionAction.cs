@@ -6,7 +6,7 @@ namespace Worktown.Game.Net.Rules
         None = 0,
         /// <summary>Press a stove knob or button (switch, fry/saute).</summary>
         Press,
-        /// <summary>Knife over a board with food: drag down to cut, right click to turn (no click action).</summary>
+        /// <summary>Knife over a board with food: drag down to cut, the mouse wheel turns it (spec 041; no click action).</summary>
         Cut,
         /// <summary>Spec 021: put the held food onto the board or plate, into the pan, pot or bowl.</summary>
         PutInto,

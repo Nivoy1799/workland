@@ -36,7 +36,8 @@ namespace Worktown.Game.Player
         /// <summary>Camera look delta this frame; zero while the cursor is free or look is suppressed.</summary>
         public Vector2 Look => _active && !SuppressLook && Cursor.lockState == CursorLockMode.Locked ? _look.ReadValue<Vector2>() : Vector2.zero;
         public bool IsGamepadLook => _look != null && _look.activeControl != null && _look.activeControl.device is Gamepad;
-        /// <summary>Mouse wheel this frame (positive = zoom in).</summary>
+        /// <summary>Mouse wheel this frame (positive = rolled away): the zoom in third person; spec 041: the turn in first person
+        /// (WheelSteps, read by the PickupInteractor).</summary>
         public float Zoom => _active && Mouse.current != null ? Mouse.current.scroll.ReadValue().y : 0f;
 
         /// <summary>True once per Jump press (Space / gamepad south); the next call returns false

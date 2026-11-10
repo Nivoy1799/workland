@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 6828763501057792381}
   - component: {fileID: 2940117845291623438}
   - component: {fileID: 3277045579197397876}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: PickupCube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -234,3 +234,4 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 6828763501057792381}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 0

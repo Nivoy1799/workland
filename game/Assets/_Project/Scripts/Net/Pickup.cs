@@ -32,6 +32,9 @@ namespace Worktown.Game.Net
         /// <summary>Client id of the holder, or <see cref="PickupRegistry.NoHolder"/>. Server writes, everyone reads.</summary>
         public readonly SyncVar<int> HolderClientId = new SyncVar<int>(PickupRegistry.NoHolder);
 
+        [Tooltip("Spec 039: a tool with a handle (knife, spatula, cloth): put down, its handle points to the cook (ToolRest).")]
+        [SerializeField] private bool _handleTool;
+
         private const float DropDistance = 1.2f;
         private const float RestHeight = 0.25f;
         private static readonly Vector3 HalfExtents = Vector3.one * 0.24f;
@@ -135,6 +138,9 @@ namespace Worktown.Game.Net
             base.OnStopClient();
             Unhook();
         }
+
+        /// <summary>Spec 039: a tool with a handle; it rests with the handle towards the cook (<see cref="ToolRest"/>).</summary>
+        public bool IsHandleTool => _handleTool;
 
         /// <summary>Spec 020, server: the item's resting tilt (rotation without yaw), captured when the server starts it.</summary>
         internal Quaternion RestTilt => _restTilt;

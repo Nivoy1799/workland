@@ -395,7 +395,7 @@ namespace Worktown.Game.Tests
         public void ATap_FillsACupInTheHands_AndSaysWhyNotOtherwise()
         {
             Assert.AreEqual(InteractionAction.Fill, InteractionRules.ActionFor(EmptyCup, Tool(Lemonade)));
-            Assert.AreEqual("Hold · fill lemonade", InteractionRules.PromptFor(EmptyCup, Tool(Lemonade)));
+            Assert.AreEqual("Hold left click · fill lemonade", InteractionRules.PromptFor(EmptyCup, Tool(Lemonade)));
             Held low = Held.Cup("half-full cup of lemonade", Lemonade, DrinkRules.LevelLow, false);
             Assert.AreEqual(InteractionAction.Fill, InteractionRules.ActionFor(low, Tool(Lemonade)), "a top-up of the same drink");
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(low, Tool(IcedTea)));
@@ -416,11 +416,11 @@ namespace Worktown.Game.Tests
         public void TheStacks_GiveACup_AndALidOnAFilledCup()
         {
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, Tool(DrinkRules.CupTool)));
-            Assert.AreEqual("Click · take a cup", InteractionRules.PromptFor(Held.Nothing, Tool(DrinkRules.CupTool)));
+            Assert.AreEqual("Left click · take a cup", InteractionRules.PromptFor(Held.Nothing, Tool(DrinkRules.CupTool)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(EmptyCup, Tool(DrinkRules.CupTool)), "full hands");
             Held filled = Held.Cup("cup of soda", 2, DrinkRules.LevelRight, false);
             Assert.AreEqual(InteractionAction.Lid, InteractionRules.ActionFor(filled, Tool(DrinkRules.LidTool)));
-            Assert.AreEqual("Click · put a lid on it", InteractionRules.PromptFor(filled, Tool(DrinkRules.LidTool)));
+            Assert.AreEqual("Left click · put a lid on it", InteractionRules.PromptFor(filled, Tool(DrinkRules.LidTool)));
             Assert.AreEqual("Fill the cup first", InteractionRules.PromptFor(EmptyCup, Tool(DrinkRules.LidTool)));
             Assert.AreEqual("It has its lid", InteractionRules.PromptFor(Held.Cup("x", 2, DrinkRules.LevelRight, true), Tool(DrinkRules.LidTool)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, AimTarget.DrinkTool(-1, 0, null, -1)), "the body");

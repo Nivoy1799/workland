@@ -285,7 +285,7 @@ namespace Worktown.Game.UI
         /// <summary>
         /// Spec 018: the centre dot, first person only, hidden under menus. Spec 020: the prompt under it comes from
         /// InteractionRules (the same action the click and the highlight use): white for an action, grey for a
-        /// reason; with full hands and nothing else to say it reminds of Q.
+        /// reason; with full hands and nothing else to say it names the right click (spec 041).
         /// </summary>
         private void UpdateCrosshair(PickupInteractor player, bool firstPerson, Pickup held)
         {
@@ -301,7 +301,7 @@ namespace Worktown.Game.UI
             bool reason = action == InteractionAction.None;
             if (text == null && held != null)
             {
-                text = "Q · drop";
+                text = InteractionRules.PutDownPrompt(player.PutDownSurface != null); // spec 041: the right click puts down
                 reason = true;
             }
             if (text == null) return;

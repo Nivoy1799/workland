@@ -114,7 +114,9 @@ namespace Worktown.Game.Tests
             Assert.IsNotNull(plan.Serving, "no serving counter");
             Assert.IsNotNull(plan.Shelf, "no plate shelf");
             foreach (PlaceSurface surface in All<PlaceSurface>(scene))
-                if (surface.GetComponentInParent<Station>() == null) plan.Worktops.Add(surface);
+                if (surface.GetComponentInParent<Station>() == null
+                    && (surface.transform.parent == null || !surface.transform.parent.name.StartsWith("Front counter"))) // spec 039: the counter's tops
+                    plan.Worktops.Add(surface);
             foreach (BoxCollider box in All<BoxCollider>(scene))
             {
                 if (box.name.StartsWith("Front counter")) plan.FrontRuns.Add(box);

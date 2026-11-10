@@ -52,10 +52,13 @@ judgement stays with the human, through A/B choices in the tuning panel (no voca
   a distinct sound and a puff of smoke when it burns.
 - Serving gives a reward moment: stars pop up, a coin sound, the tip shown.
 
-## 8. Controls are consistent
-- Left click does the obvious action on the target (pick up, put, press, cut). Right click is the secondary
-  action (put back, rotate, drop). Hold left for continuous actions (chopping, filling a cup).
-- The same action uses the same input everywhere; the prompt always names it.
+## 8. Controls are consistent (spec 041)
+- **Left click** does the obvious thing on the target (pick up, put into, press, cut, flip, serve). **Hold left** for
+  continuous actions (chopping strokes, squeeze, pour, scrub, wipe, shave).
+- **Right click** only puts down what you hold (the aimed spot with the ghost, else the floor). **Mouse wheel** turns
+  (the food on the board, the held item's rest rotation).
+- Third person: E acts on the nearest target. Q stays a hidden alias of right click.
+- The same action uses the same input everywhere; the prompt always names the button.
 
 ## 9. How it is checked
 - Numbers above are constants in code with tests (`FeelRules` style), and visible in the spec 027 contact

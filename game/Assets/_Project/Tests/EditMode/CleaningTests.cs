@@ -336,21 +336,21 @@ namespace Worktown.Game.Tests
             Held food = Held.Food("burnt potato", false);
             // The dish return.
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, Station(StationKind.DishReturn, 2)));
-            Assert.AreEqual("Click · take a dirty plate (2 waiting)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.DishReturn, 2)));
+            Assert.AreEqual("Left click · take a dirty plate (2 waiting)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.DishReturn, 2)));
             Assert.AreEqual("No dirty dishes here", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.DishReturn, 0)));
             // The sink.
             Assert.AreEqual(InteractionAction.Wash, InteractionRules.ActionFor(Held.DirtyDish, Station(StationKind.Sink, CleaningRules.SinkByte(0, false))));
             Assert.AreEqual("The sink is full: scrub a dish first",
                 InteractionRules.PromptFor(Held.DirtyDish, Station(StationKind.Sink, CleaningRules.SinkByte(CleaningRules.BasinCapacity, false))));
             Assert.AreEqual(InteractionAction.Scrub, InteractionRules.ActionFor(Held.Nothing, Station(StationKind.Sink, CleaningRules.SinkByte(2, false))));
-            Assert.AreEqual("Hold · scrub the plate (2 in the sink)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.Sink, CleaningRules.SinkByte(2, false))));
+            Assert.AreEqual("Hold left click · scrub the plate (2 in the sink)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.Sink, CleaningRules.SinkByte(2, false))));
             Assert.AreEqual("Someone is scrubbing", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.Sink, CleaningRules.SinkByte(1, true))));
             Assert.AreEqual("Bring a dirty dish from the dish return", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.Sink, 0)));
             Assert.AreEqual("Only dirty dishes go in the sink", InteractionRules.PromptFor(food, Station(StationKind.Sink, 0)));
             // The trash.
             Assert.AreEqual(InteractionAction.Discard, InteractionRules.ActionFor(food, Station(StationKind.TrashCan, 3)));
-            Assert.AreEqual("Click · throw away burnt potato", InteractionRules.PromptFor(food, Station(StationKind.TrashCan, 3)));
-            Assert.AreEqual("Click · throw away the food", InteractionRules.PromptFor(Held.Cookware(VesselKind.Plate, 2, "fries"), Station(StationKind.TrashCan, 3)));
+            Assert.AreEqual("Left click · throw away burnt potato", InteractionRules.PromptFor(food, Station(StationKind.TrashCan, 3)));
+            Assert.AreEqual("Left click · throw away the food", InteractionRules.PromptFor(Held.Cookware(VesselKind.Plate, 2, "fries"), Station(StationKind.TrashCan, 3)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Cookware(VesselKind.Plate, 0, null), Station(StationKind.TrashCan, 3)),
                 "empty cookware stays");
             Assert.AreEqual(InteractionAction.Discard, InteractionRules.ActionFor(Held.Cup("empty cup", -1, 0, false), Station(StationKind.TrashCan, 0)),
@@ -359,15 +359,15 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionRules.WashItText, InteractionRules.PromptFor(Held.DirtyDish, Station(StationKind.TrashCan, 3)));
             Assert.AreEqual("That doesn't go in the trash", InteractionRules.PromptFor(Held.Knife, Station(StationKind.TrashCan, 3)));
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, Station(StationKind.TrashCan, 5)));
-            Assert.AreEqual("Click · take the trash bag out (5/12)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.TrashCan, 5)));
+            Assert.AreEqual("Left click · take the trash bag out (5/12)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.TrashCan, 5)));
             Assert.AreEqual("The trash is empty", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.TrashCan, 0)));
             // The bin.
             Assert.AreEqual(InteractionAction.Discard, InteractionRules.ActionFor(Held.TrashBag, Station(StationKind.Bin, 0)));
-            Assert.AreEqual("Click · throw the bag in", InteractionRules.PromptFor(Held.TrashBag, Station(StationKind.Bin, 0)));
+            Assert.AreEqual("Left click · throw the bag in", InteractionRules.PromptFor(Held.TrashBag, Station(StationKind.Bin, 0)));
             Assert.AreEqual(InteractionRules.ToTheBinText, InteractionRules.PromptFor(Held.TrashBag, Station(StationKind.TrashCan, 0)));
             Assert.AreEqual("Only the trash bag goes in here", InteractionRules.PromptFor(food, Station(StationKind.Bin, 0)));
             // The plate shelf counts its clean plates.
-            Assert.AreEqual("Click · take a plate (3 clean)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.PlateShelf, 3)));
+            Assert.AreEqual("Left click · take a plate (3 clean)", InteractionRules.PromptFor(Held.Nothing, Station(StationKind.PlateShelf, 3)));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, Station(StationKind.PlateShelf, 0)));
             Assert.AreEqual(InteractionRules.NoCleanPlatesText, InteractionRules.PromptFor(Held.Nothing, Station(StationKind.PlateShelf, 0)));
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, AimTarget.OnStation(StationKind.PlateShelf)),
@@ -384,7 +384,7 @@ namespace Worktown.Game.Tests
             byte spill = DrinkRules.WithSpill(0, true);
             AimTarget puddle = AimTarget.DrinkTool(CleaningRules.SpillTool, spill, null, -1);
             Assert.AreEqual(InteractionAction.Wipe, InteractionRules.ActionFor(Held.Cloth, puddle));
-            Assert.AreEqual("Hold · wipe the spill", InteractionRules.PromptFor(Held.Cloth, puddle));
+            Assert.AreEqual("Hold left click · wipe the spill", InteractionRules.PromptFor(Held.Cloth, puddle));
             Assert.AreEqual("Take the cloth to wipe the spill", InteractionRules.PromptFor(Held.Nothing, puddle));
             Assert.AreEqual("Someone is wiping it",
                 InteractionRules.PromptFor(Held.Cloth, AimTarget.DrinkTool(CleaningRules.SpillTool, (byte)(spill | CleaningRules.WipingBit), null, -1)));

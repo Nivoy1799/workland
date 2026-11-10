@@ -332,27 +332,27 @@ namespace Worktown.Game.Tests
             AimTarget withFood = AimTarget.Cookware(VesselKind.Griddle, 1, "half-grilled seitan strips");
             AimTarget empty = AimTarget.Cookware(VesselKind.Griddle, 0, null);
             Assert.AreEqual(InteractionAction.Flip, InteractionRules.ActionFor(Held.Spatula, withFood));
-            Assert.AreEqual("Click · flip half-grilled seitan strips", InteractionRules.PromptFor(Held.Spatula, withFood));
+            Assert.AreEqual("Left click · flip half-grilled seitan strips", InteractionRules.PromptFor(Held.Spatula, withFood));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Spatula, empty));
             Assert.AreEqual("Put food on the griddle first", InteractionRules.PromptFor(Held.Spatula, empty));
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Nothing, withFood));
-            Assert.AreEqual("Click · take half-grilled seitan strips   Flip: use the spatula", InteractionRules.PromptFor(Held.Nothing, withFood));
+            Assert.AreEqual("Left click · take half-grilled seitan strips   Flip: use the spatula", InteractionRules.PromptFor(Held.Nothing, withFood));
             Held plate = Held.Cookware(VesselKind.Plate, 0, null);
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(plate, withFood));
-            Assert.AreEqual("Click · slide half-grilled seitan strips on the plate", InteractionRules.PromptFor(plate, withFood));
+            Assert.AreEqual("Left click · slide half-grilled seitan strips on the plate", InteractionRules.PromptFor(plate, withFood));
             Held strips = Held.Food("seitan sticks", false);
             Assert.AreEqual(InteractionAction.PutInto, InteractionRules.ActionFor(strips, empty));
-            Assert.AreEqual("Click · put seitan sticks on the griddle", InteractionRules.PromptFor(strips, empty));
+            Assert.AreEqual("Left click · put seitan sticks on the griddle", InteractionRules.PromptFor(strips, empty));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(strips, withFood), "one item per spot");
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Knife, withFood));
-            // The right click flips (by hand the server says "Use the spatula"); only the spatula predicts the arc.
-            Assert.IsTrue(InteractionRules.RightClickFlips(withFood));
-            Assert.IsFalse(InteractionRules.RightClickFlips(empty));
-            Assert.IsFalse(InteractionRules.RightClickFlips(withFood.TooFar()));
+            // A griddle spot with food is where the spatula flips (spec 041: a left click with it); only the spatula predicts the arc.
+            Assert.IsTrue(InteractionRules.IsFlipTarget(withFood));
+            Assert.IsFalse(InteractionRules.IsFlipTarget(empty));
+            Assert.IsFalse(InteractionRules.IsFlipTarget(withFood.TooFar()));
             Assert.IsTrue(InteractionRules.PredictsFlip(Held.Spatula, withFood));
             Assert.IsFalse(InteractionRules.PredictsFlip(Held.Nothing, withFood));
-            Assert.AreEqual("Click · griddle on", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Griddle, GriddleRules.PowerOption, 0)));
-            Assert.AreEqual("Click · griddle off",
+            Assert.AreEqual("Left click · griddle on", InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Griddle, GriddleRules.PowerOption, 0)));
+            Assert.AreEqual("Left click · griddle off",
                 InteractionRules.PromptFor(Held.Nothing, AimTarget.Button(StationKind.Griddle, GriddleRules.PowerOption, GriddleRules.Flags(true))));
         }
 
@@ -510,7 +510,7 @@ namespace Worktown.Game.Tests
             byte seen = FryerRules.WithLowered(synced, 0, true);     // our own lower is on its way
             Assert.IsTrue(FryerRules.IsLowered(seen, 0));
             Assert.IsTrue(FryerRules.IsOn(seen));
-            Assert.AreEqual("Click · raise the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(0), seen));
+            Assert.AreEqual("Left click · raise the basket", InteractionRules.FryerButtonPrompt(FryerRules.BasketOption(0), seen));
             Assert.AreEqual(FryerRules.RaiseOption(0), FryerRules.IntentOption(0, FryerRules.IsLowered(seen, 0)), "the click asks for the same");
             Assert.AreEqual(synced, FryerRules.WithLowered(seen, 0, false));
             Assert.AreEqual(seen, FryerRules.WithLowered(seen, 5, false), "no such basket: unchanged");

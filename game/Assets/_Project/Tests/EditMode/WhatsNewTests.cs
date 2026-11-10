@@ -386,7 +386,7 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void ShippedFile_HasTheSpec038Entry_WithTestSteps_AsTheNewest()
+        public void ShippedFile_HasTheSpec038Entry_WithTestSteps()
         {
             IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
             WhatsNewEntry entry = null;
@@ -394,6 +394,32 @@ namespace Worktown.Game.Tests
                 if (e.id == "2026-11-09-spec-038") entry = e;
             Assert.IsNotNull(entry, "spec 038 AC5");
             Assert.AreEqual("2026-11-09", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 039 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec039Entry_WithTestSteps()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-10-spec-039") entry = e;
+            Assert.IsNotNull(entry, "spec 039 AC6");
+            Assert.AreEqual("2026-11-10", entry.date);
+            Assert.GreaterOrEqual(entry.test.Length, 3);
+            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 041 is newer");
+        }
+
+        [Test]
+        public void ShippedFile_HasTheSpec041Entry_WithTestSteps_AsTheNewest()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            WhatsNewEntry entry = null;
+            foreach (WhatsNewEntry e in entries)
+                if (e.id == "2026-11-10-spec-041") entry = e;
+            Assert.IsNotNull(entry, "spec 041 AC5");
+            Assert.AreEqual("2026-11-10", entry.date);
             Assert.GreaterOrEqual(entry.test.Length, 3);
             Assert.AreSame(entry, WhatsNewRules.Newest(entries), "the newest entry, so the banner shows it");
         }

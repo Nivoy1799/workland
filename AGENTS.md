@@ -17,11 +17,11 @@ deterministic and computed by our simulation code, never by the LLM.
 
 - Unity 6 (LTS), C#
 - FishNet for networking, Steam via FishySteamworks / Steamworks.NET
-- Dedicated, server-authoritative, headless Linux server builds
-- Self-hosted: k3s + Agones on rented servers
+- Server-authoritative: the host is the server (D33); headless Linux server builds stay for tests and load bots
+- Game mode (D33, 2026-11-10): player-hosted co-op via Steam, up to 16 players; host-saved games. The earlier
+  k3s/Agones/official-servers plan (D15, D16) no longer applies to the game.
 - AI: our own gateway exposing an OpenAI-compatible API (cloud Qwen now, own GPU later)
-- Backend: small API + Postgres for global state
-- Official servers only (no community servers yet)
+- Backend: only if needed later (AI gateway, leaderboards, cloud saves; O4)
 - Low-poly art from asset packs
 - Editor automation: MCP for Unity (CoplayDev), not Unity AI
 

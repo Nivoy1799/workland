@@ -45,7 +45,7 @@ WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsne
 
 timeout_for() {
   case "$1" in
-    look) echo 360 ;;
+    look) echo 600 ;; # spec 039: + place anywhere
     walk) echo 420 ;;
     cook) echo 1860 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register; spec 033: the lemonade; spec 034: the stock run; spec 035: the cleaning loop; spec 036: the spit
     tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)

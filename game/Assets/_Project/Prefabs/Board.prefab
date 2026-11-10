@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7479152745942013689}
   - component: {fileID: 8082658044246184875}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Contents
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -67,7 +67,7 @@ GameObject:
   - component: {fileID: 5389597167764735551}
   - component: {fileID: 7915121360855799933}
   - component: {fileID: 2064610342957327870}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Board
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -232,6 +232,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 121300522431551966}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 0
 --- !u!114 &2064610342957327870
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -259,7 +260,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6023580673596522349}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -293,7 +294,7 @@ GameObject:
   - component: {fileID: 3729676083587110779}
   - component: {fileID: 5387964632625721491}
   - component: {fileID: 5053420934025682208}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Label
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -394,9 +395,17 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 6023580673596522349}
     m_Modifications:
+    - target: {fileID: 2679919253919593773, guid: 89ba92b480e0cae4fa30fa50f06284bc, type: 3}
+      propertyPath: m_Layer
+      value: 8
+      objectReference: {fileID: 0}
     - target: {fileID: 3849985500832943739, guid: 89ba92b480e0cae4fa30fa50f06284bc, type: 3}
       propertyPath: m_Name
       value: Art_ToolCuttingBoard
+      objectReference: {fileID: 0}
+    - target: {fileID: 3849985500832943739, guid: 89ba92b480e0cae4fa30fa50f06284bc, type: 3}
+      propertyPath: m_Layer
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 8121839230356715743, guid: 89ba92b480e0cae4fa30fa50f06284bc, type: 3}
       propertyPath: m_LocalPosition.x

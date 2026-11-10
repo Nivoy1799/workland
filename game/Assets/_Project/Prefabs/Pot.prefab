@@ -9,7 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1782596826633234555}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -43,7 +43,7 @@ GameObject:
   - component: {fileID: 5615385108202512665}
   - component: {fileID: 1958899537461735148}
   - component: {fileID: 757604317998010492}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Label
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -146,7 +146,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1402297945283618261}
   - component: {fileID: 421477484794017232}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Contents
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -204,7 +204,7 @@ GameObject:
   - component: {fileID: 6081507613085337186}
   - component: {fileID: 6434436626810170321}
   - component: {fileID: 3043519237093817417}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Pot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -369,6 +369,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 4717353183024436819}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 0
 --- !u!114 &6434436626810170321
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -449,9 +450,17 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2995710091139557265, guid: da0e5b4d732c88a44b13ec5add66a045, type: 3}
+      propertyPath: m_Layer
+      value: 8
+      objectReference: {fileID: 0}
     - target: {fileID: 8768240269242372184, guid: da0e5b4d732c88a44b13ec5add66a045, type: 3}
       propertyPath: m_Name
       value: Art_FoodPot
+      objectReference: {fileID: 0}
+    - target: {fileID: 8768240269242372184, guid: da0e5b4d732c88a44b13ec5add66a045, type: 3}
+      propertyPath: m_Layer
+      value: 8
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

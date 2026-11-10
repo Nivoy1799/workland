@@ -3,8 +3,8 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-09 19:45)
-- **The 24 h run is finished.** Read docs/digest-2026-11-09.md first. Everything is merged into main and pushed; verify.sh passes (1120 Unity, 356 sim tests), both builds are fresh in game/Builds. Not built: 037 pricing (waits for question 7).
+## Status (updated 2026-11-10 20:45)
+- **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045, 040 in that order, each merged when green.
 - **Next (only when you say so):** 037 pricing, then the follow-up lists at the end of docs/cooking-roadmap.md.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
@@ -55,6 +55,46 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+14. **Setting (2026-11-10 brainstorm):** the year 2222 as imagined in 1950–80 (retro-futurism), with a little
+    steampunk in the kitchen machines; robots and AI exist, but people work by passion; native vegan. Money question,
+    default **C**:
+    - basics are free;
+    - the economy is a voluntary passion game: credits are the scoreboard and the way to big dreams;
+    - cash is a retro ritual (that's why guests pay in coins);
+    - real hand-grown ingredients are rare and cost credits;
+    - robots can do everything, but hand-made is the luxury.
+    When you say yes: Claude writes docs/setting.md and proposes D37 (setting) plus a palette update for D32 and
+    spec 040.
+13. **Design v1 after your decision (D33-D36):** co-op restaurant simulator for up to 16 players, player-hosted, the
+    climb from a food corner (1 dish, cash only) through a restaurant with your mix of services to automation,
+    ingredient creation, competitions, events, marketing and cars. Persistent town and mechanic dropped. Please read
+    docs/game-design.md v1 and approve or correct it. Next, by default: the climb simulation in /sim, then the
+    "food corner" start spec. Specs 045, 047, 049 now say 16 players; 046 is superseded.
+12. **046 direction after the brainstorm (2026-11-10).** You liked crew competition ("like Schedule I, making the most
+    in a group"); weapons and PvP harm are out for EA. Proposal: rewrite 046 as **"Crew and empire, slice 1"**:
+    - crew and shop (roles and shares);
+    - signature dishes (a recipe lab: the sim values a dish, AI names it, the crew prices it);
+    - the first NPC employee (dishwasher);
+    - a food truck for events ("big jobs", the heist feeling);
+    - a crew ranking per server (global later).
+    Districts, more employees and more locations come as later specs. **Default: Claude drafts this as 046 v3 and asks
+    you before building.**
+11. **Spec 046 v2 (town time, shifts, progression).** Rewritten after your feedback: a town clock that never skips,
+    personal clock in and out with a shift summary, three gratification loops (every order with streaks, your shift,
+    long term: player levels plus shop reputation), owner cash and helper wages. Decisions, with defaults in brackets:
+    game mode for EA [co-op sessions now, persistent town later with the same rules], progress tied to [player and
+    shop], day length [48 real minutes], helper wage [fixed per game hour, owner can change it]. 046 is built only
+    after you approve it.
+10. **Early Access plan (your new goal).** See docs/early-access.md. After the current queue Claude builds 006 (AI
+    gateway, already approved). Approved 2026-11-10: **047** and **048**. Still need your OK: **046** (now v2, question 11) days and progression (save, rating, unlocks),
+    **047** main menu and joining (Steam invite, lobby, rejoin), **048** settings and comfort, **049** release
+    stability. Default: Claude waits for your approval before building them. Also open for you: O4 backend, O5 hoster,
+    O6 moderation, O7 player cap (after the load test in 045).
+9. **Blender (you offered it).** Yes, please. With Blender installed, Claude can generate our own low-poly models
+   from code (headless `blender -b -P script.py`, exported as FBX into `game/Assets/_Project/Art/Generated`). One
+   style, our palette and the same bevels everywhere, which is exactly what spec 040 needs. Install it yourself
+   (Claude does not install software): `winget install BlenderFoundation.Blender` (or blender.org, version 4.x LTS),
+   then write "Blender installed" here. **Until then:** 040 runs last and uses code-built stand-ins; no downloads.
 8. **Crash on quit (Direct3D 12).** After the visual-check tours finish, the game sometimes crashes while shutting
    down (4 of 6 runs): an access violation inside Windows' `D3D12Core.dll`, after networking has stopped; no game code
    on the stack. An older dump from 11-07 shows a different shutdown crash. Players would see "Worktown has stopped"
@@ -103,5 +143,8 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- 2026-11-10 play-test: the register / payment terminal works great ("insane"). Problems found and drafted as specs:
+  039 (every counter accepts items, items are not stairs, tools handle towards you), 040 (readable at a glance:
+  better models, labels from every angle), 041 (mouse-first: left does, right puts down, no Q).
 - 2026-11-08: 24 h autonomy granted; CC0 downloads from Kenney/Quaternius OK; old Mini Characters may be deleted;
   feel comes first ("counter on the wrong side, buttons on the back, everything feels off").

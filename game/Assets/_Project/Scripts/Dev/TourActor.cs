@@ -26,9 +26,13 @@ namespace Worktown.Game.Dev
             Player = player;
             Interactor = player.GetComponent<PickupInteractor>();
             Intents = intents;
+            if (Interactor != null) Interactor.HandIntentSource = intents; // spec 041: the left click, right click and wheel too
         }
 
         public Vector3 Position => Player.transform.position;
+
+        /// <summary>Spec 041: a scripted input whose aim did not give what it needed, so the request went out directly.</summary>
+        public void CountFallback() => Fallbacks++;
 
         public void CountTimeout(string what)
         {
@@ -130,7 +134,8 @@ namespace Worktown.Game.Dev
         /// <paramref name="expected"/> in 3 s, logs a warning and sends <paramref name="fallback"/> directly.
         /// Same log lines as the spec 021 demo. Spec 027b: <paramref name="beforeClick"/> runs between the aim and the click.
         /// </summary>
-        public IEnumerator Use(string what, Vector3 point, InteractionAction expected, Action fallback, Func<IEnumerator> beforeClick = null)
+        public IEnumerator Use(string what, Vector3 point, InteractionAction expected, Action fallback, Func<IEnumerator> beforeClick = null,
+            bool viaInput = false)
         {
             Debug.Log("[Demo] " + what + " (" + Time.time.ToString("0.0") + " s)");
             yield return AimAt(point, 3f, () => Interactor.CurrentAction == expected);
@@ -139,13 +144,46 @@ namespace Worktown.Game.Dev
             if (beforeClick != null) yield return beforeClick();
             if (Interactor.CurrentAction == expected)
             {
-                Debug.Log("[Demo] click: '" + InteractionRules.PromptFor(Interactor.CurrentHeld, Interactor.CurrentAim) + "'");
-                Interactor.DevClick();
+                Debug.Log("[Demo] click: '" + InteractionRules.PromptFor(Interactor.CurrentHeld, Interactor.CurrentAim) + "'"
+                    + (viaInput ? " (scripted left click)" : string.Empty));
+                // Spec 041: through the scripted left click (routed like the mouse's: ControlRules, the click buffer), or directly.
+                if (viaInput) Intents.LeftClick();
+                else Interactor.DevClick();
             }
             else
             {
                 Fallbacks++;
                 Debug.LogWarning("[Demo] aiming gave " + Interactor.CurrentAction + " instead of " + expected + "; sending the request directly");
+                fallback();
+            }
+            yield return new WaitForSeconds(1.5f);
+        }
+
+        /// <summary>
+        /// Spec 041: aims at <paramref name="point"/> and right clicks through the scripted input. <paramref name="onSpot"/>: the aim must
+        /// give a put-down spot (the ghost) within 3 s, else <paramref name="fallback"/> is sent directly (counted); false: it must give
+        /// none (a drop at the feet). <paramref name="beforeClick"/> runs between the aim and the click (a shot of the ghost).
+        /// </summary>
+        public IEnumerator PutDown(string what, Vector3 point, bool onSpot, Action fallback, Func<IEnumerator> beforeClick = null)
+        {
+            Debug.Log("[Demo] " + what + " (" + Time.time.ToString("0.0") + " s)");
+            yield return AimAt(point, 3f, () => (Interactor.PutDownSurface != null) == onSpot);
+            if (beforeClick != null) yield return beforeClick();
+            bool ready = (Interactor.PutDownSurface != null) == onSpot;
+            if (ready || fallback == null)
+            {
+                string prompt = InteractionRules.PromptFor(Interactor.CurrentHeld, Interactor.CurrentAim)
+                    ?? InteractionRules.PutDownPrompt(Interactor.PutDownSurface != null);
+                Debug.Log("[Demo] right click: '" + prompt + "', " + (Interactor.PutDownSurface != null
+                    ? "onto " + Interactor.PutDownSurface.name + " spot " + Interactor.PutDownSpot + ", turn " + Interactor.RestTurn
+                    : "a drop at the feet"));
+                Intents.RightClick();
+            }
+            else
+            {
+                Fallbacks++;
+                Debug.LogWarning("[Demo] aiming gave " + (Interactor.PutDownSurface != null ? "a spot" : "no spot") + " for '" + what
+                    + "'; sending the request directly");
                 fallback();
             }
             yield return new WaitForSeconds(1.5f);

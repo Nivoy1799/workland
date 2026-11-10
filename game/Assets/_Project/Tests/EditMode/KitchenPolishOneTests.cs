@@ -262,8 +262,8 @@ namespace Worktown.Game.Tests
             AimTarget raised = AimTarget.Cookware(VesselKind.Basket, 1, "golden fries", up);
             Held plate = Held.Cookware(VesselKind.Plate, 0, null);
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(plate, raised));
-            Assert.AreEqual("Click · tip golden fries on the plate", InteractionRules.PromptFor(plate, raised));
-            Assert.AreEqual("Click · tip golden fries on the plate (still dripping)",
+            Assert.AreEqual("Left click · tip golden fries on the plate", InteractionRules.PromptFor(plate, raised));
+            Assert.AreEqual("Left click · tip golden fries on the plate (still dripping)",
                 InteractionRules.PromptFor(plate, AimTarget.Cookware(VesselKind.Basket, 1, "golden fries", dripping)));
             Assert.AreEqual(InteractionAction.Take, InteractionRules.ActionFor(Held.Cookware(VesselKind.Bowl, 0, null), raised));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(plate, AimTarget.Cookware(VesselKind.Basket, 0, null, up)), "empty basket");
