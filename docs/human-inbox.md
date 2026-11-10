@@ -55,6 +55,15 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+12. **046 direction after the brainstorm (2026-11-10).** You liked crew competition ("like Schedule I, making the most
+    in a group"); weapons and PvP harm are out for EA. Proposal: rewrite 046 as **"Crew and empire, slice 1"**:
+    - crew and shop (roles and shares);
+    - signature dishes (a recipe lab: the sim values a dish, AI names it, the crew prices it);
+    - the first NPC employee (dishwasher);
+    - a food truck for events ("big jobs", the heist feeling);
+    - a crew ranking per server (global later).
+    Districts, more employees and more locations come as later specs. **Default: Claude drafts this as 046 v3 and asks
+    you before building.**
 11. **Spec 046 v2 (town time, shifts, progression).** Rewritten after your feedback: a town clock that never skips,
     personal clock in and out with a shift summary, three gratification loops (every order with streaks, your shift,
     long term: player levels plus shop reputation), owner cash and helper wages. Decisions, with defaults in brackets:
