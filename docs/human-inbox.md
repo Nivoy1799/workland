@@ -55,6 +55,11 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+10. **Early Access plan (your new goal).** See docs/early-access.md. After the current queue Claude builds 006 (AI
+    gateway, already approved). Four new drafts need your OK: **046** days and progression (save, rating, unlocks),
+    **047** main menu and joining (Steam invite, lobby, rejoin), **048** settings and comfort, **049** release
+    stability. Default: Claude waits for your approval before building them. Also open for you: O4 backend, O5 hoster,
+    O6 moderation, O7 player cap (after the load test in 045).
 9. **Blender (you offered it).** Yes, please. With Blender installed, Claude can generate our own low-poly models
    from code (headless `blender -b -P script.py`, exported as FBX into `game/Assets/_Project/Art/Generated`). One
    style, our palette and the same bevels everywhere, which is exactly what spec 040 needs. Install it yourself
