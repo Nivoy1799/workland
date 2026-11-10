@@ -568,7 +568,7 @@ namespace Worktown.Game.Net
                         if (held != null)
                         {
                             Predict(PredictionKind.Place, held, null);
-                            held.PredictRest(PlacePose(held, surface, TargetSpot));
+                            held.PredictRest(PlacePose(held, surface, TargetSpot, transform.position));
                             PlaySound(SoundRules.PlaceSound(SoundRules.MaterialOf(held), surface.IsBurner), TargetSpotPosition);
                         }
                     }
@@ -660,11 +660,15 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>Spec 027b: where an item lands on spot <paramref name="spot"/> of <paramref name="surface"/>, as the
-        /// server places it (PickupService.TryPlace): its bottom on the spot, its resting tilt, the surface's yaw.</summary>
-        private static Pose PlacePose(Pickup item, PlaceSurface surface, int spot)
+        /// server places it (PickupService.TryPlace): its bottom on the spot, its resting tilt, the surface's yaw; spec 039: a
+        /// tool's handle towards <paramref name="placer"/> (the same ToolRest rule the server applies to its own copy of
+        /// the player's position, so the predicted look does not jump).</summary>
+        private static Pose PlacePose(Pickup item, PlaceSurface surface, int spot, Vector3 placer)
         {
-            Vector3 position = surface.SpotWorldPosition(spot) + surface.transform.up * item.BottomOffset;
-            return new Pose(position, PlaceSpots.RestRotation(item.ClientRestTilt, surface.transform.rotation));
+            Vector3 spotPosition = surface.SpotWorldPosition(spot);
+            Vector3 position = spotPosition + surface.transform.up * item.BottomOffset;
+            return new Pose(position, ToolRest.RestRotation(item.IsHandleTool, item.ClientRestTilt, surface.transform.rotation, placer,
+                spotPosition));
         }
 
         /// <summary>Spec 027b: just above the cookware's contents, where food is dropped in from.</summary>
@@ -687,7 +691,7 @@ namespace Worktown.Game.Net
             if (held == null || held.HasPrediction) return false;
             if (CurrentAction == InteractionAction.Place && Target is PlaceSurface surface && TargetSpot >= 0)
             {
-                pose = PlacePose(held, surface, TargetSpot);
+                pose = PlacePose(held, surface, TargetSpot, transform.position);
                 return true;
             }
             if (CurrentAction == InteractionAction.PutInto && Target is Vessel vessel)
@@ -1427,12 +1431,30 @@ namespace Worktown.Game.Net
         private const float ToolAimRadius = 0.12f;
 
         /// <summary>
+        /// Spec 039: the tool of the station a place surface sits on (assembly board, register, drink dispenser) that the ray passes,
+        /// or null (any other surface, or no tool near the ray).
+        /// </summary>
+        private static StockSlot ToolNearRay(PlaceSurface surface, Ray ray, out float distance)
+        {
+            distance = float.PositiveInfinity;
+            Station station = surface.GetComponentInParent<Station>();
+            if (station == null || (station.Kind != StationKind.Assembly && station.Kind != StationKind.Register
+                && station.Kind != StationKind.DrinkDispenser)) return null;
+            return ToolOnRay(station, ray, out distance);
+        }
+
+        /// <summary>
         /// Spec 031: the tool of the assembly board <paramref name="board"/> the ray passes nearest (within <see cref="ToolAimRadius"/> of
         /// its anchor), or null. The tools have no colliders (they never block a ray), so the ray that aims at a bottle hits the
         /// board's top behind it; the distance to the ray, not to that hit point, says which tool is meant.
         /// </summary>
-        private static StockSlot ToolOnRay(Station board, Ray ray)
+        private static StockSlot ToolOnRay(Station board, Ray ray) => ToolOnRay(board, ray, out _);
+
+        /// <summary>Spec 039: <see cref="ToolOnRay(Station, Ray)"/> with how far the ray passes the tool's anchor (m).</summary>
+        private static StockSlot ToolOnRay(Station board, Ray ray, out float distance)
         {
+            distance = float.PositiveInfinity;
+            if (board == null) return null;
             StockSlot best = null;
             float bestSqr = ToolAimRadius * ToolAimRadius;
             for (int option = 0; option < board.SlotCount; option++)
@@ -1443,6 +1465,7 @@ namespace Worktown.Game.Net
                 bestSqr = sqr;
                 best = slot;
             }
+            if (best != null) distance = Mathf.Sqrt(bestSqr);
             return best;
         }
 
@@ -1911,7 +1934,7 @@ namespace Worktown.Game.Net
             Camera cam = Camera.main;
             if (cam == null) return null;
             ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-            int count = Physics.RaycastNonAlloc(ray, _rayHits, ViewRules.AimRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            int count = Physics.RaycastNonAlloc(ray, _rayHits, ViewRules.AimRange, PhysicsLayers.Interact, QueryTriggerInteraction.Ignore);
             _aimHits.Clear();
             _aimSources.Clear();
             _aimPoints.Clear();
@@ -1933,6 +1956,15 @@ namespace Worktown.Game.Net
                 {
                     Vector3 point = _rayHits[i].point;
                     int spot = NearestFreeSpot(surface, point, out Vector3 spotPosition);
+                    // Spec 039: a top on a station with tools (the assembly board's back) lies behind them. The ray means the tool
+                    // when it passes the tool closer than the hit lies to the nearest free spot (as when it reached the body).
+                    StockSlot tool = ToolNearRay(surface, ray, out float toolDistance);
+                    if (tool != null && (spot < 0 || toolDistance < Vector3.Distance(point, spotPosition)))
+                    {
+                        AddAimHit(distance, AimKind.Station, tool);
+                        _aimPoints.Add(point);
+                        continue;
+                    }
                     _aimHits.Add(AimHit.Spot(distance, spot >= 0 ? spotPosition : point, surface.Index, spot));
                     _aimSources.Add(surface);
                     _aimPoints.Add(point);
@@ -2222,7 +2254,7 @@ namespace Worktown.Game.Net
             if (self != null && self.TryGetComponent(out FryerBasket fb)) own = fb.Fryer;
             if (self != null && self.TryGetComponent(out GriddleSpot gs)) own = gs.Griddle; // spec 030: on its griddle
             if (self != null && self.TryGetComponent(out AssemblySpot asp)) own = asp.Board; // spec 031: on its board
-            int count = Physics.RaycastNonAlloc(new Ray(eye, to.normalized), _sightHits, distance, Physics.DefaultRaycastLayers,
+            int count = Physics.RaycastNonAlloc(new Ray(eye, to.normalized), _sightHits, distance, PhysicsLayers.Interact,
                 QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
@@ -2430,7 +2462,8 @@ namespace Worktown.Game.Net
 
         private Pickup FindNearestFreePickup()
         {
-            int count = Physics.OverlapSphereNonAlloc(transform.position, ClientSearchRadius, _hits);
+            int count = Physics.OverlapSphereNonAlloc(transform.position, ClientSearchRadius, _hits, PhysicsLayers.Interact,
+                QueryTriggerInteraction.Ignore); // spec 039: items lie on their own layer
             Pickup best = null;
             float bestSqr = float.MaxValue;
             for (int i = 0; i < count; i++)
@@ -2651,6 +2684,12 @@ namespace Worktown.Game.Net
         public void DevSendPlace(int surfaceIndex, int spotIndex) => SendPlace(surfaceIndex, spotIndex);
         public void DevSendStation(int stationIndex, int option) => SendStation(stationIndex, option);
         public void DevSendUse(NetworkObject target, int action) => SendUse(target, action);
+        /// <summary>Spec 039, tours: drop what the hands hold in front of the player (Q), with its predicted fall.</summary>
+        public void DevDrop()
+        {
+            Pickup held = FindHeldPickup();
+            if (held != null) DropWithLook(held);
+        }
         /// <summary>Spec 031, tours: press a sauce dispenser like a held left click (the look now, the start when allowed).</summary>
         public void DevSqueezePress(StockSlot dispenser)
         {

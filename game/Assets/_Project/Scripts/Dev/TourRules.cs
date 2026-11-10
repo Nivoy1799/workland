@@ -40,6 +40,8 @@ namespace Worktown.Game.Dev
         /// <summary>Spec 027b: tweens <see cref="SlowMotionScale"/> times longer (the arc shape shows at 0.1 s frames), and back.</summary>
         public const string ActSlowMotion = "slow-motion";
         public const string ActNormalMotion = "normal-motion";
+        /// <summary>Spec 039: the knife put down and picked up on the new tops, the tools at home, a tomato walked over (PlaceAnywhereSequence).</summary>
+        public const string ActPlaceAnywhere = "place-anywhere";
         public const float SlowMotionScale = 4f;
         /// <summary>Spec 027b: seconds of frames around one click.</summary>
         public const float ClickFramesSeconds = 1f;
@@ -75,7 +77,8 @@ namespace Worktown.Game.Dev
         public static readonly IReadOnlyList<string> Names = new[] { LookTour, WalkTour, CookTour, TutorialTour };
         public static readonly IReadOnlyList<string> Acts = new[]
         {
-            ActPickUpPan, ActPutPanBack, ActCook, ActTutorial, ActPickUpPanFrames, ActPutPanBackFrames, ActSlowMotion, ActNormalMotion
+            ActPickUpPan, ActPutPanBack, ActCook, ActTutorial, ActPickUpPanFrames, ActPutPanBackFrames, ActSlowMotion, ActNormalMotion,
+            ActPlaceAnywhere,
         };
 
         public static bool IsKnown(string name) => TryGet(name, out _);
@@ -257,6 +260,8 @@ namespace Worktown.Game.Dev
                 // Spec 036: the seitan spit on the front counter from the aisle (first person): the cone, the heat panel, the tray, the knob.
                 TourStep.WalkTo(SpitX, AisleZ), TourStep.LookAt(SpitX, 1.35f, FrontCounterZ), TourStep.Wait(0.6f),
                 TourStep.Shot("spit-first"),
+                // Spec 039: place anywhere (the tools at home, the knife on every new top, a tomato walked over); ends in first person.
+                TourStep.Act(ActPlaceAnywhere),
                 // Spec 034: the ordering terminal on the back wall over the landing worktop, and the back door (first person).
                 TourStep.WalkTo(TerminalX + 0.3f, AisleZ), TourStep.LookAt(TerminalX, 1.3f, 14.9f), TourStep.Wait(0.6f),
                 TourStep.Shot("terminal-first"),
@@ -274,7 +279,7 @@ namespace Worktown.Game.Dev
             {
                 new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, LookObserverZ), new Vector3(LookObserverX, 0f, LookObserverZ)
             };
-            return new Tour(LookTour, steps, route, 0f, false, Vector3.zero, 0f, 0f, 0f, 240f);
+            return new Tour(LookTour, steps, route, 0f, false, Vector3.zero, 0f, 0f, 0f, 480f); // spec 039: + place anywhere
         }
 
         /// <summary>

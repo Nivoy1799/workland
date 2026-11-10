@@ -61,7 +61,10 @@ namespace Worktown.Game.Dev
             foreach (PlaceSurface s in UnityEngine.Object.FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
             {
                 if (s.GetComponentInParent<Station>() != stoveB) continue;
-                if (!s.IsBurner) stoveTop = s;
+                if (!s.IsBurner)
+                {
+                    if (s.name == "StoveTop") stoveTop = s; // spec 039: not the stove's front strip
+                }
                 else if (Vector3.Distance(s.SpotWorldPosition(0), pot.transform.position) > 0.2f) freeBurner = s;
             }
             PlaceSurface potBurner = null;

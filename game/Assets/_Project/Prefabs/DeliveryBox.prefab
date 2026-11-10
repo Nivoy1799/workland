@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 8365540769498875686}
   - component: {fileID: 6786833812575646367}
   - component: {fileID: 4825848120596007490}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: DeliveryBox
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -178,6 +178,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 2419542005569120209}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 0
 --- !u!114 &4825848120596007490
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -204,7 +205,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1524748010745794450}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Model
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -236,7 +237,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4098550185625528937}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -270,7 +271,7 @@ GameObject:
   - component: {fileID: 1471698401314307553}
   - component: {fileID: 3372624277597762624}
   - component: {fileID: 3107845971482382209}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Label
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -371,6 +372,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1524748010745794450}
     m_Modifications:
+    - target: {fileID: 5140114914462867119, guid: 6f5b46f3e36c86b4eb413a27f5b0acb4, type: 3}
+      propertyPath: m_Layer
+      value: 8
+      objectReference: {fileID: 0}
     - target: {fileID: 5888083156353889733, guid: 6f5b46f3e36c86b4eb413a27f5b0acb4, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -414,6 +419,10 @@ PrefabInstance:
     - target: {fileID: 7080086148598699206, guid: 6f5b46f3e36c86b4eb413a27f5b0acb4, type: 3}
       propertyPath: m_Name
       value: Art_PropDeliveryBox
+      objectReference: {fileID: 0}
+    - target: {fileID: 7080086148598699206, guid: 6f5b46f3e36c86b4eb413a27f5b0acb4, type: 3}
+      propertyPath: m_Layer
+      value: 8
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 6444419748488234429}
   - component: {fileID: 1153596771503530311}
   - component: {fileID: 8296375382497954816}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Knife
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -177,6 +177,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 2297251483477435684}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 1
 --- !u!114 &8296375382497954816
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -199,7 +200,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8077951087267660216}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -233,6 +234,14 @@ PrefabInstance:
     - target: {fileID: 5767357214219264080, guid: 0cc88d583db2de447893757926481375, type: 3}
       propertyPath: m_Name
       value: Art_ToolKnife
+      objectReference: {fileID: 0}
+    - target: {fileID: 5767357214219264080, guid: 0cc88d583db2de447893757926481375, type: 3}
+      propertyPath: m_Layer
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 7132877958089513850, guid: 0cc88d583db2de447893757926481375, type: 3}
+      propertyPath: m_Layer
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 8911440495612045643, guid: 0cc88d583db2de447893757926481375, type: 3}
       propertyPath: m_LocalPosition.x

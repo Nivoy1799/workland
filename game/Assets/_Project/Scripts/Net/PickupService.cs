@@ -86,7 +86,8 @@ namespace Worktown.Game.Net
         /// <paramref name="surfaceIndex"/>. Checks (PlaceSpots.CheckPlace): something held, the surface exists, the
         /// spot index is valid, the spot is within reach (2.5 m, to the spot), the spot is free; also nothing else
         /// lies there (e.g. the knife at its home spot after a respawn). The item rests on the spot in its resting
-        /// tilt (Pickup.RestTilt, e.g. the knife flat), turned with the surface's yaw.
+        /// tilt (Pickup.RestTilt, e.g. the knife flat), turned with the surface's yaw; spec 039: a tool with a handle turned
+        /// so the handle points to the player (ToolRest).
         /// </summary>
         public PickupOutcome TryPlace(PickupInteractor player, int surfaceIndex, int spotIndex)
         {
@@ -108,7 +109,9 @@ namespace Worktown.Game.Net
 
             _registry.TryRelease(itemId, clientId);
             item.RemoveOwnership();
-            Quaternion rest = PlaceSpots.RestRotation(pickup.RestTilt, surface.transform.rotation);
+            // Spec 039: a tool lies with its handle towards where the server has the player (ToolRest); anything else as before.
+            Quaternion rest = ToolRest.RestRotation(pickup.IsHandleTool, pickup.RestTilt, surface.transform.rotation,
+                player.transform.position, spot);
             pickup.ServerPlaceAt(spot + surface.transform.up * pickup.BottomOffset, rest);
             _spots.TryTake(surfaceIndex, spotIndex, itemId);
             ItemMoved?.Invoke(item, surface);
@@ -123,7 +126,7 @@ namespace Worktown.Game.Net
         public static bool IsSpotOccupied(Vector3 spot, Collider[] buffer)
         {
             int count = Physics.OverlapSphereNonAlloc(spot + Vector3.up * (SpotProbeRadius + 0.005f), SpotProbeRadius, buffer,
-                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                PhysicsLayers.Interact, QueryTriggerInteraction.Ignore); // spec 039: items lie on their own layer
             for (int i = 0; i < count; i++)
             {
                 Pickup pickup = buffer[i] != null ? buffer[i].GetComponentInParent<Pickup>() : null;

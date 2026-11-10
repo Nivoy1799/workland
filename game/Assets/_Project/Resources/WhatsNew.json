@@ -669,6 +669,24 @@
         "Do the guests wait longer during the tutorial, and is the first guest's order fries (cash, eat in)?",
         "Press F4: is the card gone, and does it stay gone after a restart? Replay it from F1 or Play the tutorial"
       ]
+    },
+    {
+      "id": "2026-11-10-spec-039",
+      "date": "2026-11-10",
+      "title": "Put things down anywhere on the counters",
+      "items": [
+        "Every counter top takes items now: both front counter runs (the cook side, also right beside the register, the dish return and the drink dispenser), the front strip of the stoves, the fryer's deck behind the oil, the back of the assembly board, the sink's front and back, and the plate shelf (its plate stack moved to the back left corner)",
+        "Only parts with a job of their own still refuse: burners take one pan each, the fryer baskets, the griddle spots, the sink basin, the spit, the build spot, the dispenser taps, the register, the serving counter and the trash can",
+        "You walk through food and things lying on the floor instead of climbing them like stairs",
+        "Knives, spatulas and the cloth lie with the handle towards you: at home the handle points into the aisle, and when you put one down it turns towards where you stand"
+      ],
+      "test": [
+        "Put a plate, a pan and the knife on the front counter left and right of the register and the drink dispenser, on the fryer deck and on the plate shelf: does it land where the green ghost was, at the right height, and can you pick it up again?",
+        "Aim at the guest half of the front counter with something in your hands: does the ghost show on the cook side?",
+        "Drop a tomato and walk over it: do you stay on the floor?",
+        "Put the knife down on the front counter and on a back worktop: does the handle point at you?",
+        "Does anything still refuse without a reason?"
+      ]
     }
   ]
 }

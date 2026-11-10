@@ -258,6 +258,10 @@ namespace Worktown.Game.Dev
                     StopCoroutine(watch);
                     break;
                 }
+                case TourRules.ActPlaceAnywhere: // spec 039
+                    yield return PlaceAnywhereSequence.Run(_actor, new CookCapture(shot => _capture.Shot(shot), StartFrames, SetTweenScale,
+                        () => _framesRunning > 0));
+                    break;
                 case TourRules.ActSlowMotion:
                     SetTweenScale(TourRules.SlowMotionScale);
                     break;

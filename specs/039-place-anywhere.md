@@ -98,7 +98,107 @@ the way a cook leaves them:
    (out of reach for a comfortable place).
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-10 (builder, opus). `verify.sh` PASS: EditMode 1140/1140 (baseline 1120), sim 356/356. Not committed.
+
+**Part 1, new surfaces** (appended, indices 0-11 unchanged; 24 surfaces now):
+- 12 `Counter top 1` front counter west run, x 1.04-7.80 (26 spots);
+- 13 `Counter top 2` between the spit and the drink dispenser, x 8.40-10.05 (6);
+- 14 `Counter top 3` the 16 cm gap between the register and the dish return (1 spot, rule 3);
+- 15 `Counter top 4` after the dish return, x 14.11-14.78 (2);
+- 16/17 `Stove front` (stoves 1 and 2): the strip in front of the burners (4 each);
+- 18 `Fryer deck`: behind the oil wells (3);
+- 19 `Assembly back`: behind the dispensers and the rack (3);
+- 20 `Sink front`, 21 `Sink back` (4 each);
+- 22 `Plates front` (8), 23 `Plates back` beside the stack (4).
+
+The front counter tops are children of their run (turned 180°, so a pan's handle and a tool face the cook). Their spots lie
+on the cook half only (Q1). Their thin aim collider spans the whole depth, so aiming at the guest half shows the ghost on the
+nearest cook-side spot. Items rest at 1.05 m. The segments are computed from the widths of the spit, dispenser, register and
+dish return, with a 2 cm margin. Gaps under 10 cm get no top: 1 cm at the register, 9 cm between the dispenser and the
+serving counter.
+
+**Exceptions (`PlaceCoverage.Exceptions`, each with its reason):** Burner, Fryer basket, Fries box, Griddle spot, Basin,
+Faucet, Spit cone, Spit tray, Build spot, Tool (the assembly dispensers and rack), Drink tool, Till (register), Counter (the
+serving counter, a click sells), PlateStack, Trash (lid), and Front counter with guest half only. Matching is by object name:
+exact, or the name followed by " <digit>", so "Counter" does not match "Counter module 3".
+
+**Coverage test (`PlaceCoverageTests`):**
+- It samples cells of at most 0.1 m over the top face of every non-trigger furniture collider whose top is 0.85-1.10 m, inside
+  the walls' bounds. It skips items, characters and the surfaces' own aim colliders.
+- A sample passes when it lies in a surface footprint at that height (±3 cm), or in a listed exception.
+- Deviation, reviewer please check: a sample also passes within `PlaceCoverage.Rim` (0.15 m = spot edge margin 0.12 plus 0.03)
+  of an exception's footprint or of something standing on that top. Without it, the slivers between the burners, the 10-15 cm
+  aprons in front of the register, dispenser and dish return, and the 2 cm gaps between griddle spots would each need a one-spot
+  surface no item fits on.
+- A meta test runs the same scan with only the old 12 surfaces. It must name the front counter runs, the stove, fryer deck,
+  assembly, sink and plate shelf, with a point for each.
+- Other tests: rule 2 (front counter 1.05 m, every surface on the furniture under it), cook-side-only spots, every exception
+  names something in the shop.
+- AC3 is covered by the existing FloorPlanTests reach test, which checks every spot of every surface from the aisle.
+
+**Rule 3:** `PlaceSpots.CountAlong` now gives 1 (not 0) for a side shorter than both margins. Two old assertions in
+`PlaceSpotsTests` encoded the old rule and were updated to it (0.2 m → 1; a 0.1 m top has its one spot); 0 / NaN still give 0.
+
+**Layout changes for room:**
+- The plate stack moved from the shelf's middle to its back-left corner.
+- The fries boxes moved from the fryer deck's middle (z 0.36) to its back edge (0.51). The builder constant is `FryerBoxesZ`;
+  `FryerArt.BoxesZ` (Scripts/Art, out of scope) is now unused, a follow-up.
+- The fryer got a `Deck` collider behind the wells (its body collider stops at 0.6 m). The aim then finds the deck, and the
+  coverage test samples it.
+
+**Tools on station tops (aim):** the assembly's back strip lies behind the bottles, so a ray aimed at a bottle hits the strip.
+When a ray hits a place surface on the assembly board, register or dispenser, `PickupInteractor.ToolNearRay` asks `ToolOnRay`.
+The tool wins when the ray passes it closer than the hit lies to the nearest free spot. The first run, where the tool always
+won, made the middle back spot (straight behind the chili bottle) unreachable; that was the one look-tour aim fallback.
+
+**Part 2, layers:**
+- TagManager: 8 `Items`, 9 `Player`, 10 `Npc`.
+- DynamicsManager matrix: Items ignores Player and Npc (rows 8/9/10: `fff9ffff`, `fffeffff`, `fffeffff`); everything else stays
+  on.
+- The builders put every Pickup prefab on Items (recursive, 13 prefabs), Player.prefab on Player, Customer.prefab on Npc.
+- `PhysicsLayers.Interact` (DefaultRaycastLayers | Items) is now explicit in the aim ray, the sight check, the pickup search and
+  the server's spot probe.
+- `PlayerController`'s ground and headroom probes use the player layer's matrix row (`PhysicsLayers.BodyMask`), so they ignore
+  items like the controller does. The same project setting runs on the server and the clients.
+- Tests (`ItemsLayerTests`): a controller with the player prefab's settings walks over a tomato and a plate stand-in (the
+  prefabs' colliders and layer): it never rises and gets past. A control run with the stand-ins on Default must climb or be
+  stopped.
+
+**Part 3, tools:**
+- `ToolRest.Home/Rotation/RestRotation`, pure and tested. The tool models' handle is their local +Z (seen in the old sheets: the
+  knife and spatula lay blade towards the aisle at identity).
+- `Pickup._handleTool` is set by the builder for the knife, spatula and cloth. For the cloth, the "handle" is its striped hem.
+- Home: `PlaceOnSpot` turns them with `ToolRest.Home`. The respawn reuses the scene pose.
+- Place: `PickupService.TryPlace` uses the server's player position. The predicted pose and the ghost (`PlacePose`) use the
+  client's own position with the same rule. Near a 45° boundary the two can differ by one snap; this has not been seen.
+- A Q-drop on the floor keeps the old rule (identity yaw); the spec only names placing.
+
+**Tours:**
+- New act `place-anywhere` in the look tour (`Dev/PlaceAnywhereSequence.cs`): the three tools at home; the knife put down and
+  picked up on 9 new tops; the knife back home; a tomato dropped in the aisle and walked over in third person. The walk logs
+  the highest y.
+- Look tour timeout 240 → 480 s, `visual-check.sh` look 360 → 600 s.
+- The cook tour now picks stove B's top by name (`StoveTop`), since stove B also has the `Stove front` strip. My first
+  version of that edit sent the front strip down the `else` branch as the "free burner". The pan landed on the strip, and the
+  cook tour failed with "pan heat setup missing". Fixed and re-run.
+- AC4's "fridge top" is not done: Q2 keeps the 1.8 m tops out.
+
+**Visual check (2026-11-10):**
+- Look tour (`.verify/visual039b/look/sheet.png`, cells 58-119): ok, 0 timeouts, 0 aim fallbacks.
+  - The knife was put down and picked up again on all 9 tops. On each, the handle came to rest 3-7° off the direction to the
+    cook.
+  - The front counter tops hold the knife on the cook side at 1.05 m.
+  - The tomato walk logged ground y 0.080 and highest y 0.080.
+- Cook tour (`.verify/visual039c/cook/sheet.png`): ok, 965 images, 0 timeouts, 0 fallbacks (the same as the baseline).
+- The cook run before it (`visual039b`) failed. The host window ended with no exception and no crash dump, 8 s after the pan's
+  burner went on. The client then timed out. A rerun of the same build passed the same step, so it looks flaky (not seen
+  before, worth watching).
+
+**Still feels off (for the human):**
+- The fryer deck and the assembly back strip lie behind the baskets and the bottles; a tool put there is partly hidden.
+- The stove front strip covers the hob's drawn front edge.
+- The one spot between the register and the dish return is narrower than a plate.
+- Food colliders (0.4 m) still overlap neighbouring spots, as before.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

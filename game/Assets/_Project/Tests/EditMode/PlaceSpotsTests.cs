@@ -43,10 +43,15 @@ namespace Worktown.Game.Tests
         public void SmallOrBadTops_HaveFewOrNoSpots()
         {
             Assert.AreEqual(1, PlaceSpots.CountAlong(0.24f), "exactly both margins: one spot in the middle");
-            Assert.AreEqual(0, PlaceSpots.CountAlong(0.2f));
+            // Spec 039 rule 3 (was 0): a top narrower than one spot still gets one spot, in its middle.
+            Assert.AreEqual(1, PlaceSpots.CountAlong(0.2f));
+            Assert.AreEqual(0, PlaceSpots.CountAlong(0f));
+            Assert.AreEqual(0, PlaceSpots.CountAlong(-0.3f));
             Assert.AreEqual(0, PlaceSpots.CountAlong(float.NaN));
             Assert.AreEqual(2, PlaceSpots.CountAlong(0.49f));
-            Assert.AreEqual(0, PlaceSpots.Count(new Vector2(1f, 0.1f)));
+            Assert.AreEqual(4, PlaceSpots.Count(new Vector2(1f, 0.1f)), "spec 039: one row along a 10 cm strip");
+            Assert.AreEqual(Vector2.zero, PlaceSpots.Position(new Vector2(0.16f, 0.1f), 0), "the one spot of a tiny top is its middle");
+            Assert.AreEqual(1, PlaceSpots.Count(new Vector2(0.16f, 0.1f)));
             Assert.IsFalse(PlaceSpots.IsValid(Top, -1));
             Assert.IsFalse(PlaceSpots.IsValid(Top, 8));
         }
@@ -75,7 +80,10 @@ namespace Worktown.Game.Tests
             var taken = new bool[8];
             for (int i = 0; i < taken.Length; i++) taken[i] = true;
             Assert.AreEqual(PlaceSpots.None, PlaceSpots.NearestFree(Top, Vector2.zero, taken));
-            Assert.AreEqual(PlaceSpots.None, PlaceSpots.NearestFree(new Vector2(0.1f, 0.1f), Vector2.zero, null), "no spots at all");
+            Assert.AreEqual(PlaceSpots.None, PlaceSpots.NearestFree(Vector2.zero, Vector2.zero, null), "no spots at all");
+            // Spec 039 rule 3 (was None): a 10 cm top still has its one spot, until that is taken.
+            Assert.AreEqual(0, PlaceSpots.NearestFree(new Vector2(0.1f, 0.1f), Vector2.zero, null));
+            Assert.AreEqual(PlaceSpots.None, PlaceSpots.NearestFree(new Vector2(0.1f, 0.1f), Vector2.zero, new[] { true }));
         }
 
         [Test]

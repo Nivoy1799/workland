@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 2150255004390626298}
   - component: {fileID: 3215324705941048170}
   - component: {fileID: 8302411734108332197}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Smudge 1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -104,7 +104,7 @@ GameObject:
   - component: {fileID: 3609729914253467185}
   - component: {fileID: 6582699919480377153}
   - component: {fileID: 5460596440590941336}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: DirtyDish
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -267,6 +267,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 8250138318313900683}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 0
 --- !u!114 &5460596440590941336
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -290,7 +291,7 @@ GameObject:
   - component: {fileID: 7341486054550629498}
   - component: {fileID: 6286853405974384931}
   - component: {fileID: 7389789764564087988}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Smudge 2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -380,7 +381,7 @@ GameObject:
   - component: {fileID: 1852731879533667074}
   - component: {fileID: 6408910120498641286}
   - component: {fileID: 5866738946196308896}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Smudge 3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -468,7 +469,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 5624450953873813170}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -500,7 +501,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8085494250889852516}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Model
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -574,9 +575,17 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6339981493214993103, guid: 31633bde6857067458d5b16f78592d7c, type: 3}
+      propertyPath: m_Layer
+      value: 8
+      objectReference: {fileID: 0}
     - target: {fileID: 8944614232214928790, guid: 31633bde6857067458d5b16f78592d7c, type: 3}
       propertyPath: m_Name
       value: Art_FoodPlate
+      objectReference: {fileID: 0}
+    - target: {fileID: 8944614232214928790, guid: 31633bde6857067458d5b16f78592d7c, type: 3}
+      propertyPath: m_Layer
+      value: 8
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

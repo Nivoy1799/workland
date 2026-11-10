@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 9170319568432471815}
   - component: {fileID: 1759921108746719610}
   - component: {fileID: 7243995442977779657}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Cloth
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -99,7 +99,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3601836457212686047}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -136,7 +136,7 @@ GameObject:
   - component: {fileID: 420666476260970889}
   - component: {fileID: 7844618267844449245}
   - component: {fileID: 3747183386423937919}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: WipeCloth
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -299,6 +299,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 8259063340580416634}
   _networkObjectCache: {fileID: 0}
+  _handleTool: 1
 --- !u!114 &3747183386423937919
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -320,7 +321,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 407221646692756435}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Model
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -355,7 +356,7 @@ GameObject:
   - component: {fileID: 4738350577043717160}
   - component: {fileID: 4534951460637807858}
   - component: {fileID: 6188705797810868682}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Stripe
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -36,7 +36,9 @@ namespace Worktown.Game.Tests
             try
             {
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(12, surfaces.Count, "spec 021: five worktops, and per stove its top and two burners; spec 030: the griddle's deck");
+                Assert.AreEqual(24, surfaces.Count, "spec 021: five worktops, and per stove its top and two burners; spec 030: the griddle's deck; "
+                    + "spec 039: four front counter tops, the stoves' front strips, the fryer deck, the assembly back, the sink front and back, "
+                    + "the plate shelf front and back");
                 SerializedProperty list = new SerializedObject(All<PickupService>(scene)[0]).FindProperty("_surfaces");
                 Assert.AreEqual(surfaces.Count, list.arraySize);
                 int burners = 0;
@@ -56,7 +58,8 @@ namespace Worktown.Game.Tests
                         Assert.AreEqual(StationKind.Stove, stove.Kind);
                         Assert.AreEqual(stove.Index, surface.StoveIndex, surface.name);
                     }
-                    else Assert.Greater(surface.SpotCount, 1, surface.name);
+                    else if (i < 12) Assert.Greater(surface.SpotCount, 1, surface.name);
+                    else Assert.GreaterOrEqual(surface.SpotCount, 1, surface.name + ": spec 039 rule 3, a narrow top still has a spot");
                     float y = surface.SpotWorldPosition(0).y;
                     Assert.That(y, Is.InRange(0.7f, 1.3f), surface.name + " top at station height");
                     Bounds box = surface.GetComponent<BoxCollider>().bounds;
@@ -78,6 +81,7 @@ namespace Worktown.Game.Tests
                 foreach (PlaceSurface surface in All<PlaceSurface>(scene))
                 {
                     if (surface.GetComponentInParent<Station>() != null) continue; // a stove's top or burner
+                    if (surface.transform.parent != null && surface.transform.parent.name.StartsWith("Front counter")) continue; // spec 039
                     worktops++;
                     Bounds top = surface.GetComponent<BoxCollider>().bounds;
                     foreach (Station station in stations)
