@@ -55,6 +55,16 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+14. **Setting (2026-11-10 brainstorm):** the year 2222 as imagined in 1950–80 (retro-futurism), with a little
+    steampunk in the kitchen machines; robots and AI exist, but people work by passion; native vegan. Money question,
+    default **C**:
+    - basics are free;
+    - the economy is a voluntary passion game: credits are the scoreboard and the way to big dreams;
+    - cash is a retro ritual (that's why guests pay in coins);
+    - real hand-grown ingredients are rare and cost credits;
+    - robots can do everything, but hand-made is the luxury.
+    When you say yes: Claude writes docs/setting.md and proposes D37 (setting) plus a palette update for D32 and
+    spec 040.
 13. **Design v1 after your decision (D33-D36):** co-op restaurant simulator for up to 16 players, player-hosted, the
     climb from a food corner (1 dish, cash only) through a restaurant with your mix of services to automation,
     ingredient creation, competitions, events, marketing and cars. Persistent town and mechanic dropped. Please read
