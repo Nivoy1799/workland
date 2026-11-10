@@ -151,3 +151,7 @@ tuned later by the human.
   dead checks in ControlRules routing; a turned item can overlap neighbours visually; stale spec line.
 - Flaky: Cinemachine NRE in one cook run (destroyed tracked transform at teardown) and a host that ended mid-tour
   without a log line - both for spec 045.
+- 042 review (approved; nits 1-9 go into the 043 round). Known limits: a cup sits 2 cm into the tray grid; other players
+  see the level about one round trip late; in third person E cannot take an empty cup back off the tray; HudView still
+  says "Take a cup first" on a refused press (needs a Scripts/UI scope); the tour prompt reads "pick up empty cup"
+  during our own pour.
