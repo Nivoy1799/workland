@@ -146,3 +146,8 @@ tuned later by the human.
   the tutorial target; an unused using.
 - 039 review (CHANGES REQUESTED, fixed in the 041 round): empty-handed aim through thin strips; coverage test blind
   spots. Later: the prediction can be one 45-degree snap off near a boundary; the fries box depth is defined twice.
+- 041 review (approved; 1, 2, 5 and 9 go into the 042 round): empty-hands tests copy the hit sorting (make it a
+  shared pure helper); the right-click ray sees through station bodies; WheelSteps should read scrollDeltaBehavior;
+  dead checks in ControlRules routing; a turned item can overlap neighbours visually; stale spec line.
+- Flaky: Cinemachine NRE in one cook run (destroyed tracked transform at teardown) and a host that ended mid-tour
+  without a log line - both for spec 045.
