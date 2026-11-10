@@ -128,11 +128,12 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateCup(out Item cup));
             kitchen.Register(50, cup);
             const int station = 9, tap = 1;
-            Assert.AreEqual(CookOutcome.Ok, desk.Press(station, tap, Cook, 50, 100, null));
+            Assert.IsTrue(kitchen.PutCupOnSpot(station, tap, 50)); // spec 042: under the tap
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(station, tap, Cook, 100, null));
             var player = new object();
             var pourers = new Dictionary<long, object> { [DrinkDesk.KeyOf(station, tap)] = player };
             Assert.IsFalse(desk.ForgetGonePour(pourers, station, tap, player), "the pour still runs: kept");
-            kitchen.CancelPoursOfCup(50); // the cup was put down
+            kitchen.CancelPoursOfCup(50); // the cup went away (spec 042: taken off its spot)
             Assert.IsFalse(desk.ForgetGonePour(pourers, station, tap, new object()), "someone else's entry is not ours to forget");
             Assert.IsTrue(desk.ForgetGonePour(pourers, station, tap, player));
             Assert.AreEqual(0, pourers.Count);
@@ -219,7 +220,8 @@ namespace Worktown.Game.Tests
             // The client: a tap whose kegs are empty says so in grey. 036 review: "Out of stock" only at 0; a started cup counts as one
             // (less than a cup shows as 1), so the last part of a keg still pours.
             int lemonade = StockCatalog.IndexOf("lemonade");
-            AimTarget tap = AimTarget.DrinkTool(0, 0, "lemonade", -1).WithStock(lemonade, 0);
+            // Spec 042: the cup stands on the tap's spot (the tap pours into it, not into the hands).
+            AimTarget tap = AimTarget.DrinkTool(0, 0, "lemonade", -1, DrinkRules.SpotByte(true, false, -1, DrinkRules.LevelEmpty)).WithStock(lemonade, 0);
             Held cup = Held.Cup("empty cup", -1, DrinkRules.LevelEmpty, false);
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(cup, tap));
             Assert.AreEqual(InteractionRules.OutOfStockText, InteractionRules.PromptFor(cup, tap));

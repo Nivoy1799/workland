@@ -331,15 +331,16 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateCup(out Item empty));
             kitchen.Register(cupId, empty);
+            Assert.IsTrue(kitchen.PutCupOnSpot(dispenser, tap, cupId), "spec 042: the cup stands under the tap");
             var room = new StockRoom();
             int lemonade = Line("lemonade");
             while (room.LineOf(lemonade).AvailablePercent > 30) room.Draw(lemonade, 10, 1, out _);
             Assert.AreEqual(30, room.LineOf(lemonade).AvailablePercent, "a third of a cup left (120 ml)");
             var desk = new DrinkDesk(kitchen);
 
-            Assert.AreEqual(CookOutcome.Ok, desk.Press(dispenser, tap, Owner, cupId, Start, new StockWallet(room)));
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(dispenser, tap, Owner, Start, new StockWallet(room)));
             var wallet = new StockWallet(room);
-            Assert.AreEqual(CookOutcome.Ok, desk.Release(dispenser, tap, Owner, Real(1.8), Rate, cupId, wallet, out DrinkDesk.PourResult r),
+            Assert.AreEqual(CookOutcome.Ok, desk.Release(dispenser, tap, Owner, Real(1.8), Rate, wallet, out DrinkDesk.PourResult r),
                 "held for 360 ml (90 %): not refused whole");
             Assert.AreEqual(120f, r.Poured, 0.01f, "only the keg's rest");
             Assert.AreEqual(120f, r.Total, 0.01f);
@@ -351,13 +352,13 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(r.Spilled);
 
             // Empty now: the next press is refused before the tap is taken, nothing changes.
-            Assert.AreEqual(CookOutcome.OutOfStock, desk.Press(dispenser, tap, Owner, cupId, Real(3), new StockWallet(room)));
+            Assert.AreEqual(CookOutcome.OutOfStock, desk.Press(dispenser, tap, Owner, Real(3), new StockWallet(room)));
             Assert.AreSame(cup, kitchen.TryGet(cupId, out Item same) ? same : null);
 
             // A top-up that would run over the brim, with 50 % left: 200 ml more, 320 ml in the cup, no spill (the drawn ml decides).
             room.ReturnPercent(lemonade, 50);
-            Assert.AreEqual(CookOutcome.Ok, desk.Press(dispenser, tap, Owner, cupId, Real(4), new StockWallet(room)));
-            Assert.AreEqual(CookOutcome.Ok, desk.Release(dispenser, tap, Owner, Real(6.4), Rate, cupId, new StockWallet(room), out r));
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(dispenser, tap, Owner, Real(4), new StockWallet(room)));
+            Assert.AreEqual(CookOutcome.Ok, desk.Release(dispenser, tap, Owner, Real(6.4), Rate, new StockWallet(room), out r));
             Assert.AreEqual(200f, r.Poured, 0.01f);
             Assert.AreEqual(320f, r.Total, 0.01f);
             Assert.IsFalse(r.Spilled, "480 ml held would have spilled; 320 ml do not");
@@ -464,11 +465,12 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateCup(out Item cup));
             kitchen.Register(50, cup);
+            Assert.IsTrue(kitchen.PutCupOnSpot(10, 0, 50)); // spec 042: under the tap
             var desk = new DrinkDesk(kitchen);
             var wallet = new ChangingWallet();
             wallet.During = () => kitchen.TryRemove(50, out _); // the cup is gone while the pour is charged
-            Assert.AreEqual(CookOutcome.Ok, desk.Press(10, 0, Owner, 50, Start, wallet));
-            Assert.AreEqual(CookOutcome.SimRefused, desk.Release(10, 0, Owner, Real(1.8), Rate, 50, wallet, out _));
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(10, 0, Owner, Start, wallet));
+            Assert.AreEqual(CookOutcome.SimRefused, desk.Release(10, 0, Owner, Real(1.8), Rate, wallet, out _));
             Assert.AreEqual((1, 1), (wallet.Charges, wallet.Refunds), "charged once, refunded once");
             Assert.IsFalse(kitchen.TryGet(50, out _), "no cup came back from nowhere");
         }
@@ -481,14 +483,19 @@ namespace Worktown.Game.Tests
             var kitchen = KitchenState.CreateDemo();
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateCup(out Item cup));
             kitchen.Register(50, cup);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryStartPour(10, 0, Owner, 50, Start));
+            Assert.IsTrue(kitchen.PutCupOnSpot(10, 0, 50)); // spec 042: under the tap
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryStartPour(10, 0, Owner, Start));
             // A new item under the same id (a despawned cup's id reused): the pour is dropped, it never fills the new one.
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateCup(out Item other));
             kitchen.Register(50, other);
             Assert.IsFalse(kitchen.IsPouring(10, 0, out _, out _, out _), "Register cancels the pour into that id");
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryStartPour(10, 0, Owner, 50, Start));
+            Assert.AreEqual(-1, kitchen.CupOnSpot(10, 0), "spec 042: and the new item stands on no spot");
+            Assert.AreEqual(CookOutcome.NeedsCup, kitchen.TryStartPour(10, 0, Owner, Start), "no cup under the tap now");
+            Assert.IsTrue(kitchen.PutCupOnSpot(10, 0, 50));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryStartPour(10, 0, Owner, Start));
             Assert.IsTrue(kitchen.TryRemove(50, out _));
             Assert.IsFalse(kitchen.IsPouring(10, 0, out _, out _, out _), "TryRemove cancels it too");
+            Assert.AreEqual(-1, kitchen.CupOnSpot(10, 0), "spec 042: and frees its spot");
             Assert.AreEqual(0, kitchen.DrinkFlags(10), "the tap is free");
         }
 
@@ -499,8 +506,9 @@ namespace Worktown.Game.Tests
             var desk = new DrinkDesk(kitchen);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryCreateCup(out Item cup));
             kitchen.Register(50, cup);
-            desk.Press(10, 0, Owner, 50, Start, null);
-            Assert.AreEqual(CookOutcome.Ok, desk.Release(10, 0, Owner, Real(1.8), Rate, 50, null, out _));
+            Assert.IsTrue(kitchen.PutCupOnSpot(10, 0, 50)); // spec 042: under the tap
+            desk.Press(10, 0, Owner, Start, null);
+            Assert.AreEqual(CookOutcome.Ok, desk.Release(10, 0, Owner, Real(1.8), Rate, null, out _));
             Assert.Greater(kitchen.CupMl(50), 300f);
             // The cup goes onto... nothing takes it (033 review 2), so take it away the other way: the registry forgets its ml.
             Assert.IsTrue(kitchen.TryRemove(50, out _));

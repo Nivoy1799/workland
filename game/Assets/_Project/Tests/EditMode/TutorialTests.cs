@@ -152,6 +152,14 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(TutorialTarget.CupStack, TutorialSteps.LemonadeTarget(Empty));
             Assert.AreEqual(TutorialTarget.LemonadeTap, TutorialSteps.LemonadeTarget(Holding(EmptyCup)));
             Assert.AreEqual(TutorialTarget.LidStack, TutorialSteps.LemonadeTarget(Holding(OpenLemonade)));
+            // Spec 042: the cup on the lemonade tap's tray: hold the tap until the line, the lids, then take the lidded cup.
+            TutorialSnapshot OnTray(byte level, bool lid) => new TutorialSnapshot { LemonadeSpot = DrinkRules.SpotByte(true, lid, 0, level) };
+            Assert.AreEqual(TutorialTarget.LemonadeTap, TutorialSteps.LemonadeTarget(OnTray(DrinkRules.LevelEmpty, false)));
+            Assert.AreEqual(TutorialTarget.LemonadeTap, TutorialSteps.LemonadeTarget(OnTray(DrinkRules.LevelLow, false)), "not full yet");
+            Assert.AreEqual(TutorialTarget.LidStack, TutorialSteps.LemonadeTarget(OnTray(DrinkRules.LevelRight, false)));
+            Assert.AreEqual(TutorialTarget.LemonadeCup, TutorialSteps.LemonadeTarget(OnTray(DrinkRules.LevelRight, true)));
+            Assert.IsFalse(TutorialSteps.HasLemonade(OnTray(DrinkRules.LevelRight, true)), "done once it is in the hands");
+            StringAssert.Contains("tray", TutorialSteps.Default[(int)TutorialStepId.FillLemonade].Text);
             Assert.AreEqual(TutorialTarget.DishReturn, TutorialSteps.WashTarget(Empty));
             Assert.AreEqual(TutorialTarget.Sink, TutorialSteps.WashTarget(Holding(Held.DirtyDish)));
             Assert.AreEqual(TutorialTarget.SpitCone, TutorialSteps.SpitTarget(Empty), "a bare spit: load a cone");

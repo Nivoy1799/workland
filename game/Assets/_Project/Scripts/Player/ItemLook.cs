@@ -41,6 +41,8 @@ namespace Worktown.Game.Player
 
         /// <summary>A predicted look is drawn (pending, or confirmed and waiting for the state to catch up).</summary>
         public bool HasPrediction => _hasPrediction;
+        /// <summary>041 review: the predicted look is a put-down (a place or a drop) still waiting for the server.</summary>
+        public bool HasRestPrediction => _hasPrediction && _predictedKind == ItemGoalKind.Rest;
         /// <summary>Waiting for the networked position after a put-down.</summary>
         public bool IsSettling => _settling;
 

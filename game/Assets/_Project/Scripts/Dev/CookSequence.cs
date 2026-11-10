@@ -1086,18 +1086,17 @@ namespace Worktown.Game.Dev
         public const float PourSeconds = 1.8f;
 
         /// <summary>
-        /// Spec 033 AC4: the wrap guest's lemonade. A cup from the stack (frames of it flying into the hand), the lemonade tap held for
-        /// <see cref="PourSeconds"/> (frames of the cup under the tap, the stream and the level rising to the line), the lid from the lid
-        /// stack (frames), a shot of the lidded cup in the hand, then served at the counter (frames of the reward). The observer sees the
-        /// stream from the guests' side.
+        /// Spec 033 AC4, spec 042 AC3: the wrap guest's lemonade. A cup from the stack (frames of it flying into the hand), put on the
+        /// lemonade tap's tray by a left click (the ghost, then frames of it snapping under the spout), the tap held for
+        /// <see cref="PourSeconds"/> with free hands (frames of the lever, the stream and the level rising in the cup on the tray), the lid
+        /// from the lid stack onto the cup on the tray (frames), the lidded cup taken off the tray (frames), a shot of it in the hand, then
+        /// served at the counter (frames of the reward).
         /// </summary>
         private static IEnumerator PourLemonade(TourActor actor, CookCapture capture, float laneZ, Station counter)
         {
             const float frames = TourRules.ClickFramesSeconds;
             PickupInteractor me = actor.Interactor;
-            Station drinks = null;
-            foreach (Station s in UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None))
-                if (s.Kind == StationKind.DrinkDispenser) drinks = s;
+            Station drinks = FindStation(StationKind.DrinkDispenser);
             StockSlot cups = null, lemonade = null, lids = null;
             if (drinks != null)
             {
@@ -1105,9 +1104,10 @@ namespace Worktown.Game.Dev
                 drinks.TryGetSlot(0, out lemonade);
                 drinks.TryGetSlot(DrinkRules.LidTool, out lids);
             }
-            if (drinks == null || cups == null || lemonade == null || lids == null)
+            PlaceSurface spot = CupSpot(drinks, 0);
+            if (drinks == null || cups == null || lemonade == null || lids == null || spot == null)
             {
-                Debug.LogWarning("[Demo] drinks: the dispenser or its tools are missing");
+                Debug.LogWarning("[Demo] drinks: the dispenser, its tools or its cup spot are missing");
                 actor.CountTimeout("cook: drink dispenser missing");
                 yield break;
             }
@@ -1118,40 +1118,59 @@ namespace Worktown.Game.Dev
                 capture.Before("cup-aim", "cup-take", frames));
             float until = Time.unscaledTime + 3f;
             while (HeldCup(me) == null && Time.unscaledTime < until) yield return null;
-            if (HeldCup(me) == null) actor.CountTimeout("cook: no cup in the hands");
+            Food cup = HeldCup(me);
+            if (cup == null) actor.CountTimeout("cook: no cup in the hands");
             yield return actor.LevelView();
             yield return capture.Shot("cup-in-hand");
 
-            // The tap: hold it, the cup goes under it and the lemonade rises to the line.
+            // Spec 042: the cup onto the lemonade tap's tray (a left click with the ghost); it snaps under the spout.
+            Vector3 onTray = spot.SpotWorldPosition(0) + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight * 0.5f);
+            yield return actor.Use("put the cup under the lemonade tap", onTray, InteractionAction.Place,
+                () => me.DevSendPlace(spot.Index, 0), capture.Before("cup-place-aim", "cup-place", frames), viaInput: true);
+            until = Time.unscaledTime + 3f;
+            while (!OnSpot(cup, spot) && Time.unscaledTime < until) yield return null;
+            if (!OnSpot(cup, spot)) actor.CountTimeout("cook: the cup is not on the lemonade tap's tray");
+            Debug.Log("[Demo] drinks: the cup stands under the lemonade tap (" + (cup != null ? Vector3.Distance(cup.transform.position,
+                spot.SpotWorldPosition(0)).ToString("0.000") : "?") + " m from the spot), the hands hold '" + HeldName(me) + "'");
+
+            // The tap: hold it with free hands, the lever goes down and the lemonade rises to the line in the cup on the tray.
             yield return actor.AimAt(lemonade.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Fill);
             yield return capture.Shot("lemonade-aim");
             if (me.CurrentAction != InteractionAction.Fill) Debug.LogWarning("[Demo] drinks: the tap offers " + me.CurrentAction);
             Debug.Log("[Demo] drinks: press the lemonade tap: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
+            yield return actor.AimAt(onTray + Vector3.up * 0.05f, 0.3f); // look down at the cup on the tray while it fills
             me.DevSqueezePress(lemonade);
             float pressed = Time.unscaledTime;
             var tap = lemonade.GetComponent<Worktown.Game.Art.DrinkTapView>();
             if (capture.Frames != null) yield return capture.Frames("lemonade-pour", PourSeconds + 0.4f);
             while (Time.unscaledTime - pressed < PourSeconds) yield return null;
-            Food cup = HeldCup(me);
             float drawn = cup != null && cup.Visual != null ? cup.Visual.DrawnFill : -1f;
             me.DevSqueezeRelease();
             float released = Time.unscaledTime;
             while ((me.DevSqueezeBusy || (cup != null && cup.Look.Value.Shape == DrinkRules.LevelEmpty)) && Time.unscaledTime - released < 3f)
                 yield return null;
             Debug.Log("[Demo] drinks: held the tap " + (released - pressed).ToString("0.00") + " s (drawn level " + drawn.ToString("0.00")
-                + ", the tap drew its stream from frame " + (tap != null ? tap.PredictionDrawnFrame : -1) + "); the cup is '" + HeldName(me)
-                + "', level " + (cup != null ? cup.Look.Value.Shape : 0));
+                + ", the tap drew its stream from frame " + (tap != null ? tap.PredictionDrawnFrame : -1) + "); the cup on the tray is '"
+                + (cup != null ? cup.DisplayName.Value : "?") + "', level " + (cup != null ? cup.Look.Value.Shape : 0) + "; the hands hold '"
+                + HeldName(me) + "'");
             if (cup == null || cup.Look.Value.Shape != DrinkRules.LevelRight) actor.CountTimeout("cook: the lemonade is not at the line");
             yield return capture.WaitForFrames();
-            yield return actor.Look(0f, -30f, 0.6f);
             yield return capture.Shot("lemonade-filled");
             yield return actor.LevelView();
 
-            // The lid.
+            // The lid, onto the cup on the tray (empty hands).
             yield return actor.Use("put a lid on it", lids.Anchor, InteractionAction.Lid, () => me.DevLid(drinks), capture.Before("lid-aim", "lid", frames));
             until = Time.unscaledTime + 3f;
             while ((cup == null || cup.Look.Value.Kind != FoodLook.KindLidded) && Time.unscaledTime < until) yield return null;
             if (cup == null || cup.Look.Value.Kind != FoodLook.KindLidded) actor.CountTimeout("cook: no lid on the lemonade");
+
+            // Spec 042: taken off the tray with empty hands.
+            Pickup cupItem = cup != null ? cup.GetComponent<Pickup>() : null;
+            yield return actor.Use("take the lemonade off the tray", onTray, InteractionAction.PickUp,
+                () => { if (cupItem != null) me.DevSendPickup(cupItem.NetworkObject); }, capture.Before("lemonade-take-aim", "lemonade-take", frames));
+            until = Time.unscaledTime + 3f;
+            while (HeldCup(me) == null && Time.unscaledTime < until) yield return null;
+            if (HeldCup(me) != cup) actor.CountTimeout("cook: the lemonade is not in the hands");
             yield return actor.LevelView();
             yield return capture.Shot("lemonade-held-level");
             LogHold(me, "lemonade");
@@ -1167,6 +1186,24 @@ namespace Worktown.Game.Dev
             Debug.Log("[Demo] drinks: served (" + Time.time.ToString("0.0") + " s); feed: " + latest);
             if (!latest.Contains("lemonade")) actor.CountTimeout("cook: the lemonade was not served");
             if (!latest.Contains("drink order: exact order")) Debug.LogWarning("[Demo] drinks: no exact lemonade order was served");
+        }
+
+        /// <summary>Spec 042: the cup spot under tap <paramref name="tap"/> of <paramref name="dispenser"/>, or null.</summary>
+        private static PlaceSurface CupSpot(Station dispenser, int tap)
+        {
+            if (dispenser == null) return null;
+            foreach (PlaceSurface s in UnityEngine.Object.FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
+                if (s.IsCupSpot && s.DispenserIndex == dispenser.Index && s.CupTap == tap) return s;
+            return null;
+        }
+
+        /// <summary>Spec 042: the cup lies (not held) on <paramref name="spot"/>, as the server put it.</summary>
+        private static bool OnSpot(Food cup, PlaceSurface spot)
+        {
+            if (cup == null || spot == null || !cup.TryGetComponent(out Pickup item) || item.IsHeld) return false;
+            Vector3 offset = cup.transform.position - spot.SpotWorldPosition(0);
+            offset.y = 0f;
+            return offset.sqrMagnitude < 0.05f * 0.05f;
         }
 
         // ---- Spec 035: cleaning in the tour ----
@@ -1263,11 +1300,21 @@ namespace Worktown.Game.Dev
             if (ByteOf(FindStation(StationKind.PlateShelf)) <= clean) actor.CountTimeout("cook: the scrubbed plate is not back on the shelf");
             yield return capture.Shot("scrubbed");
 
-            // 2. The spill: a cup held under the tap past the brim.
+            // 2. The spill: a cup on the tray, the tap held past the brim (spec 042: the cup under the tap, not in the hands).
             yield return actor.WalkTo(new Vector3(drinks.transform.position.x, 0f, laneZ), false, false);
             yield return actor.Use("take a cup", cups.Anchor, InteractionAction.Take, () => me.DevTakeCup(drinks), null);
             until = Time.unscaledTime + 3f;
             while (HeldCup(me) == null && Time.unscaledTime < until) yield return null;
+            Food overfilled = HeldCup(me);
+            PlaceSurface spillSpot = CupSpot(drinks, 0);
+            if (spillSpot != null)
+            {
+                Vector3 tray = spillSpot.SpotWorldPosition(0) + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight * 0.5f);
+                yield return actor.Use("put the cup under the lemonade tap", tray, InteractionAction.Place, () => me.DevSendPlace(spillSpot.Index, 0),
+                    null, viaInput: true);
+                until = Time.unscaledTime + 3f;
+                while (!OnSpot(overfilled, spillSpot) && Time.unscaledTime < until) yield return null;
+            }
             yield return actor.AimAt(lemonade.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Fill);
             me.DevSqueezePress(lemonade);
             pressed = Time.unscaledTime;
@@ -1280,6 +1327,16 @@ namespace Worktown.Game.Dev
             if (!DrinkRules.HasSpill(ByteOf(drinks))) actor.CountTimeout("cook: the overfilled cup made no spill");
             yield return actor.AimAt(spill.Anchor, 1f);
             yield return capture.Shot("spill");
+            // Spec 042: the overfilled cup comes off the tray (empty hands) to go into the trash.
+            Pickup spilled = overfilled != null ? overfilled.GetComponent<Pickup>() : null;
+            if (spilled != null && spillSpot != null)
+            {
+                yield return actor.Use("take the overfilled cup off the tray", spillSpot.SpotWorldPosition(0)
+                    + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight * 0.5f), InteractionAction.PickUp,
+                    () => me.DevSendPickup(spilled.NetworkObject), null);
+                until = Time.unscaledTime + 3f;
+                while (HeldCup(me) == null && Time.unscaledTime < until) yield return null;
+            }
             Debug.Log("[Demo] cleaning: spilled (" + HeldName(me) + "): " + CleaningText());
 
             // 3. The trash: the spilled cup goes in (it is full then), the bag goes out to the bin outside the staff gap.

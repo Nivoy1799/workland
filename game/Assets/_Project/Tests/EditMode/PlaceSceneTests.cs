@@ -29,6 +29,42 @@ namespace Worktown.Game.Tests
             return found;
         }
 
+        /// <summary>
+        /// Spec 042: each tap of the drink dispenser has one cup spot, flagged with its dispenser and tap, its spot right under the spout
+        /// where the stream lands (the tap view's CupPose), reachable from the aisle in front of the dispenser.
+        /// </summary>
+        [Test]
+        public void BuiltScene_EachTap_HasOneCupSpot_RightUnderItsSpout()
+        {
+            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var taps = new Dictionary<int, Worktown.Game.Art.DrinkTapView>();
+                foreach (Worktown.Game.Art.DrinkTapView view in All<Worktown.Game.Art.DrinkTapView>(scene)) taps[view.Tap] = view;
+                Assert.AreEqual(DrinkRules.TapCount, taps.Count);
+                var seen = new HashSet<int>();
+                foreach (PlaceSurface surface in All<PlaceSurface>(scene))
+                {
+                    if (!surface.IsCupSpot) continue;
+                    Assert.IsTrue(seen.Add(surface.CupTap), surface.name + ": one spot per tap");
+                    Station dispenser = surface.GetComponentInParent<Station>();
+                    Assert.IsNotNull(dispenser, surface.name);
+                    Assert.AreEqual(StationKind.DrinkDispenser, dispenser.Kind);
+                    Assert.AreEqual(dispenser.Index, surface.DispenserIndex, surface.name);
+                    Assert.AreEqual(1, surface.SpotCount, surface.name + ": one cup");
+                    Assert.IsFalse(surface.IsBurner);
+                    Vector3 spot = surface.SpotWorldPosition(0);
+                    Assert.AreEqual(0f, Vector3.Distance(taps[surface.CupTap].CupPose.position, spot), 0.001f, surface.name + " under its spout");
+                    Vector3 aisle = dispenser.transform.position + dispenser.transform.rotation * new Vector3(0f, 0f, -0.9f);
+                    aisle.y = 0f;
+                    Assert.IsTrue(PickupRules.IsInReach(aisle, spot), surface.name + " in reach from the aisle");
+                    Assert.AreEqual(-1, PlaceCoverage.ExceptionFor(surface.name), "a place surface, not an exception");
+                }
+                Assert.AreEqual(DrinkRules.TapCount, seen.Count);
+            }
+            finally { EditorSceneManager.CloseScene(scene, true); }
+        }
+
         [Test]
         public void BuiltScene_SurfacesAreRegisteredByIndex_WithSpotsAtStationHeight()
         {
@@ -36,7 +72,7 @@ namespace Worktown.Game.Tests
             try
             {
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
-                Assert.AreEqual(24, surfaces.Count, "spec 021: five worktops, and per stove its top and two burners; spec 030: the griddle's deck; "
+                Assert.AreEqual(27, surfaces.Count, "spec 042: the three taps' cup spots; spec 021: five worktops, and per stove its top and two burners; spec 030: the griddle's deck; "
                     + "spec 039: four front counter tops, the stoves' front strips, the fryer deck, the assembly back, the sink front and back, "
                     + "the plate shelf front and back");
                 SerializedProperty list = new SerializedObject(All<PickupService>(scene)[0]).FindProperty("_surfaces");

@@ -709,6 +709,27 @@
         "With the spatula, left click a seitan strip on the griddle: does it flip? Does a right click there only put the spatula down (never a flip)?",
         "Play a whole shift with the mouse only: is there anything you still need a key for?"
       ]
+    },
+    {
+      "id": "2026-11-10-spec-042",
+      "date": "2026-11-10",
+      "title": "Drinks: put the cup under the tap, then fill it",
+      "items": [
+        "Each tap of the drink dispenser has a spot on its drip tray. Take a cup and left click the tap (or the tray under it): the cup snaps under the spout. Right click puts it there too",
+        "Hold left click on the tap to fill the cup on its tray: the lever goes down and the drink rises in the cup. Your hands are free while it pours",
+        "Left click the lids to put a lid on the filled cup on the tray (or on the one in your hands), then take the cup off the tray with empty hands",
+        "Only an empty cup, or an open cup of that tap's drink, fits under a tap. Nobody can take a cup while someone else pours into it",
+        "Everyone sees the same pour: the cup on the tray, the lever, the stream and the rising drink",
+        "Third person: E puts the cup under the nearest free tap, hold E to pour, E again for the lid, then E takes the cup",
+        "The ghost now always shows where a right click would put things down when a left click would not place them (for example next to the pot)"
+      ],
+      "test": [
+        "Put a cup under the lemonade tap, hold the tap and walk away to do something else halfway: does the cup keep what was poured and the drink stay on the tray?",
+        "Fill a cup, lid it on the tray, take it and serve it with an order: does the guest take the drink?",
+        "Try to put a lidded cup or a cup of lemonade under the soda tap: is it refused with a reason?",
+        "With two players: while one pours, can the other take that cup? (it should say someone is pouring into it)",
+        "Overfill a cup: does it spill over the tray and leave the puddle to wipe?"
+      ]
     }
   ]
 }

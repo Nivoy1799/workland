@@ -7,14 +7,17 @@ namespace Worktown.Game.Cooking
     /// Spec 033, server, pure: the drink dispenser's steps around <see cref="KitchenState"/>, the 031b AssemblyDesk pattern (AGENTS rule
     /// 6: money and items are decided here, tested without the network). Every step checks in the sim first, then charges once, then
     /// commits; a refusal changes nothing and charges nothing.
-    /// - A press records the pour for the cup in the hands (a repeated press of the same player keeps the first start). A player who
-    ///   cannot pay the smallest pour (the cup when it is empty, plus 1 %) is refused before the tap is taken.
+    /// - Spec 042: a press records the pour for the cup on that tap's spot on the drip tray (a repeated press of the same player keeps the
+    ///   first start); no cup there is NeedsCup. A player who cannot pay the smallest pour (the cup when it is empty, plus 1 %) is
+    ///   refused before the tap is taken.
     /// - The release (or the server's stop at <see cref="Drinks.MaxMl"/>) previews the cup for the ml held, charges it once (the cup
     ///   when it was empty plus <see cref="PriceRules.FillPercent"/> of the drink, computed here on the server), then commits; a pour
     ///   over the brim marks the dispenser's spill (spec 035 cleans it). A release without this player's pour is a harmless Ok.
-    /// - The cup must still be in the hands at the release (put down, it is no pour: nothing charged).
+    /// - The cup must still stand on the spot at the release. Taken away mid-pour (only its pourer may; <see cref="CanTake"/>), the pour
+    ///   stops at once with nothing charged (<see cref="TakenOff"/>).
     /// - A player who left: the pour is dropped at once, nothing charged (<see cref="Cancel"/>).
-    /// - The lid is free (the cup's price includes it); the cup stack gives empty hands a cup for free (charged with its first pour).
+    /// - The lid is free (the cup's price includes it): on the cup in the hands, else on the first filled open cup on a spot
+    ///   (<see cref="LidTarget"/>). The cup stack gives empty hands a cup for free (charged with its first pour).
     /// The release does not need reach (<see cref="NeedsReach"/>): the press was in reach.
     /// </summary>
     public sealed class DrinkDesk
@@ -53,32 +56,32 @@ namespace Worktown.Game.Cooking
             !(kind == StationKind.DrinkDispenser && DrinkRules.TryParsePour(option, out _, out bool press) && !press);
 
         /// <summary>
-        /// The press of tap <paramref name="tap"/> holding cup <paramref name="heldCupId"/> (-1: nothing held) at <paramref name="tick"/>.
-        /// Nothing is charged here.
+        /// The press of tap <paramref name="tap"/> at <paramref name="tick"/>: it pours into the cup on that tap's spot (spec 042), whatever
+        /// the hands hold. Nothing is charged here.
         /// </summary>
-        public CookOutcome Press(int station, int tap, int owner, int heldCupId, uint tick, IDrinkWallet wallet)
+        public CookOutcome Press(int station, int tap, int owner, uint tick, IDrinkWallet wallet)
         {
             if (!DrinkRules.IsTap(tap)) return CookOutcome.InvalidOption;
             if (!_kitchen.IsPouring(station, tap, out _, out _, out _))
             {
-                CookOutcome can = _kitchen.CanPourInto(heldCupId, tap);
+                int spotCup = _kitchen.CupOnSpot(station, tap);
+                CookOutcome can = _kitchen.CanPourInto(spotCup, tap);
                 if (can != CookOutcome.Ok) return can;
-                bool empty = _kitchen.TryGet(heldCupId, out Item cup) && Drinks.IsEmptyCup(cup);
+                bool empty = _kitchen.TryGet(spotCup, out Item cup) && Drinks.IsEmptyCup(cup);
                 if (wallet != null && !wallet.CanAfford(owner, DrinkRules.DrinkOf(tap), 1, empty)) return wallet.Short; // 034: or OutOfStock
             }
-            return _kitchen.TryStartPour(station, tap, owner, heldCupId, tick);
+            return _kitchen.TryStartPour(station, tap, owner, tick);
         }
 
         /// <summary>
         /// The release by <paramref name="owner"/> at <paramref name="tick"/>: Ok and nothing happens when this player is not pouring
         /// that tap; else the pour ends (<see cref="End"/>).
         /// </summary>
-        public CookOutcome Release(int station, int tap, int owner, uint tick, double tickRate, int heldCupId, IDrinkWallet wallet,
-            out PourResult result)
+        public CookOutcome Release(int station, int tap, int owner, uint tick, double tickRate, IDrinkWallet wallet, out PourResult result)
         {
             result = default;
             if (!_kitchen.IsPouring(station, tap, out int who, out _, out _) || who != owner) return CookOutcome.Ok;
-            return End(station, tap, owner, tick, tickRate, heldCupId, wallet, out result);
+            return End(station, tap, owner, tick, tickRate, wallet, out result);
         }
 
         /// <summary>
@@ -87,11 +90,10 @@ namespace Worktown.Game.Cooking
         /// leaves the cup as it was. 038b: a stock wallet (<see cref="IDrinkStock"/>) with less left than the pour gives what is left: the
         /// cup gets only that, charged that much.
         /// </summary>
-        public CookOutcome End(int station, int tap, int owner, uint tick, double tickRate, int heldCupId, IDrinkWallet wallet,
-            out PourResult result)
+        public CookOutcome End(int station, int tap, int owner, uint tick, double tickRate, IDrinkWallet wallet, out PourResult result)
         {
             result = default;
-            CookOutcome made = _kitchen.TryEndPour(station, tap, owner, tick, tickRate, heldCupId, out Item cup, out float total,
+            CookOutcome made = _kitchen.TryEndPour(station, tap, owner, tick, tickRate, out Item cup, out float total,
                 out float poured, out bool wasEmpty, out int cupId);
             if (made != CookOutcome.Ok) return made;
             // 038b: a keg with less left than the pour draws what is left and fills only that much (the bucket from the drawn ml).
@@ -175,14 +177,52 @@ namespace Worktown.Game.Cooking
             return pourers.Remove(key);
         }
 
-        /// <summary>The lid on the cup in the hands (<paramref name="heldCupId"/>): checked in the sim, then applied. Free.</summary>
-        public CookOutcome Lid(int heldCupId, out Item lidded)
+        /// <summary>The lid on cup <paramref name="cupId"/> (in the hands or on a spot): checked in the sim, then applied. Free.</summary>
+        public CookOutcome Lid(int cupId, out Item lidded)
         {
-            CookOutcome fits = _kitchen.TryPreviewLid(heldCupId, out lidded);
+            CookOutcome fits = _kitchen.TryPreviewLid(cupId, out lidded);
             if (fits != CookOutcome.Ok) return fits;
-            _kitchen.CommitLid(heldCupId, lidded);
+            _kitchen.CommitLid(cupId, lidded);
             return CookOutcome.Ok;
         }
+
+        /// <summary>
+        /// Spec 042: the cup a click on dispenser <paramref name="station"/>'s lid stack lids: the cup in the hands
+        /// (<paramref name="heldId"/>) when it is a cup (its own refusals then), else the first filled open cup on a spot
+        /// (KitchenState.LiddableSpotCup), else -1 (NeedsCup).
+        /// </summary>
+        public int LidTarget(int station, int heldId)
+        {
+            if (_kitchen.TryGet(heldId, out Item held) && Drinks.IsCup(held)) return heldId;
+            return _kitchen.LiddableSpotCup(station);
+        }
+
+        /// <summary>Spec 042: whether item <paramref name="objectId"/> may be put on tap <paramref name="tap"/>'s cup spot (DrinkRules.CanStand).</summary>
+        public CookOutcome CanPlace(int objectId, int tap) => _kitchen.CanStandOnSpot(objectId, tap);
+
+        /// <summary>Spec 042: whether player <paramref name="owner"/> may take item <paramref name="objectId"/> (not while another pours into it).</summary>
+        public CookOutcome CanTake(int objectId, int owner) => _kitchen.CanTakeCup(objectId, owner);
+
+        /// <summary>
+        /// Spec 042: item <paramref name="objectId"/> was put on tap <paramref name="tap"/>'s spot of dispenser <paramref name="station"/>
+        /// (<paramref name="onSpot"/>), or moved anywhere else. Off a spot mid-pour, the pour stops without a result or a charge: true, with
+        /// its <paramref name="stoppedStation"/> and <paramref name="stoppedTap"/>.
+        /// </summary>
+        public bool Moved(int objectId, bool onSpot, int station, int tap, out int stoppedStation, out int stoppedTap)
+        {
+            stoppedStation = stoppedTap = -1;
+            if (onSpot)
+            {
+                bool stopped = TakenOff(objectId, out stoppedStation, out stoppedTap);
+                _kitchen.PutCupOnSpot(station, tap, objectId);
+                return stopped;
+            }
+            return TakenOff(objectId, out stoppedStation, out stoppedTap);
+        }
+
+        /// <summary>Spec 042: the cup left its spot; true when a pour into it stopped (nothing charged).</summary>
+        public bool TakenOff(int objectId, out int station, out int tap) =>
+            _kitchen.TakeCupOffSpot(objectId, out station, out tap, out bool stopped) && stopped;
 
         /// <summary>Whether empty hands may take a cup now: HandsFull, NoCupsLeft (<see cref="DrinkRules.MaxEmptyCups"/>), else Ok.</summary>
         public CookOutcome CanTakeCup(bool holding)

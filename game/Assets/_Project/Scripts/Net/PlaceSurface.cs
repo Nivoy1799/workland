@@ -5,7 +5,7 @@ namespace Worktown.Game.Net
 {
     /// <summary>
     /// Spec 020: the top of a worktop (spec 021: also of a stove outside its burners, and each burner as a surface with
-    /// one spot and the burner flag) that items can be put on. Static scene
+    /// one spot and the burner flag; spec 042: each tap's cup spot on a drink dispenser's drip tray, one spot) that items can be put on. Static scene
     /// object, the same on server and clients; requests refer to it by <see cref="Index"/>. Data only: the spot
     /// grid comes from <see cref="PlaceSpots"/>, the server (PickupService) decides who may put what where.
     /// Sits on the object with the collider the aim ray hits; the top is at local height <see cref="TopY"/>,
@@ -25,7 +25,18 @@ namespace Worktown.Game.Net
         [Tooltip("Spec 021, burners: which burner of that stove (0 or 1).")]
         [SerializeField] private int _burner = -1;
 
+        [Tooltip("Spec 042: a cup spot on a drink dispenser's drip tray (one spot): the tap above it pours into the cup standing there.")]
+        [SerializeField] private bool _isCupSpot;
+        [Tooltip("Spec 042, cup spots: station index of the drink dispenser.")]
+        [SerializeField] private int _dispenserIndex = -1;
+        [Tooltip("Spec 042, cup spots: the tap above it (DrinkRules: 0 lemonade, 1 iced tea, 2 soda).")]
+        [SerializeField] private int _tap = -1;
+
         public int Index => _index;
+        /// <summary>Spec 042: a tap's cup spot on the drip tray (only a cup that fits the tap goes there).</summary>
+        public bool IsCupSpot => _isCupSpot;
+        public int DispenserIndex => _dispenserIndex;
+        public int CupTap => _isCupSpot ? _tap : -1;
         public Vector2 Size => _size;
         public float TopY => _topY;
         public int SpotCount => PlaceSpots.Count(_size);
