@@ -144,3 +144,5 @@ tuned later by the human.
 - 038b review (approved with nits): the calm-guests MonoBehaviour wiring is untested (only pure parts); two error paths
   after a cut pour; the engine trusts offer fields (items per unit, pack size); plates spawned within 1 s are not seen by
   the tutorial target; an unused using.
+- 039 review (CHANGES REQUESTED, fixed in the 041 round): empty-handed aim through thin strips; coverage test blind
+  spots. Later: the prediction can be one 45-degree snap off near a boundary; the fries box depth is defined twice.
