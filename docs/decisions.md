@@ -41,12 +41,16 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D31 | Movement speed | Walk 2.5 m/s, sprint 5 m/s, crouch 1.25 m/s (was 4 / 8 / 2) | 2026-11-08 | Decided by the human: calmer life-sim feel, animations can match |
 | D32 | Colour palette | One warm muted palette (16 named colours in docs/art-direction.md), defined once in code and once for UI; no other hard-coded colours | 2026-11-08 | Decided by the human |
 
+| D33 | Game mode (replaces D15, D16 for the game) | **Co-op restaurant simulator, player-hosted:** the host starts the game (Steam), up to **16 players** join. No persistent town, no official game servers ("game B" dropped). The host's game is saved on the host's PC | 2026-11-10 | Decided by the human after the design critique: the persistent town is too big, too costly and risks empty servers |
+| D34 | Progression | Start as a **food corner: 1 dish, guests, cash only**. Then: rent a restaurant, choose the service (fast food first), add delivery or custom orders, mix as you like. Specialised content later. When the restaurant is automated: create new ingredients, compete against the best NPC teams in cooking competitions, serve at event locations, better marketing, buy cars | 2026-11-10 | Decided by the human: a restaurant simulator first |
+| D35 | Professions | **Mechanic dropped.** The game is about the restaurant; other "professions" become restaurant roles or business branches (delivery, events, ingredient creation) | 2026-11-10 | Decided by the human |
+| D36 | Player cap (was O7) | 16 players per game | 2026-11-10 | Decided by the human (D33); spec 045 load test now tests 16 players |
+
 ## OPEN
 
 | # | Topic | Options | Needed by |
 |---|---|---|---|
 | O1 | Working title | "Worktown" is a placeholder | Steam page |
-| O4 | Backend stack | Own API + Postgres vs Nakama | Phase 4 |
-| O5 | Server hoster | Which rental provider, region (EU) | Phase 4 |
+| O4 | Backend stack | Own API + Postgres vs Nakama. Mostly moot after D33 (host saves); only needed later for the AI gateway, leaderboards or cloud saves | later |
+| O5 | Server hoster | Only for the AI gateway after D33 (no game servers) | before the AI gateway goes live |
 | O6 | Moderation approach | Rule-based filter, small classifier model, or provider moderation API | Before Early Access |
-| O7 | Max players per server at Early Access | Depends on load test results | After spec 004 |

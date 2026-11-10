@@ -1,10 +1,12 @@
 ---
 id: 046
 title: Town time, shifts and progression (clock in and out, player levels, shop reputation)
-status: draft
+status: superseded
 owner: architect
 builder: opus
 ---
+
+# 046 (SUPERSEDED by D33/D34 and docs/game-design.md v1, 2026-11-10)
 
 # 046: Town time, shifts and progression (v2, after the human's feedback)
 

@@ -18,7 +18,7 @@ Collect the stability items from the inbox and the netcode list:
 - **Late answers:** a late refusal after a server stall over 1 s must not bounce a newer prediction.
 - **Restart paths:** a scene-plate reset to its start spots; a partly used cone handled.
 
-Then run spec 004 (bot load test: 32 bots, 500 objects) on today's game and write the result.
+Then run the spec 004 bot load test with 16 players (D36) in one restaurant on a host, and write the result.
 
 ## Acceptance criteria
 - [ ] AC1: `verify.sh`.

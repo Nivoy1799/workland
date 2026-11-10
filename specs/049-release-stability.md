@@ -9,8 +9,7 @@ builder: opus
 # 049: Release stability
 
 ## Design
-- **Performance budget:** 60 fps at 1080p on a mid PC (the human's PC as the reference, with numbers recorded) with 8
-  players in the kitchen. A profiling tour (dev) records frame times and GC allocations per station. Fix the top
+- **Performance budget:** 60 fps at 1080p on a mid PC (the human's PC as the reference, with numbers recorded) with 16 players (D36) in the restaurant. A profiling tour (dev) records frame times and GC allocations per station. Fix the top
   offenders.
 - **Memory:** a 2-hour soak run (bots) with no growth in managed memory or object counts beyond a bound.
 - **Crash logs:** a local crash and exception log with the build hash. An opt-in upload is an OPEN decision (O6-like);

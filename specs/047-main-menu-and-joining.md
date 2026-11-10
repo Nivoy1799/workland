@@ -19,7 +19,7 @@ Today the game starts from command-line flags (`-host`, `-connect`). Early Acces
   - Settings (048);
   - Quit.
   The town is visible behind the menu.
-- **Lobby:** the host's shop with up to the O7 player cap (default 4 until the load test decides). Players appear as
+- **Lobby:** the host's shop with up to 16 players (D36). Players appear as
   they join. The host can kick.
 - **Connection feel:**
   - a loading screen with progress;
@@ -27,7 +27,7 @@ Today the game starts from command-line flags (`-host`, `-connect`). Early Acces
   - automatic rejoin for 30 s after a drop;
   - the held item goes back to its spot when a player leaves.
 - **Version check:** client and server compare a build hash, and a mismatch refuses cleanly.
-- Dedicated servers are not listed yet (O5, Phase 4).
+- There are no dedicated game servers (D33): the host is the server.
 
 ## Acceptance criteria
 - [ ] AC1: `verify.sh`; RPC surface tests (only connection messages may change, documented).

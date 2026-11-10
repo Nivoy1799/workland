@@ -55,6 +55,11 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+13. **Design v1 after your decision (D33-D36):** co-op restaurant simulator for up to 16 players, player-hosted, the
+    climb from a food corner (1 dish, cash only) through a restaurant with your mix of services to automation,
+    ingredient creation, competitions, events, marketing and cars. Persistent town and mechanic dropped. Please read
+    docs/game-design.md v1 and approve or correct it. Next, by default: the climb simulation in /sim, then the
+    "food corner" start spec. Specs 045, 047, 049 now say 16 players; 046 is superseded.
 12. **046 direction after the brainstorm (2026-11-10).** You liked crew competition ("like Schedule I, making the most
     in a group"); weapons and PvP harm are out for EA. Proposal: rewrite 046 as **"Crew and empire, slice 1"**:
     - crew and shop (roles and shares);
