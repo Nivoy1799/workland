@@ -43,13 +43,13 @@ namespace Worktown.Game.Tests
             return item;
         }
 
-        /// <summary>Sticks in the pan on a burner that is on, 750 ticks = 150 sim s (the golden fries).</summary>
+        /// <summary>Sticks in the pan on a burner that is on, 400 ticks = 80 sim s (the golden fries; spec 043: the 2x pan).</summary>
         private Item FriesInThePan(KitchenState kitchen)
         {
             int sticks = Food(kitchen, "potato", 3);
             HeatTestKit.SwitchOn(kitchen, Pan, HeatTestKit.PanBurner);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(sticks, Pan, VesselKind.Pan, Start));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 750, Rate, out Item fries));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 400, Rate, out Item fries));
             return fries;
         }
 
@@ -58,7 +58,7 @@ namespace Worktown.Game.Tests
         {
             var kitchen = KitchenState.CreateDemo();
             Item fries = FriesInThePan(kitchen);
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPour(Pan, VesselKind.Pan, Plate, VesselKind.Plate, Start + 750, Rate, out Item poured));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPour(Pan, VesselKind.Pan, Plate, VesselKind.Plate, Start + 400, Rate, out Item poured));
             Assert.AreEqual(fries.Hash, poured.Hash, "the same item a take would give");
             Assert.AreEqual(0, kitchen.HeatCount(Pan));
             CollectionAssert.AreEqual(new[] { "crispy fried potato sticks" }, kitchen.NamesIn(Plate));
@@ -107,10 +107,10 @@ namespace Worktown.Game.Tests
             for (int i = 0; i < VesselRules.Capacity(VesselKind.Plate); i++)
                 Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(Food(kitchen, "tomato", 2), Plate, VesselKind.Plate, Start));
             Item fries = FriesInThePan(kitchen);
-            Assert.AreEqual(CookOutcome.VesselFull, kitchen.TryPour(Pan, VesselKind.Pan, Plate, VesselKind.Plate, Start + 750, Rate, out Item poured));
+            Assert.AreEqual(CookOutcome.VesselFull, kitchen.TryPour(Pan, VesselKind.Pan, Plate, VesselKind.Plate, Start + 400, Rate, out Item poured));
             Assert.IsNull(poured);
             Assert.AreEqual(1, kitchen.HeatCount(Pan), "the fries stay in the pan");
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 750, Rate, out Item still));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 400, Rate, out Item still));
             Assert.AreEqual(fries.Hash, still.Hash);
             Assert.AreEqual(VesselRules.Capacity(VesselKind.Plate), kitchen.CountIn(Plate));
         }
@@ -149,7 +149,7 @@ namespace Worktown.Game.Tests
         {
             var kitchen = KitchenState.CreateDemo();
             Item fries = FriesInThePan(kitchen);
-            kitchen.TryPour(Pan, VesselKind.Pan, Plate, VesselKind.Plate, Start + 750, Rate, out _);
+            kitchen.TryPour(Pan, VesselKind.Pan, Plate, VesselKind.Plate, Start + 400, Rate, out _);
             int tomato = Food(kitchen, "tomato", 2);
             Item tomatoItem = ItemOf(kitchen, tomato);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(tomato, Plate, VesselKind.Plate, Start));

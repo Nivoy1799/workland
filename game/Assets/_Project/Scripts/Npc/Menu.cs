@@ -71,7 +71,8 @@ namespace Worktown.Game.Npc
                 }, false, false, 4),
             new MenuDish(Falafel, "Falafel (4)", "snack", "falafel_mix",
                 new[] { new DishNeed("falafel_mix", null, DeepFryOp, "medium") }, false, false, 1),
-            // Spec 030: the griddle's "time" bucket is its shorter side, so "medium" means both sides grilled (at least 9 s each).
+            // Spec 030: the griddle's "time" bucket is its shorter side, so "medium" means both sides grilled. Spec 043: the buckets
+            // follow the zones, so "medium" is both sides at least Good (12 s seitan, 10 s vegetables); undercooked is Close.
             new MenuDish(GrilledVeggies, "Grilled veggies", "meal", "paprika",
                 new[] { new DishNeed("paprika", null, GriddleOp, "medium"), new DishNeed(null, null, GriddleOp, "medium", GrillVegetables) },
                 false, false, 3),

@@ -845,11 +845,15 @@ namespace Worktown.Game.Cooking
             return looks.Count == 0 ? (FoodLook?)null : looks[0];
         }
 
-        /// <summary>The doneness bucket id reached so far ("short", "medium", "long"), empty before the first.</summary>
+        /// <summary>
+        /// The doneness bucket id reached so far ("short", "medium", "long"), empty before the op's minimum time. Spec 043: the
+        /// bucket the sim gives the food if it were taken out now (the zone of its doneness), so the look on the heat never
+        /// contradicts the item; the seconds alone no longer pick it.
+        /// </summary>
         private string CurrentBucket(HeatSession session, uint tick, double tickRate)
         {
-            if (!TryGetTimeParam(session.OperationId, out ParamDef time)) return string.Empty;
-            return CookingTime.BucketId(time, CookingTime.SimSeconds(session.CookedTicks(tick), tickRate));
+            if (CookOne(session, tick, tickRate, false, false, out Item preview) != CookOutcome.Ok || preview == null) return string.Empty;
+            return preview.Buckets.TryGetValue("time", out string bucket) ? bucket : string.Empty;
         }
 
         private bool TryGetTimeParam(string opId, out ParamDef time)
@@ -1744,8 +1748,8 @@ namespace Worktown.Game.Cooking
         {
             station = tap = -1;
             if (!_spotOfCup.TryGetValue(objectId, out long key)) return false;
-            station = (int)(key >> 8);
-            tap = (int)(key & 0xFF);
+            station = DrinkDesk.StationOfKey(key); // 042 review: the one key decoder
+            tap = DrinkDesk.TapOfKey(key);
             return true;
         }
 
@@ -1816,15 +1820,18 @@ namespace Worktown.Game.Cooking
         /// </summary>
         public int LiddableSpotCup(int station)
         {
-            for (int t = 0; t < DrinkRules.TapCount; t++)
-            {
-                int cup = CupOnSpot(station, t);
-                if (cup < 0 || !_items.TryGetValue(cup, out Item item) || !Drinks.IsCup(item) || Drinks.IsLidded(item) || Drinks.IsEmptyCup(item))
-                    continue;
-                if (_pours.ContainsKey(PourKey(station, t))) continue;
-                return cup;
-            }
-            return -1;
+            // 042 review: the one pure rule (DrinkRules.LiddableTap), fed with the server's cups.
+            int tap = DrinkRules.LiddableTap(t => SpotByteOf(CupOnSpot(station, t)), t => _pours.ContainsKey(PourKey(station, t)));
+            return tap < 0 ? -1 : CupOnSpot(station, tap);
+        }
+
+        /// <summary>042 review: the spot byte (DrinkRules.SpotByte) of item <paramref name="objectId"/> as it stands on a cup spot.</summary>
+        private byte SpotByteOf(int objectId)
+        {
+            if (objectId < 0 || !_items.TryGetValue(objectId, out Item item) || !Drinks.IsCup(item)) return DrinkRules.NoSpotCup;
+            bool empty = Drinks.IsEmptyCup(item);
+            return DrinkRules.SpotByte(true, Drinks.IsLidded(item), empty ? -1 : Drinks.IndexOf(Drinks.DrinkOf(item)),
+                empty ? DrinkRules.LevelEmpty : DrinkRules.LevelOf(Drinks.LevelOf(item)));
         }
 
         /// <summary>The dispenser's synced byte: a pouring bit per tap and the spill bit.</summary>

@@ -17,7 +17,8 @@ namespace Worktown.Game.Cooking
         /// <summary>Burnt: this much doneness past the window's maximum (the sim's doneness factor falls to zero over 0.2,
         /// so it is at half here), capped at fully done; never for a window that ends at 1.</summary>
         public const float BurnMargin = 0.1f;
-        /// <summary>The second half of the good window is Perfect.</summary>
+        /// <summary>The second half of the good window is Perfect (spec 043: where the sim rates best; measured per food in
+        /// <see cref="Build"/>, this share only places the ring's Perfect mark).</summary>
         public const double PerfectShareOfWindow = 0.5;
         /// <summary>Where the good window starts on the ring and in <see cref="Progress"/> (fixed, so the client can mark it).</summary>
         public const float GoodShare = 0.6f;
@@ -55,6 +56,7 @@ namespace Worktown.Game.Cooking
             if (cookedAt(max) == null) return new HeatTimeline(never, never, never, never, never);
 
             double good = FirstTime(min, max, cookedAt, IsGood);
+            double perfect = FirstTime(min, max, cookedAt, IsPerfect); // spec 043: where the sim rates best
             double overdone = FirstTime(min, max, cookedAt, IsOverdone);
             double burnt = FirstTime(min, max, cookedAt, IsBurnt);
             double end = overdone;
@@ -63,7 +65,7 @@ namespace Worktown.Game.Cooking
                 double full = FirstTime(min, max, cookedAt, IsFullyDone);
                 end = double.IsInfinity(full) ? max : full;
             }
-            return new HeatTimeline(min, good, end, overdone, burnt);
+            return new HeatTimeline(min, good, end, overdone, burnt, perfect);
         }
 
         /// <summary>Every component is at least at its window's minimum.</summary>
@@ -72,6 +74,18 @@ namespace Worktown.Game.Cooking
             if (parts == null || parts.Count == 0) return false;
             foreach (ItemComponent c in parts)
                 if (c.Doneness < c.Ideal.Min - Epsilon) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Spec 043: every component is in the Perfect half of its window or past it (the sim's <see cref="DonenessZones"/>: the
+        /// rating's doneness term is best there). Monotonic like the others: doneness only grows on the heat.
+        /// </summary>
+        public static bool IsPerfect(IReadOnlyList<ItemComponent> parts)
+        {
+            if (parts == null || parts.Count == 0) return false;
+            foreach (ItemComponent c in parts)
+                if (c.Doneness < c.Ideal.PerfectFrom - Epsilon) return false;
             return true;
         }
 

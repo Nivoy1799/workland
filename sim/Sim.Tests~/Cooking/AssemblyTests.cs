@@ -329,17 +329,17 @@ namespace Worktown.Sim.Tests.Cooking
             Item strips = Cut(Base("seitan"), "sticks");
             float side = 13f * DeepFry.KitchenTimeScale;
             Item grilled = TestItems.Ok(Factory.Apply(Griddle.OperationId, new[] { strips }, Griddle.Params(side, side)));
-            Item pan = TestItems.Ok(TestItems.Heat("saute", TestItems.Base("potato"), 150f, 100f));
+            Item pan = TestItems.Ok(TestItems.Heat("saute", TestItems.Base("potato"), 150f, 50f));
 
             Assert.Equal("2ab1f86227c96055d1d69a98ce1485820e94a0805096d923ef51a6b4286857d3", fries.Hash);
-            Assert.Equal(0.6969903f, Quality(fries));
+            Assert.Equal(0.69777298f, Quality(fries));
             Assert.Equal("crispy fried potato sticks", Name(fries));
             Assert.Equal("f81768d9941d99ff3e8ded4f87ddbd6dcc22577c3b562bca9b112bcefc3f5799", grilled.Hash);
-            Assert.Equal(0.40560204f, Quality(grilled));
+            Assert.Equal(0.37411365f, Quality(grilled));
             Assert.Equal("grilled seitan strips", Name(grilled));
-            Assert.Equal("25c75ec22905276f114edb3a25534eff11a5d899e5cdc1eb69da51f78723eb2c", pan.Hash);
+            Assert.Equal("ee6d91d9e4a6bff4c11e4ebc9e532091d41250f952b77a134fd7d7232bce2ce9", pan.Hash);
             Assert.Equal(0.121469915f, Quality(pan));
-            Assert.Equal("sauteed potato", Name(pan));
+            Assert.Equal("lightly sauteed potato", Name(pan));
         }
 
         // ---- Spec 031b (review of 031): builds stay builds ----

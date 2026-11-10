@@ -61,7 +61,8 @@ Your hands are free while it pours, so you can turn to the next task (a short po
 
 ## Implementation notes
 Built 2026-11-10 (builder, opus). `verify.sh` PASS: EditMode 1172/1172 (baseline 1161), sim 356/356. No new RPC, SyncVar or RPC
-parameter, and no new synced byte at all: `RpcSurfaceTests` and `MoveDataSurfaceTests` unchanged and green. Not committed.
+parameter, and no new synced byte at all: `RpcSurfaceTests` and `MoveDataSurfaceTests` unchanged and green. Merged (review: approve with
+nits; the nits went into the 043 round, see specs/043 "042 review follow-ups").
 
 **Design choice: the cup spot is a place target, not a fixed vessel** (the orchestrator allowed either). Each tap gets a one-spot
 `PlaceSurface` ("Cup spot 0..2", appended after the 039 tops, so no earlier index moves) with `_isCupSpot`, `_dispenserIndex`, `_tap`,

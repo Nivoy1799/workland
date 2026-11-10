@@ -52,7 +52,8 @@ namespace Worktown.Game.Cooking
 
         /// <summary>
         /// The doneness bucket id players see while cooking ("short", "medium", "long"), picked like the
-        /// sim picks buckets (the last one whose value is reached). Empty below the first bucket.
+        /// sim picks buckets by value (the last one whose value is reached). Empty below the first bucket. Spec 043: the default heat
+        /// ops pick their time bucket by the doneness zone instead (HeatProfile.ZoneBuckets), so the kitchen asks the sim for it.
         /// </summary>
         public static string BucketId(ParamDef time, double simSeconds)
         {

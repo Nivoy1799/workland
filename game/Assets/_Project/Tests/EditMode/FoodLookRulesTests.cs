@@ -81,11 +81,11 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void SticksFried150_AreSticksMedium()
+        public void SticksFried80_AreSticksMedium()
         {
             var kitchen = KitchenState.CreateDemo();
             int id = Food(kitchen, "potato", 3);
-            FoodLook look = FoodLookRules.From(HeatTestKit.Fry(kitchen, id, 150));
+            FoodLook look = FoodLookRules.From(HeatTestKit.Fry(kitchen, id, 80)); // spec 043: the 2x pan
             AssertLook(look, PotatoIndex, FoodLook.ShapeSticks, FoodLook.DonenessMedium, FoodLook.KindSingle, 0);
             Assert.AreEqual(FoodLook.HeatFried, look.Heat);
         }
@@ -113,7 +113,7 @@ namespace Worktown.Game.Tests
         {
             var kitchen = KitchenState.CreateDemo();
             int fries = Food(kitchen, "potato", 3);
-            HeatTestKit.Fry(kitchen, fries, 150);
+            HeatTestKit.Fry(kitchen, fries, 80); // spec 043: the 2x pan
             int tomato = Food(kitchen, "tomato", 2);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(fries, Table, VesselKind.Plate));
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(tomato, Table, VesselKind.Plate));
@@ -176,7 +176,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(FoodLook.MaxParts, FoodLookRules.PartsOf(mix).Count);
         }
 
-        /// <summary>Potato cubes and onion cubes mixed in the bowl, then fried 150 sim s (medium).</summary>
+        /// <summary>Potato cubes and onion cubes mixed in the bowl, then fried 60 sim s (medium: spec 043, the potato inside its window
+        /// at the 2x pan; 150 s would be overdone, "long").</summary>
         private Item FriedCubeMix(KitchenState kitchen)
         {
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryAddToVessel(Food(kitchen, "potato", 4), Bowl, VesselKind.Bowl));
@@ -184,7 +185,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryTakeFromVessel(Bowl, VesselKind.Bowl, out Item mix));
             int id = _nextId++;
             kitchen.Register(id, mix);
-            return HeatTestKit.Fry(kitchen, id, 150);
+            return HeatTestKit.Fry(kitchen, id, 60);
         }
 
         [Test]
@@ -272,7 +273,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(FoodLook.HeatNone, raw.Value.Heat);
 
             FoodLook? medium = kitchen.HeatLook(HeatTestKit.PanIndex,
-                HeatTestKit.StartTick + HeatTestKit.TicksFor(150), HeatTestKit.TickRate);
+                HeatTestKit.StartTick + HeatTestKit.TicksFor(80), HeatTestKit.TickRate); // spec 043: the 2x pan
             Assert.AreEqual(FoodLook.DonenessMedium, medium.Value.Doneness);
             Assert.AreEqual(FoodLook.HeatFried, medium.Value.Heat);
             Assert.AreEqual(FoodLook.ShapeSticks, medium.Value.Shape);

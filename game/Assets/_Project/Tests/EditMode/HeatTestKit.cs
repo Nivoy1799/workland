@@ -50,16 +50,16 @@ namespace Worktown.Game.Tests
         }
 
         /// <summary>
-        /// The old spec 007 pan presets by time at the fixed pan heat (190 C): 1 light (40 s), 2 golden
-        /// (150 s, the same item as before), 3 dark (400 s).
+        /// The old spec 007 pan presets by time at the fixed pan heat (190 C): 1 light (20 s), 2 golden
+        /// (80 s, the same item as before: Perfect), 3 dark (200 s). Spec 043: half the old 40 / 150 / 400 s (the pan runs 2x).
         /// </summary>
         public static Item PanPreset(KitchenState kitchen, int foodId, int preset)
         {
             switch (preset)
             {
-                case 1: return Fry(kitchen, foodId, 40);
-                case 2: return Fry(kitchen, foodId, 150);
-                case 3: return Fry(kitchen, foodId, 400);
+                case 1: return Fry(kitchen, foodId, 20);
+                case 2: return Fry(kitchen, foodId, 80);
+                case 3: return Fry(kitchen, foodId, 200);
                 default: throw new ArgumentOutOfRangeException(nameof(preset));
             }
         }

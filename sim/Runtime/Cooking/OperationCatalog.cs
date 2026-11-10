@@ -66,6 +66,8 @@ namespace Worktown.Sim.Cooking
                 new BucketDef("medium", 120f, ""),
                 new BucketDef("hot", 170f, "crispy"),
             });
+            // Spec 043: every default heat op has zone buckets (HeatProfile.ZoneBuckets): its three time buckets are the zones
+            // undercooked, done (Good or Perfect) and overdone of what it cooked; the bucket values below only order them.
             var panTime = new ParamDef("time", ParamKind.Number, 10f, 600f, new[]
             {
                 new BucketDef("short", 10f, "lightly"),
@@ -84,11 +86,11 @@ namespace Worktown.Sim.Cooking
                 new OperationDef("cut", "board", OperationKind.Cut, false, 1, 1, new[] { shape }, null,
                     platedOrBuild, none, "{in} {shape}"),
                 new OperationDef("fry", "pan", OperationKind.Heat, false, 1, 1, new[] { panTemp, panTime },
-                    new HeatProfile(null, 0.35f, -0.6f, 0.5f, 0.15f, 0f), platedOrBuild, none, "{temp} {time} fried {in}"),
+                    new HeatProfile(null, 0.35f, -0.6f, 0.5f, 0.15f, 0f, ZoneBuckets: true), platedOrBuild, none, "{temp} {time} fried {in}"),
                 new OperationDef("saute", "pan", OperationKind.Heat, false, 1, 1, new[] { panTemp, panTime },
-                    new HeatProfile(null, 0.15f, -0.4f, 0.25f, 0.2f, 0f), platedOrBuild, none, "{temp} {time} sauteed {in}"),
+                    new HeatProfile(null, 0.15f, -0.4f, 0.25f, 0.2f, 0f, ZoneBuckets: true), platedOrBuild, none, "{temp} {time} sauteed {in}"),
                 new OperationDef("boil", "pot", OperationKind.Heat, false, 1, 1, new[] { boilTime },
-                    new HeatProfile(100f, 0f, 0.5f, -0.8f, 0f, 0.1f), platedOrBuild, none, "{time} boiled {in}"),
+                    new HeatProfile(100f, 0f, 0.5f, -0.8f, 0f, 0.1f, ZoneBuckets: true), platedOrBuild, none, "{time} boiled {in}"),
                 new OperationDef("mix", "counter", OperationKind.Mix, true, 2, CookingLimits.MaxMixInputs,
                     Array.Empty<ParamDef>(), null, platedOrBuild, none, "{in} mix"),
                 new OperationDef("plate", "counter", OperationKind.Plate, true, 1, CookingLimits.MaxPlateInputs,
@@ -162,7 +164,7 @@ namespace Worktown.Sim.Cooking
             var longSide = new ParamDef(Griddle.LongSideParam, ParamKind.Number, 0f, Griddle.MaxSideSeconds, Buckets());
             string done = profile.Toasts ? "toasted" : "grilled";
             return new OperationDef(id, Griddle.Station, OperationKind.Heat, false, 1, 1, new[] { shortSide, longSide },
-                new HeatProfile(Griddle.PlateTempC, 0.1f, -0.3f, 0.4f, 0.25f, 0f, null, profile), plated, none, done + " {in}");
+                new HeatProfile(Griddle.PlateTempC, 0.1f, -0.3f, 0.4f, 0.25f, 0f, null, profile, ZoneBuckets: true), plated, none, done + " {in}");
         }
 
         /// <summary>
@@ -179,7 +181,7 @@ namespace Worktown.Sim.Cooking
                 new BucketDef("long", Spit.OuterCurve.WindowMaxAt, "charred"),
             });
             return new OperationDef(Spit.OperationId, Spit.Station, OperationKind.Heat, false, 1, 1, new[] { layer },
-                new HeatProfile(Spit.PanelTempC, 0.2f, -0.3f, 0.35f, 0.25f, 0f, null, null, Spit.OuterCurve), plated, none,
+                new HeatProfile(Spit.PanelTempC, 0.2f, -0.3f, 0.35f, 0.25f, 0f, null, null, Spit.OuterCurve, true), plated, none,
                 "{time} shaved {in}");
         }
 
@@ -212,7 +214,7 @@ namespace Worktown.Sim.Cooking
                 new BucketDef(DeepFry.Greasy, 1f, "greasy"),
             });
             return new OperationDef(DeepFry.OperationId, "fryer", OperationKind.Heat, false, 1, 1, new[] { oilTemp, fryTime, shake, drain },
-                new HeatProfile(null, 0.45f, -0.6f, 0.7f, 0.15f, 0f, DeepFry.DefaultProfile), plated, none,
+                new HeatProfile(null, 0.45f, -0.6f, 0.7f, 0.15f, 0f, DeepFry.DefaultProfile, ZoneBuckets: true), plated, none,
                 "{" + DeepFry.DrainParam + "} {time} deep-fried {in}");
         }
 
@@ -297,6 +299,9 @@ namespace Worktown.Sim.Cooking
                 if (time == null || time.Kind != ParamKind.Number)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs a Number param 'time'.", p);
                 var temp = Find("temp");
+                // Spec 043: zone buckets map undercooked, done and overdone to the time param's three buckets (the long side's too).
+                if (h.ZoneBuckets && (time.Buckets.Count != 3 || (Find(Griddle.LongSideParam) is ParamDef ls && ls.Buckets.Count != 3)))
+                    throw new ArgumentException($"Heat operation '{op.Id}' with zone buckets needs three time buckets.", p);
                 bool hasTemp = temp != null && temp.Kind == ParamKind.Number;
                 if (hasTemp == op.Heat.FixedTemperatureC.HasValue)
                     throw new ArgumentException($"Heat operation '{op.Id}' needs exactly one of a 'temp' param or a fixed temperature.", p);

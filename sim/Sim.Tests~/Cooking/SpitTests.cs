@@ -187,6 +187,7 @@ namespace Worktown.Sim.Tests.Cooking
         /// <summary>
         /// Measured before spec 036 (at commit 93ce453): a seitan wrap and a seitan flatbread with grilled strips (13 kitchen s a side).
         /// Spec 036 adds shaved seitan to their templates; these keep their hash, name and rating.
+        /// Spec 043 re-pinned the ratings (hash and name stay): 13 s a side is Good for seitan, which now rates 0.9 instead of 1.
         /// </summary>
         [Fact]
         public void Pre036Dishes_KeepTheirHashesNamesAndRatings()
@@ -194,11 +195,11 @@ namespace Worktown.Sim.Tests.Cooking
             Item wrap = SeitanWrap(Strips());
             Assert.Equal("58f0c74c52ca1b918150770a2f4e07f1a6da3bb7f0b78d6279f0bef0cec4cb4a", wrap.Hash);
             Assert.Equal("seitan wrap in paper", Name(wrap));
-            Assert.Equal(0.7005245f, Quality(wrap), 6);
+            Assert.Equal(0.687459f, Quality(wrap), 6);
             Item flatbread = SeitanFlatbread(Strips());
             Assert.Equal("e111d79d407e753f86b344895c5ec1d26fc99e39b29f6e0010b54f505a3bdbbf", flatbread.Hash);
             Assert.Equal("seitan flatbread in a bag", Name(flatbread));
-            Assert.Equal(0.7241293f, Quality(flatbread), 6);
+            Assert.Equal(0.710634f, Quality(flatbread), 6);
         }
 
         [Fact]

@@ -24,7 +24,7 @@ namespace Worktown.Game.Tests
             KitchenState kitchen = NewKitchenWithPotato(out Item potato);
 
             HeatTestKit.Cut(kitchen, FoodId, 3); // spec 021: sticks cut on a board vessel (same item as the old digit 3)
-            Item fries = HeatTestKit.PanPreset(kitchen, FoodId, 2); // spec 016: pan switched on, 150 sim s at 190 C
+            Item fries = HeatTestKit.PanPreset(kitchen, FoodId, 2); // spec 016: pan switched on, 80 sim s at 190 C (spec 043: the 2x pan)
 
             // Built directly with the sim, the way spec 005's tests build fries.
             var factory = new ItemFactory(new ItemCatalog(DemoIngredients.All), OperationCatalog.CreateDefault());
@@ -33,7 +33,7 @@ namespace Worktown.Game.Tests
             Item expected = factory.Apply("fry", new[] { sticks }, new Dictionary<string, ParamValue>
             {
                 ["temp"] = ParamValue.Number(190f),
-                ["time"] = ParamValue.Number(150f)
+                ["time"] = ParamValue.Number(80f)
             }).Item;
 
             Assert.AreEqual(expected.Hash, fries.Hash);

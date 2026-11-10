@@ -730,6 +730,24 @@
         "With two players: while one pours, can the other take that cup? (it should say someone is pouring into it)",
         "Overfill a cup: does it spill over the tray and leave the puddle to wipe?"
       ]
+    },
+    {
+      "id": "2026-11-11-spec-043",
+      "date": "2026-11-11",
+      "title": "Cooking: perfect means best",
+      "items": [
+        "On every station (pan, pot, fryer, griddle, spit) the best stars now come in the Perfect zone of the ring, from the perfect cue to the warning. Good gives a little less, overdone falls off",
+        "Names follow the ring: food is called golden, grilled or plain fried / boiled exactly when the ring turns Good. Before that it is pale, lightly fried or half-grilled",
+        "Undercooked food no longer passes as the dish: pale fries, half-grilled vegetables or pale seitan in a wrap are only 'close enough'",
+        "The pan and the pot cook about twice as fast (a whole potato in the pan is good after about 22 s, in the pot after about 70 s)",
+        "For a pan or pot of mixed food, Perfect starts when every part is at its best"
+      ],
+      "test": [
+        "Shave the spit at the perfect cue: do you get the best stars? Is waiting longer never better?",
+        "Lift fries or flip strips at the perfect cue and serve them: the best stars?",
+        "Serve fries or a seitan wrap a little early (before the ring turns Good): does the guest say 'close enough'?",
+        "Do the pan and the pot feel too fast or too slow now?"
+      ]
     }
   ]
 }

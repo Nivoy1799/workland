@@ -7,7 +7,8 @@ namespace Worktown.Game.Tests
 {
     /// <summary>
     /// Spec 021 AC4: a pan keyed by its object id cooks only on a burner that is on, keeps its clock while carried
-    /// between burners, and gives the same items as the spec 016 pan station did for the same times.
+    /// between burners, and gives the same items as the spec 016 pan station did for the same times. Spec 043: the pan runs 2x, so
+    /// the golden fries (the same hash) come at 80 sim s (400 ticks), Perfect, instead of 150.
     /// </summary>
     public class VesselHeatTests
     {
@@ -40,14 +41,14 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void Fry150_OnABurner_IsThePinnedGoldenFries()
+        public void Fry80_OnABurner_IsThePinnedGoldenFries()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
             HeatTestKit.SwitchOn(kitchen, Pan, BurnerA);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutInto(FoodId, Pan, VesselKind.Pan, Start));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Pan, VesselKind.Pan, Start + 750, Rate, out Item fries));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewTakeOut(Pan, VesselKind.Pan, Start + 400, Rate, out Item fries)); // spec 043: 80 sim s (2x pan)
             Assert.AreEqual(GoldenFriesHash, fries.Hash);
-            Assert.AreEqual(Direct("fry", sticks, 150f).Hash, fries.Hash);
+            Assert.AreEqual(Direct("fry", sticks, 80f).Hash, fries.Hash);
         }
 
         [Test]
@@ -57,11 +58,11 @@ namespace Worktown.Game.Tests
             HeatTestKit.SwitchOn(kitchen, Pan, BurnerA);
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(BurnerB, StationRules.StoveSwitch, Start));
             kitchen.TryPutInto(FoodId, Pan, VesselKind.Pan, Start);
-            kitchen.SetVesselBurner(Pan, KitchenState.NoBurner, Start + 400);  // picked up after 400 ticks
-            kitchen.SetVesselBurner(Pan, BurnerB, Start + 1400);              // 1000 ticks in the hands: nothing
+            kitchen.SetVesselBurner(Pan, KitchenState.NoBurner, Start + 200);  // picked up after 200 ticks
+            kitchen.SetVesselBurner(Pan, BurnerB, Start + 1200);              // 1000 ticks in the hands: nothing
             Assert.AreEqual(BurnerB, kitchen.BurnerUnder(Pan));
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 1750, Rate, out Item fries)); // + 350
-            Assert.AreEqual(GoldenFriesHash, fries.Hash, "400 + 350 ticks on = 150 sim s, as on the station");
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 1400, Rate, out Item fries)); // + 200
+            Assert.AreEqual(GoldenFriesHash, fries.Hash, "200 + 200 ticks on = 80 sim s, as on the station (spec 043: the 2x pan)");
         }
 
         [Test]
@@ -82,7 +83,7 @@ namespace Worktown.Game.Tests
             kitchen.TryPutInto(FoodId, Pan, VesselKind.Pan, Start);
             kitchen.TryUseBurner(BurnerB, StationRules.StoveSwitch, Start + 100); // another burner: no effect on the pan
             Assert.IsTrue(kitchen.IsCooking(Pan));
-            kitchen.TryUseBurner(BurnerA, StationRules.StoveSwitch, Start + 750);
+            kitchen.TryUseBurner(BurnerA, StationRules.StoveSwitch, Start + 400);
             Assert.IsFalse(kitchen.IsCooking(Pan));
             kitchen.TryPreviewHeatTake(Pan, Start + 5000, Rate, out Item fries);
             Assert.AreEqual(GoldenFriesHash, fries.Hash);
@@ -96,9 +97,9 @@ namespace Worktown.Game.Tests
             HeatTestKit.SwitchOn(kitchen, Pan, BurnerB);
             kitchen.TryPutInto(FoodId, Pan, VesselKind.Pan, Start);
             Assert.IsTrue(kitchen.PanIsSaute(Pan));
-            kitchen.SetVesselBurner(Pan, KitchenState.NoBurner, Start + 750);
-            kitchen.TryPreviewHeatTake(Pan, Start + 750, Rate, out Item sauteed);
-            Assert.AreEqual(Direct("saute", sticks, 150f).Hash, sauteed.Hash);
+            kitchen.SetVesselBurner(Pan, KitchenState.NoBurner, Start + 400);
+            kitchen.TryPreviewHeatTake(Pan, Start + 400, Rate, out Item sauteed);
+            Assert.AreEqual(Direct("saute", sticks, 80f).Hash, sauteed.Hash);
             Assert.IsTrue(kitchen.PanIsSaute(Pan), "the food keeps its op when carried");
         }
 
@@ -109,7 +110,7 @@ namespace Worktown.Game.Tests
             HeatTestKit.SwitchOn(kitchen, Pan, BurnerA);
             kitchen.TryPutInto(FoodId, Pan, VesselKind.Pan, Start);
             Assert.AreEqual(1, kitchen.ContentCount(Pan, VesselKind.Pan));
-            Assert.AreEqual("crispy fried potato sticks", kitchen.ResultName(Pan, VesselKind.Pan, Start + 750, Rate));
+            Assert.AreEqual("crispy fried potato sticks", kitchen.ResultName(Pan, VesselKind.Pan, Start + 400, Rate));
             kitchen.ClearContents(Pan, VesselKind.Pan);
             Assert.AreEqual(0, kitchen.ContentCount(Pan, VesselKind.Pan));
             Assert.IsNull(kitchen.ResultName(Pan, VesselKind.Pan, Start, Rate));

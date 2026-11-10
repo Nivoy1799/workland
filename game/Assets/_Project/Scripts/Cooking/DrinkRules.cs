@@ -1,3 +1,4 @@
+using System;
 using Worktown.Sim.Cooking;
 
 namespace Worktown.Game.Cooking
@@ -220,6 +221,22 @@ namespace Worktown.Game.Cooking
 
         /// <summary>Spec 042: whether a lid fits the cup on a spot (<paramref name="spot"/>): a filled, open cup.</summary>
         public static CookOutcome CanLidOnSpot(byte spot) => CanLid(HasSpotCup(spot), SpotLidded(spot), SpotLevel(spot));
+
+        /// <summary>
+        /// 042 review, the one rule for server and clients: the tap whose cup a click on the lid stack lids when the hands hold no cup:
+        /// the first tap whose spot (<paramref name="spotOf"/>, a <see cref="SpotByte"/>) holds a filled, open cup that nobody pours
+        /// into (<paramref name="pouring"/>); -1 when there is none.
+        /// </summary>
+        public static int LiddableTap(Func<int, byte> spotOf, Func<int, bool> pouring)
+        {
+            if (spotOf == null) return -1;
+            for (int t = 0; t < TapCount; t++)
+            {
+                if (pouring != null && pouring(t)) continue;
+                if (CanLidOnSpot(spotOf(t)) == CookOutcome.Ok) return t;
+            }
+            return -1;
+        }
 
         /// <summary>Whether a lid fits what the hands hold: an open cup with a drink in it.</summary>
         public static CookOutcome CanLid(bool holdsCup, bool lidded, byte level)

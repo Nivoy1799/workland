@@ -181,11 +181,14 @@ namespace Worktown.Game.Net.Rules
         /// </summary>
         public static AimTarget BusyCup(string name)
         {
-            return new AimTarget(AimKind.Pickup, StationKind.DrinkDispenser, default, 0, null, 1, 0, name, -1, PlaceSpots.None, false, false);
+            return new AimTarget(AimKind.Pickup, StationKind.DrinkDispenser, default, 0, null, BusyOption, 0, name, -1, PlaceSpots.None, false, false);
         }
 
+        /// <summary>042 review: the option a <see cref="BusyCup"/> target carries (a pickup has no option otherwise).</summary>
+        public const int BusyOption = 1;
+
         /// <summary>Spec 042: a pickup someone else is using (<see cref="BusyCup"/>).</summary>
-        public bool IsBusy => Kind == AimKind.Pickup && Station == StationKind.DrinkDispenser && Option == 1;
+        public bool IsBusy => Kind == AimKind.Pickup && Station == StationKind.DrinkDispenser && Option == BusyOption;
 
         /// <summary>
         /// Spec 032: a slot of the register (Shop.RegisterRules: <see cref="Option"/> the slot), with what clients see of the payment:

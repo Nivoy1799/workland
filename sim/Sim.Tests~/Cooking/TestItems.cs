@@ -59,7 +59,8 @@ namespace Worktown.Sim.Tests.Cooking
         public static OperationResult Boil(Item input, float time) =>
             Factory.Apply("boil", new[] { input }, new Dictionary<string, ParamValue> { ["time"] = ParamValue.Number(time) });
 
-        public static Item Fries() => Ok(Fry(Ok(Cut(Base("potato"), "sticks")), 190f, 150f));
+        // Spec 043: 80 s at the 2x pan pace (CookingPace.PanPotSpeed) is Perfect (doneness 0.741, window 0.55..0.85, Perfect from 0.7).
+        public static Item Fries() => Ok(Fry(Ok(Cut(Base("potato"), "sticks")), 190f, 80f));
 
         public static ItemRating Rate(params BaseItemDef[] single)
         {

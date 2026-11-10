@@ -23,14 +23,13 @@ namespace Worktown.Sim.Cooking
         /// <summary>The longest time a side may be given (sim seconds).</summary>
         public const float MaxSideSeconds = 600f;
 
-        // ---- THE griddle timings, in kitchen seconds per side: Good, Perfect, Burnt (spec 030 default A "about 2x faster",
-        // pending the human's cooking-pace answer). Changing a timing is this one line. ----
-        public static readonly FryCurve SeitanSide = FryCurve.FromKitchenSeconds("seitan", 12f, 14f, 22f);
-        public static readonly FryCurve PaprikaSide = FryCurve.FromKitchenSeconds("paprika", 10f, 12f, 20f);
-        public static readonly FryCurve EggplantSide = FryCurve.FromKitchenSeconds("eggplant", 10f, 12f, 20f);
-        public static readonly FryCurve MushroomSide = FryCurve.FromKitchenSeconds("mushroom", 10f, 12f, 20f);
-        public static readonly FryCurve FlatbreadSide = FryCurve.FromKitchenSeconds("flatbread", 4f, 5f, 9f);
-        public static readonly FryCurve WrapSide = FryCurve.FromKitchenSeconds("wrap", 4f, 5f, 9f);
+        // The griddle timings (kitchen seconds per side: Good, Perfect, Burnt) live in the one pace table, CookingPace (spec 043).
+        public static readonly FryCurve SeitanSide = CookingPace.SeitanSide;
+        public static readonly FryCurve PaprikaSide = CookingPace.PaprikaSide;
+        public static readonly FryCurve EggplantSide = CookingPace.EggplantSide;
+        public static readonly FryCurve MushroomSide = CookingPace.MushroomSide;
+        public static readonly FryCurve FlatbreadSide = CookingPace.FlatbreadSide;
+        public static readonly FryCurve WrapSide = CookingPace.WrapSide;
 
         /// <summary>The curves of the <c>griddle</c> op (anything else grills like the vegetables).</summary>
         public static readonly GriddleProfile GrillProfile = new GriddleProfile(
