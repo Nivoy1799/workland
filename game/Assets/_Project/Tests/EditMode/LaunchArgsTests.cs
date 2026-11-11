@@ -226,5 +226,31 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(Parse("-connect", "127.0.0.1", "-bot", "-seed", "seven").IsValid);
             Assert.AreEqual(-3, Parse("-connect", "127.0.0.1", "-bot", "-seed", "-3").Seed);
         }
+
+        // ---- Spec 047 ----
+
+        [Test]
+        public void MaxPlayers_OnAHostOrServer_OneTo64()
+        {
+            Assert.AreEqual(0, Parse("-host").MaxPlayers, "not given: D36");
+            Assert.AreEqual(17, Parse("-host", "-max-players", "17").MaxPlayers);
+            Assert.AreEqual(4, Parse("-server", "-max-players", "4").MaxPlayers);
+            Assert.IsFalse(Parse("-host", "-max-players", "0").IsValid);
+            Assert.IsFalse(Parse("-host", "-max-players", "65").IsValid);
+            Assert.IsFalse(Parse("-host", "-max-players").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-max-players", "4").IsValid, "a client has no places");
+        }
+
+        [Test]
+        public void TheMenuTour_StartsOnTheTitleScreen_WithoutAMode()
+        {
+            var a = Parse("Worktown.exe", "-tour", "menu", "-tour-out", "C:/out");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual(LaunchMode.Menu, a.Mode);
+            Assert.AreEqual(LaunchArgs.MenuTour, a.Tour);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-tour", "menu").IsValid);
+            Assert.IsTrue(Parse("-host", "-observe", "menu").IsValid, "its host");
+            Assert.IsFalse(Parse("-tour", "look").IsValid, "other tours still need -connect");
+        }
     }
 }

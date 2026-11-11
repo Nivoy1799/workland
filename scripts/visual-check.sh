@@ -5,7 +5,10 @@
 # numbers to names). The tour client starts first and the observer second, so another window has focus while
 # the tour runs: the tour moves through its intents, not simulated keys.
 #
-#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
+#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
+#
+#   menu (spec 047): the tour window starts on the title screen (-tour menu, no -connect) and joins the observer window (-host -observe
+#                  menu) through Join by address; the host kicks it; it then opens its own shop and closes it. Local server only.
 #
 #   --server local (default): the observer is a windowed -host (server plus observer), because the WSL link
 #                  has MTU 1280 while Tailscale runs and nothing spawns there (spec 003).
@@ -31,7 +34,7 @@ while [ $# -gt 0 ]; do
     --out) OUT="${2:?--out needs a directory}"; shift 2 ;;
     --server) SERVER="${2:?--server needs local or wsl}"; shift 2 ;;
     --gfx) GFX="${2:?--gfx needs d3d11, d3d12 or default}"; shift 2 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -55,6 +58,7 @@ timeout_for() {
     walk) echo 420 ;;
     cook) echo 1860 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register; spec 033: the lemonade; spec 034: the stock run; spec 035: the cleaning loop; spec 036: the spit
     tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)
+    menu) echo 360 ;; # spec 047: title, join by address, lobby, kick, own shop
     *) echo 420 ;;
   esac
 }
@@ -112,7 +116,8 @@ failed=0
 report=()
 IFS=',' read -r -a tour_list <<< "$TOURS"
 for tour in "${tour_list[@]}"; do
-  case "$tour" in look|walk|cook|tutorial) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  case "$tour" in look|walk|cook|tutorial|menu) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  if [ "$tour" = "menu" ] && [ "$SERVER" != "local" ]; then echo "the menu tour needs --server local (its host is the observer window)" >&2; failed=1; continue; fi
   rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer"
   tour_log="$OUT/$tour-tour.log"
   observer_log="$OUT/$tour-observer.log"
@@ -122,7 +127,10 @@ for tour in "${tour_list[@]}"; do
   # Spec 038: the tutorial tour's client runs the tutorial (-tutorial overrides -skip-whatsnew).
   tour_extra=()
   if [ "$tour" = "tutorial" ]; then tour_extra=(-tutorial); fi
-  "$GAME" -connect "$ADDRESS" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$tour_log")" &
+  # Spec 047: the menu tour starts on the title screen and joins through it (no -connect).
+  tour_connect=(-connect "$ADDRESS")
+  if [ "$tour" = "menu" ]; then tour_connect=(); fi
+  "$GAME" "${tour_connect[@]}" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$tour_log")" &
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
   sleep 3

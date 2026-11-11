@@ -45,13 +45,6 @@ namespace Worktown.Game.Cooking
             if (!_spits.ContainsKey(station)) _spits[station] = new Record();
         }
 
-        /// <summary>The server stopped: every spit is bare, off and empty again (FishNet set the scene up again).</summary>
-        public void Clear()
-        {
-            _spits.Clear();
-            Version++;
-        }
-
         /// <summary>
         /// 036 review: the server stops at <paramref name="tick"/>: how many loaded cones are still untouched (all
         /// <see cref="Spit.PortionsPerCone"/> portions, never shaved), so the caller puts them back into the cone stock line; those spits

@@ -62,7 +62,8 @@ stop_all() {
 trap 'stop_all; exit 130' INT TERM
 
 echo "==> host"
-"$GAME" -host -metrics "$(win "$OUT/host.jsonl")" -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew \
+# Spec 047: a game has 16 places with the host (D36); the load test opens one per bot plus the host (-max-players, up to 64).
+"$GAME" -host -max-players $(( BOTS + 1 )) -metrics "$(win "$OUT/host.jsonl")" -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew \
   -force-d3d11 -logFile "$(win "$OUT/host.log")" >/dev/null 2>&1 &
 PIDS+=($!)
 started=0

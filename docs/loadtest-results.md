@@ -18,7 +18,7 @@ share this machine, so CPU numbers are pessimistic for the host.
 |---|---|---|
 | Server tick work (OnPreTick to OnPostTick), p95 of the per-second p95 | **1.01 ms** (avg 0.63, max 3.4) | under 20 ms at 30 Hz: met |
 | Ticks per second | 30.0 | 30 |
-| Outbound per client (bytes each bot received, FishNet payload) | **49.6 KB/s** avg, 49.9 worst bot avg, 53.0 worst second | under 50 KB/s: just met |
+| Outbound per client (bytes each bot received, FishNet payload) | **49.6 KB/s** avg, 49.9 worst bot avg, 53.0 worst second | under 50 KB/s: at the limit, no headroom (see below) |
 | Host upload, all clients (16 x the above) | about 0.8 MB/s (6.4 Mbit/s) | - |
 | Inbound at the host, all clients | 30.4 KB/s | - |
 | Round trip (bots, loopback) | 22 ms avg, 33 ms p95 | - |
@@ -51,6 +51,8 @@ share this machine, so CPU numbers are pessimistic for the host.
 
 The one tick spike (20.7 ms) is in the first seconds, while the first bots joined (scene load and spawn on the host).
 
+**Verdict on bandwidth.** At the limit, no headroom: 49.6 KB/s payload only. Wire bytes, with UDP/IP and LiteNetLib headers, are higher; the worst second is 53.0 KB/s; loopback; bots do not cook.
+
 **Reading.**
 - The tick is cheap: 16 players cost about 1 ms of a 33 ms tick. CPU is not what limits a 16-player host.
 - Bandwidth is the limit. Outbound per client grows by about 3 KB/s for every other player (8.8 KB/s with 4 bots, 49.6 with
@@ -67,8 +69,10 @@ The one tick spike (20.7 ms) is in the first seconds, while the first bots joine
    it to all; the bots carry something about half the time.
 3. NPC guests and station state: walking guests' transforms and the station bytes (heat rings, flags) change all the time.
 
-Next step for a later spec: turn on FishNet's network traffic statistics for one run to split the bytes by packet type, then
-lower the send rate of remote players (for example 15 Hz with interpolation) or stop forwarding inputs to spectators.
+**Next steps (required, not optional; for a later spec, before Early Access):**
+1. Per-packet traffic stats: turn on FishNet's network traffic statistics for one run and split the bytes by packet type
+   (and measure wire bytes with headers, not only payload).
+2. A 15 Hz send rate for remote players (with interpolation), or stop forwarding inputs to spectators.
 
 **Not covered.** Steam transport (bots use Tugboat; Steam would need 16 accounts), real network latency and loss (loopback),
 a host on a weaker PC, bots cooking (they only pick up, carry and drop).

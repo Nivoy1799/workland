@@ -12,7 +12,7 @@ namespace Worktown.Game.UI
 {
     /// <summary>
     /// Debug menu (spec 011): all technical details of the former overlay, toggled with F1.
-    /// Before connecting (menu mode) it always shows, because it holds the connect buttons.
+    /// Spec 047: before connecting the title screen (MainMenuView) shows; F1 still opens this menu with its raw connect buttons.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class DebugMenuView : MonoBehaviour
@@ -122,7 +122,7 @@ namespace Worktown.Game.UI
 
             NetworkManager nm = _bootstrap.NetworkManager;
             bool connected = nm != null && nm.TimeManager != null && (nm.IsServerStarted || nm.IsClientStarted);
-            bool visible = _toggledOpen || !connected;
+            bool visible = _toggledOpen; // spec 047: the title screen (MainMenuView) replaces the always-open connect menu
             _box.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             _menu.style.display = connected ? DisplayStyle.None : DisplayStyle.Flex;
             _replay.style.display = connected ? DisplayStyle.Flex : DisplayStyle.None;

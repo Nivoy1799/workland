@@ -1,61 +1,83 @@
 namespace Worktown.Game.Net.Rules
 {
     /// <summary>
-    /// Spec 045, server side, pure: disconnect a client after many TooFast replies in a row. Every request the rate limit
-    /// (<see cref="RequestBucket"/>) refuses is one more in the streak; any request it lets through ends the streak. At
-    /// <see cref="MaxTooFastInARow"/> the guard trips once and stays tripped (the caller kicks the client).
-    /// Why this many: an honest client spaces its requests by <see cref="PickupRules.ClientRequestInterval"/> (about 0.24 s), so
-    /// after a network stall its queued requests arrive bunched and the bucket's <see cref="RequestBucket.Burst"/> passes, the
-    /// rest is refused: 40 in a row needs a stall of about 10 s, longer than a connection survives in play. A flood trips it
-    /// within a fraction of a second, because the bucket lets one through only every <see cref="PickupRules.ServerRequestInterval"/>:
-    /// 40 refusals in that time is about 200 requests per second. A client a little faster than allowed is only throttled (the
-    /// bucket's job): every refusal is one small answer and no validation work.
+    /// Spec 045 (045 review: a sliding window), server side, pure: disconnect a client that keeps sending faster than the rate
+    /// limit (<see cref="RequestBucket"/>) allows. Every TooFast reply is counted in the second it happened; when the TooFast replies
+    /// of the last <see cref="WindowSeconds"/> seconds reach <see cref="MaxTooFastInWindow"/> (30 per second sustained) the guard trips
+    /// once and stays tripped (the caller kicks the client unless <see cref="ShouldKick"/> says no). Requests that pass do not reset
+    /// anything, so a flood that the bucket lets through one request every <see cref="PickupRules.ServerRequestInterval"/> still adds up.
+    /// Why these numbers: the bucket passes about 5 requests per second, so an honest masher at 10 clicks per second gets about 5 TooFast
+    /// per second (50 per window); a network stall bunches the requests sent meanwhile into one burst (a 10 s stall: about 40 at the
+    /// client's own spacing, about 100 at 10 per second), and even the longest stall a connection survives (FishNet's remote timeout,
+    /// 60 s on the ServerManager and ClientManager defaults; Tugboat's own 1800 s socket timeout is only the fallback) queues about 250,
+    /// still under 300. A flood of 50 per second trips it within about 7 s, 1000 per second within a third of a second.
+    /// Allocation-free after construction: a ring of per-second counts.
     /// </summary>
     public sealed class SpamGuard
     {
-        /// <summary>TooFast replies in a row that disconnect the client.</summary>
-        public const int MaxTooFastInARow = 40;
+        /// <summary>TooFast replies within the window that disconnect the client.</summary>
+        public const int MaxTooFastInWindow = 300;
+
+        /// <summary>The sliding window, in whole seconds.</summary>
+        public const int WindowSeconds = 10;
 
         private readonly int _limit;
+        private readonly int[] _counts = new int[WindowSeconds];
+        private readonly long[] _seconds = new long[WindowSeconds];
 
-        public SpamGuard() : this(MaxTooFastInARow)
+        public SpamGuard() : this(MaxTooFastInWindow)
         {
         }
 
         public SpamGuard(int limit)
         {
-            _limit = limit > 0 ? limit : MaxTooFastInARow;
+            _limit = limit > 0 ? limit : MaxTooFastInWindow;
+            Reset();
         }
-
-        /// <summary>TooFast replies since the last request that passed.</summary>
-        public int Streak { get; private set; }
 
         /// <summary>The limit was reached; the client is (being) disconnected.</summary>
         public bool Tripped { get; private set; }
 
+        /// <summary>TooFast replies counted in the window that ends at the last <see cref="Note"/>.</summary>
+        public int InWindow { get; private set; }
+
         /// <summary>
-        /// One request was answered: <paramref name="tooFast"/> when the rate limit refused it. True exactly once, for the refusal
-        /// that reaches the limit (kick now); false before and after.
+        /// One request was answered at <paramref name="now"/> (seconds, never decreasing): <paramref name="tooFast"/> when the rate
+        /// limit refused it. True exactly once, for the refusal that reaches the limit (kick now); false before and after.
         /// </summary>
-        public bool Note(bool tooFast)
+        public bool Note(bool tooFast, double now)
         {
-            if (Tripped) return false;
-            if (!tooFast)
+            if (Tripped || double.IsNaN(now)) return false;
+            long second = (long)System.Math.Floor(now);
+            int slot = (int)(((second % WindowSeconds) + WindowSeconds) % WindowSeconds);
+            if (_seconds[slot] != second)
             {
-                Streak = 0;
-                return false;
+                _seconds[slot] = second;
+                _counts[slot] = 0;
             }
-            Streak++;
-            if (Streak < _limit) return false;
+            if (tooFast) _counts[slot]++;
+            int sum = 0;
+            for (int i = 0; i < WindowSeconds; i++)
+                if (_seconds[i] > second - WindowSeconds && _seconds[i] <= second) sum += _counts[i];
+            InWindow = sum;
+            if (!tooFast || sum < _limit) return false;
             Tripped = true;
             return true;
         }
 
-        /// <summary>A new life of the player object (FishNet may pool it): no streak, not tripped.</summary>
+        /// <summary>045 review: whether a tripped guard kicks the client; never the host's own player (<paramref name="isLocal"/>).</summary>
+        public static bool ShouldKick(bool tripped, bool isLocal) => tripped && !isLocal;
+
+        /// <summary>A new life of the player object (FishNet may pool it): nothing counted, not tripped.</summary>
         public void Reset()
         {
-            Streak = 0;
             Tripped = false;
+            InWindow = 0;
+            for (int i = 0; i < WindowSeconds; i++)
+            {
+                _counts[i] = 0;
+                _seconds[i] = long.MinValue;
+            }
         }
     }
 }

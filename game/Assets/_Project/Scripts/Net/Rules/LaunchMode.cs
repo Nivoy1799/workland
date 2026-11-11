@@ -2,7 +2,7 @@ namespace Worktown.Game.Net.Rules
 {
     public enum LaunchMode
     {
-        /// <summary>No mode flag: show the debug menu.</summary>
+        /// <summary>No mode flag: show the title screen (spec 047; the F1 debug menu still has its connect buttons).</summary>
         Menu,
         /// <summary><c>-server</c>: dedicated server, no local player.</summary>
         Server,

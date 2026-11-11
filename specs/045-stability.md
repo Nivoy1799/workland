@@ -21,11 +21,11 @@ Collect the stability items from the inbox and the netcode list:
 Then run the spec 004 bot load test with 16 players (D36) in one restaurant on a host, and write the result.
 
 ## Acceptance criteria
-- [ ] AC1: `verify.sh`.
-- [ ] AC2: Tests for spam disconnect, late answers, restart paths.
-- [ ] AC3: The WSL server at MTU 1280 spawns players (or a documented decision).
-- [ ] AC4: A crash-on-quit report with a fix or a workaround.
-- [ ] AC5: The spec 004 load-test numbers in docs/loadtest-results.md.
+- [x] AC1: `verify.sh`.
+- [x] AC2: Tests for spam disconnect, late answers, restart paths.
+- [x] AC3: The WSL server at MTU 1280 spawns players (or a documented decision).
+- [x] AC4: A crash-on-quit report with a fix or a workaround.
+- [x] AC5: The spec 004 load-test numbers in docs/loadtest-results.md.
 
 ## Implementation notes
 
@@ -35,7 +35,7 @@ Spec 004's tooling was not built (only `-bot/-seed/-metrics` flags on the parked
 built here: `LaunchArgs` `-bot`, `-seed`, `-metrics`; `Scripts/Dev/LoadTestRunner.cs` (bot + per-second metrics, dev builds),
 `BotBrain` and `LoadStats` (pure, tested); `tools/bots/run-loadtest.sh` (host + N bots, ramp, hold, perl summary).
 
-**Spam (AC2).** `Net/Rules/SpamGuard` (pure): 40 TooFast replies in a row disconnect the client (`ServerManager.Kick`,
+**Spam (AC2).** (Replaced in the 045 review, built with spec 047: a sliding window, 300 TooFast replies within 10 s; see the 047 notes.) `Net/Rules/SpamGuard` (pure): 40 TooFast replies in a row disconnect the client (`ServerManager.Kick`,
 ExcessiveData, one warning line); any request that passes ends the streak; the host's own player is never kicked; reset on a
 new player life. 40 because the bucket lets one request through every 0.2 s: a flood (about 200/s) trips it within a
 fraction of a second, an honest client needs a ~10 s stall; a client a little too fast is only throttled. Tests: `SpamGuardTests`

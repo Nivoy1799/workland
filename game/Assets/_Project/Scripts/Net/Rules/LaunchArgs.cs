@@ -11,6 +11,10 @@ namespace Worktown.Game.Net.Rules
     public sealed class LaunchArgs
     {
         public const ushort DefaultTugboatPort = 7770;
+        /// <summary>Spec 047: the menu tour (Dev/MenuTourRunner) starts on the title screen, so it takes no mode flag.</summary>
+        public const string MenuTour = "menu";
+        /// <summary>Spec 047: the highest <c>-max-players</c>.</summary>
+        public const int MaxPlayersLimit = 64;
 
         public LaunchMode Mode { get; private set; } = LaunchMode.Menu;
         public string Address { get; private set; } = string.Empty;
@@ -30,11 +34,14 @@ namespace Worktown.Game.Net.Rules
         public string TourOut { get; private set; } = string.Empty;
         /// <summary>Spec 045 (the spec 004 load test, dev builds): <c>-bot</c>, drive the own player with a load-test bot. Needs <c>-connect</c>.</summary>
         public bool IsBot { get; private set; }
-        /// <summary>Spec 045: <c>-seed n</c>, the bot's random seed (0 when not given).</summary>
+        /// <summary>Spec 045: <c>-seed n</c>, the bot's random seed, any int including negative values (0 when not given).</summary>
         public int Seed { get; private set; }
         /// <summary>Spec 045: <c>-metrics path</c>, one JSON line per second there (a server or host: its load; a bot: what it received).
         /// Empty = none.</summary>
         public string MetricsPath { get; private set; } = string.Empty;
+        /// <summary>Spec 047: <c>-max-players n</c> (1..64), the places of a server or host (the spec 004 load test: 16 bots and the host);
+        /// 0 = not given (JoinRules.MaxPlayers, D36).</summary>
+        public int MaxPlayers { get; private set; }
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -107,6 +114,12 @@ namespace Worktown.Game.Net.Rules
                         result.Seed = seed;
                         i++;
                         break;
+                    case "-max-players":
+                        if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int places) || places < 1 || places > MaxPlayersLimit)
+                            return Fail("-max-players needs a number 1.." + MaxPlayersLimit);
+                        result.MaxPlayers = places;
+                        i++;
+                        break;
                     case "-metrics":
                         if (!HasValue(args, i)) return Fail("-metrics needs a file path");
                         result.MetricsPath = args[++i];
@@ -116,11 +129,15 @@ namespace Worktown.Game.Net.Rules
 
             if (modeFlags > 1) return Fail("only one of -server, -host, -connect, -steam is allowed");
             if (result.Tour.Length > 0 && result.Observe.Length > 0) return Fail("-tour and -observe exclude each other");
-            if (result.Tour.Length > 0 && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
+            // Spec 047: the menu tour starts on the title screen (no mode flag); every other tour joins with -connect.
+            if (result.Tour == MenuTour && result.Mode != LaunchMode.Menu) return Fail("-tour menu takes no -server, -host, -connect or -steam");
+            if (result.Tour.Length > 0 && result.Tour != MenuTour && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
             if (result.Observe.Length > 0 && result.Mode != LaunchMode.ClientTugboat && result.Mode != LaunchMode.Host)
                 return Fail("-observe needs -connect or -host");
             if (result.IsBot && result.Mode != LaunchMode.ClientTugboat) return Fail("-bot needs -connect (bots use Tugboat)");
             if (result.IsBot && (result.Tour.Length > 0 || result.Observe.Length > 0)) return Fail("-bot excludes -tour and -observe");
+            if (result.MaxPlayers > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-max-players needs -server or -host");
             if (result.MetricsPath.Length > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host && !result.IsBot)
                 return Fail("-metrics needs -server, -host or -bot");
             return result;

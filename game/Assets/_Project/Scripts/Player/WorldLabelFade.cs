@@ -39,6 +39,9 @@ namespace Worktown.Game.Player
             public Transform Transform;
             public LabelKind Kind;
             public Vector3 BaseScale;
+            /// <summary>Spec 047: the renderer's own material and switch before this player took the label over (given back on destroy).</summary>
+            public Material Original;
+            public bool WasEnabled;
             public Pickup Pickup;
             /// <summary>Spec 029: a fryer basket (a vessel without a Pickup), for "aimed".</summary>
             public Vessel Fixed;
@@ -102,6 +105,17 @@ namespace Worktown.Game.Player
 
         private void OnDestroy()
         {
+            // Spec 047: the labels outlive this player (a rejoin, back to the menu, a new shop in the same process): give them their own
+            // material, size and switch back, so none is left drawing with the material destroyed below (magenta) until the next
+            // player's first scan.
+            foreach (Entry entry in _entries.Values)
+            {
+                if (entry.Renderer == null) continue;
+                entry.Renderer.sharedMaterial = entry.Original;
+                entry.Renderer.SetPropertyBlock(null);
+                entry.Renderer.enabled = entry.WasEnabled;
+                if (entry.Transform != null) entry.Transform.localScale = entry.BaseScale;
+            }
             if (_backs != null) Destroy(_backs.gameObject);
             if (_textMaterial != null) Destroy(_textMaterial);
             if (_panelMaterial != null) Destroy(_panelMaterial);
@@ -264,6 +278,8 @@ namespace Worktown.Game.Player
                     Customer = text.GetComponentInParent<Customer>()
                 };
                 if (entry.Renderer == null) continue;
+                entry.Original = entry.Renderer.sharedMaterial;
+                entry.WasEnabled = entry.Renderer.enabled;
                 if (_textMaterial == null) _textMaterial = LabelMaterials.CreateText(text.font);
                 if (_textMaterial != null) entry.Renderer.sharedMaterial = _textMaterial;
                 if (kind == LabelKind.Sign || kind == LabelKind.Item || kind == LabelKind.Bubble) MakeBack(entry);

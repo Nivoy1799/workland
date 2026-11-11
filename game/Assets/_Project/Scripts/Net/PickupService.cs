@@ -47,6 +47,9 @@ namespace Worktown.Game.Net
 
         private readonly PickupRegistry _registry = new PickupRegistry();
         private readonly PlaceSpots _spots = new PlaceSpots();
+        // Spec 047: where each held item was picked up from (item object id), so it goes back there when its holder leaves.
+        private readonly System.Collections.Generic.Dictionary<int, PickupOrigin> _origins =
+            new System.Collections.Generic.Dictionary<int, PickupOrigin>();
         private readonly Collider[] _probe = new Collider[8];
 
         // Start, not OnEnable: NetworkManager creates its ServerManager in its own Awake.
@@ -70,6 +73,7 @@ namespace Worktown.Game.Net
             {
                 _registry.Clear();
                 _spots.Clear(); // spec 020
+                _origins.Clear(); // spec 047
             }
         }
 
@@ -99,6 +103,9 @@ namespace Worktown.Game.Net
                 _canTake == null || _canTake(player, target));
             if (claimed != PickupOutcome.Ok) return claimed;
 
+            // Spec 047: remember where it lay (its spot, else its pose) before the spot is freed.
+            bool onSpot = _spots.TryGetSpotOf(target.ObjectId, out int fromSurface, out int fromSpot);
+            _origins[target.ObjectId] = new PickupOrigin(onSpot, fromSurface, fromSpot, pickup.transform.position, pickup.transform.rotation);
             target.GiveOwnership(player.Owner);
             pickup.ServerAttach(player.HoldPoint, clientId);
             _spots.Free(target.ObjectId); // spec 020: picking it up frees its spot
@@ -135,6 +142,7 @@ namespace Worktown.Game.Net
             if (_canPlace != null && !_canPlace(item, surface)) return PickupOutcome.Taken;
 
             _registry.TryRelease(itemId, clientId);
+            _origins.Remove(itemId); // spec 047
             item.RemoveOwnership();
             pickup.ServerPlaceAt(rest.position, rest.rotation);
             _spots.TryTake(surfaceIndex, spotIndex, itemId);
@@ -212,6 +220,7 @@ namespace Worktown.Game.Net
                 return PickupOutcome.NothingHeld;
 
             _registry.TryRelease(itemId, clientId);
+            _origins.Remove(itemId); // spec 047
             Release(itemId, player.transform.position, player.transform.forward);
             return PickupOutcome.Ok;
         }
@@ -243,6 +252,7 @@ namespace Worktown.Game.Net
             if (target == null || !target.TryGetComponent(out Pickup pickup)) return false;
             int clientId = player.Owner.ClientId;
             if (!_registry.TryClaim(target.ObjectId, clientId)) return false;
+            _origins.Remove(target.ObjectId); // spec 047: handed over fresh, no place to go back to
             target.GiveOwnership(player.Owner);
             pickup.ServerAttach(player.HoldPoint, clientId);
             _spots.Free(target.ObjectId);
@@ -268,6 +278,7 @@ namespace Worktown.Game.Net
         {
             if (!TryGetHeld(player, out taken)) return false;
             _registry.TryRelease(taken.ObjectId, player.Owner.ClientId);
+            _origins.Remove(taken.ObjectId); // spec 047
             taken.RemoveOwnership();
             ItemMoved?.Invoke(taken, null);
             return true;
@@ -279,9 +290,35 @@ namespace Worktown.Game.Net
             // ownership back here keeps the held cube in the world.
             if (args.ConnectionState != RemoteConnectionState.Stopped) return;
             if (!_registry.ReleaseAllFor(connection.ClientId, out int itemId)) return;
+            bool hasOrigin = _origins.TryGetValue(itemId, out PickupOrigin origin);
+            _origins.Remove(itemId);
+            if (!_networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out NetworkObject item)) return;
+            // Spec 047: the held item goes back to where it was picked up, if that place is still free.
+            if (hasOrigin && TryReturn(item, origin)) return;
             // The leaving player's object may already be gone; drop below the cube itself.
-            if (_networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out NetworkObject item))
-                Release(itemId, item.transform.position, Vector3.forward);
+            Release(itemId, item.transform.position, Vector3.forward);
+        }
+
+        /// <summary>
+        /// Spec 047, server: puts a leaving holder's item back where it was picked up (its spot, or the pose it lay in) when the place
+        /// is still free (PickupOrigin.GoesBack). False: nothing moved, the caller drops it.
+        /// </summary>
+        private bool TryReturn(NetworkObject item, PickupOrigin origin)
+        {
+            if (!item.TryGetComponent(out Pickup pickup)) return false;
+            PlaceSurface surface = origin.OnSpot ? SurfaceAt(origin.Surface) : null;
+            if (origin.OnSpot && (surface == null || origin.Spot < 0 || origin.Spot >= surface.SpotCount)) return false;
+            if (origin.OnSpot) FreeIfStale(origin.Surface, origin.Spot, surface.SpotWorldPosition(origin.Spot));
+            bool spotTaken = origin.OnSpot && _spots.IsTaken(origin.Surface, origin.Spot);
+            Vector3 probeAt = origin.OnSpot ? surface.SpotWorldPosition(origin.Spot) : origin.Position;
+            Pickup lying = spotTaken ? null : OccupantAt(probeAt, _probe);
+            if (!PickupOrigin.GoesBack(true, spotTaken, lying != null && lying != pickup)) return false;
+            item.RemoveOwnership();
+            pickup.ServerPlaceAt(origin.Position, origin.Rotation);
+            if (origin.OnSpot) _spots.TryTake(origin.Surface, origin.Spot, item.ObjectId);
+            ItemMoved?.Invoke(item, surface);
+            Debug.Log("[Net] a leaving player's " + item.name + " went back to " + (origin.OnSpot ? surface.name + " spot " + origin.Spot : "where it lay"));
+            return true;
         }
 
         private void Release(int itemId, Vector3 holderPosition, Vector3 dropForward)

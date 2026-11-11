@@ -47,7 +47,7 @@ namespace Worktown.Game.Net
 
         // Server only: this player's request rate limit (review of spec 027b: a token bucket).
         private readonly RequestBucket _serverBucket = new RequestBucket();
-        private readonly SpamGuard _spam = new SpamGuard(); // spec 045: kick after many TooFast replies in a row
+        private readonly SpamGuard _spam = new SpamGuard(); // spec 045: kick after many TooFast replies within 10 s
 
         [SerializeField] private Transform _holdPoint;
 
@@ -3126,23 +3126,24 @@ namespace Worktown.Game.Net
         /// also limits knife strokes. Review of spec 027b: a token bucket per player (RequestBucket: burst 2, one token per
         /// 0.2 s), so requests sent far enough apart but arriving bunched all pass; a refused one is answered with TooFast
         /// (one small report, the same RPCs; spec 045: with the request's echoed number). Spec 045: after
-        /// SpamGuard.MaxTooFastInARow refusals in a row the client is disconnected (a flood, not a person); the host's own player is
+        /// SpamGuard.MaxTooFastInWindow refusals within SpamGuard.WindowSeconds the client is disconnected (045 review: a sliding window) (a flood, not a person); the host's own player is
         /// never kicked from its own server.
         /// </summary>
         private bool IsRateLimited()
         {
-            bool limited = !_serverBucket.TryTake(Time.unscaledTimeAsDouble);
-            if (_spam.Note(limited))
+            double now = Time.unscaledTimeAsDouble;
+            bool limited = !_serverBucket.TryTake(now);
+            if (_spam.Note(limited, now))
             {
                 NetworkConnection owner = Owner;
-                if (owner == null || !owner.IsValid || owner.IsLocalClient)
+                if (!SpamGuard.ShouldKick(_spam.Tripped, owner == null || !owner.IsValid || owner.IsLocalClient))
                 {
                     _spam.Reset(); // the host's own player (or nobody): keep answering
                 }
                 else
                 {
-                    Debug.LogWarning("[Net] player " + owner.ClientId + " disconnected: " + SpamGuard.MaxTooFastInARow
-                        + " requests in a row came too fast (spam)");
+                    Debug.LogWarning("[Net] player " + owner.ClientId + " disconnected: " + SpamGuard.MaxTooFastInWindow
+                        + " requests in " + SpamGuard.WindowSeconds + " s came too fast (spam)");
                     NetworkManager.ServerManager.Kick(owner, FishNet.Managing.Server.KickReason.ExcessiveData,
                         FishNet.Managing.Logging.LoggingType.Off);
                 }
