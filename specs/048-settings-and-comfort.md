@@ -104,3 +104,15 @@ settings-in-shop (what Esc opens), 25 labels-on, 26 labels-off. The tour fails i
    (`.verify/visual-fu1`) failed only on the menu tour's new overflow check: the page was 4 px too tall. The rows went from 28 to
    26 px, then a menu re-run (`.verify/visual-fu1b`) passed: "reaches 0 px past the visible area at 1280x720", sheet cell 04
    settings-controls, 0 exceptions.
+
+**Follow-ups (2026-11-11 evening)** (branch `spec/followups-053-044-048`):
+8. Gamepad capture in the menu tour. The pad half of the capture is now one pure step, `CaptureGate.PadCapture(beganFrame, frame,
+   padPresent, held, pressed, ref releasedSince)` over `CaptureGate.PadBit` masks. `SettingsView` reads the real pad into those masks,
+   or in a development build the tour's simulated pad (`SettingsView.DevSimulatePad` / `DevEndSimulatedPad`, under
+   `DEVELOPMENT_BUILD || UNITY_EDITOR`; a press counts for one frame). The behaviour is unchanged: not on the frame the capture began,
+   and only after every pad button was up once. The menu tour clicks Jump's gamepad binding with A still held, checks the capture
+   waits, releases, presses Y, and checks Jump = Y and Turn swapped onto A. Then it resets the page. Test:
+   `FollowUpsEveningTests.PadCapture_WaitsForTheClickingAToBeReleased_ThenTakesTheFirstPressedButton`.
+   Runs: see spec 053, "Follow-ups (2026-11-11 evening)". Menu tour `.verify/visual-fu4b`: cell 06 settings-pad-waiting (the capture
+   waits while A is held) and 07 settings-pad-capture ("Y was Turn one step: swapped, Turn one step now uses A"), log "pad capture:
+   Jump Y, Turn A".

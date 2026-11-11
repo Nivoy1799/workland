@@ -151,15 +151,35 @@ namespace Worktown.Game.Player
             _reachLeftWeight = CharacterAnimRules.FadeWeight(_reachLeftWeight, Time.frameCount - _reachLeftFrame <= 2, dt);
             _reachRightWeight = CharacterAnimRules.FadeWeight(_reachRightWeight, Time.frameCount - _reachRightFrame <= 2, dt);
             if (_animator == null || !_animator.isHuman) return;
-            if (_reachLeftWeight > 0f) TurnArm(HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftHand, _reachLeft, _reachLeftWeight);
-            if (_reachRightWeight > 0f) TurnArm(HumanBodyBones.RightUpperArm, HumanBodyBones.RightHand, _reachRight, _reachRightWeight);
+            if (_reachLeftWeight > 0f)
+                TurnArm(HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand, _reachLeft, _reachLeftWeight, true);
+            if (_reachRightWeight > 0f)
+                TurnArm(HumanBodyBones.RightUpperArm, HumanBodyBones.RightLowerArm, HumanBodyBones.RightHand, _reachRight, _reachRightWeight, false);
         }
 
-        private void TurnArm(HumanBodyBones upper, HumanBodyBones hand, Vector3 target, float weight)
+        private void TurnArm(HumanBodyBones upper, HumanBodyBones lower, HumanBodyBones hand, Vector3 target, float weight, bool left)
         {
-            Transform upperArm = _animator.GetBoneTransform(upper), handBone = _animator.GetBoneTransform(hand);
+            Transform upperArm = _animator.GetBoneTransform(upper), lowerArm = _animator.GetBoneTransform(lower), handBone = _animator.GetBoneTransform(hand);
             if (upperArm == null || handBone == null) return;
-            upperArm.rotation = ArmPoseRules.Reach(upperArm.position, handBone.position, target, weight) * upperArm.rotation;
+            if (lowerArm == null)
+            {
+                upperArm.rotation = ArmPoseRules.Reach(upperArm.position, handBone.position, target, weight) * upperArm.rotation;
+                return;
+            }
+            BendArm(upperArm, lowerArm, handBone, target, ArmPoseRules.BendHint(Yaw, left), weight);
+        }
+
+        /// <summary>
+        /// Follow-up 2026-11-11 evening (044 known limit): bends an arm after the animation so the hand reaches
+        /// <paramref name="target"/> (ArmPoseRules.TwoBone: the shoulder, then the elbow), by <paramref name="weight"/>. No allocations.
+        /// </summary>
+        public static void BendArm(Transform upperArm, Transform lowerArm, Transform hand, Vector3 target, Vector3 bendHint, float weight)
+        {
+            if (!ArmPoseRules.TwoBone(upperArm.position, lowerArm.position, hand.position, target, bendHint, weight,
+                    out Quaternion upperTurn, out Quaternion lowerTurn))
+                return;
+            upperArm.rotation = upperTurn * upperArm.rotation;
+            lowerArm.rotation = lowerTurn * lowerArm.rotation;
         }
 
         /// <summary>The character of the player with this owner client id, or null (not spawned here yet).</summary>

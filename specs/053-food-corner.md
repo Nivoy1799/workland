@@ -282,5 +282,37 @@ needs $31,625 more:
 Spec 052's stage 1 target (enter stage 2) is 0.75 to 1.5 h. A solo cook lands a little above it, any larger crew well below it,
 and the slot's 12, not the goal, sets the crew's pace. The guests' demand per service was not measured (the tour served only 2).
 
+### Follow-ups (2026-11-11 evening)
+Branch `spec/followups-053-044-048` (builder), from the known limits and the review notes above. One verify for the 053, 044 and 048
+follow-ups.
+1. **Closed-station covers.** `Art/ClosedCoverRules` (pure) gives one fitted cloth box per closed station: the station's bounds plus
+   everything resting on it (a pan, a pot: separate scene objects, found by `ClosedCover.TryRestingBounds`), 2 cm margin, 2 cm above
+   the highest thing, a 12 cm skirt below the top. A small Cream sign card (0.44 x 0.075 m, Ink text about 2.6 cm high, it shrinks on
+   a narrow cover) is pinned to the cook-side face. The cloth is Sage (`Closed_Cover.mat`, was Plaster, which read as grey); the card
+   is a new `Closed_Sign.mat`. 10 covers. Tests: `FollowUpsEveningTests.CoverRules_...` and `BuiltScene_ClosedCovers_...` (in the built
+   scene, nothing that rests on a covered station reaches out of its cloth; at least one station has a pan under it).
+2. **Money display.** The shop balance cannot go below 0: every sim debit is refused with InsufficientFunds,
+   `TownEconomy.AdjustBalance` keeps 0..MaxBalance and `PayFee` takes at most the balance. So the clamps are dropped (`ShopLedger.ServerSet`,
+   `EconomyService.PublishWallets`, which now skips only the -1 "no account yet", `FoodCornerRules.GoalLine`, `MenuRules.ContinueLine`);
+   a negative value would read "-$120" (no warning colour needed). The Continue card already shows the save point's balance (the tour
+   checks it). The difference came from the drop: it is charged at the service start, and a Continue opens the next service at once.
+   The HUD's line at the service start is now `FoodCornerRules.DeliveryText`: "Potatoes delivered -$96 (2 on the shelf)" (or "No
+   potatoes delivered: ..."). The corner tour fails if the wallet after Continue is below the saved balance without that line.
+3. **Menu tour.** Its own shop is now the open kitchen (`NetBootstrap.StartHost(ShopStart.OpenKitchen)`, as `-host`; AC9: the open
+   kitchen is unchanged), not the title's New shop (a food corner that needs a save file; the corner tour presses New shop with its
+   own `-save-dir`). The tour fails if its shop is not the open kitchen, if anything was saved, or if the title then offers Continue.
+- Tests: new `FollowUpsEveningTests` (8 for all three specs; 4 for 053).
+- **Runs (053, 044 and 048 follow-ups together).** `verify.sh` PASS: EditMode 1462/1462 (baseline 1454, +8), sim 483/483, gateway
+  175/175. The scene was regenerated; the re-saved materials, the fryer basket wrapper prefab and the DefaultPrefabObjects reorder
+  were reverted (only `Closed_Cover.mat` changes on purpose, `Closed_Sign.mat` is new). `BuildAll` succeeded (both builds).
+  `visual-check.sh --tours look,cook,menu,corner --out .verify/visual-fu4`: look, cook and corner ok, with 0 exceptions. The menu
+  tour failed only on a check I added (it expected the title page before hosting, but the menu was on the join page). I removed
+  the check, rebuilt, and re-ran the menu tour (`.verify/visual-fu4b`): ok, 0 exceptions, "wrote 0 save(s); Continue on the title:
+  False". Cells:
+  - corner `03-closed-stove-prompt`: the stove's Sage cloth covers its pan, with the small sign card on the front;
+  - corner `05-covers-left`: the griddle and fridge caps;
+  - corner `318-continued`: "Potatoes delivered -$96 (2 on the shelf)" while the wallet reads $3,147 after Continue at $3,243;
+  - menu `26-30`: the open kitchen, then the title with no Continue.
+
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

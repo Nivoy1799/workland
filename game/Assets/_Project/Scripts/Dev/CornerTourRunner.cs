@@ -241,8 +241,20 @@ namespace Worktown.Game.Dev
             MarketBoard board = FindFirstObjectByType<MarketBoard>();
             string clock = board != null ? board.Clock.Value : string.Empty;
             if (!clock.StartsWith("Day " + savedDay + ",", StringComparison.Ordinal)) Fail("the clock reads '" + clock + "', not day " + savedDay);
+            // Follow-up 2026-11-11 evening: money that left at the service start is on the HUD ("Potatoes delivered -$96 (2 on the shelf)").
+            long continued = Balance(me);
+            if (continued >= 0 && continued < savedBalance)
+            {
+                string expected = "Potatoes delivered " + EconomyRules.Money(continued - savedBalance);
+                ServeFeed feed = FindFirstObjectByType<ServeFeed>();
+                bool shown = false;
+                if (feed != null)
+                    foreach (string entry in feed.Entries)
+                        if (entry != null && entry.StartsWith(expected, StringComparison.Ordinal)) shown = true;
+                if (!shown) Fail("the HUD shows no '" + expected + "' for the money that left at the service start");
+            }
             Debug.Log("[Tour] corner: continued at '" + clock + "', the shop wallet " + EconomyRules.Money(Balance(me))
-                + " (the saved balance less the service start's stock drop)");
+                + " (the saved balance less the service start's delivery, on the HUD as 'Potatoes delivered -$...')");
             yield return _capture.Shot("continued");
             _bootstrap.Leave();
             yield return Until(() => Flow.State == JoinState.Menu && !_bootstrap.IsRunning, "closed again");

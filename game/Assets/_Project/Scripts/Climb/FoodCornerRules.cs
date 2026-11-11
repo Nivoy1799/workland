@@ -67,8 +67,21 @@ namespace Worktown.Game.Climb
         /// <summary>The goal flips once: at a service end the balance reached the goal and it was not reached before.</summary>
         public static bool ReachesGoal(bool alreadyReached, long balance, long goal) => !alreadyReached && goal > 0 && balance >= goal;
 
-        /// <summary>The HUD's goal line: "Save for the rent: $230 / $400".</summary>
-        public static string GoalLine(long balance, long goal) => "Save for the rent: " + EconomyRules.Money(Math.Max(0L, balance)) + " / " + EconomyRules.Money(goal);
+        /// <summary>
+        /// Follow-up 2026-11-11 evening: the HUD's line at the service start, when the supplier's drop is paid from the shop wallet:
+        /// "Potatoes delivered -$96 (2 on the shelf)", so the money that leaves at the day's start is seen leaving (a Continue opens the
+        /// next service at once, so the wallet soon reads less than the title's saved balance). Nothing came: says why.
+        /// </summary>
+        public static string DeliveryText(int units, long cost) =>
+            units > 0
+                ? "Potatoes delivered " + EconomyRules.Money(-Math.Max(0L, cost)) + " (" + units + " on the shelf)"
+                : "No potatoes delivered: the potato slot is full, or the money is short";
+
+        /// <summary>
+        /// The HUD's goal line: "Save for the rent: $230 / $400". Follow-up 2026-11-11 evening: no clamp at 0 (the shop balance never goes
+        /// below 0, see ShopLedger; if it ever did, it would read "-$120", not $0).
+        /// </summary>
+        public static string GoalLine(long balance, long goal) => "Save for the rent: " + EconomyRules.Money(balance) + " / " + EconomyRules.Money(goal);
 
         /// <summary>The shift summary's goal line with its percent (0 to 100): "Save for the rent: $230 / $400 (57 %)".</summary>
         public static string GoalProgressLine(long balance, long goal) => GoalLine(balance, goal) + " (" + GoalPercent(balance, goal) + " %)";

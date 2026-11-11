@@ -182,3 +182,16 @@ follow-ups.
   - cook `193-202 unpack`;
   - cook `292-298 wipe`.
   The observers do not film the unpack or the wipe, so the remote box flight and the cloth blend are covered by tests only.
+
+## Follow-ups (2026-11-11 evening)
+Branch `spec/followups-053-044-048` (builder), from the known limit "the arm reach turns only the upper arm (no elbow bend)". One
+verify for the 053, 044 and 048 follow-ups.
+- **A two-bone bend.** `ArmPoseRules.Elbow(shoulder, target, upperLength, lowerLength, bendHint)` (pure) puts the elbow where the
+  shoulder, the target and the two bone lengths make a triangle, bent towards the hint; out of reach the arm is straight at the target.
+  `ArmPoseRules.BendHint(yaw, left)`: down, out to the arm's side and a little back. `ArmPoseRules.TwoBone` turns that into two world
+  turns (the upper arm, then the forearm) faded by the reach weight. `CharacterVisual.BendArm` applies them in `LateUpdate`, after
+  the animation, with the bone lengths taken from the animated pose; a rig without a lower-arm bone keeps the old shoulder turn.
+- No per-frame allocations (structs only). Tests: `FollowUpsEveningTests.Elbow_...`, `TwoBone_...` and `BendArm_OnRealBones_...`
+  (three transforms: the hand lands on the target, the bones keep their lengths, 0 bytes allocated over 500 calls).
+- The third-person box carry and wipe are not filmed by a tour (as before), so the bend is covered by tests only. Runs: see spec
+  053, "Follow-ups (2026-11-11 evening)" (look and cook tours ok, 0 exceptions).

@@ -25,7 +25,7 @@ namespace Worktown.Game.UI
 
         /// <summary>Spec 053: the line under Continue: "Day 4 · $230" (the newest save's next day and its shop wallet).</summary>
         public static string ContinueLine(long day, long balance) =>
-            "Day " + System.Math.Max(1L, day) + " \u00b7 " + Worktown.Game.Economy.EconomyRules.Money(System.Math.Max(0L, balance));
+            "Day " + System.Math.Max(1L, day) + " \u00b7 " + Worktown.Game.Economy.EconomyRules.Money(balance); // the saved balance as it is (never below 0: ShopLedger)
 
         /// <summary>Spec 053 review: the line under Continue when the only (or newest) save comes from a newer build.</summary>
         public const string NewerContinueLine = "Saved by a newer version of Worktown";

@@ -519,9 +519,7 @@ namespace Worktown.Game.Editor
 
         public const string ClosedCoverName = "Closed cover";
         private const string ClosedCoverMaterialPath = Root + "/Settings/Closed_Cover.mat";
-        private const float CoverMargin = 0.03f;
-        private const float CoverThickness = 0.03f;
-        private const float CoverDrape = 0.35f;
+        private const string ClosedSignMaterialPath = Root + "/Settings/Closed_Sign.mat";
 
         /// <summary>
         /// Spec 053: the shop's stage (a global scene object like the stock counts: the stage, the goal), the save service next to the
@@ -560,26 +558,30 @@ namespace Worktown.Game.Editor
             SetField(ledgerNob, "_isGlobal", true);
             SetField(networkManager.GetComponent<EconomyService>(), "_ledger", ledgerObject.AddComponent<ShopLedger>());
 
-            Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Plaster);
+            // Follow-up 2026-11-11 evening: a calm Sage cloth (Plaster read as grey) and a small Cream sign card with Ink text.
+            Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Sage);
+            Material card = CreateMaterial(ClosedSignMaterialPath, Palette.Cream);
+            Renderer[] sceneRenderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
             int covers = 0;
             var stations = new List<Station>(UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None));
             stations.Sort((a, b) => a.Index.CompareTo(b.Index));
             foreach (Station station in stations)
             {
                 if (ShopStageRules.IsStationOpen(ShopStageRules.FoodCorner, station.Kind)) continue;
-                if (CreateClosedCover(station, cloth)) covers++;
+                if (CreateClosedCover(station, cloth, card, sceneRenderers)) covers++;
             }
             Debug.Log("[Graybox] food corner: " + covers + " closed covers");
         }
 
-        /// <summary>Spec 053: a cloth over the station's top with a drape at its front, and the sign above it. No collider.</summary>
-        private static bool CreateClosedCover(Station station, Material cloth)
+        /// <summary>
+        /// Spec 053, follow-up 2026-11-11 evening: one fitted cloth box over the station and what rests on it (ClosedCoverRules.Cloth),
+        /// and a small sign card on its cook-side face. No collider.
+        /// </summary>
+        private static bool CreateClosedCover(Station station, Material cloth, Material card, Renderer[] sceneRenderers)
         {
-            Renderer[] renderers = station.GetComponentsInChildren<Renderer>();
-            if (renderers.Length == 0) return false;
-            Bounds b = renderers[0].bounds;
-            foreach (Renderer r in renderers)
-                if (!(r is ParticleSystemRenderer) && !(r.GetComponent<TextMesh>() != null)) b.Encapsulate(r.bounds);
+            if (!ClosedCover.TryStationBounds(station, out Bounds b)) return false;
+            bool resting = ClosedCover.TryRestingBounds(station, b, sceneRenderers, out Bounds contents);
+            Bounds box = ClosedCoverRules.Cloth(b, contents, resting);
             var root = new GameObject(ClosedCoverName);
             root.transform.SetParent(station.transform, false);
             var cover = root.AddComponent<ClosedCover>();
@@ -588,36 +590,37 @@ namespace Worktown.Game.Editor
             shown.transform.SetParent(root.transform, false);
             SetField(cover, "_cover", shown);
 
-            Vector3 size = new Vector3(b.size.x + 2f * CoverMargin, CoverThickness, b.size.z + 2f * CoverMargin);
             GameObject top = GameObject.CreatePrimitive(PrimitiveType.Cube);
             top.name = "Cloth";
             UnityEngine.Object.DestroyImmediate(top.GetComponent<Collider>());
             top.transform.SetParent(shown.transform, true);
-            top.transform.SetPositionAndRotation(new Vector3(b.center.x, b.max.y + CoverThickness * 0.5f, b.center.z), Quaternion.identity);
-            top.transform.localScale = WorldToLocalScale(top.transform, size);
+            top.transform.SetPositionAndRotation(box.center, Quaternion.identity);
+            top.transform.localScale = WorldToLocalScale(top.transform, box.size);
             top.GetComponent<MeshRenderer>().sharedMaterial = cloth;
 
-            // The drape hangs down the aisle side of the station (its forward is the cook side for most stations).
-            Vector3 front = -station.transform.forward; // the cook side (a station faces the wall; the counter is turned 180)
+            // The sign card on the cook side (a station faces the wall; the counter is turned 180).
+            Vector3 front = -station.transform.forward;
             front.y = 0f;
             front = front.sqrMagnitude > 0.01f ? front.normalized : Vector3.back;
-            bool alongX = Mathf.Abs(front.z) >= Mathf.Abs(front.x);
-            float half = alongX ? b.extents.z : b.extents.x;
-            float drape = Mathf.Min(CoverDrape, b.size.y);
-            Vector3 drapeSize = alongX ? new Vector3(size.x, drape, CoverThickness) : new Vector3(CoverThickness, drape, size.z);
-            GameObject side = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            side.name = "Drape";
-            UnityEngine.Object.DestroyImmediate(side.GetComponent<Collider>());
-            side.transform.SetParent(shown.transform, true);
-            Vector3 centre = new Vector3(b.center.x, b.max.y - drape * 0.5f + CoverThickness, b.center.z) + front * (half + CoverMargin);
-            side.transform.SetPositionAndRotation(centre, Quaternion.identity);
-            side.transform.localScale = WorldToLocalScale(side.transform, drapeSize);
-            side.GetComponent<MeshRenderer>().sharedMaterial = cloth;
+            bool alongZ = Mathf.Abs(front.z) >= Mathf.Abs(front.x);
+            Vector3 face = alongZ ? new Vector3(0f, 0f, Mathf.Sign(front.z)) : new Vector3(Mathf.Sign(front.x), 0f, 0f);
+            float scale = ClosedCoverRules.SignScale(alongZ ? box.size.x : box.size.z);
+            if (scale <= 0f) return true;
+            Vector3 centre = ClosedCoverRules.SignCentre(box, face, scale);
+            Quaternion facing = Quaternion.LookRotation(-face, Vector3.up);
+            GameObject plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            plate.name = "Sign card";
+            UnityEngine.Object.DestroyImmediate(plate.GetComponent<Collider>());
+            plate.transform.SetParent(shown.transform, true);
+            plate.transform.SetPositionAndRotation(centre - face * (ClosedCoverRules.SignProud * 0.5f), facing);
+            plate.transform.localScale = WorldToLocalScale(plate.transform,
+                new Vector3(ClosedCoverRules.SignSize.x * scale, ClosedCoverRules.SignSize.y * scale, ClosedCoverRules.SignProud));
+            plate.GetComponent<MeshRenderer>().sharedMaterial = card;
 
-            TextMesh sign = CreateLabel(shown.transform, Vector3.zero, 40, 0.025f);
+            TextMesh sign = CreateLabel(shown.transform, Vector3.zero, ClosedCoverRules.SignFontSize, ClosedCoverRules.SignCharacterSize * scale);
             sign.name = "Sign";
-            sign.transform.position = new Vector3(b.center.x, b.max.y + 0.08f, b.center.z) + front * (half * 0.5f);
-            sign.transform.rotation = Quaternion.LookRotation(-front, Vector3.up);
+            sign.anchor = TextAnchor.MiddleCenter;
+            sign.transform.SetPositionAndRotation(centre + face * ClosedCoverRules.TextProud, facing);
             sign.text = ShopStageRules.NotOpenText;
             sign.color = Palette.Ink;
             return true;
