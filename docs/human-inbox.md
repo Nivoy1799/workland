@@ -3,7 +3,7 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-11 11:00)
+## Status (updated 2026-11-11 15:00)
 - **Merged in run 2:** 039 (every counter accepts items, items are not stairs, tools handle towards you) and 041
   (left click does, right click puts down, the wheel turns), 042 (put the cup on the drip tray, then hold to fill;
   play-test: can you fill a drink while doing something else?), 043 (perfect means best, names like "golden fries"
@@ -18,8 +18,8 @@ every question has a default, and work continues on other items until you answer
   joining a friend while hosting asks first; Alt-F4 tells your guests the shop closed; a kicked player stays out for
   the session. For the real Steam app id, upload game/Steam/rich_presence_localization.vdf in Steamworks.
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
-- **Autonomous run 2 is finished.** The approved queue is done except 037 (question 17); 040 is with your second
-  session. Next is the climb, after question 13 (docs/early-access.md).
+- **Run 3 (from 2026-11-11 afternoon):** 052 climb simulation, then 054 network headroom and 053 food corner with the
+  save file. 037 still waits for question 17; 040 is with your second session.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
@@ -69,25 +69,6 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-21. **Four new draft specs for the path to Early Access** (all `status: draft`; nothing is built until you approve).
-    - **052 climb simulation** (/sim only; needs question 13). It tunes stages 1-5 for 1, 4 and 16 players against NPC
-      rivals before we build them. Defaults: hours to reach each stage 0.75-1.5 / 3-5 / 7-11 / 12-20 h; a service lasts
-      6 minutes.
-    - **053 food corner and save file** (/game; needs question 13 and 052). Stage 1: one dish, cash only, saving for the
-      rent. The host saves, autosave runs, and the title screen gets Continue. Defaults:
-      - the dish is fries;
-      - **one shared shop wallet** instead of a wallet per player (pillar 2; a change from today);
-      - each New shop has its own save; Continue loads the newest.
-    - **054 network headroom.** Today each player costs about 48 KB/s against a 50 KB/s target. The spec measures each
-      message type, sends other players at 15 Hz with smoothing, and sets a target of 35 KB/s. Question: is about 133 ms
-      of display delay for other players fine? You can compare 30 Hz and 15 Hz with a flag.
-    - **055 AI gateway go-live** (three parts: sim, gateway, game). Default login: Steam tickets checked by the gateway.
-      Big question: **does Early Access need a live AI gateway at all?** Names for the menu's dishes could be generated
-      once, offline, and shipped with the game: no hosting, no running cost. Default: ship offline names for EA, and go
-      live later. O4, O5 and O6 stay open.
-    - **Before outside players save games:** the company name in Player Settings is still "DefaultCompany", and it is
-      part of the save folder path. Default: set it once you pick a name (O1).
-    Say "approve 054" (and so on), or answer 13 to unlock 052 and 053.
 20. **AI gateway (spec 006) and player-hosted games (D33).** Spec 006 was planned for official servers only: they
     alone held the gateway's password. Under D33 the host is a player's PC, so that password ships inside the game and
     is public. Anyone could then run up our API bill, or claim an item's name first and show a bad name to everyone.
@@ -140,11 +121,6 @@ every question has a default, and work continues on other items until you answer
     - robots can do everything, but hand-made is the luxury.
     When you say yes: Claude writes docs/setting.md and proposes D37 (setting) plus a palette update for D32 and
     spec 040.
-13. **Design v1 after your decision (D33-D36):** co-op restaurant simulator for up to 16 players, player-hosted, the
-    climb from a food corner (1 dish, cash only) through a restaurant with your mix of services to automation,
-    ingredient creation, competitions, events, marketing and cars. Persistent town and mechanic dropped. Please read
-    docs/game-design.md v1 and approve or correct it. Next, by default: the climb simulation in /sim, then the
-    "food corner" start spec. Specs 045, 047, 049 now say 16 players; 046 is superseded.
 12. **046 direction after the brainstorm (2026-11-10).** You liked crew competition ("like Schedule I, making the most
     in a group"); weapons and PvP harm are out for EA. Proposal: rewrite 046 as **"Crew and empire, slice 1"**:
     - crew and shop (roles and shares);
@@ -218,6 +194,9 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11, questions 13 and 21:** "13 and 21 go burn the tokens. AI live we skip, you are right." Design v1 is
+  approved (D37). Specs 052, 053 and 054 are approved with their defaults. The live AI gateway is skipped for Early Access:
+  names are generated offline (D38), and 055 is deferred.
 - 2026-11-10 play-test: the register / payment terminal works great ("insane"). Problems found and drafted as specs:
   039 (every counter accepts items, items are not stairs, tools handle towards you), 040 (readable at a glance:
   better models, labels from every angle), 041 (mouse-first: left does, right puts down, no Q).

@@ -45,6 +45,8 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D34 | Progression | Start as a **food corner: 1 dish, guests, cash only**. Then: rent a restaurant, choose the service (fast food first), add delivery or custom orders, mix as you like. Specialised content later. When the restaurant is automated: create new ingredients, compete against the best NPC teams in cooking competitions, serve at event locations, better marketing, buy cars | 2026-11-10 | Decided by the human: a restaurant simulator first |
 | D35 | Professions | **Mechanic dropped.** The game is about the restaurant; other "professions" become restaurant roles or business branches (delivery, events, ingredient creation) | 2026-11-10 | Decided by the human |
 | D36 | Player cap (was O7) | 16 players per game | 2026-11-10 | Decided by the human (D33); spec 045 load test now tests 16 players |
+| D37 | Game design v1 | docs/game-design.md v1 is binding: co-op restaurant climb in 5 stages (food corner first), NPC rivals, 16 players, time runs only while playing | 2026-11-11 | Approved by the human (inbox question 13); specs 052 and 053 follow it |
+| D38 | AI content for Early Access | No live AI gateway at Early Access; names are generated offline and shipped with the game. Spec 055 (gateway go-live) is deferred | 2026-11-11 | Decided by the human ("AI live we skip"): no hosting, no running cost, no public-token risk |
 
 ## OPEN
 

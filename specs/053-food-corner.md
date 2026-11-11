@@ -1,10 +1,12 @@
 ---
 id: 053
 title: Stage 1 food corner (1 dish, walk-up guests, cash only, save for the rent) and the host's save file
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 13 and 21) with the recommended defaults of its Open questions.
 
 # 053: Food corner and the host's save
 

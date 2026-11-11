@@ -1,10 +1,12 @@
 ---
 id: 054
 title: Network headroom (traffic per packet type, 15 Hz remote players, 35 KB/s per client)
-status: draft
+status: approved
 owner: architect
 builder: opus         # netcode (CLAUDE.md: netcode stays on Opus)
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 13 and 21) with the recommended defaults of its Open questions.
 
 # 054: Network headroom
 

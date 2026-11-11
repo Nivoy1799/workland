@@ -1,10 +1,12 @@
 ---
 id: 052
 title: Climb simulation (stages 1-5 for 1, 4 and 16 players against NPC rivals) in /sim
-status: draft
+status: approved
 owner: architect
 builder: sonnet
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 13 and 21) with the recommended defaults of its Open questions.
 
 # 052: Climb simulation
 

@@ -1,10 +1,12 @@
 ---
 id: 055
 title: AI gateway go-live under D33 (per-host auth, server-built inputs, cost limits, game client)
-status: draft
+status: deferred
 owner: architect
 builder: sonnet       # 055a: opus (identity rules in /sim); 055b, 055c: sonnet
 ---
+
+> Deferred on 2026-11-11 (D38): no live gateway at Early Access; names are generated offline and shipped.
 
 # 055: AI gateway go-live
 
