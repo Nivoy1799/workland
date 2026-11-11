@@ -54,4 +54,4 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | O4 | Backend stack | Own API + Postgres vs Nakama. Mostly moot after D33 (host saves); only needed later for the AI gateway, leaderboards or cloud saves | later |
 | O5 | Server hoster | Only for the AI gateway after D33 (no game servers) | before the AI gateway goes live |
 | O6 | Moderation approach | Rule-based filter, small classifier model, or provider moderation API | Before Early Access |
-| O7 | Direct-IP transport over VPN (MTU 1280, spec 045) | Proposed: players connect through Steam; Tugboat (direct IP) stays for LAN and dev only, because it hard-codes a 1350-byte MTU. Alternative: patch FishNet (vendor code) | Before Early Access |
+| O10 | Direct-IP transport over VPN (MTU 1280, spec 045) | Proposed: players connect through Steam; Tugboat (direct IP) stays for LAN and dev only, because it hard-codes a 1350-byte MTU. Alternative: patch FishNet (vendor code) | Before Early Access |
