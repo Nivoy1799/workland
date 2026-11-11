@@ -205,3 +205,8 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
   shrinks the growth bounds to the noise floor (fix: one best clean row; growth only against the bounds); the watcher can
   hang if winpid is unreadable; the port check looks only for Worktown.exe; the HostStalled notice to clients is untested
   (add a bot to the stall test). C# fixes: stall close wrapped, crash-log caps, profile paths scrubbed, more scripted flags.
+- 049b host freeze investigation: in both cases the host PROCESS died (a native access violation on the main thread,
+  a jump through a bad code pointer from JIT code), so the tick watchdog cannot catch it. No reproduction in 4 cook
+  tours. Suspects: Unity/Mono, the Steam overlay DLL in the host, or the GPU driver. Next: visual-check.sh now keeps
+  native crash reports; on the next one take a full dump; try a cook run with the Steam overlay off; consider telling
+  clients sooner than FishNet's 60 s timeout that the host is gone (a netcode spec).
