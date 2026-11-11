@@ -8,9 +8,10 @@ namespace Worktown.Game.Net.Rules
     /// anything, so a flood that the bucket lets through one request every <see cref="PickupRules.ServerRequestInterval"/> still adds up.
     /// Why these numbers: the bucket passes about 5 requests per second, so an honest masher at 10 clicks per second gets about 5 TooFast
     /// per second (50 per window); a network stall bunches the requests sent meanwhile into one burst (a 10 s stall: about 40 at the
-    /// client's own spacing, about 100 at 10 per second), and even the longest stall a connection survives (FishNet's remote timeout,
-    /// 60 s on the ServerManager and ClientManager defaults; Tugboat's own 1800 s socket timeout is only the fallback) queues about 250,
-    /// still under 300. A flood of 50 per second trips it within about 7 s, 1000 per second within a third of a second.
+    /// client's own spacing, about 100 at 10 per second). How many a stall queues depends on the client's request spacing, not on the
+    /// stall alone: the longest stall a connection survives (FishNet's remote timeout, 60 s on the ServerManager and ClientManager
+    /// defaults; Tugboat's own 1800 s socket timeout is only the fallback) queues about 250 at the client's own spacing, under 300,
+    /// but a client that kept sending 10 per second through all 60 s would queue about 600 and trip it. A flood of 50 per second trips it within about 7 s, 1000 per second within a third of a second.
     /// Allocation-free after construction: a ring of per-second counts.
     /// </summary>
     public sealed class SpamGuard

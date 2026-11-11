@@ -77,7 +77,9 @@ namespace Worktown.Game.Net.Rules
                     case "-steam":
                         modeFlags++;
                         if (i + 1 >= args.Count || args[i + 1].StartsWith("-"))
-                            return Fail("-steam needs a SteamID64 or address");
+                            return Fail("-steam needs a SteamID64");
+                        if (!RichPresenceRules.TryParseSteamId(args[i + 1], out _))
+                            return Fail("-steam: invalid SteamID64 '" + args[i + 1] + "'");
                         result.Mode = LaunchMode.ClientSteam;
                         result.SteamTarget = args[++i];
                         break;

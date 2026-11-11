@@ -52,6 +52,11 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(JoinRules.MaxNameLength, JoinRules.CleanName(new string('x', 100), 0).Length);
             Assert.AreEqual("e\u0301x", JoinRules.CleanName("e\u0301\u0362\u0362\u0362x", 0), "one combining mark per letter");
             Assert.AreEqual("a", JoinRules.CleanName("\u0301a", 0), "no mark at the start");
+            Assert.AreEqual("size=400X", JoinRules.CleanName("<size=400>X", 0), "no rich-text tag survives");
+            Assert.AreEqual("bAnn/b", JoinRules.CleanName("<b>Ann</b>", 0));
+            Assert.AreEqual("AnnBo", JoinRules.CleanName("Ann\u202eBo", 0), "a bidi override is removed");
+            Assert.AreEqual("AnnBo", JoinRules.CleanName("Ann\u200bBo\u2066", 0), "zero-width and a bidi isolate are removed");
+            Assert.AreEqual("Cook 1", JoinRules.CleanName("\u200d\ufeff", 0), "only format characters is empty");
         }
 
         [Test]
@@ -140,13 +145,62 @@ namespace Worktown.Game.Tests
         [Test]
         public void TheLeavingHoldersItem_GoesBack_OnlyToAFreePlace()
         {
-            Assert.IsTrue(PickupOrigin.GoesBack(hasOrigin: true, spotTaken: false, occupied: false));
+            Assert.IsTrue(PickupOrigin.GoesBack(allowed: true, spotTaken: false, occupied: false));
             Assert.IsFalse(PickupOrigin.GoesBack(true, spotTaken: true, occupied: false));
             Assert.IsFalse(PickupOrigin.GoesBack(true, false, occupied: true));
-            Assert.IsFalse(PickupOrigin.GoesBack(hasOrigin: false, false, false), "handed over fresh: dropped");
+            Assert.IsFalse(PickupOrigin.GoesBack(allowed: false, false, false), "the kitchen's veto: dropped");
             var origin = new PickupOrigin(false, 3, 4, UnityEngine.Vector3.one, UnityEngine.Quaternion.identity);
             Assert.AreEqual(PlaceSpots.None, origin.Surface, "not on a spot: no spot");
             Assert.AreEqual(PlaceSpots.None, origin.Spot);
+        }
+
+        private sealed class FreeWallet : Worktown.Game.Cooking.IDrinkWallet
+        {
+            public Worktown.Game.Cooking.CookOutcome Charge(int owner, string drinkId, int percent, bool withCup, out long cost)
+            {
+                cost = 0;
+                return Worktown.Game.Cooking.CookOutcome.Ok;
+            }
+
+            public bool CanAfford(int owner, string drinkId, int percent, bool withCup) => true;
+            public Worktown.Game.Cooking.CookOutcome Short => Worktown.Game.Cooking.CookOutcome.NotEnoughMoney;
+            public void Refund(int owner, string drinkId, int percent, bool withCup, long cost) { }
+        }
+
+        /// <summary>
+        /// 047 review: the leaving holder's cup is not put back on a tap's spot the kitchen no longer allows it on (filled there, then
+        /// lidded in the hands: a lidded cup does not go back under a tap), the same veto as a place; it drops instead.
+        /// </summary>
+        [Test]
+        public void ALeavingHoldersCup_IsNotReturned_ToASpotItIsNotAllowedOn()
+        {
+            const int dispenser = 10, cup = 50, lemonade = 0, owner = 3;
+            var kitchen = Worktown.Game.Cooking.KitchenState.CreateDemo();
+            Assert.AreEqual(Worktown.Game.Cooking.CookOutcome.Ok, kitchen.TryCreateCup(out var item));
+            kitchen.Register(cup, item);
+            var desk = new Worktown.Game.Cooking.DrinkDesk(kitchen);
+            var wallet = new FreeWallet();
+            Assert.IsTrue(kitchen.PutCupOnSpot(dispenser, lemonade, cup));
+            desk.Press(dispenser, lemonade, owner, HeatTestKit.StartTick, wallet);
+            desk.Release(dispenser, lemonade, owner, HeatTestKit.StartTick + 54, HeatTestKit.TickRate, wallet, out _);
+            Assert.IsTrue(kitchen.TakeCupOffSpot(cup, out _, out _, out _), "picked up from the lemonade tap's spot");
+            var origin = new PickupOrigin(true, 2, lemonade, UnityEngine.Vector3.one, UnityEngine.Quaternion.identity);
+            int asked = 0;
+            System.Func<bool> canPlace = () =>
+            {
+                asked++;
+                return desk.CanPlace(cup, lemonade) == Worktown.Game.Cooking.CookOutcome.Ok;
+            };
+
+            Assert.IsTrue(Worktown.Game.Net.PickupService.PlanReturn(origin, canPlace, false, false), "a filled cup: back to its tap");
+            Assert.AreEqual(Worktown.Game.Cooking.CookOutcome.Ok, desk.Lid(cup, out _));
+            Assert.IsFalse(Worktown.Game.Net.PickupService.PlanReturn(origin, canPlace, false, false), "lidded: not under the tap");
+            Assert.AreEqual(2, asked, "the kitchen is asked, as for a place");
+
+            var floor = new PickupOrigin(false, 0, 0, UnityEngine.Vector3.one, UnityEngine.Quaternion.identity);
+            Assert.IsTrue(Worktown.Game.Net.PickupService.PlanReturn(floor, canPlace, false, false), "off the spot table: no veto");
+            Assert.AreEqual(2, asked);
+            Assert.IsFalse(Worktown.Game.Net.PickupService.PlanReturn(floor, null, false, occupied: true));
         }
 
         [Test]

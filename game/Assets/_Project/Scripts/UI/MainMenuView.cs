@@ -55,6 +55,7 @@ namespace Worktown.Game.UI
         private VisualElement _friendList;
         private Label _friendHint;
         private Label _build;
+        private bool _buildShown;
         private Behaviour _pausedBrain;
         private bool _wasShowing;
 
@@ -146,7 +147,8 @@ namespace Worktown.Game.UI
             _cardTitle = new Label();
             _cardTitle.AddToClassList("card-title");
             _card.Add(_cardTitle);
-            _cardText = new Label();
+            // Shows server-supplied text (ConnectionNotice.Detail) and the typed address: plain text, never rich-text tags.
+            _cardText = new Label { enableRichText = false };
             _cardText.AddToClassList("card-text");
             _card.Add(_cardText);
             _track = new VisualElement();
@@ -239,7 +241,9 @@ namespace Worktown.Game.UI
             foreach (FriendHost host in hosts)
             {
                 ulong id = host.SteamId;
-                _friendList.Add(MenuButton("friend-" + id, "Join " + host.Name, () => _bootstrap.ConnectSteam(id.ToString())));
+                Button join = MenuButton("friend-" + id, "Join " + host.Name, () => _bootstrap.ConnectSteam(id.ToString()));
+                join.enableRichText = false; // a Steam name is player-supplied
+                _friendList.Add(join);
             }
         }
 
@@ -293,8 +297,11 @@ namespace Worktown.Game.UI
             UnityEngine.Cursor.visible = true;
             DriveCamera();
 
-            if (_bootstrap.Join != null)
+            if (!_buildShown && _bootstrap.Join != null && !string.IsNullOrEmpty(_bootstrap.Join.BuildHash))
+            {
                 _build.text = MenuRules.BuildLine(Application.version, BuildHash.Short(_bootstrap.Join.BuildHash));
+                _buildShown = true;
+            }
             Show(_side, flow.State == JoinState.Menu);
             Show(_card, flow.State != JoinState.Menu);
             double now = Time.unscaledTimeAsDouble;

@@ -54,6 +54,11 @@ namespace Worktown.Game.Tests
         [TestCase("-connect", "host:70000")]
         [TestCase("-connect", ":7770")]
         [TestCase("-steam")]
+        [TestCase("-steam", "abc")]
+        [TestCase("-steam", "0")]
+        [TestCase("-steam", "+5")]
+        [TestCase("-steam", "10.0.0.2")]
+        [TestCase("-steam", "99999999999999999999999")]
         public void InvalidValues_FallBackToMenuWithError(params string[] args)
         {
             var a = LaunchArgs.Parse(args);
@@ -67,6 +72,19 @@ namespace Worktown.Game.Tests
             var a = Parse("-steam", "76561197960287930");
             Assert.AreEqual(LaunchMode.ClientSteam, a.Mode);
             Assert.AreEqual("76561197960287930", a.SteamTarget);
+        }
+
+        [Test]
+        public void Steam_RefusesANonSteamId_NamingSteamId64()
+        {
+            var a = Parse("-steam", "abc");
+            Assert.AreEqual(LaunchMode.Menu, a.Mode);
+            StringAssert.Contains("SteamID64", a.Error);
+            StringAssert.Contains("SteamID64", Parse("-steam").Error);
+            Assert.IsTrue(RichPresenceRules.TryParseSteamId("18446744073709551615", out ulong max), "ulong max");
+            Assert.AreEqual(ulong.MaxValue, max);
+            Assert.IsFalse(RichPresenceRules.TryParseSteamId(" 5", out _), "no spaces");
+            Assert.IsFalse(RichPresenceRules.TryParseSteamId(null, out _));
         }
 
         [Test]

@@ -301,7 +301,8 @@ namespace Worktown.Game.Net
 
         /// <summary>
         /// Spec 047, server: puts a leaving holder's item back where it was picked up (its spot, or the pose it lay in) when the place
-        /// is still free (PickupOrigin.GoesBack). False: nothing moved, the caller drops it.
+        /// is still free and, on a spot, the kitchen still allows it there (<see cref="PlanReturn"/>). False: nothing moved, the caller
+        /// drops it.
         /// </summary>
         private bool TryReturn(NetworkObject item, PickupOrigin origin)
         {
@@ -312,13 +313,26 @@ namespace Worktown.Game.Net
             bool spotTaken = origin.OnSpot && _spots.IsTaken(origin.Surface, origin.Spot);
             Vector3 probeAt = origin.OnSpot ? surface.SpotWorldPosition(origin.Spot) : origin.Position;
             Pickup lying = spotTaken ? null : OccupantAt(probeAt, _probe);
-            if (!PickupOrigin.GoesBack(true, spotTaken, lying != null && lying != pickup)) return false;
+            System.Func<bool> canPlaceThere = _canPlace != null ? () => _canPlace(item, surface) : (System.Func<bool>)null;
+            if (!PlanReturn(origin, canPlaceThere, spotTaken, lying != null && lying != pickup)) return false;
             item.RemoveOwnership();
             pickup.ServerPlaceAt(origin.Position, origin.Rotation);
             if (origin.OnSpot) _spots.TryTake(origin.Surface, origin.Spot, item.ObjectId);
             ItemMoved?.Invoke(item, surface);
             Debug.Log("[Net] a leaving player's " + item.name + " went back to " + (origin.OnSpot ? surface.name + " spot " + origin.Spot : "where it lay"));
             return true;
+        }
+
+        /// <summary>
+        /// 047 review, server, without the network: whether a leaving holder's item goes back to <paramref name="origin"/>. On a spot,
+        /// the same place veto as <see cref="TryPlace"/> (<paramref name="canPlaceThere"/>: the kitchen's check of this item on that
+        /// spot; a tap's cup spot takes only a cup that fits its tap) must allow it there; then the place must be free
+        /// (PickupOrigin.GoesBack). A pose off the spot table has no veto (the check is not asked). False: the item drops where it is.
+        /// </summary>
+        public static bool PlanReturn(PickupOrigin origin, System.Func<bool> canPlaceThere, bool spotTaken, bool occupied)
+        {
+            bool allowed = !origin.OnSpot || canPlaceThere == null || canPlaceThere();
+            return PickupOrigin.GoesBack(allowed, spotTaken, occupied);
         }
 
         private void Release(int itemId, Vector3 holderPosition, Vector3 dropForward)

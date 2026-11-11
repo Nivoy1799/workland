@@ -26,9 +26,9 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>
-        /// The name other players see: control characters dropped, at most one combining mark per letter, spaces folded, cut to
-        /// <see cref="MaxNameLength"/>; an empty
-        /// result becomes "Cook n" (n = the connection's id + 1).
+        /// The name other players see: control and format characters (bidi controls, zero-width) dropped, '&lt;' and '&gt;'
+        /// dropped (the labels show plain text; this is defence in depth against rich-text tags), at most one combining mark per
+        /// letter, spaces folded, cut to <see cref="MaxNameLength"/>; an empty result becomes "Cook n" (n = the connection's id + 1).
         /// </summary>
         public static string CleanName(string raw, int clientId)
         {
@@ -39,7 +39,7 @@ namespace Worktown.Game.Net.Rules
                 foreach (char c in raw)
                 {
                     if (sb.Length >= MaxNameLength) break;
-                    if (char.IsControl(c) || char.IsSurrogate(c)) continue;
+                    if (char.IsControl(c) || char.IsSurrogate(c) || c == '<' || c == '>' || IsFormat(c)) continue;
                     // At most one combining mark per letter (stacked marks draw over the other rows), none at the start.
                     bool isMark = IsMark(c);
                     if (isMark && mark) continue;
@@ -55,6 +55,18 @@ namespace Worktown.Game.Net.Rules
                 }
             }
             return sb.Length > 0 ? sb.ToString() : "Cook " + (clientId + 1);
+        }
+
+        /// <summary>
+        /// Unicode format characters (bidi controls, zero-width spaces and joiners, the BOM). The bidi and zero-width ranges are
+        /// also named by value, in case the runtime's Unicode tables predate them (the isolates U+2066..2069 came in Unicode 6.3).
+        /// </summary>
+        private static bool IsFormat(char c)
+        {
+            if (c >= 0x200B && c <= 0x200F) return true;
+            if (c >= 0x202A && c <= 0x202E) return true;
+            if (c >= 0x2060 && c <= 0x206F) return true;
+            return char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format;
         }
 
         private static bool IsMark(char c)

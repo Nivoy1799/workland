@@ -12,7 +12,8 @@ namespace Worktown.Game.Net
     /// (server, observers, target, replicate, reconcile) with its parameter types, every synced field with its type, and every
     /// broadcast with its fields. Read by reflection from this assembly, so two builds of the same code give the same lines on any PC
     /// and a changed message changes the hash. Type names are written without assembly versions (they differ between the Editor and
-    /// a player).
+    /// a player). The fields of a struct used as an RPC parameter or a synced type are not expanded (only its type name is listed);
+    /// only broadcasts list their fields.
     /// </summary>
     public static class ProtocolSurface
     {
@@ -60,7 +61,10 @@ namespace Worktown.Game.Net
                 else if (type.IsValueType && typeof(IBroadcast).IsAssignableFrom(type))
                 {
                     var sb = new StringBuilder("broadcast ").Append(Name(type)).Append('{');
-                    foreach (FieldInfo field in type.GetFields(BindingFlags.Instance | BindingFlags.Public))
+                    // Declaration order (MetadataToken): GetFields promises no order, and the wire order is the declaration order.
+                    FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public);
+                    Array.Sort(fields, (a, b) => a.MetadataToken.CompareTo(b.MetadataToken));
+                    foreach (FieldInfo field in fields)
                         sb.Append(Name(field.FieldType)).Append(' ').Append(field.Name).Append(';');
                     lines.Add(sb.Append('}').ToString());
                 }

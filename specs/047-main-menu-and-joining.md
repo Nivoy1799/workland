@@ -110,6 +110,24 @@ material, size and switch back on destroy.
 - A kicked player can rejoin by hand at once (no ban list); the save ("Continue") waits for its own spec.
 - During the first ~0.5 s of a new session in the same process the labels show without their panels (before the new player's
   first scan).
+- Steam friends see the `status` rich-presence key only under "View game info". The friends-list line itself needs
+  `steam_display` plus a rich-presence localization file uploaded for the app id (not possible with 480).
+- Joining a friend's Steam game while hosting leaves the own shop at once; it should ask for confirmation first.
+- Alt-F4 (or a crash) while hosting sends no HostClosed notice: the guests see "Connection lost" and try to rejoin for 30 s.
+
+**047 review fixes.**
+- Names: `JoinRules.CleanName` also drops format characters (bidi controls, zero-width, BOM; the U+200B..200F, 202A..202E and
+  2060..206F ranges by value as well, for older Unicode tables) and `<`, `>`. Rich text is off on the lobby names, the friend
+  buttons and the card text (which shows `ConnectionNotice.Detail` and the typed address). Tests: `<size=400>X`, bidi, zero-width.
+- Held item on leave: `PickupService.PlanReturn` asks the same place veto as `TryPlace` (the kitchen's `canPlace`) for a spot
+  origin; refused, the item drops. `PickupOrigin.GoesBack(allowed, spotTaken, occupied)`: the constant `hasOrigin` parameter is
+  gone (the caller already drops an item without an origin); its test line now checks the veto. New test: a cup filled on the
+  lemonade spot and lidded in the hands is not returned there.
+- `-steam` takes only a SteamID64 (digits, fits a ulong, not 0: `RichPresenceRules.TryParseSteamId`, shared with the connect
+  string); errors name "SteamID64".
+- Nits: `SendRoster`'s dead parameter dropped; 1 s (was 0.3 s) before the closing host stops the server; broadcast fields
+  ordered by `MetadataToken` (the hash is unchanged, declaration order was already used); doc lines for struct parameters in
+  `ProtocolSurface`, the pending entry's start in `JoinAuthenticator`, the stall wording in `SpamGuard`; the build line is set once.
 
 **045 review follow-ups.**
 1. `SpamGuard` is now a sliding window: kick when the TooFast replies of the last 10 s reach 300 (30/s sustained); a ring of 10

@@ -19,9 +19,19 @@ namespace Worktown.Game.Net.Rules
             if (string.IsNullOrWhiteSpace(connect)) return false;
             string[] parts = connect.Split(new[] { ' ', '\t' }, System.StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i + 1 < parts.Length; i++)
-                if (parts[i] == "-steam" && ulong.TryParse(parts[i + 1], out hostSteamId) && hostSteamId != 0) return true;
+                if (parts[i] == "-steam" && TryParseSteamId(parts[i + 1], out hostSteamId)) return true;
             hostSteamId = 0;
             return false;
+        }
+
+        /// <summary>A SteamID64: digits only (no sign, no spaces), fits a ulong, not 0. Also the check of LaunchArgs' <c>-steam</c>.</summary>
+        public static bool TryParseSteamId(string text, out ulong steamId)
+        {
+            steamId = 0;
+            if (string.IsNullOrEmpty(text)) return false;
+            if (!ulong.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out steamId))
+                return false;
+            return steamId != 0;
         }
 
         /// <summary>The status line friends see: "Running a shop (3/16)".</summary>

@@ -80,6 +80,11 @@ namespace Worktown.Game.Net
 
         // ---- Server ----
 
+        /// <summary>
+        /// The <see cref="JoinRules.AnswerSeconds"/> (10 s) pending entry starts here, when FishNet has accepted the client's version
+        /// packet (ServerManager.ParseVersion calls this), not at the transport's connect. A client that stays silent before sending
+        /// that packet is never pending here: FishNet's remote timeout (60 s on the ServerManager) drops it.
+        /// </summary>
         public override void OnRemoteConnection(NetworkConnection connection)
         {
             base.OnRemoteConnection(connection);
@@ -162,7 +167,7 @@ namespace Worktown.Game.Net
         {
             if (args.ConnectionState != RemoteConnectionState.Stopped) return;
             _pending.Remove(connection.ClientId);
-            if (_names.Remove(connection.ClientId)) SendRoster(connection.ClientId);
+            if (_names.Remove(connection.ClientId)) SendRoster();
         }
 
         private void OnServerConnectionState(ServerConnectionStateArgs args)
@@ -174,11 +179,9 @@ namespace Worktown.Game.Net
             }
         }
 
-        private void SendRoster(int leaving = -1)
+        private void SendRoster()
         {
-            var ids = new List<int>(_names.Count);
-            foreach (int id in _names.Keys)
-                if (id != leaving) ids.Add(id);
+            var ids = new List<int>(_names.Keys);
             ids.Sort();
             var names = new string[ids.Count];
             int hostId = -1;

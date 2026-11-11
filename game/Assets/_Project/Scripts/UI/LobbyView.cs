@@ -127,7 +127,8 @@ namespace Worktown.Game.UI
             {
                 var row = new VisualElement();
                 row.AddToClassList("lobby-row");
-                var name = new Label(line.Text);
+                // Player-supplied names: plain text, never rich-text tags (JoinRules.CleanName drops '<' and '>' as well).
+                var name = new Label(line.Text) { enableRichText = false };
                 name.AddToClassList("lobby-name");
                 row.Add(name);
                 if (line.CanKick)

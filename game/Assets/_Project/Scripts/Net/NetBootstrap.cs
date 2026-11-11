@@ -230,7 +230,8 @@ namespace Worktown.Game.Net
         {
             _closing = true;
             Debug.Log("[Net] the host closes the shop");
-            yield return new WaitForSecondsRealtime(0.3f);
+            // 1 s, not less: the HostClosed notice must survive a resend over the Steam relay before the server stops.
+            yield return new WaitForSecondsRealtime(1f);
             if (_networkManager.IsClientStarted) _networkManager.ClientManager.StopConnection();
             if (_networkManager.IsServerStarted) _networkManager.ServerManager.StopConnection(true);
             _closing = false;
