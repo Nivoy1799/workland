@@ -64,7 +64,7 @@ every question has a default, and work continues on other items until you answer
     - **Just burnt still rates well:** for about 2 s past the window, food still rates about 0.95 and still counts as an exact
       order. Default: keep it as a grace margin.
     - **Sauteed apple** with the faster pan: Perfect from 2.5 to 4.9 s, burnt at 6.5 s. It is playable but twitchy. Default:
-      widen the apple window a little in 044's follow-ups unless you say no.
+      leave it until you have played it; say "wider" and it becomes about 2x wider.
     - **Griddle:** the stars use the mean of both sides, so one side Good and the other Perfect can give the best stars.
       Default: keep the mean (simpler); say "per side" if you want the stricter rule.
     - **Onion and tomato** still have a placeholder window, so they are Good from the first second. Default: give them real
