@@ -74,7 +74,7 @@ namespace Worktown.Game.Climb
         /// </summary>
         public static string DeliveryText(int units, long cost) =>
             units > 0
-                ? "Potatoes delivered " + EconomyRules.Money(-Math.Max(0L, cost)) + " (" + units + " on the shelf)"
+                ? "Potatoes delivered " + (cost > 0 ? EconomyRules.Money(-cost) + " " : "") + "(" + units + " on the shelf)"
                 : "No potatoes delivered: the potato slot is full, or the money is short";
 
         /// <summary>

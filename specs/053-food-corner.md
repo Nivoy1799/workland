@@ -313,6 +313,12 @@ follow-ups.
   - corner `05-covers-left`: the griddle and fridge caps;
   - corner `318-continued`: "Potatoes delivered -$96 (2 on the shelf)" while the wallet reads $3,147 after Continue at $3,243;
   - menu `26-30`: the open kitchen, then the title with no Continue.
+- **Review nits (2026-11-11).**
+  - `BuiltScene_ClosedCovers_...` has an independent check: no renderer of the stove's Pan or Pot crosses the cloth's top face (renderer
+    bounds against the cloth bounds, not the builder's rule).
+  - `ClosedCoverRules`: the sign's `0.01f` / `0.02f` are `SignTopPad` / `SignTopGap`; the sign face is one helper
+    (`FrontFace`, `FaceWidth`) used by the scene builder and `SignCentre`.
+  - `FoodCornerRules.DeliveryText` with units > 0 and cost 0 leaves the amount out ("Potatoes delivered (2 on the shelf)", not "-$0"); tested.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
