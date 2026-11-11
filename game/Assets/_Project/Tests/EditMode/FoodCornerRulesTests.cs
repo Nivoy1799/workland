@@ -16,7 +16,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void Scale_IsTheCeilingOfTheDishPriceRatio()
         {
-            Assert.AreEqual(115, FoodCornerRules.Scale(1, 460, 4));
+            Assert.AreEqual(115, FoodCornerRules.Scale(1, 460, 4)); // the 053 scale (the old whole dollars), kept as the rule's example
             Assert.AreEqual(2, FoodCornerRules.Scale(1, 5, 4), "rounded up");
             Assert.AreEqual(0, FoodCornerRules.Scale(0, 460, 4));
             Assert.AreEqual(0, FoodCornerRules.Scale(-3, 460, 4));
@@ -24,14 +24,16 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void TheDishPrice_IsTheSnackCeilingPayoutAtTheDishsBaseQuality()
+        public void TheDishPrice_IsTheMenuBoardsReferencePrice() // spec 037 re-pin: it was the snack ceiling payout ($460 of the old scale)
         {
-            Assert.IsTrue(Economy.TryGetMarket("snack", out MarketDef snack));
-            int quality = Climb.Dish("fries").BaseQualityPermille;
+            Assert.IsTrue(Economy.TryGetMarket("snack", out MarketDef _));
             Assert.AreEqual("fries", Climb.Stage1DishId, "open question 1: fries");
-            Assert.AreEqual(PriceRules.DemandPayout(snack.Ceiling, quality), FoodCornerRules.GameDishPrice(Economy, Climb));
-            Assert.AreEqual(460, FoodCornerRules.GameDishPrice(Economy, Climb), "the current snack market (ceiling $400) at 650 permille");
-            Assert.AreEqual(4, FoodCornerRules.SimDishPrice(Climb));
+            Assert.AreEqual(Worktown.Game.Npc.MenuPrices.Reference(Worktown.Game.Npc.MenuPrices.LineOfDish(FoodCornerRules.GameDish)),
+                FoodCornerRules.GameDishPrice(Economy, Climb));
+            Assert.AreEqual(400, FoodCornerRules.GameDishPrice(Economy, Climb), "the board's fries: $4.00, the climb's own price");
+            Assert.AreEqual(400, FoodCornerRules.SimDishPrice(Climb), "the climb's fries in cents (D39)");
+            Assert.AreEqual(1, FoodCornerRules.Scale(1, FoodCornerRules.GameDishPrice(Economy, Climb), FoodCornerRules.SimDishPrice(Climb)),
+                "the scale is 1: the corner's amounts are the climb's in cents");
         }
 
         [Test]
@@ -41,10 +43,14 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(FoodCornerRules.Scale(Climb.Purchase("rent_restaurant").Cost, game, sim), FoodCornerRules.RentGoal(Economy, Climb));
             Assert.AreEqual(FoodCornerRules.Scale(Climb.StageOf(ClimbStage.FoodCorner).Upkeep, game, sim), FoodCornerRules.PitchFee(Economy, Climb));
             Assert.AreEqual(FoodCornerRules.Scale(Climb.StartingMoney, game, sim), FoodCornerRules.StartingMoney(Economy, Climb));
-            // The default numbers today (052: rent 300, upkeep 5, start 25; x 115).
-            Assert.AreEqual(34500, FoodCornerRules.RentGoal(Economy, Climb));
-            Assert.AreEqual(575, FoodCornerRules.PitchFee(Economy, Climb));
-            Assert.AreEqual(2875, FoodCornerRules.StartingMoney(Economy, Climb));
+            // Spec 037 re-pin (D39): 052's rent $300, upkeep $5 and start $25 in cents, scale 1 (it was x 115 of the old whole dollars:
+            // $34,500, $575 and $2,875; a v1 save's money is converted by the same 100 / 115, SaveMigrations.V1ToV2).
+            Assert.AreEqual(30000, FoodCornerRules.RentGoal(Economy, Climb));
+            Assert.AreEqual(500, FoodCornerRules.PitchFee(Economy, Climb));
+            Assert.AreEqual(2500, FoodCornerRules.StartingMoney(Economy, Climb));
+            Assert.AreEqual(30000, Worktown.Game.Save.SaveMigrations.ToCents(34500), "the old goal is the new goal");
+            Assert.AreEqual(2500, Worktown.Game.Save.SaveMigrations.ToCents(2875));
+            Assert.AreEqual(500, Worktown.Game.Save.SaveMigrations.ToCents(575));
         }
 
         [Test]
@@ -66,14 +72,14 @@ namespace Worktown.Game.Tests
         [Test]
         public void TheGoalLines_ReadAsTheSpecSays()
         {
-            Assert.AreEqual("Save for the rent: $230 / $400", FoodCornerRules.GoalLine(230, 400));
-            Assert.AreEqual("Save for the rent: $230 / $400 (57 %)", FoodCornerRules.GoalProgressLine(230, 400));
+            Assert.AreEqual("Save for the rent: $2.30 / $4.00", FoodCornerRules.GoalLine(230, 400)); // spec 037 re-pin: cents
+            Assert.AreEqual("Save for the rent: $2.30 / $4.00 (57 %)", FoodCornerRules.GoalProgressLine(230, 400));
             Assert.AreEqual(100, FoodCornerRules.GoalPercent(900, 400));
             Assert.AreEqual(0, FoodCornerRules.GoalPercent(-5, 400));
             Assert.AreEqual(string.Empty, UI.HudView.GoalText(ShopStageRules.OpenKitchen, 230, 400, false), "no goal in the open kitchen");
-            Assert.AreEqual("Save for the rent: $230 / $400", UI.HudView.GoalText(ShopStageRules.FoodCorner, 230, 400, false));
+            Assert.AreEqual("Save for the rent: $2.30 / $4.00", UI.HudView.GoalText(ShopStageRules.FoodCorner, 230, 400, false));
             Assert.AreEqual(FoodCornerRules.GoalReachedText, UI.ShiftSummaryView.GoalText(500, 400, true));
-            Assert.AreEqual("Save for the rent: $230 / $400 (57 %)", UI.ShiftSummaryView.GoalText(230, 400, false));
+            Assert.AreEqual("Save for the rent: $2.30 / $4.00 (57 %)", UI.ShiftSummaryView.GoalText(230, 400, false));
         }
 
         [Test]

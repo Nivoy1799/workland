@@ -4,8 +4,9 @@ namespace Worktown.Game.Save
 {
     /// <summary>
     /// Spec 053: what the host's save file holds: the business, not the players (D33). A [Serializable] DTO for JsonUtility (like
-    /// GameSettings): plain public fields, nested parts as classes that always exist. Money in the game's whole-dollar unit (D23; inbox
-    /// question 17 may move it to cents with a "v1 to v2" migration step). Validated, clamped and migrated by <see cref="ShopSaveCodec"/>.
+    /// GameSettings): plain public fields, nested parts as classes that always exist. Spec 037 (D39 revises D23): money in cents, format
+    /// version 2 (a version 1 save held the old scale's whole dollars; SaveMigrations.V1ToV2 converts it when it loads), and the menu
+    /// board's prices (<see cref="menu"/>). Validated, clamped and migrated by <see cref="ShopSaveCodec"/>.
     /// </summary>
     [Serializable]
     public sealed class ShopSave
@@ -13,7 +14,7 @@ namespace Worktown.Game.Save
         public const string Format = "worktown-shop-save";
 
         public string format = Format;
-        public int formatVersion = 1;
+        public int formatVersion = 2;
         /// <summary>Informational: Application.version and the 047 build hash of the build that wrote it.</summary>
         public string gameVersion = string.Empty;
         public string buildHash = string.Empty;
@@ -32,6 +33,8 @@ namespace Worktown.Game.Save
         public StockPart[] stock = new StockPart[0];
         public int hygienePercent = 100;
         public StatsPart stats = new StatsPart();
+        /// <summary>Spec 037: the menu board's prices that differ from their reference (a line id and cents); unknown ids are ignored.</summary>
+        public MenuPart[] menu = new MenuPart[0];
 
         [Serializable]
         public sealed class ClimbPart
@@ -46,7 +49,7 @@ namespace Worktown.Game.Save
         [Serializable]
         public sealed class MoneyPart
         {
-            /// <summary>The one shop wallet (pillar 2).</summary>
+            /// <summary>The one shop wallet (pillar 2), in cents (spec 037).</summary>
             public long balance;
             public long earnedTotal;
             public long spentTotal;
@@ -67,6 +70,15 @@ namespace Worktown.Game.Save
             /// <summary>"shelf:potato", "fridge:tomato", "stock:cups" (ShopSaveCodec.SlotOf); an unknown slot is kept for the next save.</summary>
             public string slot = string.Empty;
             public int count;
+        }
+
+        [Serializable]
+        public sealed class MenuPart
+        {
+            /// <summary>A MenuPrices line id ("fries", "falafel_wrap", "lemonade").</summary>
+            public string id = string.Empty;
+            /// <summary>Its price on the board, in cents.</summary>
+            public long cents;
         }
 
         [Serializable]

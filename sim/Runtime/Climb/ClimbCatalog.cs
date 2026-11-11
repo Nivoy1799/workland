@@ -8,7 +8,9 @@ namespace Worktown.Sim.Climb
 {
     /// <summary>
     /// Spec 052: the data of the climb model. The constructor copies its inputs, multiplies every money value by
-    /// <see cref="MoneyScale"/> (data is written in whole units, D23) and validates (throws <see cref="ArgumentException"/>).
+    /// <see cref="MoneyScale"/> (data is written in whole dollars) and validates (throws <see cref="ArgumentException"/>).
+    /// Spec 037 (D39 revises D23): money is integer cents, so <see cref="CreateDefault"/> uses <see cref="CentsPerDollar"/>; the
+    /// engine rounds to whole units, so the climb is the same at any scale (the climb report reads the same).
     /// All numbers of <see cref="CreateDefault"/> are provisional; tuning changes only those.
     /// </summary>
     public sealed class ClimbCatalog
@@ -16,6 +18,8 @@ namespace Worktown.Sim.Climb
         /// <summary>The <see cref="PurchaseEffect.SavedOn"/> value that saves cleaning actions.</summary>
         public const string CleaningTarget = "cleaning";
         public const int MaxPermille = 5000;
+        /// <summary>Spec 037 (D39): money is integer cents; the default data (whole dollars) is multiplied by this.</summary>
+        public const long CentsPerDollar = 100;
 
         private static readonly Regex IdPattern = new Regex("^[a-z0-9_]{1,32}$", RegexOptions.CultureInvariant);
 
@@ -320,8 +324,8 @@ namespace Worktown.Sim.Climb
 
         // ---------- default data (PROVISIONAL: tuning changes only these numbers; see spec 052 Implementation notes) ----------
 
-        /// <summary>The default climb data of spec 052 (whole dollars times <paramref name="moneyScale"/>).</summary>
-        public static ClimbCatalog CreateDefault(long moneyScale = 1)
+        /// <summary>The default climb data of spec 052 (whole dollars times <paramref name="moneyScale"/>; spec 037: cents by default, D39).</summary>
+        public static ClimbCatalog CreateDefault(long moneyScale = CentsPerDollar)
         {
             var profiles = new[]
             {

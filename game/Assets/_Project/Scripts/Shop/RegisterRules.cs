@@ -5,16 +5,17 @@ namespace Worktown.Game.Shop
 {
     /// <summary>
     /// Spec 032, pure: the register on the counter. Its station options are its slots (like the assembly board's tools): the tray's
-    /// coins and notes (<see cref="CashRules.Tray"/>, options 0-5), "take the change back" (6), "hand over the change" (7) and the card
-    /// terminal (8). Clients send only the option (RequestStation); the server builds the change and decides. What clients see of the
-    /// payment is one short (<see cref="PackPayment"/>: card, or cash and the change due) and the tray's sum as a byte.
+    /// coins and notes (<see cref="CashRules.Tray"/>, options 0-7: spec 037's $0.10 to $20), "take the change back" (8), "hand over the
+    /// change" (9) and the card terminal (10). Clients send only the option (RequestStation); the server builds the change and decides.
+    /// What clients see of the payment is one short (<see cref="PackPayment"/>: card, or cash and the change due in cents) and the
+    /// tray's sum in cents as a ushort (spec 037: a byte held whole dollars).
     /// </summary>
     public static class RegisterRules
     {
-        public const int TakeBackOption = 6;
-        public const int GiveChangeOption = 7;
-        public const int CardOption = 8;
-        public const int SlotCount = 9;
+        public const int TakeBackOption = 8;
+        public const int GiveChangeOption = 9;
+        public const int CardOption = 10;
+        public const int SlotCount = 11;
 
         public const ushort NoPayer = 0;
         public const ushort CardBit = 0x8000;
@@ -44,7 +45,7 @@ namespace Worktown.Game.Shop
         public static bool IsCash(ushort payment) => (payment & CashBit) != 0 && !IsCard(payment);
         public static int ChangeDue(ushort payment) => IsCash(payment) ? payment & MaxChange : 0;
 
-        /// <summary>The register's display: "CARD", "CHANGE $8 / $18" (given / due), or a dash with nobody to pay.</summary>
+        /// <summary>The register's display: "CARD", "CHANGE $0.20 / $0.50" (given / due), or a dash with nobody to pay.</summary>
         public static string DisplayText(ushort payment, int tray)
         {
             if (IsCard(payment)) return "CARD";
@@ -52,7 +53,12 @@ namespace Worktown.Game.Shop
             return "CHANGE " + EconomyRules.Money(tray) + " / " + EconomyRules.Money(ChangeDue(payment));
         }
 
-        /// <summary>The slot's name: "$5", "take back", "hand over", "card".</summary>
+        /// <summary>Spec 037: the short label on a tray compartment: "10c", "20c", "50c", "$1", "$2", "$5", "$10", "$20".</summary>
+        public static string TrayLabel(int cents) =>
+            cents < (int)EconomyRules.CentsPerDollar ? cents + "c"
+            : cents % (int)EconomyRules.CentsPerDollar == 0 ? "$" + cents / (int)EconomyRules.CentsPerDollar : EconomyRules.Money(cents);
+
+        /// <summary>The slot's name: "$5.00", "take back", "hand over", "card".</summary>
         public static string SlotName(int option)
         {
             if (TryParseTray(option, out int value)) return EconomyRules.Money(value);
@@ -80,7 +86,7 @@ namespace Worktown.Game.Shop
             return null;
         }
 
-        /// <summary>The prompt's words: "give $5", "take the change back", "hand over $18", "card payment".</summary>
+        /// <summary>The prompt's words: "give $0.50", "take the change back", "hand over $1.80", "card payment".</summary>
         public static string ActionWords(int option, int tray)
         {
             if (TryParseTray(option, out int value)) return "give " + EconomyRules.Money(value);

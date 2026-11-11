@@ -401,7 +401,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, Tool(paper, 3, open)));
             Assert.AreEqual("Fold it first", InteractionRules.PromptFor(Held.Nothing, Tool(paper, 3, open)));
             Assert.AreEqual(InteractionAction.Pack, InteractionRules.ActionFor(Held.Nothing, Tool(paper, 3, folded)));
-            Assert.AreEqual("Left click · wrap in paper ($35)", InteractionRules.PromptFor(Held.Nothing, Tool(paper, 3, folded)));
+            Assert.AreEqual("Left click · wrap in paper ($0.35)", InteractionRules.PromptFor(Held.Nothing, Tool(paper, 3, folded))); // spec 037 re-pin: money is cents (D39)
             int box = BuildRules.DispenserCount + BuildRules.Box;
             Assert.AreEqual(InteractionAction.Pack, InteractionRules.ActionFor(Held.Nothing,
                 Tool(box, 3, BuildRules.Mode(BuildRules.CloseOpen, BuildRules.PackNone, false))));

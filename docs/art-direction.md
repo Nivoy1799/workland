@@ -71,6 +71,7 @@ Largest dimension unless stated. Tolerance for the automated check: ±15 %.
 | Trash bag | 0.45 | same | largest side (world size: carried with both hands); graybox; added in spec 035 |
 | Wipe cloth | 0.25 | 0.29 | x1.15 (a tool, like the knife); folded flat, 2 cm thick; graybox; added in spec 035 |
 | Seitan spit | 0.78 | same | height above the counter top; a 0.56 x 0.52 m base with the heat panel, the turning cone (0.5 m of stacked discs, 0.17 to 0.27 m across) and the catch tray; graybox; added in spec 036 |
+| Menu board | 0.50 | same | height of the hanging board; 0.70 x 0.50 m, 3 cm deep, above the front counter between the serving counter and the register, its face and four buttons towards the cook; graybox; added in spec 037 |
 | Small house (2 storeys, to the ridge) | 7–8 | same | |
 | Shop (ground floor 4 m + 1 storey) | 7–8 | same | |
 | Tree small / large | 4 / 8 | same | |

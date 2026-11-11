@@ -4,7 +4,12 @@ using Worktown.Sim.Cooking;
 
 namespace Worktown.Sim.Economy
 {
-    /// <summary>Validated, immutable economy data. All numbers in the default catalog are provisional.</summary>
+    /// <summary>
+    /// Validated, immutable economy data. All numbers in the default catalog are provisional. Spec 037 (D39 revises D23): money is
+    /// integer cents. The default catalog's numbers were whole dollars of the old luxury scale (a wrap about $1,525); one old dollar
+    /// is one cent now, so every integer stays (ingredients $0.35 to $1.50, packaging and cups $0.35 to $0.40, a snack market of
+    /// $1.00 to $4.00) and every bulk, portion, floor, SurplusCap and anti-faucet rule holds unchanged (B = $0.31).
+    /// </summary>
     public sealed class EconomyCatalog
     {
         private readonly Dictionary<string, MarketDef> _markets = new Dictionary<string, MarketDef>(StringComparer.Ordinal);
@@ -92,7 +97,7 @@ namespace Worktown.Sim.Economy
         public IReadOnlyList<ByproductRule> Byproducts { get; }
         public IReadOnlyList<GrocerPrice> Grocer { get; }
 
-        /// <summary>B: worst-case lifetime byproduct value per item component (whole dollars).</summary>
+        /// <summary>B: worst-case lifetime byproduct value per item component (cents).</summary>
         public long ByproductMaxPerComponent { get; }
 
         public bool TryGetMarket(string? id, out MarketDef market)

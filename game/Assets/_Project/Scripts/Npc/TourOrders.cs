@@ -9,8 +9,11 @@ namespace Worktown.Game.Npc
     /// <summary>
     /// Spec 032, development builds only: the cook tour's host (<c>-tour-orders</c>) scripts its first guests per market, so the
     /// visual check always takes the same orders: a snack guest wants fries (card); the meal guests want a falafel wrap with extra
-    /// garlic and (spec 033) a lemonade (cash, a $50 note: change), grilled veggies (card) and a seitan wrap without lettuce (cash, a $20 note; its ticket shows
-    /// the struck line; its patience runs out during the tour, so the sheets show the ring turn Terracotta and the guest leave).
+    /// garlic and (spec 033) a lemonade (cash, a $20 note: change), grilled veggies (spec 037: cash with a $10 note, and it does not
+    /// tip; 037 review: it pays the board's price from when it joined, times its dish's stars, so the tour's later raise to $9.50 does
+    /// not reach it; the change is counted in coins) and a seitan wrap without
+    /// lettuce (cash, a $20 note; its ticket shows the struck line; its patience runs out during the tour, so the sheets show the ring
+    /// turn Terracotta and the guest leave). Spec 037: notes in cents ($5, $10, $20; there is no $50 note any more).
     /// Later guests draw as usual. Patience is scaled by <see cref="PatienceScale"/> (the tour is long), the seitan wrap guest's by
     /// <see cref="ShortPatienceScale"/>; the release build never compiles this.
     /// </summary>
@@ -22,17 +25,19 @@ namespace Worktown.Game.Npc
 
         private readonly Dictionary<string, int> _next = new Dictionary<string, int>();
 
-        private static readonly (string Market, byte Dish, string[] Mods, bool Card, int Note, float Patience, string Drink, bool EatIn)[] Script =
+        private static readonly (string Market, byte Dish, string[] Mods, bool Card, int Note, float Patience, string Drink, bool EatIn, bool Tips)[] Script =
         {
-            ("snack", Menu.Fries, new string[0], true, 10, PatienceScale, null, true), // spec 035: eats in (its plate comes back dirty)
-            ("meal", Menu.FalafelWrap, new[] { "extra garlic" }, false, 50, PatienceScale, "lemonade", false), // spec 033: the tour's drink
-            ("meal", Menu.GrilledVeggies, new string[0], true, 10, PatienceScale, null, true),
-            ("meal", Menu.SeitanWrap, new[] { "no lettuce" }, false, 20, ShortPatienceScale, null, false),
+            ("snack", Menu.Fries, new string[0], true, 1000, PatienceScale, null, true, true), // spec 035: eats in (its plate comes back dirty)
+            ("meal", Menu.FalafelWrap, new[] { "extra garlic" }, false, 2000, PatienceScale, "lemonade", false, true), // spec 033: the tour's drink
+            ("meal", Menu.GrilledVeggies, new string[0], false, 1000, PatienceScale, null, true, false), // spec 037: cash, a $10 note, no tip
+            ("meal", Menu.SeitanWrap, new[] { "no lettuce" }, false, 2000, ShortPatienceScale, null, false, true),
         };
 
         /// <summary>Spec 035: the last <see cref="TryNext(string, out MenuDish, out GuestOrder, out float, out string)"/> gave a scripted guest, and whether it eats in.</summary>
         public bool LastScripted { get; private set; }
         public bool LastEatIn { get; private set; }
+        /// <summary>Spec 037: whether the last scripted guest tips (the AC3 guest does not, so it owes exactly the board's price).</summary>
+        public bool LastTips { get; private set; } = true;
 
         public static bool Requested(string[] args) => args != null && Array.IndexOf(args, Arg) >= 0;
 
@@ -49,6 +54,7 @@ namespace Worktown.Game.Npc
             patienceScale = PatienceScale;
             LastScripted = false;
             LastEatIn = false;
+            LastTips = true;
             _next.TryGetValue(market, out int done);
             int seen = 0;
             foreach (var entry in Script)
@@ -66,6 +72,7 @@ namespace Worktown.Game.Npc
                 drink = entry.Drink;
                 LastScripted = true;
                 LastEatIn = entry.EatIn;
+                LastTips = entry.Tips;
                 return true;
             }
             return false;

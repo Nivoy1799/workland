@@ -43,6 +43,6 @@ namespace Worktown.Game.Cooking
 
         public override int GetHashCode() => Serial;
 
-        public override string ToString() => "ServeReward(#" + Serial + ", counter " + Counter + ", " + Stars + " stars, $" + Paid + ", tip $" + Tip + ")";
+        public override string ToString() => "ServeReward(#" + Serial + ", counter " + Counter + ", " + Stars + " stars, " + Worktown.Game.Economy.EconomyRules.Money(Paid) + ", tip " + Worktown.Game.Economy.EconomyRules.Money(Tip) + ")";
     }
 }

@@ -670,6 +670,7 @@ namespace Worktown.Game.Net.Rules
                 case InteractionAction.Press:
                     if (target.Station == StationKind.Griddle) return Click(GriddleRules.PowerText(GriddleRules.IsOn(target.StoveFlags))); // spec 030
                     if (target.Station == StationKind.Spit) return Click(SpitRules.KnobText(target.StoveFlags)); // spec 036
+                    if (target.Station == StationKind.MenuBoard) return Click(Worktown.Game.Shop.MenuBoardRules.ButtonWords(target.Option)); // spec 037
                     return target.Station == StationKind.Fryer
                         ? FryerButtonPrompt(target.Option, target.StoveFlags)
                         : ButtonPrompt(target.Option, target.StoveFlags);

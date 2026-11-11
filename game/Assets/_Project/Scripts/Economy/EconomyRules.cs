@@ -3,9 +3,10 @@ namespace Worktown.Game.Economy
     /// <summary>Spec 009 constants and pure mappings. Values answered by the human on 2026-11-06.</summary>
     public static class EconomyRules
     {
-        /// <summary>Demo starting money in whole dollars (open question 1). Spec 053: the open kitchen's shop wallet gets it once (it was
-        /// per player); a food corner starts with its scaled 052 starting money instead (Climb.FoodCornerRules.StartingMoney).</summary>
-        public const long StartingGrant = 500;
+        /// <summary>Demo starting money (open question 1). Spec 053: the open kitchen's shop wallet gets it once (it was per player); a food
+        /// corner starts with its scaled 052 starting money instead (Climb.FoodCornerRules.StartingMoney). Spec 037 (D39): cents, $200 (the
+        /// spec's start; it was 500 whole dollars of the old scale, which is $5.00 in cents and too little to try every station).</summary>
+        public const long StartingGrant = 20000;
 
         /// <summary>Spec 053 (pillar 2, the money belongs to the group): the one shop account every player shares.</summary>
         public const string ShopAccount = "shop";
@@ -26,7 +27,7 @@ namespace Worktown.Game.Economy
         public const int FullPayPermille = 1000;
 
         /// <summary>
-        /// Spec 022: <paramref name="payout"/> times <paramref name="permille"/> / 1000 in whole dollars, rounded half up;
+        /// Spec 022: <paramref name="payout"/> times <paramref name="permille"/> / 1000 in cents (spec 037), rounded half up;
         /// never below 0. Used for the customer's order factor on a sale (no new money source: it scales a sim sale).
         /// </summary>
         public static long ApplyPermille(long payout, int permille)
@@ -53,10 +54,17 @@ namespace Worktown.Game.Economy
             return "Day " + day + ", " + hour.ToString("00") + ":00";
         }
 
-        /// <summary>"$1,234" style money text (whole dollars, D23).</summary>
-        public static string Money(long dollars)
+        /// <summary>Spec 037 (D39 revises D23): money is integer cents; <see cref="Money"/> shows dollars and cents.</summary>
+        public const long CentsPerDollar = 100;
+
+        /// <summary>"$1,234.50" style money text from cents (spec 037, D39): always two decimals; "-$0.60" below 0.</summary>
+        public static string Money(long cents)
         {
-            return (dollars < 0 ? "-$" : "$") + System.Math.Abs(dollars).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            ulong abs = cents < 0 ? (ulong)(-(cents + 1)) + 1UL : (ulong)cents; // long.MinValue safe
+            ulong dollars = abs / (ulong)CentsPerDollar;
+            ulong rest = abs % (ulong)CentsPerDollar;
+            return (cents < 0 ? "-$" : "$") + dollars.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + "."
+                + rest.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 }

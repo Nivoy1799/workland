@@ -3,7 +3,7 @@ using Worktown.Sim.Cooking;
 
 namespace Worktown.Sim.Economy
 {
-    /// <summary>Pure price and payout rules, whole dollars, integer math only.</summary>
+    /// <summary>Pure price and payout rules, cents (spec 037, D39), integer math only.</summary>
     public static class PriceRules
     {
         /// <summary>Quality (0..1 float from the rater) to permille, truncated. NaN gives 0.</summary>
@@ -53,8 +53,8 @@ namespace Worktown.Sim.Economy
         /// <summary>
         /// Sum of grocer prices of the item's components; null if any component is unpriced. Spec 031b: a squeezed portion of
         /// sauce counts at the least share any squeeze of its amount bucket was charged (<see cref="PortionPercentOf"/>), not at
-        /// the bottle's price. 032 review: rounding can put a "lots" layer made of merged squeezes up to $1 above what they cost
-        /// (three 10 % taps of a $14 bottle cost 3 x $1, a 30 % portion is $4), so each lots portion counts
+        /// the bottle's price. 032 review: rounding can put a "lots" layer made of merged squeezes up to 1 cent above what they cost
+        /// (three 10 % taps of a 14-cent bottle cost 3 x 1 cent, a 30 % portion is 4 cents), so each lots portion counts
         /// <see cref="LotsRoundingMargin"/> less; with any number of merged lots layers the cost is never above what was spent, and
         /// the wholesaler's cap (<see cref="SurplusCap"/>) never pays more than that. Items without a squeeze are unchanged.
         /// </summary>
@@ -108,7 +108,7 @@ namespace Worktown.Sim.Economy
         public static int PortionPercentOf(string? amountBucket) =>
             amountBucket == Assembly.Lots ? PortionPercent(Assembly.LotsFrom) : PortionStepPercent;
 
-        /// <summary>032 review: a lots portion counts this much less than a 30 % portion (merged squeezes round down by up to $1).</summary>
+        /// <summary>032 review: a lots portion counts this much less than a 30 % portion (merged squeezes round down by up to 1 cent).</summary>
         public const long LotsRoundingMargin = 1;
 
         /// <summary>What a portion of a <paramref name="price"/> bottle in <paramref name="amountBucket"/> counts in <see cref="ItemCost"/>.</summary>
@@ -155,7 +155,7 @@ namespace Worktown.Sim.Economy
         {
             if (item.Kind == OperationKind.Fill)
             {
-                // Spec 033: a cup of a drink counts its drink at the least share its bucket was charged, $1 less (top-ups round each
+                // Spec 033: a cup of a drink counts its drink at the least share its bucket was charged, 1 cent less (top-ups round each
                 // pour; the cup's own price, always paid with the first pour, is not counted at all), never above what was spent.
                 item.Buckets.TryGetValue(Drinks.MlParam, out string? level);
                 long discount = 0;

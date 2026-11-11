@@ -61,16 +61,19 @@ namespace Worktown.Game.Tests
                     bool register = station.Kind == StationKind.Register;
                     bool drinks = station.Kind == StationKind.DrinkDispenser; // spec 033: on the front counter too
                     bool terminal = station.Kind == StationKind.Terminal; // spec 034: a screen hanging on the back wall
+                    bool board = station.Kind == StationKind.MenuBoard; // spec 037: a board hanging above the front counter
                     bool cleaning = Worktown.Game.Shop.CleaningRules.IsCleaningStation(station.Kind); // spec 035
                     bool spit = station.Kind == StationKind.Spit; // spec 036: on the front counter too
                     bool onCounter = register || drinks || station.Kind == StationKind.DishReturn || spit;
                     float floor = onCounter ? ArtSizeTable.ServingCounterHeight
-                        : terminal ? TerminalArtRules.CentreHeight - TerminalArtRules.Height * 0.5f : 0f;
+                        : terminal ? TerminalArtRules.CentreHeight - TerminalArtRules.Height * 0.5f
+                        : board ? MenuBoardArtRules.CentreHeight - MenuBoardArtRules.Height * 0.5f : 0f;
                     float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
                         : register ? floor + RegisterArtRules.Height
                         : drinks ? floor + DrinkArtRules.Height
                         : spit ? floor + SpitArtRules.Height
                         : terminal ? floor + TerminalArtRules.Height
+                        : board ? floor + MenuBoardArtRules.Height
                         : cleaning ? floor + CleaningArtRules.SizeOf(station.Kind).y
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");
@@ -79,7 +82,7 @@ namespace Worktown.Game.Tests
                     float colliderTop = station.Kind == StationKind.Fryer ? FryerArt.BodyColliderTop : expected;
                     Assert.AreEqual(colliderTop, body.max.y, HeightTolerance, station.name + " collider top");
                     Assert.AreEqual(floor, body.min.y, 0.001f, station.name + (onCounter ? " stands on the counter top"
-                        : terminal ? " hangs at its height on the wall" : " stands on the floor"));
+                        : terminal ? " hangs at its height on the wall" : board ? " hangs at its height above the counter" : " stands on the floor"));
                     if (station.Kind == StationKind.Counter) counters++;
                     if (station.Kind == StationKind.Stove) stoves++;
                 }

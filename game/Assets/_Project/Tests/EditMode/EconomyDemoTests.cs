@@ -35,9 +35,11 @@ namespace Worktown.Game.Tests
         public void OpenAccount_GrantsStartingMoney_OnlyOnce()
         {
             TownEconomy economy = NewEconomyWithPlayer();
-            Assert.AreEqual(500, economy.BalanceOf(Player));
+            // Spec 037 re-pin: the open kitchen's grant is $200.00 in cents (it was 500 whole dollars of the old scale).
+            Assert.AreEqual(20000, EconomyRules.StartingGrant);
+            Assert.AreEqual(20000, economy.BalanceOf(Player));
             Assert.IsFalse(economy.TryOpenAccount(Player, 500), "a reconnect must not grant twice");
-            Assert.AreEqual(500, economy.BalanceOf(Player));
+            Assert.AreEqual(20000, economy.BalanceOf(Player));
             Assert.AreEqual(-1, economy.BalanceOf("p9"));
         }
 
@@ -48,7 +50,7 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(economy.TryGetGrocerPrice("potato", out long price));
             Assert.AreEqual(EconomyError.None, economy.TryBuyBase(Player, "potato", out long cost));
             Assert.AreEqual(price, cost);
-            Assert.AreEqual(500 - price, economy.BalanceOf(Player));
+            Assert.AreEqual(EconomyRules.StartingGrant - price, economy.BalanceOf(Player));
         }
 
         [Test]
@@ -74,7 +76,7 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(dark.Ok, dark.Error.ToString());
             Assert.AreEqual("snack", golden.MarketId);
             Assert.Greater(golden.Payout, dark.Payout);
-            Assert.AreEqual(500 + golden.Payout, forGolden.BalanceOf(Player));
+            Assert.AreEqual(EconomyRules.StartingGrant + golden.Payout, forGolden.BalanceOf(Player));
         }
 
         [Test]
@@ -88,7 +90,7 @@ namespace Worktown.Game.Tests
 
             SaleResult sale = economy.TrySell(Player, plated);
             Assert.AreEqual(EconomyError.QualityTooLow, sale.Error);
-            Assert.AreEqual(500, economy.BalanceOf(Player));
+            Assert.AreEqual(EconomyRules.StartingGrant, economy.BalanceOf(Player));
         }
 
         // AC3
@@ -142,8 +144,11 @@ namespace Worktown.Game.Tests
             // Spec 053 (pillar 2): every player shares the one shop account (it was "p" + id per player).
             Assert.AreEqual(EconomyRules.ShopAccount, EconomyRules.AccountId(3));
             Assert.AreEqual(EconomyRules.AccountId(1), EconomyRules.AccountId(2));
-            Assert.AreEqual("$1,234", EconomyRules.Money(1234));
-            Assert.AreEqual("-$60", EconomyRules.Money(-60));
+            Assert.AreEqual("$12.34", EconomyRules.Money(1234)); // spec 037 re-pin: money is cents (D39)
+            Assert.AreEqual("$1,234.50", EconomyRules.Money(123450));
+            Assert.AreEqual("$0.05", EconomyRules.Money(5));
+            Assert.AreEqual("-$92,233,720,368,547,758.00", EconomyRules.Money(long.MinValue + 8));
+            Assert.AreEqual("-$0.60", EconomyRules.Money(-60));
         }
     }
 }

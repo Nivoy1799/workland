@@ -337,7 +337,8 @@ namespace Worktown.Sim.Economy
                 {
                     long w = 0;
                     foreach (var x in m.Demand.HourWeights) w += x;
-                    long total = ms.DemandCarry + (long)input.Population * m.Demand.UnitsPerNpcPerDayCenti * m.Demand.HourWeights[hour];
+                    long total = ms.DemandCarry + (long)input.Population * m.Demand.UnitsPerNpcPerDayCenti * m.Demand.HourWeights[hour]
+                        * DemandPermilleOf(input, m.Id) / 1000; // spec 037: the board's prices (1000 = unchanged; rounds down less than one carry step)
                     long baseUnits = total / (100 * w);
                     carry = total % (100 * w);
                     long j = baseUnits * m.Demand.JitterPercent / 100;
@@ -361,6 +362,13 @@ namespace Worktown.Sim.Economy
         }
 
         // ---- helpers ----
+
+        /// <summary>Spec 037: the market's demand permille from the tick input, clamped to 0..<see cref="MenuPricing.MaxDemandPermille"/>.</summary>
+        private static long DemandPermilleOf(TickInput input, string marketId)
+        {
+            if (input.DemandPermille == null || !input.DemandPermille.TryGetValue(marketId, out int permille)) return 1000;
+            return Math.Clamp(permille, 0, MenuPricing.MaxDemandPermille);
+        }
 
         private static void Need(EconomyState s)
         {

@@ -4,11 +4,11 @@ namespace Worktown.Sim.Economy
 {
     /// <summary>
     /// Spec 034, pure: the one supplier (the wholesaler's delivery service). It sells every grocer good in packs at a bulk discount
-    /// and delivers after a delay. Integer math, whole dollars.
+    /// and delivers after a delay. Integer math, cents (spec 037, D39).
     /// - Order cost = grocer price × grocer items × 80 %, rounded up (<see cref="OrderCost"/>).
     /// - Anti-faucet rule: a unit never costs less than the byproduct ceiling B + 1 (a good dearer than that never drops below it with
     ///   the discount; at most its grocer price), so no component bought in bulk can be worth less than the byproducts it may make.
-    ///   With the default catalog (B = 31) only the $35 goods (wrap paper, the paper bag, the cup) are affected: $32 a unit, not $28.
+    ///   With the default catalog (B = 31 cents) only the $0.35 goods (wrap paper, the paper bag, the cup) are affected: $0.32 a unit, not $0.28.
     /// - The wholesaler's cap counts each component at <see cref="BulkUnitPrice"/>, which is never above what one unit cost in any
     ///   order (PriceRules.StockCost, SurplusCap).
     /// </summary>

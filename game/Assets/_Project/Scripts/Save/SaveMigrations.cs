@@ -5,8 +5,8 @@ namespace Worktown.Game.Save
 {
     /// <summary>
     /// Spec 053: the ordered steps that bring an older save up to this build's format: step (n, f) turns a version n save into a version
-    /// n + 1 one. They run in order, each once, up to <see cref="Latest"/>. Empty in v1 (<see cref="None"/>); should inbox question 17
-    /// move money to cents, its spec adds the step "v1 to v2: money x 100". Immutable once built.
+    /// n + 1 one. They run in order, each once, up to <see cref="Latest"/>. Spec 037 (inbox question 17, D39): this build's steps are
+    /// <see cref="Current"/>, one step: <see cref="V1ToV2"/>, money from the old scale's whole dollars to cents. Immutable once built.
     /// </summary>
     public sealed class SaveMigrations
     {
@@ -15,8 +15,45 @@ namespace Worktown.Game.Save
 
         private readonly List<(int From, Func<ShopSave, ShopSave> Step)> _steps = new List<(int, Func<ShopSave, ShopSave>)>();
 
-        /// <summary>This build's steps: none (format version 1).</summary>
+        /// <summary>No steps (format version 1), for tests of the mechanism.</summary>
         public static readonly SaveMigrations None = new SaveMigrations(Array.Empty<(int, Func<ShopSave, ShopSave>)>());
+
+        /// <summary>Spec 037: this build's steps (format version 2).</summary>
+        public static readonly SaveMigrations Current = new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2) });
+
+        /// <summary>
+        /// Spec 037: a version 1 save's money was the old scale's whole dollars, 115 of which made one dollar of spec 052's climb (053: the
+        /// game's dish price $460 over the climb's $4). Spec 037 prices the game in street-food cents (the climb's dollar is 100 cents, the
+        /// food corner's scale is 1), so one old dollar is 100 / 115 cents.
+        /// </summary>
+        public const long OldDollarsPerDollar = 115;
+        public const long CentsPerDollar = 100;
+
+        /// <summary>
+        /// Spec 037, v1 to v2: the balance, the totals and the best service from the old whole dollars to cents (x 100 / 115, rounded
+        /// down), so a saved food corner keeps its progress to the rent goal ($34,500 of old dollars is the new $300.00 goal exactly). A v1
+        /// save has no menu prices: the board starts at its references.
+        /// </summary>
+        public static ShopSave V1ToV2(ShopSave save)
+        {
+            if (save == null) throw new ArgumentNullException(nameof(save));
+            save.money ??= new ShopSave.MoneyPart();
+            save.stats ??= new ShopSave.StatsPart();
+            save.money.balance = ToCents(save.money.balance);
+            save.money.earnedTotal = ToCents(save.money.earnedTotal);
+            save.money.spentTotal = ToCents(save.money.spentTotal);
+            save.stats.bestServiceEarned = ToCents(save.stats.bestServiceEarned);
+            save.menu = new ShopSave.MenuPart[0];
+            return save;
+        }
+
+        /// <summary><paramref name="oldDollars"/> x 100 / 115, rounded towards 0, without overflow (0 or less stays as it is: clamped later).</summary>
+        public static long ToCents(long oldDollars)
+        {
+            if (oldDollars <= 0) return oldDollars;
+            long whole = oldDollars / OldDollarsPerDollar, rest = oldDollars % OldDollarsPerDollar;
+            return whole * CentsPerDollar + rest * CentsPerDollar / OldDollarsPerDollar;
+        }
 
         public SaveMigrations(IEnumerable<(int From, Func<ShopSave, ShopSave> Step)> steps)
         {

@@ -82,7 +82,7 @@ namespace Worktown.ClimbReport
             long horizon = hours * 3600L;
             Parallel.For(0, setups.Count, i => runs[i] = engine.Run(setups[i], horizon));
             IReadOnlyList<TargetCheck> checks = ClimbEvaluation.Evaluate(runs, ClimbTargets.Default);
-            string report = Worktown.Sim.Climb.ClimbReport.Format(runs, checks);
+            string report = Worktown.Sim.Climb.ClimbReport.Format(runs, checks, catalog.MoneyScale);
             if (outFile != null) File.WriteAllText(outFile, report);
             Console.Out.Write(report);
             Console.Error.WriteLine($"climb-report: {runs.Length} runs in {watch.ElapsedMilliseconds} ms");

@@ -101,6 +101,8 @@ namespace Worktown.Game.Npc
         {
             public GuestOrder Order;
             public byte Modifiers;
+            /// <summary>037 review: the menu board's prices (cents) and tip share when the guest joined; its bill and tip use these.</summary>
+            public BoardQuote Quote = new BoardQuote(-1, -1, -1);
         }
 
         private readonly Dictionary<int, Guest> _guests = new Dictionary<int, Guest>();
@@ -108,7 +110,29 @@ namespace Worktown.Game.Npc
         private readonly List<KeyValuePair<int, byte>> _patienceBytes = new List<KeyValuePair<int, byte>>();
         private System.Func<int, bool> _atSlot;
         private RegisterFlow _flowField;
-        private RegisterFlow Flow => _flowField ??= new RegisterFlow(_shift); // 032 review: the register's flow (pure, tested)
+        private RegisterFlow Flow => _flowField ??= NewFlow(); // 032 review: the register's flow (pure, tested)
+
+        /// <summary>
+        /// Spec 037: the register's flow. 037 review: the tip share comes from the guest's join (OnHandedOver passes it); a guest without
+        /// one (gone from the books) tips at the board's share of now.
+        /// </summary>
+        private RegisterFlow NewFlow() =>
+            new RegisterFlow(_shift) { TipShare = pick => _economy != null ? _economy.Menu.TipPermilleOf(pick.Dish) : EconomyRules.FullPayPermille };
+
+        /// <summary>
+        /// Spec 037, server: what guest <paramref name="pick"/>'s order line costs (the base of its bill): the menu board's price of its dish,
+        /// or of the drink it ordered; <paramref name="simPayout"/> without a board.
+        /// </summary>
+        public long BillBase(GuestPick pick, long simPayout)
+        {
+            if (_economy == null) return simPayout;
+            // 037 review: the price the board showed when the guest joined (pressing + before the hand-over changes nothing), and a wrong
+            // dish is billed on what was served (at most its own sim payout).
+            long stored = -1;
+            if (_guests.TryGetValue(pick.CustomerId, out Guest g)) stored = g.Quote.PriceOf(pick.IsDrink);
+            if (stored < 0) stored = _economy.Menu.BillOf(pick.Dish, pick.IsDrink, _tab.DrinkOf(pick.CustomerId), simPayout);
+            return BoardBill.Base(stored, simPayout, pick.Fit.Match);
+        }
         private System.Func<int, IRegisterWallet> _walletFor;
         private readonly Dictionary<int, PickupInteractor> _payees = new Dictionary<int, PickupInteractor>();
         private readonly List<int> _outOfPatience = new List<int>();
@@ -341,8 +365,8 @@ namespace Worktown.Game.Npc
                     return false;
                 OrderFit cupFit = OrderRules.FitDrink(plated, _tab.DrinkOf(thirsty.Id));
                 _patience.Get(thirsty.Id, out float waitedFor, out float patienceFor);
-                pick = new GuestPick(thirsty.Id, thirsty.Dish, cupFit, OrderRules.GuestSharePermille(cupFit.Match), Tenths(waitedFor),
-                    Tenths(patienceFor), true);
+                pick = new GuestPick(thirsty.Id, thirsty.Dish, cupFit, _economy != null ? BoardBill.Permille(cupFit) // 037 review: never above the board
+                    : OrderRules.GuestSharePermille(cupFit.Match), Tenths(waitedFor), Tenths(patienceFor), true);
                 return true;
             }
             if (!_queue.TryPick(e => _tab.WantsFood(e.Id), e => OrderRules.Match(plated, Menu.ById(e.Dish), e.Modifiers),
@@ -353,8 +377,24 @@ namespace Worktown.Game.Npc
             _patience.Get(customer.Id, out float waitedSeconds, out float patienceSeconds);
             int waited = Tenths(waitedSeconds);
             int patience = Tenths(patienceSeconds);
-            pick = new GuestPick(customer.Id, customer.Dish, fit, OrderRules.BillPermille(fit.Match, itemQuality, fit.Quality), waited, patience);
+            // 037 review: on the menu board's prices the share is the match's times the stars' factor (at most 1000: never above the board);
+            // without a board the sim's payout keeps 032's order-over-item quality share.
+            int billPermille = _economy != null ? BoardBill.Permille(fit) : OrderRules.BillPermille(fit.Match, itemQuality, fit.Quality);
+            pick = new GuestPick(customer.Id, customer.Dish, fit, billPermille, waited, patience);
             return true;
+        }
+
+        /// <summary>
+        /// 037 review: a guest's books with the menu board's prices and tip share as it joins (its bill and tip use these, whatever the
+        /// board says later). <paramref name="noTip"/>: the tour's scripted AC3 guest (development builds).
+        /// </summary>
+        private Guest NewGuest(GuestOrder order, byte modifiers, byte dish, string drink, bool noTip)
+        {
+            var guest = new Guest { Order = order, Modifiers = modifiers };
+            if (_economy == null) return guest;
+            BoardQuote quote = _economy.Menu.Quote(dish, drink);
+            guest.Quote = noTip ? new BoardQuote(quote.DishPrice, quote.DrinkPrice, 0) : quote;
+            return guest;
         }
 
         private static int Tenths(float seconds) => seconds <= 0f ? 0 : (int)System.Math.Min(int.MaxValue, System.Math.Round(seconds * 10f));
@@ -422,7 +462,7 @@ namespace Worktown.Game.Npc
             _guests.Remove(pick.CustomerId);
             _patience.Remove(pick.CustomerId); // spec 032: no patience at the register
             _payees[pick.CustomerId] = payee;
-            Flow.HandOver(whole, payee.OwnerId, bill, g != null ? g.Order : null, Stage, Time.time);
+            Flow.HandOver(whole, payee.OwnerId, bill, g != null ? g.Order : null, Stage, Time.time, g != null ? g.Quote.TipPermille : -1);
             _tab.Close(pick.CustomerId); // 033 review: only now is the combined bill the register's
             try
             {
@@ -593,8 +633,10 @@ namespace Worktown.Game.Npc
                 MenuDish dish = DrawDish(wish, out GuestOrder order, out float patienceScale, out string drink);
                 if (dish == null) continue; // cannot happen: only markets with dishes are desired
                 bool eatIn = GuestOrders.DrawEatIn(_eatInOrders); // spec 035: its own RNG, one draw per guest
+                bool tourNoTip = false;
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
                 if (_tourOrders != null && _tourOrders.LastScripted) eatIn = _tourOrders.LastEatIn; // the tour's scripted guests
+                tourNoTip = _tourOrders != null && _tourOrders.LastScripted && !_tourOrders.LastTips; // spec 037 AC3
 #endif
                 if (_lastTutorialScripted) eatIn = _tutorial.Orders.LastEatIn; // spec 038
                 // Spec 053: the draws above stay the same (same seed, same count); stage 1 overrides the results: fries, to go, cash.
@@ -611,7 +653,7 @@ namespace Worktown.Game.Npc
                 _queue.Add(nob.ObjectId, wish, dish.Id, modifiers, drinkByte);
                 _tab.Open(nob.ObjectId, drink);
                 _arrivedAt[nob.ObjectId] = Time.time;
-                _guests[nob.ObjectId] = new Guest { Order = order, Modifiers = modifiers };
+                _guests[nob.ObjectId] = NewGuest(order, modifiers, dish.Id, drink, tourNoTip);
                 if (eatIn) _eatIn.Add(nob.ObjectId);
                 else _eatIn.Remove(nob.ObjectId);
                 // Spec 033: a drink is one more layer of work for the patience. Spec 035: a dirty shop (below 30 %) makes it 20 % shorter.

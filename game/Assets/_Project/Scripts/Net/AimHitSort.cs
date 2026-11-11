@@ -58,9 +58,9 @@ namespace Worktown.Game.Net
 
         /// <summary>
         /// Spec 031, 032, 033: on these stations a hit means a tool only near the ray (the interactor's ToolOnRay), not the slot nearest the
-        /// hit: the assembly board, the register and the drink dispenser.
+        /// hit: the assembly board, the register and the drink dispenser (spec 037: and the menu board's buttons).
         /// </summary>
         public static bool SlotFollowsTheRay(StationKind kind) =>
-            kind == StationKind.Assembly || kind == StationKind.Register || kind == StationKind.DrinkDispenser;
+            kind == StationKind.Assembly || kind == StationKind.Register || kind == StationKind.DrinkDispenser || kind == StationKind.MenuBoard;
     }
 }

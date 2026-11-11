@@ -240,6 +240,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Register: return _customers != null ? _customers.UseRegister(player, option) : CookOutcome.NoPayment;
                 // Spec 034: a row of the ordering terminal (an order option); paid once, the boxes come after the delay.
                 case StationKind.Terminal: return _supply != null ? _supply.Order(player, option) : CookOutcome.UnknownStation;
+                // Spec 037: a button of the menu board (a line, or its price $0.50 down or up); the economy keeps the prices.
+                case StationKind.MenuBoard: return _economy != null ? _economy.UseMenuBoard(option) : CookOutcome.UnknownStation;
                 default: return CookOutcome.UnknownStation;
             }
         }
@@ -1724,16 +1726,20 @@ namespace Worktown.Game.Cooking
                 bool billedBefore = false; // 033 review: a line already on the tab makes this dish a duplicate, not paid there
                 try { billedBefore = _customers.HasBill(pick); }
                 catch (System.Exception e) { Debug.LogException(e); }
+                // Spec 037: the guest pays the menu board's price of what it ordered (the sim's sale still takes the demand and the byproducts).
+                long billBase = soldPayout;
+                try { billBase = _customers.BillBase(pick, soldPayout); }
+                catch (System.Exception e) { Debug.LogException(e); }
                 bool handed = false;
-                try { handed = _customers.OnHandedOver(pick, player, soldPayout); }
+                try { handed = _customers.OnHandedOver(pick, player, billBase); }
                 catch (System.Exception e) { Debug.LogException(e); }
                 bool waiting = true;
                 try { waiting = _customers.HasBill(pick); } // spec 033: in the register's line, or the line is on its tab
                 catch (System.Exception e) { Debug.LogException(e); }
                 if (Worktown.Game.Npc.CustomerService.FallbackPaysFor(handed, billedBefore, waiting))
                 {
-                    long fallback = EconomyRules.ApplyPermille(soldPayout, pick.BillPermille);
-                    try { fallback = _customers.FallbackBill(pick, soldPayout); } // 033 review: the whole order when it was complete
+                    long fallback = Worktown.Game.Npc.GuestTab.LineBill(pick, billBase);
+                    try { fallback = _customers.FallbackBill(pick, billBase); } // 033 review: the whole order when it was complete
                     catch (System.Exception e) { Debug.LogException(e); }
                     _economy.TryPayGuest(player.OwnerId, player.NetworkObject, fallback, out _);
                 }

@@ -72,19 +72,20 @@ namespace Worktown.Game.Tests
         {
             var desk = new RegisterDesk();
             var wallet = new CountingWallet();
-            desk.Open(Cash(1, 352, 30, 400)); // due 382, change 18
-            Assert.AreEqual(18, desk.Head.ChangeDue);
-            foreach (int coin in new[] { 10, 5, 2, 1 })
+            // Spec 037 re-pin (D39): cents and the $0.10 to $20 tray; the old $382 with $18 of change is $38.20 with $1.80.
+            desk.Open(Cash(1, 3520, 300, 4000)); // due 3820, change 180
+            Assert.AreEqual(180, desk.Head.ChangeDue);
+            foreach (int coin in new[] { 100, 50, 20, 10 })
             {
                 Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, Slot(coin), wallet, out RegisterSettlement none));
                 Assert.IsNull(none.Payment, "a coin settles nothing");
             }
-            Assert.AreEqual(18, desk.Head.Tray);
+            Assert.AreEqual(180, desk.Head.Tray);
             Assert.AreEqual(0, wallet.Calls, "nothing is paid while the change is built");
             Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, RegisterRules.GiveChangeOption, wallet, out RegisterSettlement paid));
             Assert.AreEqual(1, wallet.Calls, "paid exactly once");
-            Assert.AreEqual((Owner, 382L), wallet.Paid[0]);
-            Assert.AreEqual(382, paid.Paid);
+            Assert.AreEqual((Owner, 3820L), wallet.Paid[0]);
+            Assert.AreEqual(3820, paid.Paid);
             Assert.IsFalse(paid.WrongChange);
             Assert.IsNull(desk.Head, "the guest left the line");
             Assert.AreEqual(CookOutcome.NoPayment, desk.Use(Owner, RegisterRules.GiveChangeOption, wallet, out _), "a second hand-over pays nothing");
@@ -95,30 +96,30 @@ namespace Worktown.Game.Tests
         public void Cash_TakeBack_EmptiesTheTray_AndTheTrayHasALimit()
         {
             var desk = new RegisterDesk();
-            desk.Open(Cash(1, 10, 0, 20));
+            desk.Open(Cash(1, 100, 0, 200));
             Assert.AreEqual(CookOutcome.TrayEmpty, desk.Use(Owner, RegisterRules.TakeBackOption, null, out _));
-            desk.Use(Owner, Slot(5), null, out _);
-            desk.Use(Owner, Slot(2), null, out _);
-            Assert.AreEqual(7, desk.Head.Tray);
+            desk.Use(Owner, Slot(50), null, out _);
+            desk.Use(Owner, Slot(20), null, out _);
+            Assert.AreEqual(70, desk.Head.Tray);
             Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, RegisterRules.TakeBackOption, null, out _));
             Assert.AreEqual(0, desk.Head.Tray);
-            for (int i = 0; i < 5; i++) Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, Slot(50), null, out _));
-            Assert.AreEqual(CookOutcome.TrayFull, desk.Use(Owner, Slot(10), null, out _), "250 + 10 is more than the byte holds");
-            Assert.AreEqual(250, desk.Head.Tray, "a refused click adds nothing");
+            for (int i = 0; i < 5; i++) Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, Slot(2000), null, out _));
+            Assert.AreEqual(CookOutcome.TrayFull, desk.Use(Owner, Slot(10), null, out _), "$100 + $0.10 is more than the tray holds (CashRules.MaxTray)");
+            Assert.AreEqual(CashRules.MaxTray, desk.Head.Tray, "a refused click adds nothing");
             Assert.AreEqual(CookOutcome.InvalidOption, desk.Use(Owner, RegisterRules.SlotCount, null, out _));
         }
 
         [Test]
         public void WrongChange_CostsTheDifference_EitherWay_AndAStarOfTheReview()
         {
-            foreach (int[] coins in new[] { new[] { 10, 5, 2, 1, 5 }, new[] { 10, 2, 1 } })
+            foreach (int[] coins in new[] { new[] { 100, 50, 20, 10, 50 }, new[] { 100, 20, 10 } })
             {
                 var desk = new RegisterDesk();
                 var wallet = new CountingWallet();
-                desk.Open(Cash(1, 352, 30, 400)); // change 18
+                desk.Open(Cash(1, 3520, 300, 4000)); // change 180
                 foreach (int coin in coins) desk.Use(Owner, Slot(coin), wallet, out _);
                 Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, RegisterRules.GiveChangeOption, wallet, out RegisterSettlement s));
-                Assert.AreEqual(382 - 5, s.Paid, string.Join(",", coins) + ": five off either way costs five");
+                Assert.AreEqual(3820 - 50, s.Paid, string.Join(",", coins) + ": fifty cents off either way costs fifty cents");
                 Assert.IsTrue(s.WrongChange);
                 GuestReview right = ReviewRules.Review(5, 100, 1200, 0, false);
                 GuestReview wrong = ReviewRules.Review(s.Payment.OrderStars, s.Payment.WaitedTenths, s.Payment.PatienceTenths, s.Payment.Misses,
@@ -133,16 +134,16 @@ namespace Worktown.Game.Tests
         {
             var desk = new RegisterDesk();
             var wallet = new CountingWallet();
-            desk.Open(Card(1, 600, 90));
-            Assert.AreEqual(CookOutcome.PaysByCard, desk.Use(Owner, Slot(5), wallet, out _));
+            desk.Open(Card(1, 6000, 900));
+            Assert.AreEqual(CookOutcome.PaysByCard, desk.Use(Owner, Slot(500), wallet, out _));
             Assert.AreEqual(CookOutcome.PaysByCard, desk.Use(Owner, RegisterRules.GiveChangeOption, wallet, out _));
             Assert.AreEqual(0, wallet.Calls);
             Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, RegisterRules.CardOption, wallet, out RegisterSettlement s));
-            Assert.AreEqual(690, s.Paid);
+            Assert.AreEqual(6900, s.Paid);
             Assert.AreEqual(1, wallet.Calls);
             Assert.IsFalse(s.WrongChange);
 
-            desk.Open(Cash(2, 10, 0, 20));
+            desk.Open(Cash(2, 100, 0, 200));
             Assert.AreEqual(CookOutcome.PaysCash, desk.Use(Owner, RegisterRules.CardOption, wallet, out _));
             Assert.AreEqual(1, wallet.Calls);
         }
@@ -152,18 +153,18 @@ namespace Worktown.Game.Tests
         {
             var desk = new RegisterDesk();
             var refusing = new CountingWallet { Refuse = CookOutcome.SimRefused };
-            desk.Open(Cash(1, 352, 30, 400));
-            desk.Use(Owner, Slot(10), refusing, out _);
-            Assert.AreEqual(10, desk.Head.Tray);
+            desk.Open(Cash(1, 3520, 300, 4000));
+            desk.Use(Owner, Slot(100), refusing, out _);
+            Assert.AreEqual(100, desk.Head.Tray);
             Assert.AreEqual(CookOutcome.SimRefused, desk.Use(Owner, RegisterRules.GiveChangeOption, refusing, out RegisterSettlement none));
             Assert.IsNull(none.Payment);
             Assert.AreEqual(0, refusing.Paid.Count);
             Assert.IsNotNull(desk.Head, "still waiting");
-            Assert.AreEqual(10, desk.Head.Tray, "the tray is kept");
+            Assert.AreEqual(100, desk.Head.Tray, "the tray is kept");
             var wallet = new CountingWallet();
             Assert.AreEqual(CookOutcome.Ok, desk.Use(Owner, RegisterRules.GiveChangeOption, wallet, out _), "a later try goes through");
             Assert.AreEqual(1, wallet.Calls);
-            Assert.AreEqual(CookOutcome.NoPayment, new RegisterDesk().Use(Owner, Slot(1), wallet, out _));
+            Assert.AreEqual(CookOutcome.NoPayment, new RegisterDesk().Use(Owner, Slot(10), wallet, out _));
         }
 
         /// <summary>032 review (orchestrator): any cook works the head payment (co-op); the money goes to the payee who served.</summary>
@@ -172,13 +173,13 @@ namespace Worktown.Game.Tests
         {
             var desk = new RegisterDesk();
             var wallet = new CountingWallet();
-            desk.Open(Cash(1, 352, 30, 400)); // served by Owner (A)
+            desk.Open(Cash(1, 3520, 300, 4000)); // served by Owner (A)
             int b = Owner + 1;
-            foreach (int coin in new[] { 10, 5, 2, 1 }) Assert.AreEqual(CookOutcome.Ok, desk.Use(b, Slot(coin), wallet, out _));
+            foreach (int coin in new[] { 100, 50, 20, 10 }) Assert.AreEqual(CookOutcome.Ok, desk.Use(b, Slot(coin), wallet, out _));
             Assert.AreEqual(CookOutcome.Ok, desk.Use(b, RegisterRules.GiveChangeOption, wallet, out RegisterSettlement s));
-            Assert.AreEqual((Owner, 382L), wallet.Paid.Single(), "paid once, to A");
-            Assert.AreEqual(30, s.TipPaid);
-            desk.Open(Card(2, 100, 10));
+            Assert.AreEqual((Owner, 3820L), wallet.Paid.Single(), "paid once, to A");
+            Assert.AreEqual(300, s.TipPaid);
+            desk.Open(Card(2, 1000, 100));
             Assert.AreEqual(CookOutcome.Ok, desk.Use(b, RegisterRules.CardOption, wallet, out _), "B takes A's card payment too");
         }
 
@@ -187,14 +188,14 @@ namespace Worktown.Game.Tests
         {
             var desk = new RegisterDesk();
             var wallet = new CountingWallet();
-            desk.Open(Cash(1, 352, 30, 400));
-            desk.Open(Card(2, 100, 0));
-            desk.Open(Card(2, 100, 0)); // the same guest twice is one payment
+            desk.Open(Cash(1, 3520, 300, 4000));
+            desk.Open(Card(2, 1000, 0));
+            desk.Open(Card(2, 1000, 0)); // the same guest twice is one payment
             Assert.AreEqual(2, desk.Line.Count);
-            desk.Use(Owner, Slot(50), wallet, out _); // a wrong tray does not count when the register settles by itself
+            desk.Use(Owner, Slot(500), wallet, out _); // a wrong tray does not count when the register settles by itself
             Assert.IsTrue(desk.SettleAutomatically(1, wallet, out RegisterSettlement s));
             Assert.IsTrue(s.Automatic);
-            Assert.AreEqual(352, s.Paid, "032 review: the bill only, no tip");
+            Assert.AreEqual(3520, s.Paid, "032 review: the bill only, no tip");
             Assert.AreEqual(0, s.TipPaid);
             Assert.IsFalse(s.WrongChange);
             Assert.IsFalse(desk.SettleAutomatically(1, wallet, out _), "once");
@@ -208,24 +209,26 @@ namespace Worktown.Game.Tests
         {
             ushort none = RegisterRules.PackPayment(false, false, 0);
             ushort card = RegisterRules.PackPayment(true, true, 0);
-            ushort cash = RegisterRules.PackPayment(true, false, 18);
+            ushort cash = RegisterRules.PackPayment(true, false, 180);
             Assert.IsFalse(RegisterRules.HasPayer(none));
             Assert.IsTrue(RegisterRules.IsCard(card));
             Assert.IsTrue(RegisterRules.IsCash(cash));
-            Assert.AreEqual(18, RegisterRules.ChangeDue(cash));
-            Assert.AreEqual("CHANGE $8 / $18", RegisterRules.DisplayText(cash, 8));
+            Assert.AreEqual(180, RegisterRules.ChangeDue(cash));
+            Assert.AreEqual("CHANGE $0.80 / $1.80", RegisterRules.DisplayText(cash, 80));
+            Assert.AreEqual(1999, RegisterRules.ChangeDue(RegisterRules.PackPayment(true, false, 1999)), "spec 037: change below $20 fits the 14 bits");
             Assert.AreEqual("CARD", RegisterRules.DisplayText(card, 0));
-            Assert.AreEqual(InteractionAction.Pay, InteractionRules.ActionFor(Held.Nothing, AimTarget.RegisterSlot(Slot(5), cash, 0)));
-            Assert.AreEqual("Left click · give $5", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(5), cash, 0)));
-            Assert.AreEqual(InteractionAction.Pay, InteractionRules.ActionFor(Held.Food("potato", false), AimTarget.RegisterSlot(Slot(5), cash, 0)),
+            Assert.AreEqual(InteractionAction.Pay, InteractionRules.ActionFor(Held.Nothing, AimTarget.RegisterSlot(Slot(500), cash, 0)));
+            Assert.AreEqual("Left click · give $5.00", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(500), cash, 0)));
+            Assert.AreEqual("Left click · give $0.10", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(10), cash, 0)));
+            Assert.AreEqual(InteractionAction.Pay, InteractionRules.ActionFor(Held.Food("potato", false), AimTarget.RegisterSlot(Slot(500), cash, 0)),
                 "any hands");
-            Assert.AreEqual("Left click · hand over $18", InteractionRules.PromptFor(Held.Nothing,
-                AimTarget.RegisterSlot(RegisterRules.GiveChangeOption, cash, 18)));
-            Assert.AreEqual("They pay by card", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(5), card, 0)));
+            Assert.AreEqual("Left click · hand over $1.80", InteractionRules.PromptFor(Held.Nothing,
+                AimTarget.RegisterSlot(RegisterRules.GiveChangeOption, cash, 180)));
+            Assert.AreEqual("They pay by card", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(500), card, 0)));
             Assert.AreEqual("Left click · card payment", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(RegisterRules.CardOption, card, 0)));
             Assert.AreEqual("They pay cash", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(RegisterRules.CardOption, cash, 0)));
-            Assert.AreEqual("Nobody is paying", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(1), none, 0)));
-            Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, AimTarget.RegisterSlot(Slot(1), none, 0).TooFar()));
+            Assert.AreEqual("Nobody is paying", InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(Slot(10), none, 0)));
+            Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, AimTarget.RegisterSlot(Slot(10), none, 0).TooFar()));
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, AimTarget.RegisterSlot(-1, cash, 0)), "the body");
             Assert.IsNull(InteractionRules.PromptFor(Held.Nothing, AimTarget.RegisterSlot(-1, cash, 0)), "no prompt on the register's body");
         }
@@ -278,8 +281,8 @@ namespace Worktown.Game.Tests
         private static GuestPick Pick(int guest) =>
             new GuestPick(guest, Menu.FalafelWrap, new OrderFit(OrderMatch.Exact, 0, 1f, 5), 1000, 100, 1200);
 
-        private static GuestOrder CashOrder => new GuestOrder(new OrderModifier[0], 60, false, 50);
-        private static GuestOrder CardOrder => new GuestOrder(new OrderModifier[0], 60, true, 10);
+        private static GuestOrder CashOrder => new GuestOrder(new OrderModifier[0], 60, false, 2000); // spec 037: a $20 note
+        private static GuestOrder CardOrder => new GuestOrder(new OrderModifier[0], 60, true, 1000);
 
         private static Shift OpenShift()
         {
@@ -370,7 +373,7 @@ namespace Worktown.Game.Tests
             var wallet = new CountingWallet();
             flow.HandOver(Pick(1), Owner, 400, CashOrder, stage, 0f);
             Assert.IsFalse(flow.Tick(10f, _ => wallet, stage));
-            flow.Use(Owner, Slot(5), wallet, stage, 20f); // touched at 20 s
+            flow.Use(Owner, Slot(500), wallet, stage, 20f); // touched at 20 s
             Assert.IsFalse(flow.Tick(45f, _ => wallet, stage), "25 s since the last touch");
             Assert.IsTrue(flow.Tick(50.5f, _ => wallet, stage), "30 s untouched");
             Assert.AreEqual(400, wallet.Paid.Single().Amount, "the bill, the tray ignored, no tip");
@@ -406,12 +409,12 @@ namespace Worktown.Game.Tests
             var stage = new RecordingStage();
             var wallet = new CountingWallet();
             RegisterPayment p = flow.HandOver(Pick(1), Owner, 1000, CashOrder, stage, 0f);
-            Assert.Greater(p.Tip, 5);
-            foreach (int coin in CashRules.Coins(p.ChangeDue + 5)) flow.Use(Owner, Slot(coin), wallet, stage, 1f); // five too many
+            Assert.Greater(p.Tip, 50); // spec 037 re-pin: the smallest coin is $0.10, so fifty cents too many (it was five dollars)
+            foreach (int coin in CashRules.Coins(p.ChangeDue + 50)) flow.Use(Owner, Slot(coin), wallet, stage, 1f); // fifty cents too many
             flow.Use(Owner, RegisterRules.GiveChangeOption, wallet, stage, 2f);
-            Assert.AreEqual(p.Due - 5, wallet.Paid.Single().Amount);
-            Assert.AreEqual(p.Tip - 5, shift.Live.Tips, "the wrong change came out of the tip");
-            Assert.AreEqual(p.Due - 5, shift.Live.Earned);
+            Assert.AreEqual(p.Due - 50, wallet.Paid.Single().Amount);
+            Assert.AreEqual(p.Tip - 50, shift.Live.Tips, "the wrong change came out of the tip");
+            Assert.AreEqual(p.Due - 50, shift.Live.Earned);
         }
 
         // ---- patience ----
@@ -621,7 +624,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(4, CustomerRules.LayersOf(Menu.ById(Menu.FalafelWrap), 0));
             Assert.AreEqual(3, CustomerRules.LayersOf(Menu.ById(Menu.FalafelWrap), Mods(Menu.FalafelWrap, "no lettuce")));
             Assert.AreEqual(3, CustomerRules.LayersOf(Menu.ById(Menu.Fries), 0), "potato, cut, fried");
-            Assert.AreEqual("Thanks! Here's $400.", CustomerRules.PayText(false, 400));
+            Assert.AreEqual("Thanks! Here's $4.00.", CustomerRules.PayText(false, 400));
             Assert.AreEqual(ArtKeyOf(Menu.FalafelWrap), Worktown.Game.Art.ArtKey.FoodWrapPaper);
         }
 
@@ -677,7 +680,9 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(typeof(byte), SyncArgument(typeof(Customer).GetField("Patience", Instance)), "the patience ring: one byte");
             CollectionAssert.AreEquivalent(new[] { "Payment", "Tray" }, Synced(typeof(Register)));
             Assert.AreEqual(typeof(ushort), SyncArgument(typeof(Register).GetField("Payment", Instance)));
-            Assert.AreEqual(typeof(byte), SyncArgument(typeof(Register).GetField("Tray", Instance)));
+            // Spec 037 re-pin: the tray is cents now (up to CashRules.MaxTray, $100), so a ushort (a byte held whole dollars).
+            Assert.AreEqual(typeof(ushort), SyncArgument(typeof(Register).GetField("Tray", Instance)));
+            Assert.LessOrEqual(Worktown.Sim.Economy.CashRules.MaxTray, ushort.MaxValue);
             Assert.Contains("LiveReport", Synced(typeof(TicketRailView)));
             Assert.Contains("LastReport", Synced(typeof(TicketRailView)));
             Assert.AreEqual(15, Synced(typeof(TicketRailView)).Length, "022's thirteen plus the two reports");

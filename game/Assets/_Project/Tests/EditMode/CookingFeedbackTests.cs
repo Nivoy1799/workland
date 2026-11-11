@@ -157,8 +157,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(1f, ServeRewardRules.Alpha(0.5f));
             Assert.AreEqual(0f, ServeRewardRules.Alpha(ServeRewardRules.Seconds));
             Assert.Less(ServeRewardRules.Height(0.5f), ServeRewardRules.Height(1.5f));
-            Assert.AreEqual("+$64 · tip $4", ServeRewardRules.MoneyText(ServeReward.Next(default, 0, 5, 64, 4)));
-            Assert.AreEqual("+$16", ServeRewardRules.MoneyText(ServeReward.Next(default, 0, 1, 16, 0)));
+            Assert.AreEqual("+$0.64 · tip $0.04", ServeRewardRules.MoneyText(ServeReward.Next(default, 0, 5, 64, 4))); // spec 037 re-pin: money is cents (D39)
+            Assert.AreEqual("+$0.16", ServeRewardRules.MoneyText(ServeReward.Next(default, 0, 1, 16, 0)));
             Assert.AreEqual(Palette.Mustard, ServeRewardRules.MoneyColor);
             var v = new List<Vector3>();
             var c = new List<Color>();

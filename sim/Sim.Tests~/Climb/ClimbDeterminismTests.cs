@@ -25,6 +25,29 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(ra, rb);
         }
 
+        [Theory] // spec 037 (D39): money in cents gives the same climb as whole dollars: every stage at the same second, every
+        [InlineData(1, "novice", "balanced+match", 3)] // service's money exactly x 100, the same report text
+        [InlineData(4, "average", "builder+plus1", 1)]
+        [InlineData(16, "expert", "rush+undercut", 2)]
+        [InlineData(4, "expert", "balanced+minus1", 5)]
+        public void CentsGiveTheSameClimbAsWholeDollars(int players, string profile, string strategy, int seed)
+        {
+            var setup = new CrewSetup(players, profile, ClimbStrategy.Parse(strategy), (ulong)seed);
+            ClimbRun dollars = new ClimbEngine(ClimbCatalog.CreateDefault(1)).Run(setup, 40 * 3600);
+            ClimbRun cents = Engine.Run(setup, 40 * 3600);
+            Assert.Equal(dollars.Services.Count, cents.Services.Count);
+            for (ClimbStage st = ClimbStage.FoodCorner; st <= ClimbStage.BeyondKitchen; st++)
+                Assert.Equal(dollars.EnteredSeconds(st), cents.EnteredSeconds(st));
+            for (int i = 0; i < cents.Services.Count; i++)
+            {
+                Assert.Equal(dollars.Services[i].Net * 100, cents.Services[i].Net);
+                Assert.Equal(dollars.Services[i].BalanceAfter * 100, cents.Services[i].BalanceAfter);
+            }
+            string d = ClimbReport.Format(new[] { dollars }, ClimbEvaluation.Evaluate(new[] { dollars }, ClimbTargets.Default), 1);
+            string c = ClimbReport.Format(new[] { cents }, ClimbEvaluation.Evaluate(new[] { cents }, ClimbTargets.Default), 100);
+            Assert.Equal(d, c);
+        }
+
         [Fact]
         public void DifferentSeedsGiveDifferentDigests() // AC2
         {
