@@ -73,13 +73,13 @@ namespace Worktown.Game.Social
             Mouse mouse = Mouse.current;
             Gamepad gamepad = Gamepad.current;
 
-            if (UpdateWheel(keyboard, mouse, gamepad)) return;
+            if (UpdateWheel(mouse, gamepad)) return;
             UpdateQuickChat(keyboard, gamepad);
             UpdatePing(mouse, gamepad);
         }
 
         /// <summary>True while the wheel is open (it takes all input).</summary>
-        private bool UpdateWheel(Keyboard keyboard, Mouse mouse, Gamepad gamepad)
+        private bool UpdateWheel(Mouse mouse, Gamepad gamepad)
         {
             bool held = GameInput.Held(ControlAction.EmoteWheel); // spec 048: the bound key and button (G, LB)
             if (held && !_wheelOpen)

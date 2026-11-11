@@ -4,10 +4,13 @@
 # pick up the nearest free item every 5-15 s, carry it 10-30 s and drop it (BotBrain). The host and every bot write one
 # JSON line per second (LoadTestRunner); this script cuts out the hold phase and writes the summary.
 #
-#   bash tools/bots/run-loadtest.sh [--bots 16] [--ramp 120] [--hold 300] [--out .verify/loadtest]
+#   bash tools/bots/run-loadtest.sh [--bots 16] [--ramp 120] [--hold 300] [--out .verify/loadtest] [--res 1280x720] [--host-arg A]...
 #
 #   --bots  N bots, started evenly over --ramp seconds, then held for --hold seconds.
-#   --out   per-run folder: host.log/host.jsonl, bot<n>.log/bot<n>.jsonl, summary.json (also copied to .verify/loadtest.json).
+#   --out   per-run folder: host.log/host.jsonl, bot<n>.log/bot<n>.jsonl, summary.json (also copied to .verify/loadtest.json);
+#           spec 049: host-crash.log and bot<n>-crash.log (the crash logs of a run stay in its folder).
+#   --res   the host window's size (spec 049's perf check uses 1920x1080).
+#   --host-arg  one more argument for the host; repeat it (spec 049: --host-arg -perf-tour --host-arg path).
 #
 # Needs the development builds (Unity -batchmode -quit -projectPath game -executeMethod
 # Worktown.Game.Editor.Build.WorktownBuild.BuildAll). Exit code 0 when the host and every bot ran to the end.
@@ -20,24 +23,33 @@ BOTS=16
 RAMP=120
 HOLD=300
 OUT=".verify/loadtest"
+RES="1280x720"
+HOST_EXTRA=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --bots) BOTS="${2:?--bots needs a number}"; shift 2 ;;
     --ramp) RAMP="${2:?--ramp needs seconds}"; shift 2 ;;
     --hold) HOLD="${2:?--hold needs seconds}"; shift 2 ;;
     --out) OUT="${2:?--out needs a directory}"; shift 2 ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    --res) RES="${2:?--res needs WIDTHxHEIGHT}"; shift 2 ;;
+    --host-arg) HOST_EXTRA+=("${2?--host-arg needs a value}"); shift 2 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 case "$BOTS$RAMP$HOLD" in *[!0-9]*) echo "--bots, --ramp and --hold take whole numbers" >&2; exit 2 ;; esac
 if [ "$BOTS" -lt 1 ]; then echo "--bots must be at least 1" >&2; exit 2; fi
+case "$RES" in [1-9]*x[1-9]*) ;; *) echo "--res takes WIDTHxHEIGHT, e.g. 1920x1080" >&2; exit 2 ;; esac
+RES_W="${RES%x*}"
+RES_H="${RES#*x}"
+case "$RES_W$RES_H" in *[!0-9]*) echo "--res takes WIDTHxHEIGHT, e.g. 1920x1080" >&2; exit 2 ;; esac
 
 GAME="$ROOT/game/Builds/Windows/Worktown.exe"
 if [ ! -f "$GAME" ]; then echo "no client build at $GAME (run WorktownBuild.BuildAll)" >&2; exit 2; fi
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
-rm -f "${OUT:?}"/host.log "${OUT:?}"/host.jsonl "${OUT:?}"/bot*.log "${OUT:?}"/bot*.jsonl "${OUT:?}"/summary.json
+rm -f "${OUT:?}"/host.log "${OUT:?}"/host.jsonl "${OUT:?}"/bot*.log "${OUT:?}"/bot*.jsonl "${OUT:?}"/summary.json \
+  "${OUT:?}"/host-crash.log "${OUT:?}"/bot*-crash.log
 win() { cygpath -w "$1"; }
 
 PIDS=()
@@ -63,8 +75,8 @@ trap 'stop_all; exit 130' INT TERM
 
 echo "==> host"
 # Spec 047: a game has 16 places with the host (D36); the load test opens one per bot plus the host (-max-players, up to 64).
-"$GAME" -host -max-players $(( BOTS + 1 )) -metrics "$(win "$OUT/host.jsonl")" -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew \
-  -force-d3d11 -logFile "$(win "$OUT/host.log")" >/dev/null 2>&1 &
+"$GAME" -host -max-players $(( BOTS + 1 )) -metrics "$(win "$OUT/host.jsonl")" -screen-fullscreen 0 -screen-width "$RES_W" -screen-height "$RES_H" \
+  -skip-whatsnew -force-d3d11 -crash-log "$(win "$OUT/host-crash.log")" "${HOST_EXTRA[@]}" -logFile "$(win "$OUT/host.log")" >/dev/null 2>&1 &
 PIDS+=($!)
 started=0
 for _ in $(seq 1 90); do
@@ -78,7 +90,7 @@ echo "==> ramp: $BOTS bots over $RAMP s"
 RAMP_START=$(date +%s)
 for n in $(seq 1 "$BOTS"); do
   "$GAME" -batchmode -nographics -connect 127.0.0.1 -bot -seed "$n" -metrics "$(win "$OUT/bot$n.jsonl")" -skip-whatsnew \
-    -logFile "$(win "$OUT/bot$n.log")" >/dev/null 2>&1 &
+    -crash-log "$(win "$OUT/bot$n-crash.log")" -logFile "$(win "$OUT/bot$n.log")" >/dev/null 2>&1 &
   PIDS+=($!)
   if [ "$n" -lt "$BOTS" ]; then sleep $(( RAMP / BOTS )); fi
 done

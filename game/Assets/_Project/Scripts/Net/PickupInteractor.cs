@@ -340,7 +340,7 @@ namespace Worktown.Game.Net
                 bool leftPressed = mouse != null && locked && _lockedLastFrame && mouse.leftButton.wasPressedThisFrame;
                 // 031b: holding E (or the right trigger) at the assembly board squeezes its nearest dispenser. 031b review: only after
                 // a 0.2 s hold (SqueezeHoldGate); a tap keeps its normal E meaning and is queued when it is let go.
-                bool squeezing = UpdateThirdPersonSqueeze(keyboard, gamepad, leftDown, leftPressed, out bool tapped);
+                bool squeezing = UpdateThirdPersonSqueeze(gamepad, leftDown, leftPressed, out bool tapped);
                 bool act = GameInput.Pressed(ControlAction.Use) || leftPressed || _scriptedLeft
                     || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame);
                 // Spec 020 AC7: E acts in third person only. Spec 027b review: through the click buffer as well.
@@ -1679,7 +1679,7 @@ namespace Worktown.Game.Net
         /// now), so E still picks up and drops at the board. Returns true while the gate owns the input (no E action from it).
         /// The board's nearest dispenser and its build spot are cached per target (no slot scan per frame).
         /// </summary>
-        private bool UpdateThirdPersonSqueeze(Keyboard keyboard, Gamepad gamepad, bool leftDown, bool leftPressed, out bool tapped)
+        private bool UpdateThirdPersonSqueeze(Gamepad gamepad, bool leftDown, bool leftPressed, out bool tapped)
         {
             tapped = false;
             Station board = Target is Station s && (s.Kind == StationKind.Assembly || s.Kind == StationKind.DrinkDispenser

@@ -36,12 +36,12 @@ namespace Worktown.Game.Tests
         [Test]
         public void Prompt_ForEveryStation()
         {
-            Assert.AreEqual("Counter: E sell", StationRules.Prompt(StationKind.Counter, "Counter"));
-            Assert.AreEqual("Potato crate: E take one", StationRules.Prompt(StationKind.Crate, "Potato crate"));
-            Assert.AreEqual("Plates: E take a plate", StationRules.Prompt(StationKind.PlateShelf, "Plates"));
-            Assert.AreEqual("Fridge: pick an item in first person (V)", StationRules.Prompt(StationKind.Fridge, "Fridge")); // spec 028b
+            Assert.AreEqual("Counter: E sell", StationRules.Prompt(StationKind.Counter, "Counter", "E", "V"));
+            Assert.AreEqual("Potato crate: E take one", StationRules.Prompt(StationKind.Crate, "Potato crate", "E", "V"));
+            Assert.AreEqual("Plates: E take a plate", StationRules.Prompt(StationKind.PlateShelf, "Plates", "E", "V"));
+            Assert.AreEqual("Fridge: pick an item in first person (V)", StationRules.Prompt(StationKind.Fridge, "Fridge", "E", "V")); // spec 028b
             foreach (StationKind kind in System.Enum.GetValues(typeof(StationKind)))
-                Assert.IsNotEmpty(StationRules.Prompt(kind, "X"), kind.ToString());
+                Assert.IsNotEmpty(StationRules.Prompt(kind, "X", "E", "V"), kind.ToString());
         }
 
         [Test]

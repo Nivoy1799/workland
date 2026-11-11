@@ -81,8 +81,7 @@ settings-in-shop (what Esc opens), 25 labels-on, 26 labels-off. The tour fails i
 **Not covered / follow-ups.**
 - AC4 (rebind a key and play) is the human's. Gamepad capture, Esc in a real shop, resolution/window changes and motion blur were
   not exercised by a tour (scripted runs never touch the display).
-- Prompts and help still name the default keys ("E take one", ControlsHelp, the tutorial texts) after a rebind.
 - Ring colours were only checked in the comfort swatches and tests; no cook-tour shot with the colour-blind set.
 - Esc that closes the settings in the shop also hits PlayerInputReader's Esc (cursor free): one click locks it again.
 - The UI and cue sound groups are a judgement call (only the feedback cues are "UI"; no menu click sounds exist).
-- Quality presets change the shared URP asset at runtime (restored on destroy, so the Editor keeps no change).
+- Quality presets change a runtime copy of the URP asset (048 review, fixed in the 049 round), never the shared asset.

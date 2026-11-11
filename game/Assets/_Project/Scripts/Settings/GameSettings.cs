@@ -26,6 +26,11 @@ namespace Worktown.Game.Settings
         /// <summary>The highest frame cap (0 is no cap).</summary>
         public const int MaxFrameCap = 500;
         public const int MinFrameCap = 30;
+        /// <summary>048 review: the format of the saved settings. A file from before it (no field: 0) loads as this one.</summary>
+        public const int CurrentSchema = 1;
+
+        /// <summary>The format this file was written in (<see cref="CurrentSchema"/>); older or missing loads and is upgraded.</summary>
+        public int SchemaVersion = CurrentSchema;
 
         // ---- Graphics ----
         public QualityPreset Quality = QualityPreset.High;
@@ -110,6 +115,7 @@ namespace Worktown.Game.Settings
             s.GamepadSensitivity = Range(s.GamepadSensitivity, MinSensitivity, MaxSensitivity, d.GamepadSensitivity);
             s.UiScale = Range(s.UiScale, MinUiScale, MaxUiScale, d.UiScale);
             s.Bindings ??= string.Empty;
+            s.SchemaVersion = CurrentSchema; // 0 (a 048 file without the field) or an older one: upgraded as it is read
             return s;
         }
 

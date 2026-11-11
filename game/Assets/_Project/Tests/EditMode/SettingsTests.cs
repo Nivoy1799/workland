@@ -7,6 +7,7 @@ using Worktown.Game.Audio;
 using Worktown.Game.Cooking;
 using Worktown.Game.Npc;
 using Worktown.Game.Player;
+using Worktown.Game.Net.Rules;
 using Worktown.Game.Settings;
 
 namespace Worktown.Game.Tests
@@ -164,13 +165,14 @@ namespace Worktown.Game.Tests
         [Test]
         public void ScriptedRuns_AreTheTours_TheirObservers_AndTheBots()
         {
-            Assert.IsTrue(SettingsRules.UsesSavedSettings(new[] { "Worktown.exe" }));
-            Assert.IsTrue(SettingsRules.UsesSavedSettings(new[] { "Worktown.exe", "-host" }));
+            Assert.IsTrue(SettingsRules.UsesSavedSettings(LaunchArgs.Parse(new[] { "Worktown.exe" })));
+            Assert.IsTrue(SettingsRules.UsesSavedSettings(LaunchArgs.Parse(new[] { "Worktown.exe", "-host" })));
             Assert.IsTrue(SettingsRules.UsesSavedSettings(null));
-            Assert.IsFalse(SettingsRules.UsesSavedSettings(new[] { "Worktown.exe", "-tour", "menu" }));
-            Assert.IsFalse(SettingsRules.UsesSavedSettings(new[] { "Worktown.exe", "-connect", "127.0.0.1", "-tour", "cook" }));
-            Assert.IsFalse(SettingsRules.UsesSavedSettings(new[] { "Worktown.exe", "-host", "-observe", "cook" }));
-            Assert.IsFalse(SettingsRules.UsesSavedSettings(new[] { "Worktown.exe", "-batchmode", "-connect", "x", "-bot" }));
+            Assert.IsFalse(SettingsRules.UsesSavedSettings(LaunchArgs.Parse(new[] { "Worktown.exe", "-tour", "menu" })));
+            Assert.IsFalse(SettingsRules.UsesSavedSettings(LaunchArgs.Parse(new[] { "Worktown.exe", "-connect", "127.0.0.1", "-tour", "cook" })));
+            Assert.IsFalse(SettingsRules.UsesSavedSettings(LaunchArgs.Parse(new[] { "Worktown.exe", "-host", "-observe", "cook" })));
+            Assert.IsFalse(SettingsRules.UsesSavedSettings(LaunchArgs.Parse(new[] { "Worktown.exe", "-batchmode", "-connect", "x", "-bot" })));
+            Assert.IsFalse(SettingsRules.UsesSavedSettings(LaunchArgs.Parse(new[] { "Worktown.exe", "-host", "-metrics", "m.jsonl" })), "048 review: a load-test or perf-check host");
         }
 
         // ---- Apply ----
@@ -323,10 +325,11 @@ namespace Worktown.Game.Tests
         [Test]
         public void QualityPresets_HighIsTheProjectsOwn()
         {
-            Assert.AreEqual(1f, SettingsRules.RenderScale(QualityPreset.High));
+            Assert.AreEqual(1f, SettingsRules.RenderScale(QualityPreset.High, 1f));
+            Assert.AreEqual(0.9f, SettingsRules.RenderScale(QualityPreset.High, 0.9f), "048 review: the asset's own scale, not a literal 1");
             Assert.IsNull(SettingsRules.ShadowDistance(QualityPreset.High));
             Assert.IsNull(SettingsRules.ShadowCascades(QualityPreset.High));
-            Assert.Less(SettingsRules.RenderScale(QualityPreset.Low), SettingsRules.RenderScale(QualityPreset.Medium));
+            Assert.Less(SettingsRules.RenderScale(QualityPreset.Low, 1f), SettingsRules.RenderScale(QualityPreset.Medium, 1f));
             Assert.Less(SettingsRules.ShadowDistance(QualityPreset.Low).Value, SettingsRules.ShadowDistance(QualityPreset.Medium).Value);
             Assert.AreEqual(1, SettingsRules.ShadowCascades(QualityPreset.Low));
         }

@@ -45,10 +45,15 @@ namespace Worktown.Game.UI
         private int _shownVersion = -1;
         private ControlAction? _capture;
         private bool _capturePad;
+        private int _captureFrame;
+        private bool _padReleased;
+        private static readonly PadButton[] PadButtons = (PadButton[])Enum.GetValues(typeof(PadButton));
         private bool _reportedOpen;
         private PlayerInputReader _input;
 
         public bool IsOpen => _open;
+        /// <summary>Spec 048 (review): a settings screen is open (the game keys and the lobby key wait, CaptureGate).</summary>
+        public static bool AnyOpen { get; private set; }
         public string CurrentPage => _page.ToString();
 
         public static SettingsView Find() => FindFirstObjectByType<SettingsView>();
@@ -65,6 +70,7 @@ namespace Worktown.Game.UI
 
         private void OnDisable()
         {
+            if (_open) AnyOpen = false;
             _root?.RemoveFromHierarchy();
             _root = null;
             Report(false);
@@ -85,6 +91,7 @@ namespace Worktown.Game.UI
             ShowPage(SettingsPage.Graphics);
             Refresh();
             Show(_root, true);
+            AnyOpen = true;
             Debug.Log("[Settings] open" + (inShop ? " (in the shop)" : string.Empty));
         }
 
@@ -94,6 +101,7 @@ namespace Worktown.Game.UI
             if (!_open) return;
             _open = false;
             _capture = null;
+            AnyOpen = false;
             SettingsApplier.Save();
             Show(_root, false);
             Action done = _onClose;
@@ -193,11 +201,15 @@ namespace Worktown.Game.UI
                 else Rebind(action, Key.None);
                 return;
             }
+            // Review: not on the frame the capture began (the click's Enter or A), and a pad only after its buttons were all up once.
+            Gamepad pad = Gamepad.current;
+            if (_capturePad && !_padReleased && pad != null) _padReleased = !AnyPadButtonHeld(pad);
+            if (!CaptureGate.CaptureReads(_captureFrame, Time.frameCount, _capturePad, _padReleased || pad == null)) return;
             if (_capturePad)
             {
-                Gamepad gamepad = Gamepad.current;
+                Gamepad gamepad = pad;
                 if (gamepad == null) return;
-                foreach (PadButton button in (PadButton[])Enum.GetValues(typeof(PadButton)))
+                foreach (PadButton button in PadButtons)
                 {
                     var control = GameInput.ToGamepadButton(button);
                     if (control.HasValue && gamepad[control.Value].wasPressedThisFrame)
@@ -221,8 +233,20 @@ namespace Worktown.Game.UI
         {
             _capture = action;
             _capturePad = pad;
+            _captureFrame = Time.frameCount;
+            _padReleased = false;
             _message.text = (pad ? "Press a gamepad button for " : "Press a key for ") + SettingsRules.ActionText(action)
                 + "   (Esc: keep it, Backspace: none)";
+        }
+
+        private static bool AnyPadButtonHeld(Gamepad gamepad)
+        {
+            foreach (PadButton button in PadButtons)
+            {
+                var control = GameInput.ToGamepadButton(button);
+                if (control.HasValue && gamepad[control.Value].isPressed) return true;
+            }
+            return false;
         }
 
         /// <summary>Frees the cursor while the screen shows over the shop.</summary>

@@ -151,13 +151,13 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>Server (the host closes the shop): every other player gets a HostClosed notice before the server stops.</summary>
-        public void NotifyClosing()
+        public void NotifyClosing(DisconnectReason reason = DisconnectReason.HostClosed)
         {
             if (NetworkManager == null || !NetworkManager.IsServerStarted) return;
             foreach (NetworkConnection connection in NetworkManager.ServerManager.Clients.Values)
                 if (connection != null && connection.IsActive && !connection.IsLocalClient)
                     NetworkManager.ServerManager.Broadcast(connection,
-                        new ConnectionNotice { Reason = (byte)DisconnectReason.HostClosed, Detail = string.Empty }, false);
+                        new ConnectionNotice { Reason = (byte)reason, Detail = string.Empty }, false);
         }
 
         /// <summary>Server: the admitted name of a connection, or empty.</summary>

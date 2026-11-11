@@ -90,12 +90,14 @@ namespace Worktown.Game.Settings
         /// <summary>
         /// A key the player cannot take: Esc (menus and the settings), Enter (closes the What's-new note), F1-F12 (menus and dev keys),
         /// the Alt keys (free the cursor), the Windows keys, the arrows (they always walk), Backspace (clears a binding while rebinding),
-        /// Print Screen, and everything after the OEM keys (F13-F24, the media keys, the IME dummy) or not a key at all.
+        /// Print Screen, and everything after the OEM keys (F13-F24, the media keys, the IME dummy) or not a key at all. 048 review: the
+        /// digits 1-6 too, because the quick chat reads them fixed while its key is held (SocialInteractor).
         /// </summary>
         public static bool IsReserved(Key key)
         {
             if (key == Key.None) return false;
             if (key >= Key.F1 && key <= Key.F12) return true;
+            if (key >= Key.Digit1 && key <= Key.Digit6) return true;
             if (key > Key.OEM5) return true;
             switch (key)
             {

@@ -65,31 +65,35 @@ namespace Worktown.Game.Cooking
             return PickupRules.IsInReach(playerPosition, stationPosition);
         }
 
-        /// <summary>Third-person prompt at the bottom (spec 007): E for crates, the counter and the shelf.</summary>
-        public static string Prompt(StationKind kind, string stationName)
+        /// <summary>
+        /// Third-person prompt at the bottom (spec 007): the Use key for crates, the counter and the shelf. Spec 048 (review): the keys come
+        /// in by name (<paramref name="useKey"/>, <paramref name="viewKey"/>: Settings.KeyPrompts.KeyName of the bindings), so the prompt follows
+        /// a rebind.
+        /// </summary>
+        public static string Prompt(StationKind kind, string stationName, string useKey, string viewKey)
         {
             switch (kind)
             {
-                case StationKind.Crate: return stationName + ": E take one";
-                case StationKind.Counter: return stationName + ": E sell";
-                case StationKind.PlateShelf: return stationName + ": E take a plate";
-                case StationKind.Stove: return stationName + ": cook in first person (V)";
+                case StationKind.Crate: return stationName + ": " + useKey + " take one";
+                case StationKind.Counter: return stationName + ": " + useKey + " sell";
+                case StationKind.PlateShelf: return stationName + ": " + useKey + " take a plate";
+                case StationKind.Stove: return stationName + ": cook in first person (" + viewKey + ")";
                 // Spec 028b: a slot is picked by aiming, so the fridge and the shelf are used in first person.
                 case StationKind.Fridge:
-                case StationKind.Shelf: return stationName + ": pick an item in first person (V)";
+                case StationKind.Shelf: return stationName + ": pick an item in first person (" + viewKey + ")";
                 // Spec 029: the fryer's knob, basket buttons and baskets are aimed at.
-                case StationKind.Fryer: return stationName + ": fry in first person (V)";
+                case StationKind.Fryer: return stationName + ": fry in first person (" + viewKey + ")";
                 // Spec 030: the griddle's knob and spots are aimed at.
-                case StationKind.Griddle: return stationName + ": grill in first person (V)";
+                case StationKind.Griddle: return stationName + ": grill in first person (" + viewKey + ")";
                 // Spec 033: E takes a cup or lids one, holding E pours from the nearest tap.
-                case StationKind.DrinkDispenser: return stationName + ": E take a cup or a lid, hold E to pour";
+                case StationKind.DrinkDispenser: return stationName + ": " + useKey + " take a cup or a lid, hold " + useKey + " to pour";
                 // Spec 034: E orders the nearest row; the page and the pack count are picked in first person.
-                case StationKind.Terminal: return stationName + ": E order the nearest row, page in first person (V)";
+                case StationKind.Terminal: return stationName + ": " + useKey + " order the nearest row, page in first person (" + viewKey + ")";
                 // Spec 035: the cleaning stations.
-                case StationKind.DishReturn: return stationName + ": E take a dirty dish";
-                case StationKind.Sink: return stationName + ": E put a dish in, hold E to scrub";
-                case StationKind.TrashCan: return stationName + ": E throw away, E with empty hands takes the bag";
-                case StationKind.Bin: return stationName + ": E throw the bag in";
+                case StationKind.DishReturn: return stationName + ": " + useKey + " take a dirty dish";
+                case StationKind.Sink: return stationName + ": " + useKey + " put a dish in, hold " + useKey + " to scrub";
+                case StationKind.TrashCan: return stationName + ": " + useKey + " throw away, " + useKey + " with empty hands takes the bag";
+                case StationKind.Bin: return stationName + ": " + useKey + " throw the bag in";
                 default: return stationName;
             }
         }

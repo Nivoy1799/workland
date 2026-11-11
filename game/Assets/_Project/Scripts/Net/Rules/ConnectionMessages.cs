@@ -14,6 +14,7 @@ namespace Worktown.Game.Net.Rules
                 case DisconnectReason.ConnectionLost: return "Connection lost";
                 case DisconnectReason.Unreachable: return "Could not connect";
                 case DisconnectReason.HostClosed: return "The shop closed";
+                case DisconnectReason.HostStalled: return "The shop stopped";
                 case DisconnectReason.Left: return "You left the shop";
                 default: return string.Empty;
             }
@@ -42,6 +43,8 @@ namespace Worktown.Game.Net.Rules
                     return "Nobody answered" + (has ? " at " + detail : string.Empty) + ". Check the address and that the host is running.";
                 case DisconnectReason.HostClosed:
                     return "The host closed the shop.";
+                case DisconnectReason.HostStalled:
+                    return "The host's game stopped responding on the network, so the shop was closed. A crash log was written on the host's PC.";
                 default:
                     return string.Empty;
             }

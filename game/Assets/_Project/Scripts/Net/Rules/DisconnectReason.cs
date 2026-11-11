@@ -23,6 +23,8 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Client: nobody answered at the address (or the Steam id).</summary>
         Unreachable = 7,
         /// <summary>Server: the host closed the shop.</summary>
-        HostClosed = 8
+        HostClosed = 8,
+        /// <summary>Spec 049, server: the host's network tick stalled (TickWatchdog), so the host closed the shop.</summary>
+        HostStalled = 9
     }
 }

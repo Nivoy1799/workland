@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using FishNet.Managing;
 using FishNet.Transporting;
+using Unity.Profiling;
 using UnityEngine;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
@@ -40,6 +41,11 @@ namespace Worktown.Game.Dev
         private float _nextSample;
         private float _started;
         private TimeSpan _lastCpu;
+        // Spec 049 (the soak): GC bytes per frame and Unity's object counts (dev-build profiler counters; 0 where unavailable).
+        private ProfilerRecorder _gcAlloc;
+        private ProfilerRecorder _objectCount;
+        private double _gcBytes;
+        private int _gcFrames;
         private float _lastCpuAt;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -78,6 +84,8 @@ namespace Worktown.Game.Dev
             if (_server)
             {
                 transport.OnServerReceivedData += OnServerData;
+                _gcAlloc = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
+                _objectCount = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "Object Count");
                 _net.TimeManager.OnPreTick += OnPreTick;
                 _net.TimeManager.OnPostTick += OnPostTick;
                 Debug.Log("[Load] server metrics to " + _args.MetricsPath);
@@ -108,6 +116,8 @@ namespace Worktown.Game.Dev
             if (_net != null && _net.ClientManager != null) _net.ClientManager.OnClientConnectionState -= OnClientState;
             _metrics?.Dispose();
             _metrics = null;
+            if (_gcAlloc.Valid) _gcAlloc.Dispose();
+            if (_objectCount.Valid) _objectCount.Dispose();
         }
 
         private void OnServerData(ServerReceivedDataArgs args) => _bytesIn += args.Data.Count;
@@ -125,6 +135,11 @@ namespace Worktown.Game.Dev
         private void Update()
         {
             _frames.Add(Time.unscaledDeltaTime * 1000f);
+            if (_gcAlloc.Valid)
+            {
+                _gcBytes += _gcAlloc.LastValue;
+                _gcFrames++;
+            }
             float now = Time.unscaledTime;
             if (now < _nextSample) return;
             _nextSample = now + 1f;
@@ -158,6 +173,10 @@ namespace Worktown.Game.Dev
                 // Mono reports no working set here: Unity's own reserved memory and the managed heap (the script reads the working set).
                 fields.Add(Field("unity_reserved_mb", UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / (1024d * 1024d)));
                 fields.Add(Field("managed_heap_mb", GC.GetTotalMemory(false) / (1024d * 1024d)));
+                // Spec 049: the soak's leak checks.
+                fields.Add(Field("gc_kb_per_frame", _gcFrames > 0 ? _gcBytes / _gcFrames / 1024d : 0d));
+                fields.Add(Field("unity_objects", _objectCount.Valid ? _objectCount.LastValue : 0));
+                fields.Add(Field("gc_collections", GC.CollectionCount(0)));
             }
             else
             {
@@ -169,6 +188,8 @@ namespace Worktown.Game.Dev
             _ticks.Clear();
             _frames.Clear();
             _bytesIn = 0;
+            _gcBytes = 0d;
+            _gcFrames = 0;
             _metrics?.WriteLine(LoadStats.Line(fields));
         }
 

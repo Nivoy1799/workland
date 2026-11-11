@@ -91,7 +91,7 @@ namespace Worktown.Game.Tests
             Assert.Greater(v.Count, half);
             Assert.AreEqual(0, t.Count % 3);
             foreach (int i in t) Assert.That(i, Is.InRange(0, v.Count - 1));
-            var allowed = new[] { HeatRingRules.Track, HeatRingRules.GoodMark, HeatRingRules.PerfectMark, Palette.Mustard };
+            var allowed = new[] { HeatRingRules.Track, RingPalette.Current.Good, RingPalette.Current.Perfect, Palette.Mustard };
             foreach (Color color in c) CollectionAssert.Contains(allowed, color);
             foreach (Vector3 p in v) Assert.LessOrEqual(p.magnitude, 1.0001f);
             Assert.AreEqual(Palette.Cream, HeatRingRules.FillColor(HeatZone.Cooking));

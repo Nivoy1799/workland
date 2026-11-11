@@ -27,16 +27,15 @@ namespace Worktown.Game.Settings
         public static readonly int[] FrameCaps = { 30, 60, 90, 120, 144, 165, 240, 0 };
 
         /// <summary>
-        /// Spec 038b's lesson: a scripted dev run (<c>-tour</c>, <c>-observe</c>: the visual check; <c>-bot</c>: the load test) neither
-        /// reads nor writes the player's saved settings. It runs on the defaults, so its pictures never depend on this PC's settings, and
-        /// anything it changes stays in memory.
+        /// Spec 038b's lesson: a scripted dev run (<c>-tour</c>, <c>-observe</c>: the visual check; <c>-bot</c>, and a host or server with
+        /// <c>-metrics</c>: the load test and spec 049's perf check) neither reads nor writes the player's saved settings. It runs on the
+        /// defaults, so its pictures and numbers never depend on this PC's settings, and anything it changes stays in memory.
+        /// 048 review: from the parsed command line (Net.Rules.LaunchArgs), not a second parse; null = a normal start.
         /// </summary>
-        public static bool UsesSavedSettings(IReadOnlyList<string> args)
+        public static bool UsesSavedSettings(Net.Rules.LaunchArgs args)
         {
             if (args == null) return true;
-            foreach (string arg in args)
-                if (arg == "-tour" || arg == "-observe" || arg == "-bot") return false;
-            return true;
+            return args.Tour.Length == 0 && args.Observe.Length == 0 && !args.IsBot && args.MetricsPath.Length == 0;
         }
 
         /// <summary>Application.targetFrameRate for a cap (-1, the platform's own, for no cap).</summary>
@@ -86,8 +85,9 @@ namespace Worktown.Game.Settings
             return look;
         }
 
-        /// <summary>The render pipeline's render scale for a preset (High = the project's own 1).</summary>
-        public static float RenderScale(QualityPreset preset) => preset == QualityPreset.Low ? 0.7f : preset == QualityPreset.Medium ? 0.85f : 1f;
+        /// <summary>The render pipeline's render scale for a preset (048 review: High = the pipeline asset's own <paramref name="original"/>).</summary>
+        public static float RenderScale(QualityPreset preset, float original) =>
+            preset == QualityPreset.Low ? 0.7f : preset == QualityPreset.Medium ? 0.85f : original;
 
         /// <summary>The shadow distance in metres for a preset (High = the project's 50); null keeps the asset's own.</summary>
         public static float? ShadowDistance(QualityPreset preset) => preset == QualityPreset.Low ? 15f : preset == QualityPreset.Medium ? 30f : (float?)null;

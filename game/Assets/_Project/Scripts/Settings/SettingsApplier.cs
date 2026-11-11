@@ -25,6 +25,8 @@ namespace Worktown.Game.Settings
         private int _targetFrameRate = -1;
         private int _vSyncCount;
         private UniversalRenderPipelineAsset _pipeline;
+        private RenderPipelineAsset _qualityPipelineBefore;
+        private bool _ownPipeline;
         private float _originalRenderScale;
         private float _originalShadowDistance;
         private int _originalCascades;
@@ -57,7 +59,7 @@ namespace Worktown.Game.Settings
                 return;
             }
             _instance = this;
-            bool persistent = SettingsRules.UsesSavedSettings(Environment.GetCommandLineArgs());
+            bool persistent = SettingsRules.UsesSavedSettings(Net.Rules.LaunchArgs.Parse(Environment.GetCommandLineArgs()));
             _store = new SettingsStore(new PlayerPrefsSettings(), persistent);
             GameSettings.Use(_store.Load());
             if (!persistent) Debug.Log("[Settings] scripted run: the defaults, nothing is read or stored");
@@ -67,9 +69,16 @@ namespace Worktown.Game.Settings
             UIDocument document = GetComponent<UIDocument>();
             _panel = document != null ? document.panelSettings : null;
             if (_panel != null) _originalPanelScale = _panel.scale;
-            _pipeline = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
-            if (_pipeline != null)
+            // 048 review: never change the project's pipeline asset (in the Editor that would dirty it on disk). A copy is made and
+            // used for this quality level instead; the presets change the copy.
+            var shared = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            if (shared != null)
             {
+                _qualityPipelineBefore = QualitySettings.renderPipeline;
+                _pipeline = Instantiate(shared);
+                _pipeline.name = shared.name + " (settings)";
+                QualitySettings.renderPipeline = _pipeline;
+                _ownPipeline = true;
                 _originalRenderScale = _pipeline.renderScale;
                 _originalShadowDistance = _pipeline.shadowDistance;
                 _originalCascades = _pipeline.shadowCascadeCount;
@@ -79,12 +88,13 @@ namespace Worktown.Game.Settings
         private void OnDestroy()
         {
             if (_instance == this) _instance = null;
-            // The pipeline and panel are project assets: give them their own values back (in the Editor they would stay changed).
-            if (_pipeline != null)
+            // The pipeline copy goes (the quality level gets back what it had); the panel is a project asset: its own scale back.
+            if (_ownPipeline)
             {
-                _pipeline.renderScale = _originalRenderScale;
-                _pipeline.shadowDistance = _originalShadowDistance;
-                _pipeline.shadowCascadeCount = _originalCascades;
+                if (QualitySettings.renderPipeline == _pipeline) QualitySettings.renderPipeline = _qualityPipelineBefore;
+                if (_pipeline != null) Destroy(_pipeline);
+                _pipeline = null;
+                _ownPipeline = false;
             }
             if (_panel != null) _panel.scale = _originalPanelScale;
             if (_blurProfile != null) Destroy(_blurProfile);
@@ -115,7 +125,7 @@ namespace Worktown.Game.Settings
         private void ApplyQuality(QualityPreset preset)
         {
             if (_pipeline == null) return;
-            _pipeline.renderScale = SettingsRules.RenderScale(preset);
+            _pipeline.renderScale = SettingsRules.RenderScale(preset, _originalRenderScale);
             _pipeline.shadowDistance = SettingsRules.ShadowDistance(preset) ?? _originalShadowDistance;
             _pipeline.shadowCascadeCount = SettingsRules.ShadowCascades(preset) ?? _originalCascades;
         }

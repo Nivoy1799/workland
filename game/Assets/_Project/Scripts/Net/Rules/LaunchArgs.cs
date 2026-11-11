@@ -42,6 +42,18 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 047: <c>-max-players n</c> (1..64), the places of a server or host (the spec 004 load test: 16 bots and the host);
         /// 0 = not given (JoinRules.MaxPlayers, D36).</summary>
         public int MaxPlayers { get; private set; }
+        /// <summary>Spec 049: <c>-crash-log path</c>, where the crash and exception log goes (Diagnostics.CrashLog). Empty = the default
+        /// (the player's data folder). Valid in every mode.</summary>
+        public string CrashLogPath { get; private set; } = string.Empty;
+        /// <summary>Spec 049 (dev builds): <c>-crash-test</c>, force exceptions on the main thread, a task and a background thread, then
+        /// quit (scripts/perf-check.sh checks the crash log). Takes no mode flag.</summary>
+        public bool CrashTest { get; private set; }
+        /// <summary>Spec 049 (dev builds): <c>-perf-tour path</c>, the host's own player visits every station of the scene and writes the
+        /// frame times and GC allocations per station there (one JSON line each). Needs <c>-host</c>.</summary>
+        public string PerfTourPath { get; private set; } = string.Empty;
+        /// <summary>Spec 049 (dev builds): <c>-stall-test s</c> (1..600), stop the server's network tick after s seconds so the tick watchdog
+        /// must close the shop (scripts/perf-check.sh). 0 = off. Needs <c>-host</c> or <c>-server</c>.</summary>
+        public int StallTestSeconds { get; private set; }
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -122,6 +134,23 @@ namespace Worktown.Game.Net.Rules
                         result.MaxPlayers = places;
                         i++;
                         break;
+                    case "-crash-log":
+                        if (!HasValue(args, i)) return Fail("-crash-log needs a file path");
+                        result.CrashLogPath = args[++i];
+                        break;
+                    case "-crash-test":
+                        result.CrashTest = true;
+                        break;
+                    case "-perf-tour":
+                        if (!HasValue(args, i)) return Fail("-perf-tour needs a file path");
+                        result.PerfTourPath = args[++i];
+                        break;
+                    case "-stall-test":
+                        if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int stall) || stall < 1 || stall > 600)
+                            return Fail("-stall-test needs seconds 1..600");
+                        result.StallTestSeconds = stall;
+                        i++;
+                        break;
                     case "-metrics":
                         if (!HasValue(args, i)) return Fail("-metrics needs a file path");
                         result.MetricsPath = args[++i];
@@ -142,6 +171,12 @@ namespace Worktown.Game.Net.Rules
                 return Fail("-max-players needs -server or -host");
             if (result.MetricsPath.Length > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host && !result.IsBot)
                 return Fail("-metrics needs -server, -host or -bot");
+            if (result.PerfTourPath.Length > 0 && result.Mode != LaunchMode.Host) return Fail("-perf-tour needs -host");
+            if (result.PerfTourPath.Length > 0 && (result.Tour.Length > 0 || result.Observe.Length > 0))
+                return Fail("-perf-tour excludes -tour and -observe");
+            if (result.StallTestSeconds > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-stall-test needs -server or -host");
+            if (result.CrashTest && result.Mode != LaunchMode.Menu) return Fail("-crash-test takes no -server, -host, -connect or -steam");
             return result;
         }
 

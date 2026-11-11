@@ -26,6 +26,8 @@ namespace Worktown.Game.Player
 
         /// <summary>Spec 011: a menu or banner is open, so the cursor stays free and clicks go to the UI.</summary>
         public bool IsUiOpen => _uiOpenCount > 0;
+        /// <summary>Spec 048 (review): how many menus are open now (the lobby subtracts its own).</summary>
+        public int UiOpenCount => _uiOpenCount;
 
         public Vector2 Move => _active && !IsUiOpen ? Vector2.ClampMagnitude(_move.ReadValue<Vector2>() + GameInput.KeyboardMove(), 1f) : Vector2.zero;
         public bool Sprint => _active && GameInput.Held(ControlAction.Sprint);
@@ -110,8 +112,12 @@ namespace Worktown.Game.Player
         private void Update()
         {
             if (!_active) return;
-            if (GameInput.Pressed(ControlAction.Crouch)) _crouchToggled = !_crouchToggled;
-            if (GameInput.Pressed(ControlAction.Jump)) _jumpPressed = true;
+            // Spec 048 (review): no jump or crouch from a key pressed in a menu (a rebind capture, the lobby).
+            if (CaptureGate.GameKeysLive(IsUiOpen, UI.SettingsView.AnyOpen))
+            {
+                if (GameInput.Pressed(ControlAction.Crouch)) _crouchToggled = !_crouchToggled;
+                if (GameInput.Pressed(ControlAction.Jump)) _jumpPressed = true;
+            }
             if (GameInput.Pressed(ControlAction.ToggleView)) _togglePressed = true;
 
             Keyboard keyboard = Keyboard.current;

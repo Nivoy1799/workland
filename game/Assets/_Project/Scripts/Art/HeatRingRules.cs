@@ -31,8 +31,6 @@ namespace Worktown.Game.Art
         public const float MarkOuter = 1f;
 
         public static readonly Color Track = Palette.Panel;
-        public static readonly Color GoodMark = Palette.Sage;
-        public static readonly Color PerfectMark = Palette.Mustard;
 
         /// <summary>The fill's colour: Cream while cooking, Sage when good, Mustard when perfect, Terracotta overdone,
         /// Brick burnt (spec 048: from <see cref="RingPalette.Current"/>, the colour-blind set when the setting is on).</summary>
