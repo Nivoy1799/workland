@@ -63,6 +63,17 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+20. **AI gateway (spec 006) and player-hosted games (D33).** Spec 006 was planned for official servers only: they
+    alone held the gateway's password. Under D33 the host is a player's PC, so that password ships inside the game and
+    is public. Anyone could then run up our API bill, or claim an item's name first and show a bad name to everyone.
+    Default: merge the skeleton (it is not live and costs nothing) and keep the gateway **off** until a follow-up
+    spec adds:
+    - a login per host (for example Steam tickets checked by the gateway; O5);
+    - item names built on our side;
+    - item checks through /sim;
+    - protection for the shared cache.
+    Until then, games use the built-in fallback names. Also FYI: the gateway now rejects animal-product words (D27) with
+    a copy of the game's own word list, and a test keeps both lists equal.
 19. **Colour-blind ring colours (spec 048) and D32.** D32 says one palette of 16 named colours. The new colour-blind
     option for the cooking rings uses 4 extra colours from the Okabe-Ito set, a standard palette that is safe for colour
     blindness. Default: allow them as a separate "accessibility" set next to the 16, used only when that option is on.
