@@ -66,6 +66,25 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+21. **Four new draft specs for the path to Early Access** (all `status: draft`; nothing is built until you approve).
+    - **052 climb simulation** (/sim only; needs question 13). It tunes stages 1-5 for 1, 4 and 16 players against NPC
+      rivals before we build them. Defaults: hours to reach each stage 0.75-1.5 / 3-5 / 7-11 / 12-20 h; a service lasts
+      6 minutes.
+    - **053 food corner and save file** (/game; needs question 13 and 052). Stage 1: one dish, cash only, saving for the
+      rent. The host saves, autosave runs, and the title screen gets Continue. Defaults:
+      - the dish is fries;
+      - **one shared shop wallet** instead of a wallet per player (pillar 2; a change from today);
+      - each New shop has its own save; Continue loads the newest.
+    - **054 network headroom.** Today each player costs about 48 KB/s against a 50 KB/s target. The spec measures each
+      message type, sends other players at 15 Hz with smoothing, and sets a target of 35 KB/s. Question: is about 133 ms
+      of display delay for other players fine? You can compare 30 Hz and 15 Hz with a flag.
+    - **055 AI gateway go-live** (three parts: sim, gateway, game). Default login: Steam tickets checked by the gateway.
+      Big question: **does Early Access need a live AI gateway at all?** Names for the menu's dishes could be generated
+      once, offline, and shipped with the game: no hosting, no running cost. Default: ship offline names for EA, and go
+      live later. O4, O5 and O6 stay open.
+    - **Before outside players save games:** the company name in Player Settings is still "DefaultCompany", and it is
+      part of the save folder path. Default: set it once you pick a name (O1).
+    Say "approve 054" (and so on), or answer 13 to unlock 052 and 053.
 20. **AI gateway (spec 006) and player-hosted games (D33).** Spec 006 was planned for official servers only: they
     alone held the gateway's password. Under D33 the host is a player's PC, so that password ships inside the game and
     is public. Anyone could then run up our API bill, or claim an item's name first and show a bad name to everyone.
