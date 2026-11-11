@@ -210,3 +210,6 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
   tours. Suspects: Unity/Mono, the Steam overlay DLL in the host, or the GPU driver. Next: visual-check.sh now keeps
   native crash reports; on the next one take a full dump; try a cook run with the Steam overlay off; consider telling
   clients sooner than FishNet's 60 s timeout that the host is gone (a netcode spec).
+- Follow-up round 2026-11-11 (042, 043, 048; approved with nits): ScrollOverflow should be dev-only; the menu tour's
+  720p scroll check passes trivially at other sizes and has no slack; the Esc re-lock order is argued, not tested; the
+  cook tour calls the station key directly, not through GameInput.
