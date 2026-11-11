@@ -5,6 +5,7 @@ using Worktown.Game.Cooking;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
+using Worktown.Game.Settings;
 using Worktown.Game.Tutorial;
 using Worktown.Game.UI;
 
@@ -222,11 +223,14 @@ namespace Worktown.Game.Tests
         [Test]
         public void ControlsHelp_ShowsTheMapping_WithoutQ()
         {
-            string text = ControlsHelp.Text();
+            ControlBindings defaults = ControlBindings.Defaults();
+            string text = ControlsHelp.Text(defaults);
             foreach (string word in new[] { "Left click", "Hold left click", "Right click: put down", "wheel", "E (third person)", "RT", "LT" })
                 StringAssert.Contains(word, text);
             StringAssert.DoesNotContain("Q", text, "Q is a hidden alias");
-            Assert.AreSame(text, ControlsHelp.Text(), "built once");
+            Assert.AreSame(text, ControlsHelp.Text(defaults), "built once");
+            foreach (string word in new[] { "V: first", "WASD: walk", "Left Shift: run", "C: sneak", "Space: jump", "Tab: who" })
+                StringAssert.Contains(word, text);
         }
 
         [Test]

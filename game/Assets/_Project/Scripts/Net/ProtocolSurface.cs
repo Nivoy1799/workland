@@ -14,6 +14,9 @@ namespace Worktown.Game.Net
     /// and a changed message changes the hash. Type names are written without assembly versions (they differ between the Editor and
     /// a player). The fields of a struct used as an RPC parameter or a synced type are not expanded (only its type name is listed);
     /// only broadcasts list their fields.
+    /// Enum values are not hashed either (a field lists only its type name, and the ConnectionNotice broadcast sends its
+    /// DisconnectReason as a plain byte): a new value, such as spec 049's DisconnectReason.HostStalled, keeps the hash, so an older
+    /// build can receive a value it does not know and must handle it (ConnectionMessages.Unknown).
     /// </summary>
     public static class ProtocolSurface
     {

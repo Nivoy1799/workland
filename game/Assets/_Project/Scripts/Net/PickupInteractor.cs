@@ -7,6 +7,7 @@ using Worktown.Game.Audio;
 using Worktown.Game.Cooking;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.Net
 {
@@ -142,7 +143,8 @@ namespace Worktown.Game.Net
 
         // Spec 041: the wheel's turn of the held item's rest rotation (PlaceTurn steps; back to 0 when the hands change), the wheel
         // itself, and where a right click puts the held item down (first person; null: it drops at the feet).
-        private readonly WheelSteps _wheel = new WheelSteps();
+        private WheelSteps _wheel; // spec 048: made on first use, with the Input System's notch size (PlayerInputReader.WheelCountsPerNotch)
+        private WheelSteps Wheel => _wheel ??= new WheelSteps(Worktown.Game.Player.PlayerInputReader.WheelCountsPerNotch());
         private int _restTurn;
         private Pickup _restTurnItem;
         private PlaceSurface _rayPutDownSurface;
@@ -300,9 +302,9 @@ namespace Worktown.Game.Net
             ConsumeScripted(out _scriptedLeft, out _scriptedRight, out _scriptedTurn); // spec 041: the tours' inputs, this frame only
             // Spec 012: while quick chat (T) or the emote wheel (G / LB) is held, the keys belong to them; the
             // wheel then owns the camera freeze, so the knife lets go of it without writing it.
-            bool wheel = (keyboard != null && keyboard.gKey.isPressed) || (gamepad != null && gamepad.leftShoulder.isPressed);
+            bool wheel = GameInput.Held(ControlAction.EmoteWheel); // spec 048: the bound keys and buttons
             // Keys belong to the menu or banner while one is open (review finding, spec 011).
-            bool blocked = keyboard == null || wheel || keyboard.tKey.isPressed
+            bool blocked = keyboard == null || wheel || GameInput.Held(ControlAction.QuickChat)
                 || (_inputReader != null && _inputReader.IsUiOpen);
 
             if (blocked)
@@ -331,15 +333,15 @@ namespace Worktown.Game.Net
                 _click.Reset();
                 if (_queuedKind != QueuedKind.None && _queuedFirstPerson) ClearQueuedClick(); // the view changed
                 SetLookSuppressed(false);
-                _wheel.Reset(); // the wheel zooms the camera in third person
+                Wheel.Reset(); // the wheel zooms the camera in third person
                 // Spec 041: the left button is E in third person (the mouse orbits the camera, so it acts on the nearest target);
                 // the first press on a free cursor only locks it.
                 bool leftDown = mouse != null && locked && mouse.leftButton.isPressed;
                 bool leftPressed = mouse != null && locked && _lockedLastFrame && mouse.leftButton.wasPressedThisFrame;
                 // 031b: holding E (or the right trigger) at the assembly board squeezes its nearest dispenser. 031b review: only after
                 // a 0.2 s hold (SqueezeHoldGate); a tap keeps its normal E meaning and is queued when it is let go.
-                bool squeezing = UpdateThirdPersonSqueeze(keyboard, gamepad, leftDown, leftPressed, out bool tapped);
-                bool act = keyboard.eKey.wasPressedThisFrame || leftPressed || _scriptedLeft
+                bool squeezing = UpdateThirdPersonSqueeze(gamepad, leftDown, leftPressed, out bool tapped);
+                bool act = GameInput.Pressed(ControlAction.Use) || leftPressed || _scriptedLeft
                     || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame);
                 // Spec 020 AC7: E acts in third person only. Spec 027b review: through the click buffer as well.
                 if (InteractionRules.KeysActInView(firstPerson) && (tapped || (!squeezing && act))
@@ -347,7 +349,7 @@ namespace Worktown.Game.Net
                     Queue(QueuedKind.Key, false);
                 // Spec 041: the right click (left trigger, Q, X) drops what you hold; it never does anything else.
                 bool right = RightPressed(mouse, gamepad, locked) || _scriptedRight;
-                bool q = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
+                bool q = GameInput.Pressed(ControlAction.PutDown);
                 if ((right || q) && ControlRules.IntentFor(right ? HandInput.RightClick : HandInput.KeyQ, false, InteractionAction.None,
                         held != null, false) == HandIntent.Drop)
                     Queue(QueuedKind.Drop, false);
@@ -433,7 +435,7 @@ namespace Worktown.Game.Net
 
             // Spec 041: the right click (left trigger; Q and X as hidden aliases) puts down what you hold, nothing else.
             bool right = RightPressed(mouse, gamepad, locked) || _scriptedRight;
-            bool q = keyboard.qKey.wasPressedThisFrame || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame);
+            bool q = GameInput.Pressed(ControlAction.PutDown);
             if (right || q)
             {
                 HandIntent put = ControlRules.IntentFor(right ? HandInput.RightClick : HandInput.KeyQ, true, CurrentAction, holding, spot);
@@ -441,9 +443,9 @@ namespace Worktown.Game.Net
             }
 
             // Spec 041: the wheel (gamepad Y: one step) turns the food on the board with the knife, else the held item's rest rotation.
-            int steps = _scriptedTurn + (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame ? 1 : 0);
-            if (armed || holding) steps += _wheel.Update(locked && _inputReader != null ? _inputReader.Zoom : 0f);
-            else _wheel.Reset();
+            int steps = _scriptedTurn + (GameInput.Pressed(ControlAction.Turn) ? 1 : 0);
+            if (armed || holding) steps += Wheel.Update(locked && _inputReader != null ? _inputReader.Zoom : 0f);
+            else Wheel.Reset();
             if (steps == 0) return;
             switch (ControlRules.IntentFor(HandInput.Wheel, true, CurrentAction, holding, spot))
             {
@@ -1677,7 +1679,7 @@ namespace Worktown.Game.Net
         /// now), so E still picks up and drops at the board. Returns true while the gate owns the input (no E action from it).
         /// The board's nearest dispenser and its build spot are cached per target (no slot scan per frame).
         /// </summary>
-        private bool UpdateThirdPersonSqueeze(Keyboard keyboard, Gamepad gamepad, bool leftDown, bool leftPressed, out bool tapped)
+        private bool UpdateThirdPersonSqueeze(Gamepad gamepad, bool leftDown, bool leftPressed, out bool tapped)
         {
             tapped = false;
             Station board = Target is Station s && (s.Kind == StationKind.Assembly || s.Kind == StationKind.DrinkDispenser
@@ -1710,8 +1712,8 @@ namespace Worktown.Game.Net
                 || offeredAction == InteractionAction.Scrub || offeredAction == InteractionAction.Wipe // spec 035
                 || offeredAction == InteractionAction.Shave; // spec 036
             // Spec 041: the left button holds like E in third person.
-            bool down = (keyboard != null && keyboard.eKey.isPressed) || (gamepad != null && gamepad.rightTrigger.isPressed) || leftDown;
-            bool pressedNow = (keyboard != null && keyboard.eKey.wasPressedThisFrame)
+            bool down = GameInput.Held(ControlAction.Use) || (gamepad != null && gamepad.rightTrigger.isPressed) || leftDown;
+            bool pressedNow = GameInput.Pressed(ControlAction.Use)
                 || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame) || leftPressed;
             if (_devSqueeze) return PollSqueeze();
             SqueezeHoldGate.Step step = _thirdPersonGate.Update(offered, down, pressedNow, Time.unscaledTimeAsDouble);

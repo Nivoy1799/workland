@@ -417,3 +417,152 @@
     font-size: 12px;
     color: var(--wt-plaster);
 }
+
+/* Spec 048: the settings screen (title screen Settings, Esc in the shop). */
+.settings-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.settings-box {
+    position: absolute;
+    left: 20%;
+    right: 20%;
+    top: 5%;
+    bottom: 5%;
+    padding-left: 22px;
+    padding-right: 22px;
+    padding-top: 16px;
+    padding-bottom: 14px;
+}
+
+.settings-tabs {
+    flex-direction: row;
+    margin-bottom: 8px;
+}
+
+.settings-tab {
+    flex-grow: 1;
+    height: 34px;
+    font-size: 16px;
+    margin-left: 0;
+    margin-right: 6px;
+    color: var(--wt-cream);
+    background-color: var(--wt-charcoal);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 3px;
+    border-bottom-color: var(--wt-charcoal);
+}
+
+.settings-tab-on {
+    border-bottom-color: var(--wt-mustard);
+    background-color: var(--wt-wood-dark);
+}
+
+.settings-scroll {
+    flex-grow: 1;
+}
+
+.settings-row {
+    flex-direction: row;
+    align-items: center;
+    min-height: 34px;
+}
+
+.panel .settings-name {
+    width: 250px;
+    font-size: 15px;
+}
+
+.settings-slider {
+    flex-grow: 1;
+}
+
+.panel .settings-value {
+    width: 90px;
+    font-size: 14px;
+    -unity-text-align: middle-right;
+}
+
+.settings-field {
+    flex-grow: 1;
+}
+
+.settings-bind-row {
+    flex-direction: row;
+    align-items: center;
+    min-height: 28px;
+}
+
+.panel .settings-bind-name {
+    width: 250px;
+    font-size: 14px;
+}
+
+.panel .settings-bind-head {
+    width: 170px;
+    font-size: 13px;
+    color: var(--wt-plaster);
+    margin-left: 6px;
+}
+
+.settings-bind {
+    width: 170px;
+    height: 26px;
+    font-size: 14px;
+    margin-left: 6px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+    color: var(--wt-cream);
+    background-color: var(--wt-charcoal);
+    border-left-color: var(--wt-wood-dark);
+    border-right-color: var(--wt-wood-dark);
+    border-top-color: var(--wt-wood-dark);
+    border-bottom-color: var(--wt-wood-dark);
+}
+
+.settings-bind:hover {
+    background-color: var(--wt-wood-dark);
+}
+
+.panel .settings-note {
+    font-size: 12px;
+    color: var(--wt-plaster);
+    margin-top: 2px;
+    margin-bottom: 6px;
+}
+
+.panel .settings-message {
+    font-size: 14px;
+    color: var(--wt-mustard);
+    min-height: 20px;
+    margin-top: 6px;
+}
+
+.settings-swatches {
+    flex-direction: row;
+    margin-left: 250px;
+    margin-bottom: 6px;
+}
+
+.settings-swatch {
+    width: 90px;
+    height: 24px;
+    margin-right: 6px;
+    justify-content: center;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+.panel .settings-swatch-text {
+    font-size: 12px;
+    color: var(--wt-ink);
+    -unity-text-align: middle-center;
+}

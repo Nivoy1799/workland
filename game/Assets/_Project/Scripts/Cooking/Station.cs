@@ -23,7 +23,24 @@ namespace Worktown.Game.Cooking
         public int IngredientIndex => _ingredientIndex;
         public int SlotCount => _slots != null ? _slots.Length : 0;
 
-        public string Prompt => StationRules.Prompt(_kind, _displayName);
+        /// <summary>Spec 048 (review): with the bound Use and view keys; rebuilt only when the settings change.</summary>
+        public string Prompt
+        {
+            get
+            {
+                if (_prompt == null || _promptVersion != Settings.GameSettings.Version)
+                {
+                    Settings.ControlBindings keys = Settings.GameSettings.CurrentBindings;
+                    _prompt = StationRules.Prompt(_kind, _displayName, Settings.KeyPrompts.KeyName(keys, Settings.ControlAction.Use),
+                        Settings.KeyPrompts.KeyName(keys, Settings.ControlAction.ToggleView));
+                    _promptVersion = Settings.GameSettings.Version;
+                }
+                return _prompt;
+            }
+        }
+
+        private string _prompt;
+        private int _promptVersion;
 
         /// <summary>Spec 028b: slot <paramref name="option"/> of this station; false for any other number or a missing slot.</summary>
         public bool TryGetSlot(int option, out StockSlot slot)

@@ -29,6 +29,15 @@ namespace Worktown.Game.UI
 
         private VisualElement _root;
         private Label _wallet;
+        // Spec 049 (the profiling tour's top GC offender: this view rebuilt its strings every frame): the inputs last shown; a text
+        // is only rebuilt when one of them changed.
+        private long _walletShown = long.MinValue;
+        private bool _walletKnown;
+        private string _clockShown;
+        private (bool Known, bool Open, int Tickets, int Served, int Missed) _shiftShown;
+        private Pickup _heldShown;
+        private float _nextHeldText;
+        private const float HeldTextSeconds = 0.1f;
         private Label _clock;
         private Label _orders;
         // Spec 034: "Low stock: tomato, cups" (lines below a quarter of their capacity), rebuilt only when the counts change.
@@ -130,10 +139,19 @@ namespace Worktown.Game.UI
             _root.style.display = player != null ? DisplayStyle.Flex : DisplayStyle.None;
             if (player == null) return;
 
-            _wallet.text = player.TryGetComponent(out Wallet wallet) ? EconomyRules.Money(wallet.Balance.Value) : string.Empty;
+            bool hasWallet = player.TryGetComponent(out Wallet wallet);
+            long balance = hasWallet ? wallet.Balance.Value : 0L;
+            if (hasWallet != _walletKnown || balance != _walletShown)
+            {
+                _walletKnown = hasWallet;
+                _walletShown = balance;
+                _wallet.text = hasWallet ? EconomyRules.Money(balance) : string.Empty;
+            }
             if (_board == null) _board = FindFirstObjectByType<MarketBoard>();
-            _clock.text = _board != null && _board.IsSpawned ? _board.Clock.Value : string.Empty;
-            UpdateShift();
+            string clock = _board != null && _board.IsSpawned ? _board.Clock.Value : string.Empty;
+            bool clockChanged = !ReferenceEquals(clock, _clockShown);
+            _clockShown = clock;
+            UpdateShift(clock, clockChanged);
             UpdateLowStock();
             UpdateHygiene();
 
@@ -146,7 +164,14 @@ namespace Worktown.Game.UI
             UpdateCrosshair(player, firstPerson, held);
 
             Show(_heldBox, held != null);
-            if (held != null) _held.text = HeldText(held);
+            // A held item's text changes with cooking: rebuilt when the item changes and then 10 times a second, not every frame.
+            if (held != null && (held != _heldShown || Time.unscaledTime >= _nextHeldText))
+            {
+                _heldShown = held;
+                _nextHeldText = Time.unscaledTime + HeldTextSeconds;
+                _held.text = HeldText(held);
+            }
+            if (held == null) _heldShown = null;
 
             UpdateResultToast(player);
             UpdateFeedToast();
@@ -245,12 +270,22 @@ namespace Worktown.Game.UI
             return low.ToString();
         }
 
-        private void UpdateShift()
+        private void UpdateShift(string clock, bool clockChanged)
         {
             if (_rail == null) _rail = FindFirstObjectByType<TicketRailView>();
             bool known = _rail != null && _rail.IsSpawned;
             Show(_orders, known);
-            if (!known) return;
+            if (!known)
+            {
+                if (clockChanged || _shiftShown.Known) _clock.text = clock;
+                _shiftShown = default;
+                return;
+            }
+            // Spec 049: the same numbers, the same text: nothing is built.
+            var shift = (true, _rail.ShiftOpen.Value, _rail.Tickets.Count, _rail.LiveServed.Value, _rail.LiveMissed.Value);
+            if (!clockChanged && shift == _shiftShown) return;
+            _shiftShown = shift;
+            _clock.text = clock;
             if (_rail.ShiftOpen.Value)
             {
                 if (_clock.text.Length > 0) _clock.text += "  ·  shift until " + Npc.Shift.CloseHour.ToString("00") + ":00";

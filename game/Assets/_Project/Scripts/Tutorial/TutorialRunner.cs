@@ -312,8 +312,11 @@ namespace Worktown.Game.Tutorial
             string text = step.TextFor(in s);
             if (ReferenceEquals(text, _shownText)) return;
             _shownText = text;
-            _panel.SetText(text);
+            _panel.SetText(Keys(text));
         }
+
+        /// <summary>Spec 048 (review): the card names the bound keys ({Move} and other KeyPrompts tokens).</summary>
+        private static string Keys(string text) => Settings.KeyPrompts.Fill(text, Settings.GameSettings.CurrentBindings);
 
         private TutorialSnapshot Snapshot(float now)
         {
@@ -377,7 +380,7 @@ namespace Worktown.Game.Tutorial
             TutorialStep step = _progress.CurrentStep;
             if (step == null) return;
             bool done = _progress.AtEnd;
-            _panel.ShowStep(_progress.Current, _progress.Count, step.Text, step.Optional, done);
+            _panel.ShowStep(_progress.Current, _progress.Count, Keys(step.Text), step.Optional, done);
             _shownText = step.Text;
             if (done && _doneAt < 0f) _doneAt = Time.unscaledTime;
             _nextTarget = 0f;
@@ -396,7 +399,7 @@ namespace Worktown.Game.Tutorial
             if (!_progress.Running || index < 0 || index >= _progress.Count) return;
             _preview = index;
             TutorialStep step = _progress.Steps[index];
-            _panel.ShowStep(index, _progress.Count, step.Text, step.Optional, index == _progress.Count - 1);
+            _panel.ShowStep(index, _progress.Count, Keys(step.Text), step.Optional, index == _progress.Count - 1);
             _target = TutorialTarget.None;
             _nextTarget = 0f;
             _nextSnapshot = 0f;
@@ -407,7 +410,7 @@ namespace Worktown.Game.Tutorial
             if (_preview < 0) return;
             _preview = -1;
             TutorialStep step = _progress.CurrentStep;
-            if (step != null) _panel.ShowStep(_progress.Current, _progress.Count, step.Text, step.Optional, _progress.AtEnd);
+            if (step != null) _panel.ShowStep(_progress.Current, _progress.Count, Keys(step.Text), step.Optional, _progress.AtEnd);
             _shownText = step != null ? step.Text : null;
             if (_progress.AtEnd) _doneAt = Time.unscaledTime; // the done card's time starts again
             _target = TutorialTarget.None;

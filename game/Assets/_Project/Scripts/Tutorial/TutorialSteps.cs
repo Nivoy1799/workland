@@ -22,7 +22,7 @@ namespace Worktown.Game.Tutorial
         /// <summary>The default first shift (one shared, immutable list).</summary>
         public static readonly IReadOnlyList<TutorialStep> Default = Array.AsReadOnly(new[]
         {
-            new TutorialStep(TutorialStepId.MoveAndLook, "Walk with WASD and look around with the mouse.", false, Moved, NoTarget),
+            new TutorialStep(TutorialStepId.MoveAndLook, "Walk with {Move} and look around with the mouse.", false, Moved, NoTarget),
             new TutorialStep(TutorialStepId.TakePotato, "Take a potato from the dry shelf: aim at it and left click.", false, HasPotato,
                 PotatoTarget),
             new TutorialStep(TutorialStepId.CutSticks,

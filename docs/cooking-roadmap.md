@@ -189,3 +189,19 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
   (0.25 s, 25 m/s2); a vessel look change mid-prediction blinks predicted-away food back for one round trip; a button
   sinks on any flag change, also server-driven ones. Still open from 043: sim follow-ups 1, 2, 4, 5 (comment, IsUndercooked
   check, pot name sweep, unequal griddle sides) need a sim round.
+- 045 review (changes required, fixed in the 047 round): SpamGuard is now a 10 s window (kick at 300); load-test verdict
+  "at the limit, no headroom" (payload only, worst second 53 KB/s). Next step for bandwidth: per-packet stats, 15 Hz remotes.
+- 047 review (changes required, fixed): plain-text names, the held-item return checks the place veto, SteamID64 check.
+  Open: confirm before joining a friend while hosting; Alt-F4 while hosting sends no notice; friends-list text needs
+  steam_display plus a localization file; no ban list after a kick.
+- **Host network freeze (seen twice: visual039b, visual047c, both cook tours):** the host's FishNet tick stops (no
+  more [Kitchen] lines, clients time out and cannot rejoin), the main thread keeps drawing, then a native crash. 045
+  traced one case to an unhandled exception on a FishNet background thread (TimeManager.LocalTick). A clean re-run
+  passed. For spec 049: log unhandled thread exceptions, find the trigger, and make the host survive or close cleanly.
+- 048 review (changes requested, fixes in the 049 round): prompts follow rebinds; key capture no longer leaks into the
+  game; own URP asset copy; settings schema version. Open: Esc frees the cursor; the Controls page scrolls at 720p; no
+  tour shot of gamepad capture, a resolution change or the colour-blind rings while cooking. Human question 19.
+- 049 review (changes required): the perf-check regression baseline mixes the best value of each metric across runs and
+  shrinks the growth bounds to the noise floor (fix: one best clean row; growth only against the bounds); the watcher can
+  hang if winpid is unreadable; the port check looks only for Worktown.exe; the HostStalled notice to clients is untested
+  (add a bot to the stall test). C# fixes: stall close wrapped, crash-log caps, profile paths scrubbed, more scripted flags.

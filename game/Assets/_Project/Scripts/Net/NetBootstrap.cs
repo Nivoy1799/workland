@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using FishNet.Component.Spawning;
 using FishNet.Connection;
 using FishNet.Managing;
@@ -33,11 +34,15 @@ namespace Worktown.Game.Net
         private JoinAuthenticator _join;
         private JoinTarget _queuedJoin;
         private bool _closing;
+        /// <summary>A dedicated server (<c>-server</c>, or a server build's default): nobody plays on it, so a stall ends the process.</summary>
+        private bool _dedicated;
 
         /// <summary>Spec 047: the client's connection as the menus show it.</summary>
         public JoinFlow Flow { get; } = new JoinFlow();
         /// <summary>Spec 047: the version check, the roster, the kick (on the NetworkManager object).</summary>
         public JoinAuthenticator Join => _join;
+        /// <summary>Spec 049: the server's tick watchdog (closes the shop when the network tick stalls).</summary>
+        public TickWatchdog Watchdog { get; private set; }
         /// <summary>Spec 047: Steam friends, invites and rich presence (does nothing without Steam).</summary>
         public SteamFriendsLink Friends { get; private set; }
 
@@ -59,6 +64,8 @@ namespace Worktown.Game.Net
         private void Start()
         {
             SetUpJoin();
+            Watchdog = gameObject.AddComponent<TickWatchdog>();
+            Watchdog.Bind(this);
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
             _networkManager.ServerManager.OnRemoteConnectionState += OnRemoteConnectionState;
             _networkManager.ServerManager.OnAuthenticationResult += OnAuthenticationResult;
@@ -87,6 +94,7 @@ namespace Worktown.Game.Net
             switch (Args.Mode)
             {
                 case LaunchMode.Server:
+                    _dedicated = true;
                     StartServer();
                     break;
                 case LaunchMode.Host:
@@ -101,6 +109,7 @@ namespace Worktown.Game.Net
                 default:
 #if UNITY_SERVER && !UNITY_EDITOR
                     // A dedicated server build has nobody to click the menu.
+                    _dedicated = true;
                     StartServer();
 #else
                     Status = "title screen";
@@ -232,9 +241,78 @@ namespace Worktown.Game.Net
             Debug.Log("[Net] the host closes the shop");
             // 1 s, not less: the HostClosed notice must survive a resend over the Steam relay before the server stops.
             yield return new WaitForSecondsRealtime(1f);
-            if (_networkManager.IsClientStarted) _networkManager.ClientManager.StopConnection();
-            if (_networkManager.IsServerStarted) _networkManager.ServerManager.StopConnection(true);
+            // 049 review: each stop on its own, so a throw from a broken FishNet (the stall close) cannot skip the other one, nor what
+            // follows (the stall's error screen and the transport pump).
+            GuardedCall.Run(StopClient, "[Net] stopping the client", Debug.LogWarning);
+            GuardedCall.Run(StopServer, "[Net] stopping the server", Debug.LogWarning);
             _closing = false;
+        }
+
+        private void StopClient()
+        {
+            if (_networkManager.IsClientStarted) _networkManager.ClientManager.StopConnection();
+        }
+
+        private void StopServer()
+        {
+            if (_networkManager.IsServerStarted) _networkManager.ServerManager.StopConnection(true);
+        }
+
+        /// <summary>
+        /// Spec 049 (TickWatchdog): the server's network tick stalled, so nothing goes out by itself. Every other player gets a HostStalled
+        /// notice, flushed with FishNet's disconnect messages (they send at once, without a tick); the host's own screen shows the same;
+        /// a second later the server stops (as when the host closes the shop).
+        /// </summary>
+        public void CloseAfterStall()
+        {
+            if (_closing || _networkManager == null || !_networkManager.IsServerStarted) return;
+            Flow.Notice(DisconnectReason.HostStalled, string.Empty);
+            _join?.NotifyClosing(DisconnectReason.HostStalled);
+            var remote = new List<NetworkConnection>();
+            foreach (NetworkConnection connection in _networkManager.ServerManager.Clients.Values)
+                if (connection != null && connection.IsActive && !connection.IsLocalClient) remote.Add(connection);
+            try
+            {
+                if (remote.Count > 0) _networkManager.ServerManager.SendDisconnectMessages(remote, true);
+            }
+            catch (Exception e) // a stalled FishNet may be in any state: the close must still happen
+            {
+                Debug.LogWarning("[Net] stall: the notices could not be flushed: " + e.Message);
+            }
+            Debug.Log("[Net] stall: closing the shop, " + remote.Count + " players told");
+            StartCoroutine(CloseAfterStallSoon());
+        }
+
+        /// <summary>
+        /// Spec 049: like CloseSoon, but FishNet's tick no longer delivers the transports' state changes, so the stop is pumped here
+        /// (Transport.IterateIncoming, a few frames) and the host's own error screen is shown directly.
+        /// </summary>
+        private IEnumerator CloseAfterStallSoon()
+        {
+            yield return CloseSoon();
+            Flow.Fail(DisconnectReason.HostStalled, string.Empty);
+            Transport transport = _networkManager.TransportManager.Transport;
+            for (int i = 0; i < 30 && (_networkManager.IsServerStarted || _networkManager.IsClientStarted); i++)
+            {
+                try
+                {
+                    transport.IterateIncoming(true);
+                    transport.IterateIncoming(false);
+                }
+                catch (Exception e) // a stalled FishNet may be in any state
+                {
+                    Debug.LogWarning("[Net] stall: pumping the stop failed: " + e.Message);
+                    break;
+                }
+                yield return null;
+            }
+            Debug.Log("[Net] stall: the shop is closed (server " + (_networkManager.IsServerStarted ? "still started" : "stopped") + ")");
+            if (TickStallRules.QuitsAfterStall(_dedicated, Args.StallTestSeconds > 0))
+            {
+                // 049 review: a dedicated server has no player to read the screen; a non-zero exit tells its supervisor.
+                Debug.LogError("[Net] stall: the dedicated server quits (exit " + TickStallRules.DedicatedExitCode + ")");
+                Application.Quit(TickStallRules.DedicatedExitCode);
+            }
         }
 
         /// <summary>Spec 047, the host: removes a player from the shop (JoinAuthenticator.Kick).</summary>

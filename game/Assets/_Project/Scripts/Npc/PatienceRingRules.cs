@@ -21,8 +21,8 @@ namespace Worktown.Game.Npc
 
         public static Color FillColor(float shareLeft)
         {
-            if (GuestPatience.IsLow(shareLeft)) return Palette.Terracotta;
-            return shareLeft > 0.5f ? Palette.Sage : Palette.Mustard;
+            // Spec 048: the colours of RingPalette.Current (the colour-blind set when the setting is on).
+            return RingPalette.Current.Patience(GuestPatience.IsLow(shareLeft), shareLeft);
         }
 
         /// <summary>Shown only while the guest waits in the queue (not while it pays or leaves).</summary>

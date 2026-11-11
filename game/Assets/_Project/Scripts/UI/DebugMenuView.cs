@@ -180,8 +180,8 @@ namespace Worktown.Game.UI
                 sb.AppendLine("Served:");
                 foreach (string entry in _feed.Entries) sb.AppendLine("  " + entry);
             }
-            sb.AppendLine(ControlsHelp.Text()); // spec 041: the mouse-first mapping
-            sb.Append("F1 closes. Esc/Alt frees the cursor.");
+            sb.AppendLine(ControlsHelp.Text(Settings.GameSettings.CurrentBindings)); // spec 041: the mouse-first mapping; 048: the bound keys
+            sb.Append("F1 closes. Esc: settings (spec 048). Alt frees the cursor.");
             return sb.ToString();
         }
 

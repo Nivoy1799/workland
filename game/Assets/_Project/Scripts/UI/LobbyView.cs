@@ -1,10 +1,10 @@
 using FishNet.Managing;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.UI
 {
@@ -25,6 +25,8 @@ namespace Worktown.Game.UI
         private Button _invite;
         private Button _leave;
         private Label _note;
+        private Label _hint;
+        private int _hintVersion = -1;
         private bool _open;
         private bool _dirty = true;
         private bool _reportedOpen;
@@ -57,9 +59,9 @@ namespace Worktown.Game.UI
             _leave = new Button(() => _bootstrap.Leave());
             _leave.AddToClassList("menu-button");
             _box.Add(_leave);
-            var hint = new Label("Tab closes");
-            hint.AddToClassList("lobby-hint");
-            _box.Add(hint);
+            _hint = new Label();
+            _hint.AddToClassList("lobby-hint");
+            _box.Add(_hint);
             _box.style.display = DisplayStyle.None;
             documentRoot.Add(_box);
         }
@@ -104,8 +106,15 @@ namespace Worktown.Game.UI
                 _subscribed.RosterChanged += MarkDirty;
             }
             bool inGame = _bootstrap.Flow.State == JoinState.InGame;
-            Keyboard keyboard = Keyboard.current;
-            if (inGame && keyboard != null && keyboard.tabKey.wasPressedThisFrame) SetOpen(!_open);
+            // Spec 048: the bound key (Tab); review: not while the settings or another menu is open (a rebind capture of Tab).
+            if (_input == null && inGame) _input = FindFirstObjectByType<PlayerInputReader>();
+            bool live = CaptureGate.LobbyToggleLive(inGame, SettingsView.AnyOpen, _input != null ? _input.UiOpenCount : 0, _reportedOpen);
+            if (live && GameInput.Pressed(ControlAction.Players)) SetOpen(!_open);
+            if (_hintVersion != GameSettings.Version)
+            {
+                _hintVersion = GameSettings.Version;
+                _hint.text = KeyPrompts.KeyName(GameSettings.CurrentBindings, ControlAction.Players) + " closes";
+            }
             if (!inGame && _open) SetOpen(false);
             bool visible = _open && inGame;
             _box.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;

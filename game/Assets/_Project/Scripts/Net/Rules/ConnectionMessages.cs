@@ -14,8 +14,10 @@ namespace Worktown.Game.Net.Rules
                 case DisconnectReason.ConnectionLost: return "Connection lost";
                 case DisconnectReason.Unreachable: return "Could not connect";
                 case DisconnectReason.HostClosed: return "The shop closed";
+                case DisconnectReason.HostStalled: return "The shop stopped";
                 case DisconnectReason.Left: return "You left the shop";
-                default: return string.Empty;
+                case DisconnectReason.None: return string.Empty;
+                default: return Unknown(reason);
             }
         }
 
@@ -42,10 +44,25 @@ namespace Worktown.Game.Net.Rules
                     return "Nobody answered" + (has ? " at " + detail : string.Empty) + ". Check the address and that the host is running.";
                 case DisconnectReason.HostClosed:
                     return "The host closed the shop.";
-                default:
+                case DisconnectReason.HostStalled:
+                    return "The host's game stopped responding on the network, so the shop was closed. A crash log was written on the host's PC.";
+                case DisconnectReason.None:
+                case DisconnectReason.Left:
                     return string.Empty;
+                default:
+                    return UnknownText;
             }
         }
+
+        /// <summary>
+        /// 049 review: what an unknown reason says, "Disconnected (reason n)". A reason byte from a newer build (the host's notice) is
+        /// still shown, with its number, instead of an empty title. ProtocolSurface does not hash enum values, so adding a reason does
+        /// not change the build hash: older clients can meet one.
+        /// </summary>
+        public static string Unknown(DisconnectReason reason) => "Disconnected (reason " + (int)reason + ")";
+
+        /// <summary>The sentence under an unknown reason's title.</summary>
+        public const string UnknownText = "The other game ended the connection for a reason this version does not know. The host may run a newer version.";
 
         /// <summary>The rejoin line, with whole seconds left.</summary>
         public static string Rejoining(float secondsLeft) =>

@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.UI
 {
@@ -41,7 +42,7 @@ namespace Worktown.Game.UI
         private VisualElement _title;
         private VisualElement _friend;
         private VisualElement _address;
-        private VisualElement _settings;
+        private SettingsView _settingsView;
         private VisualElement _card;
         private Label _cardTitle;
         private Label _cardText;
@@ -133,12 +134,7 @@ namespace Worktown.Game.UI
             _address.Add(MenuButton(BackId + "-address", "Back", () => Open(Page.Title)));
             _side.Add(_address);
 
-            _settings = SubScreen("Settings");
-            var controls = new Label(ControlsHelp.Text() + "\n\nMore settings come in a later update.");
-            controls.AddToClassList("menu-text");
-            _settings.Add(controls);
-            _settings.Add(MenuButton(BackId + "-settings", "Back", () => Open(Page.Title)));
-            _side.Add(_settings);
+            // Spec 048: Settings opens the settings screen (SettingsView) over the town; its Back returns to the title.
             _root.Add(_side);
 
             _card = new VisualElement();
@@ -220,9 +216,17 @@ namespace Worktown.Game.UI
             Show(_title, page == Page.Title);
             Show(_friend, page == Page.JoinFriend);
             Show(_address, page == Page.JoinAddress);
-            Show(_settings, page == Page.Settings);
             if (page == Page.JoinFriend) RefreshFriends();
+            if (page == Page.Settings) OpenSettings();
             if (page == Page.JoinAddress) _addressError.text = string.Empty;
+        }
+
+        /// <summary>Spec 048: the settings screen over the town; closing it (Back, Esc) returns to the title.</summary>
+        private void OpenSettings()
+        {
+            if (_settingsView == null) _settingsView = SettingsView.Find();
+            if (_settingsView == null || _settingsView.IsOpen) return;
+            _settingsView.Open(false, () => Open(Page.Title));
         }
 
         private void RefreshFriends()
@@ -236,7 +240,7 @@ namespace Worktown.Game.UI
             }
             List<FriendHost> hosts = friends.HostingFriends();
             _friendHint.text = hosts.Count == 0
-                ? "None of your Steam friends has a shop open right now. When one does, they can invite you (Tab in their shop), or use Join Game in Steam."
+                ? MenuRules.NoFriendsHosting(GameSettings.CurrentBindings)
                 : "Friends with a shop open:";
             foreach (FriendHost host in hosts)
             {
@@ -302,7 +306,8 @@ namespace Worktown.Game.UI
                 _build.text = MenuRules.BuildLine(Application.version, BuildHash.Short(_bootstrap.Join.BuildHash));
                 _buildShown = true;
             }
-            Show(_side, flow.State == JoinState.Menu);
+            Show(_side, flow.State == JoinState.Menu && _page != Page.Settings);
+            if (_page == Page.Settings && (flow.State != JoinState.Menu || _settingsView == null || !_settingsView.IsOpen)) Open(Page.Title);
             Show(_card, flow.State != JoinState.Menu);
             double now = Time.unscaledTimeAsDouble;
             switch (flow.State)

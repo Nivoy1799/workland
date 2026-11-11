@@ -20,7 +20,68 @@ A settings menu (title screen and Esc) with:
 Saved per player (PlayerPrefs, the same pattern as the tutorial flag) and applied live.
 
 ## Acceptance criteria
-- [ ] AC1: `verify.sh`.
-- [ ] AC2: Tests that settings save, load and apply; rebinding conflicts are detected.
-- [ ] AC3: Visual check of every page.
+- [x] AC1: `verify.sh`.
+- [x] AC2: Tests that settings save, load and apply; rebinding conflicts are detected.
+- [x] AC3: Visual check of every page.
 - [ ] AC4 (manual, human): rebind a key and play.
+
+## Implementation notes
+
+The spec names no folders; the work stayed in `game/Assets/_Project` (Scripts, Tests, Editor/GrayboxSceneBuilder, UI/Worktown.uss, the
+regenerated scene) plus three asmdef references (game: URP Core and Universal runtime for the motion-blur volume and the quality
+preset; Dev and EditMode tests: Unity.InputSystem for `Key`). No RPC, SyncVar or broadcast changed. Two roadmap items folded in: the
+frame cap (045: the host ran at FishNet's 500 fps cap) and `WheelSteps` reading `InputSystem.settings.scrollDeltaBehavior` (041 review).
+
+**Design.**
+- `Settings/GameSettings` (plain fields, JsonUtility): graphics (quality preset Low/Medium/High, resolution and window mode, vsync,
+  frame cap, FOV 70-100, motion blur, head bob), audio (master, effects, ambience, UI), controls (mouse and gamepad sensitivity,
+  invert Y, bindings), comfort (UI scale 75-150 %, colour-blind ring colours, labels). `Sanitized` clamps everything; `Use` makes a
+  copy current, bumps `Version` and hands on the shared parts (`Audio/AudioMix`, `Art/RingPalette`, the parsed bindings).
+- `Settings/SettingsStore` over `ISettingsPrefs` (`PlayerPrefsSettings` in the game, a fake in the tests): one JSON text under
+  `worktown.settings`. **Scripted runs** (`-tour`, `-observe`, `-bot`; `SettingsRules.UsesSavedSettings`, the 038b lesson) neither read
+  nor write: they run on the defaults (their pictures never depend on this PC) and changes stay in memory; they also never touch the
+  window (the visual check sets 1280x720 itself).
+- `Settings/SettingsApplier` (on the UI object, off in batch mode): loads at start and applies on every change: quality (URP render
+  scale, shadow distance and cascades; High = the asset as it is, restored on destroy), display (only once the player picked a
+  resolution or window mode), vsync and the frame cap (re-asserted every frame, because FishNet's `UpdateFramerate` sets
+  `targetFrameRate` whenever a server or client starts), AudioListener volume, the panel's UI scale, motion blur (a global URP volume,
+  created only once it is turned on). Defaults: vsync on, cap 120.
+- `Settings/ControlBindings` (pure): one key and one gamepad button per `ControlAction` (walk x4, run, sneak, jump, view, use, put down,
+  turn, quick chat, emote wheel, ping, players); defaults are the 041 mapping. A key or button that another action has is detected
+  (`ConflictFor`) and the two swap, reported (`RebindResult`, the screen says "E was Use: swapped, Use now uses Space"); fixed keys are
+  refused (Esc, Enter, F1-F12, Alt, Windows, arrows, Backspace, Print Screen, beyond OEM5). Saved as changed entries by name; a save
+  with a conflict loads as the defaults. `Settings/GameInput` reads an action from the devices; PlayerInputReader (WASD now from the
+  bindings, the Move action masked to its gamepad stick; arrows always walk), PickupInteractor (E, Q/X, Y, T, G/LB), SocialInteractor
+  (G/LB, T, RB) and LobbyView (Tab) use it. Mouse buttons, wheel, triggers, sticks and d-pad stay fixed (041).
+- `UI/SettingsView`: four tabs, live changes, Reset this page, Back (saves). Title screen Settings opens it over the town (the old
+  controls-text page is gone); in the shop Esc opens it (cursor freed; Esc or Back closes). Click a binding, press a key or button
+  (Esc keeps it, Backspace clears). Comfort shows the four ring colours live.
+- Readers: PlayerCameraRig (FOV first person, third person 10 narrower; sensitivity and invert Y via `SettingsRules.LookDegrees`; head
+  bob = the setting or the F2 switch; third-person zoom now per notch), WorldLabelFade (`LabelRules.ShownWithLabels`: off hides signs
+  and item names, orders, rail and buttons stay), HeatRingRules/PatienceRingRules (colours from `RingPalette.Current`; the colour-blind
+  set is Okabe-Ito sky blue, yellow, orange, vermillion, added to Palette.cs; the ring views rebuild on `RingPalette.Version`),
+  SoundCatalog (`GainOf` = `BaseGainOf` x the group volume; `SoundRules.CategoryOf`: fryer and motor hums are ambience, nope, perfect,
+  warning, burnt and coin are UI cues, the rest effects).
+- `WheelSteps(countsPerNotch)` + `CountsPerNotch(uniform, windows)`: 1 for the Input System's uniform deltas (its default, which this
+  project uses), else 120 on Windows; the old per-frame guess stays for the parameterless constructor.
+
+**Tests (AC2).** `SettingsTests` (defaults, sanitizing, JSON round trip, store save/load over a fake prefs, scripted run never reads or
+writes, `UsesSavedSettings`, `Use` -> volumes per group, ring colours, bindings; frame cap/vsync, window modes, FOV, look speed and
+invert Y, quality presets, resolutions, labels switch, the wheel notch), `ControlBindingsTests` (041 defaults, bind, conflict detected
+and swapped for keys and buttons, fixed keys refused, unchanged/cleared, serialize/parse, a conflicting save loads the defaults, pad
+mapping, words). Existing tests unchanged.
+
+**Checks.** `verify.sh` PASS: EditMode 1322 (was 1273), sim 400. `BuildAll` succeeded (Windows, Linux server).
+`visual-check.sh --tours look,cook,tutorial,menu --out .verify/visual048`: PASS, 0 Exception lines in every log; no host freeze.
+Menu sheet (`menu/sheet.png`): 02 settings-graphics, 03 settings-audio, 04 settings-controls, 05 settings-rebind-swap (Jump onto E,
+the swap message), 06 settings-comfort, 07 settings-comfort-live (UI scale 125 % and colour-blind swatches applied live), 24
+settings-in-shop (what Esc opens), 25 labels-on, 26 labels-off. The tour fails if `SettingsApplier.Persistent` is true. Afterwards
+`HKCU\Software\DefaultCompany\Worktown` has no `worktown.settings` value (every window logged "scripted run: the defaults").
+
+**Not covered / follow-ups.**
+- AC4 (rebind a key and play) is the human's. Gamepad capture, Esc in a real shop, resolution/window changes and motion blur were
+  not exercised by a tour (scripted runs never touch the display).
+- Ring colours were only checked in the comfort swatches and tests; no cook-tour shot with the colour-blind set.
+- Esc that closes the settings in the shop also hits PlayerInputReader's Esc (cursor free): one click locks it again.
+- The UI and cue sound groups are a judgement call (only the feedback cues are "UI"; no menu click sounds exist).
+- Quality presets change a runtime copy of the URP asset (048 review, fixed in the 049 round), never the shared asset.

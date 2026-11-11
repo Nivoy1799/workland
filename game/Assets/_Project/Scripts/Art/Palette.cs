@@ -39,6 +39,13 @@ namespace Worktown.Game.Art
             ("Panel", Panel), ("Interact", Interact)
         };
 
+        // Spec 048: the colour-blind friendly ring set (the Okabe-Ito hues): blue, yellow, orange and vermillion stay apart for every
+        // common kind of colour blindness, and step down in lightness as the food gets worse. Only the rings use them (RingPalette).
+        public static readonly Color SafeSkyBlue = Rgb(0x56B4E9);
+        public static readonly Color SafeYellow = Rgb(0xF0E442);
+        public static readonly Color SafeOrange = Rgb(0xE69F00);
+        public static readonly Color SafeVermillion = Rgb(0xD55E00);
+
         // Food keeps natural colours, muted to sit in the palette (HSV saturation at most 70 %).
         public static readonly Color FoodPotato = Rgb(0xD4B27A);
         public static readonly Color FoodApple = Rgb(0xB8483E);

@@ -6,7 +6,8 @@
         "UnityEditor.TestRunner",
         "Worktown.Game",
         "Worktown.Game.Dev",
-        "Worktown.Sim"
+        "Worktown.Sim",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

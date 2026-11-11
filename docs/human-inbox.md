@@ -9,10 +9,12 @@ every question has a default, and work continues on other items until you answer
   play-test: can you fill a drink while doing something else?), 043 (perfect means best, names like "golden fries"
   match the ring, one pace table; pan and pot now twice as fast), 044 (others see food fly into pots and bins and hear
   put-downs, buttons sink, faster sprint start, tip and scoop at the click, both hands on a box, smaller tutorial card,
-  tilted ticket rail).
+  tilted ticket rail), 045 (spam guard, late answers fixed, restart paths, D3D11 default, 16-player load test passed),
+  047 (title screen: open your shop, join a friend through Steam or by address, lobby with kick on Tab, auto-rejoin).
+  006 (AI gateway skeleton: item names via an OpenAI-compatible API, strict JSON, vegan check, cache; stays off, see 20).
+  **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 045 (stability, 16-player load test) is in review; 047 (main menu and joining) is being built. 037 waits for
-  question 17. After that: 047, 048, 049, 006.
+- **Next:** 048 (settings) and 049 (stability for release) merge after the 2-hour soak. 037 waits for question 17.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
@@ -62,6 +64,21 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+20. **AI gateway (spec 006) and player-hosted games (D33).** Spec 006 was planned for official servers only: they
+    alone held the gateway's password. Under D33 the host is a player's PC, so that password ships inside the game and
+    is public. Anyone could then run up our API bill, or claim an item's name first and show a bad name to everyone.
+    Default: merge the skeleton (it is not live and costs nothing) and keep the gateway **off** until a follow-up
+    spec adds:
+    - a login per host (for example Steam tickets checked by the gateway; O5);
+    - item names built on our side;
+    - item checks through /sim;
+    - protection for the shared cache.
+    Until then, games use the built-in fallback names. Also FYI: the gateway now rejects animal-product words (D27) with
+    a copy of the game's own word list, and a test keeps both lists equal.
+19. **Colour-blind ring colours (spec 048) and D32.** D32 says one palette of 16 named colours. The new colour-blind
+    option for the cooking rings uses 4 extra colours from the Okabe-Ito set, a standard palette that is safe for colour
+    blindness. Default: allow them as a separate "accessibility" set next to the 16, used only when that option is on.
+    Say no if you'd rather pick 4 of the 16.
 18. **Spec 045 results (in review).**
     - **16-player load test passed:** tick time p95 1 ms (target under 20), 49.6 KB/s per player (target 50, just met),
       host upload about 0.8 MB/s, all 17 processes alive.

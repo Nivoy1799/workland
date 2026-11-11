@@ -81,6 +81,26 @@ while cooking); `sheet.txt` names each numbered cell, the logs sit next to them.
 PNGs) before calling a visual spec done. The tours live in `Scripts/Dev/TourRules.cs` (scene coordinates); the Dev
 assembly only exists in the editor and development builds.
 
+## Perf check (spec 049)
+`bash scripts/perf-check.sh` (Git Bash, after `WorktownBuild.BuildAll`) is the release-stability check: the crash log
+(forced exceptions, a forced host tick stall), the profiling tour (the host's player visits every station of the scene
+with 15 bots in the restaurant, 1920x1080) and a soak (memory and object counts; 15 minutes by default,
+`--soak-minutes 120` for the spec's 2 hours, before a release). It appends a dated row to
+`docs/performance.md`, replaces the per-station table there, and exits 1 when the budget (60 fps: frame avg and p95 at most
+16.7 ms), a memory bound or the baseline (one row: the clean passing run of the same scenario with the lowest p95; more than
+10 % worse) is broken.
+- **When:** at least once per merged milestone, and for big specs the orchestrator adds it to the pipeline after the
+  visual check (never at the same time as a visual check or a load test: they share port 7770; the script refuses then).
+  Commit the new row with the merge (`docs: perf check [spec NNN]`).
+- **Length:** the default run takes about 20 minutes; `--quick` (10-minute soak) after a change that may cost frames;
+  rows are only compared with rows of the same scenario (bots, minutes, resolution). Do not poll a running check with a
+  loop of greps: on Git Bash that, plus 16 game processes, once used up the process table (fork failures) mid-soak.
+  `--no-record` measures without touching the doc; `--skip-soak` runs only the crash checks.
+- **A FAIL:** read `.verify/perf/<run>/report.md` (why, the station table) and the logs next to it; a frame regression
+  shows in the station table (worst p95 first); a growth in memory in `soak/host.jsonl` (`managed_heap_mb`,
+  `unity_objects`, one line a second). Fix it or write a plan into docs/performance.md, never raise the bounds quietly.
+- Crash logs stay local (`crash.log` in the player's data folder, `-crash-log path` to move it); an upload is OPEN.
+
 ## What's new entries
 Every spec that changes something playable adds one entry to
 `game/Assets/_Project/Resources/WhatsNew.json` as part of "done": an id ending in `spec-NNN`,

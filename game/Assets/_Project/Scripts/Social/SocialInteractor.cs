@@ -2,6 +2,7 @@ using FishNet.Object;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Worktown.Game.Player;
+using Worktown.Game.Settings;
 using Worktown.Game.UI;
 
 namespace Worktown.Game.Social
@@ -72,15 +73,15 @@ namespace Worktown.Game.Social
             Mouse mouse = Mouse.current;
             Gamepad gamepad = Gamepad.current;
 
-            if (UpdateWheel(keyboard, mouse, gamepad)) return;
+            if (UpdateWheel(mouse, gamepad)) return;
             UpdateQuickChat(keyboard, gamepad);
             UpdatePing(mouse, gamepad);
         }
 
         /// <summary>True while the wheel is open (it takes all input).</summary>
-        private bool UpdateWheel(Keyboard keyboard, Mouse mouse, Gamepad gamepad)
+        private bool UpdateWheel(Mouse mouse, Gamepad gamepad)
         {
-            bool held = (keyboard != null && keyboard.gKey.isPressed) || (gamepad != null && gamepad.leftShoulder.isPressed);
+            bool held = GameInput.Held(ControlAction.EmoteWheel); // spec 048: the bound key and button (G, LB)
             if (held && !_wheelOpen)
             {
                 _wheelOpen = true;
@@ -111,7 +112,7 @@ namespace Worktown.Game.Social
 
         private void UpdateQuickChat(Keyboard keyboard, Gamepad gamepad)
         {
-            bool held = keyboard != null && keyboard.tKey.isPressed;
+            bool held = keyboard != null && GameInput.Held(ControlAction.QuickChat); // spec 048: the bound key (T)
             _wheel.SetQuickChatOpen(held);
             if (held)
             {
@@ -128,7 +129,7 @@ namespace Worktown.Game.Social
         private void UpdatePing(Mouse mouse, Gamepad gamepad)
         {
             bool clicked = (mouse != null && mouse.middleButton.wasPressedThisFrame)
-                || (gamepad != null && gamepad.rightShoulder.wasPressedThisFrame);
+                || GameInput.Pressed(ControlAction.Ping); // spec 048: the bound key or button (RB); the middle button stays
             if (!clicked) return;
             float now = Time.unscaledTime;
             PingKind kind = now - _lastPingClick < DoubleClickSeconds ? PingKind.Danger : PingKind.LookHere;
