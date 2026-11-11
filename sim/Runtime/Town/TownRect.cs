@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace Worktown.Sim.Town
 {
@@ -22,8 +23,8 @@ namespace Worktown.Sim.Town
         public int X1Mm { get; }
         public int Z1Mm { get; }
 
-        /// <summary>A rectangle from whole metres, in the spec's table order: x0..x1, z0..z1.</summary>
-        public static TownRect Metres(int x0, int x1, int z0, int z1) => new TownRect(x0 * 1000, z0 * 1000, x1 * 1000, z1 * 1000);
+        /// <summary>A rectangle from whole metres, in the constructor's order: (x0, z0) to (x1, z1).</summary>
+        public static TownRect Metres(int x0, int z0, int x1, int z1) => new TownRect(x0 * 1000, z0 * 1000, x1 * 1000, z1 * 1000);
 
         /// <summary>True when the point lies inside or on the border.</summary>
         public bool Contains(TownPoint p) => p.XMm >= X0Mm && p.XMm <= X1Mm && p.ZMm >= Z0Mm && p.ZMm <= Z1Mm;
@@ -44,7 +45,10 @@ namespace Worktown.Sim.Town
         public bool Equals(TownRect o) => X0Mm == o.X0Mm && Z0Mm == o.Z0Mm && X1Mm == o.X1Mm && Z1Mm == o.Z1Mm;
         public override bool Equals(object? obj) => obj is TownRect r && Equals(r);
         public override int GetHashCode() => unchecked((((((X0Mm * 397) ^ Z0Mm) * 397) ^ X1Mm) * 397) ^ Z1Mm);
-        public override string ToString() => "[" + X0Mm + ".." + X1Mm + ", " + Z0Mm + ".." + Z1Mm + "]";
+        public override string ToString() =>
+            "[" + I(X0Mm) + ".." + I(X1Mm) + ", " + I(Z0Mm) + ".." + I(Z1Mm) + "]";
+
+        private static string I(int v) => v.ToString(CultureInfo.InvariantCulture);
         public static bool operator ==(TownRect a, TownRect b) => a.Equals(b);
         public static bool operator !=(TownRect a, TownRect b) => !a.Equals(b);
     }

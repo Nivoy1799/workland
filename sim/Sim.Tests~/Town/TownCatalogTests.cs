@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Worktown.Sim.Climb;
 using Worktown.Sim.Cooking;
@@ -47,9 +48,9 @@ namespace Worktown.Sim.Tests.Town
         [Fact] public void DistrictWithoutSafeSpotThrows() { var p = T.Small(); p.SafeSpots.RemoveAll(s => s.NodeId == 3); Throws(p, "beta: a district needs at least one safe spot"); }
 
         // The other rules of the constructor.
-        [Fact] public void OverlappingAreasThrow() => Throws(T.Small().District("beta", d => d with { Areas = new[] { TownRect.Metres(-10, 100, -100, 100) } }), "areas overlap");
-        [Fact] public void AreaOutsidePlayAreaThrows() => Throws(T.Small().District("beta", d => d with { Areas = new[] { TownRect.Metres(0, 120, -100, 100) } }), "outside the play area");
-        [Fact] public void EmptyAreaThrows() => Throws(T.Small().District("beta", d => d with { Areas = new[] { TownRect.Metres(10, 10, -100, 100) } }), "needs X0 < X1");
+        [Fact] public void OverlappingAreasThrow() => Throws(T.Small().District("beta", d => d with { Areas = new[] { TownRect.Metres(-10, -100, 100, 100) } }), "areas overlap");
+        [Fact] public void AreaOutsidePlayAreaThrows() => Throws(T.Small().District("beta", d => d with { Areas = new[] { TownRect.Metres(0, -100, 120, 100) } }), "outside the play area");
+        [Fact] public void EmptyAreaThrows() => Throws(T.Small().District("beta", d => d with { Areas = new[] { TownRect.Metres(10, -100, 10, 100) } }), "needs X0 < X1");
         [Fact] public void NodeFarFromAnchorThrows() => Throws(T.Small().Place("p_one", x => x with { NodeId = 2 } with { Anchor = TownPoint.Metres(-90, 0) }), "more than 30 m");
         [Fact] public void BorderOffTheEdgeThrows() => Throws(T.Small().Place("p_two", x => x with { Kind = PlaceKind.Border }), "play-area edge");
         [Fact] public void PermilleOutOfRangeThrows() => Throws(T.Small().Place("p_two", x => x with { RentPermille = 5001 }), "permille must be 0..5000");
@@ -60,16 +61,79 @@ namespace Worktown.Sim.Tests.Town
         [Fact] public void UnknownReferenceThrows() { var p = T.Small(); p.Reference = "nope"; Throws(p, "Unknown reference place"); }
         [Fact] public void FallHeightAboveANodeThrows() { var p = T.Small(); p.FallHeight = 0; Throws(p, "fall height"); }
         [Fact] public void ClockwisePlayAreaThrows() { var p = T.Small(); p.PlayArea.Reverse(); Throws(p, "counter-clockwise"); }
+
+        // 064 review nits
+        [Fact]
+        public void DefaultPlayAreaIsConvex() // the area check tests corners only, which is exact for a convex play area
+        {
+            IReadOnlyList<TownPoint> a = TownCatalog.CreateDefault().PlayArea;
+            for (int i = 0; i < a.Count; i++)
+            {
+                TownPoint p = a[i], q = a[(i + 1) % a.Count], r = a[(i + 2) % a.Count];
+                long cross = ((long)q.XMm - p.XMm) * ((long)r.ZMm - q.ZMm) - ((long)q.ZMm - p.ZMm) * ((long)r.XMm - q.XMm);
+                Assert.True(cross >= 0, "inward corner at " + q);
+            }
+        }
+
+        [Fact]
+        public void NodeInADistrictWithoutAreasIsLeftToC8()
+        {
+            T.Parts p = T.Small().District("beta", d => d with { Areas = new TownRect[0] });
+            p.Places.RemoveAll(x => x.DistrictId == "beta");
+            Assert.Contains(TownCheck.Run(p.Build()), x => x.Check == "C8" && x.Detail == "beta has no area");
+        }
+
+        [Fact] public void NodeOutsideItsDistrictThrows() => Throws(T.Small().Node(2, n => n with { At = TownPoint.Metres(10, 20) }), "Node 2 at (10000, 20000) is outside its district alpha");
+
+        [Fact]
+        public void DefaultNodesLieInTheirDistricts() // node 1101 used to lie in no district
+        {
+            TownCatalog c = TownCatalog.CreateDefault();
+            foreach (PathNode n in c.Nodes) Assert.Contains(c.District(n.DistrictId).Areas, r => r.Contains(n.At));
+            Assert.Equal(TownPoint.Metres(-222, 100), c.Node(1101).At);
+        }
+
+        [Fact]
+        public void TheAirlockJettyIsADeckOverTheLake() // node 605 and airlock_2 lie east of x 200, on the water
+        {
+            TownCatalog c = TownCatalog.CreateDefault();
+            PathEdge jetty = Assert.Single(c.Edges, e => e.A == 605 || e.B == 605);
+            Assert.Equal(4000, jetty.WidthMm);
+            Assert.Equal(PathEdgeKind.Path, jetty.Kind);
+            Assert.Equal(605, c.Place("airlock_2").NodeId);
+        }
+
+        [Fact]
+        public void MetresTakesTheConstructorOrder()
+        {
+            Assert.Equal(new TownRect(1000, 2000, 3000, 4000), TownRect.Metres(1, 2, 3, 4));
+            Assert.Equal(TownRect.Metres(-210, -40, -150, 40), TownCatalog.CreateDefault().District("station_square").Areas[0]);
+        }
+
+        [Fact]
+        public void PointAndRectTextIgnoresTheCurrentCulture()
+        {
+            CultureInfo before = CultureInfo.CurrentCulture;
+            var odd = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+            odd.NumberFormat.NegativeSign = "~";
+            try
+            {
+                CultureInfo.CurrentCulture = odd;
+                Assert.Equal("(-1000, 2000)", TownPoint.Metres(-1, 2).ToString());
+                Assert.Equal("[-1000..3000, -2000..4000]", TownRect.Metres(-1, -2, 3, 4).ToString());
+            }
+            finally { CultureInfo.CurrentCulture = before; }
+        }
         [Fact] public void UnknownCurveThrows() => Throws(T.Small().District("beta", d => d with { CurveId = "none" }), "unknown curve 'none'");
 
         [Fact]
         public void CatalogCopiesItsInputs()
         {
             var parts = T.Small();
-            var areas = new List<TownRect> { TownRect.Metres(0, 100, -100, 100) };
+            var areas = new List<TownRect> { TownRect.Metres(0, -100, 100, 100) };
             parts.District("beta", d => d with { Areas = areas });
             TownCatalog c = parts.Build();
-            areas.Add(TownRect.Metres(-100, 0, -100, 100));
+            areas.Add(TownRect.Metres(-100, -100, 0, 100));
             Assert.Single(c.District("beta").Areas);
         }
 
@@ -108,7 +172,7 @@ namespace Worktown.Sim.Tests.Town
                 TownPoint.Metres(-100, -100), TownPoint.Metres(100, -100), TownPoint.Metres(100, 100), TownPoint.Metres(0, 100),
                 TownPoint.Metres(0, 70), TownPoint.Metres(-100, 70),
             });
-            parts.District("alpha", d => d with { Areas = new[] { TownRect.Metres(-100, 0, -100, 70) } });
+            parts.District("alpha", d => d with { Areas = new[] { TownRect.Metres(-100, -100, 0, 70) } });
             TownCatalog l = parts.Build();
             Assert.False(l.InPlayArea(TownPoint.Metres(-50, 90)));
             Assert.True(l.InPlayArea(TownPoint.Metres(50, 90)));
@@ -125,20 +189,20 @@ namespace Worktown.Sim.Tests.Town
             Assert.Equal("(1000, -2000)", TownPoint.Metres(1, -2).ToString());
             Assert.False(TownPoint.Metres(1, 2).Equals((object)"x"));
 
-            TownRect a = TownRect.Metres(0, 10, 0, 10);
+            TownRect a = TownRect.Metres(0, 0, 10, 10);
             Assert.Equal(new TownRect(0, 0, 10000, 10000), a);
-            Assert.True(a == TownRect.Metres(0, 10, 0, 10));
-            Assert.True(a != TownRect.Metres(0, 11, 0, 10));
+            Assert.True(a == TownRect.Metres(0, 0, 10, 10));
+            Assert.True(a != TownRect.Metres(0, 0, 11, 10));
             Assert.Equal(a.GetHashCode(), new TownRect(0, 0, 10000, 10000).GetHashCode());
             Assert.Equal("[0..10000, 0..10000]", a.ToString());
             Assert.True(a.Contains(TownPoint.Metres(10, 5)));
             Assert.False(a.Contains(TownPoint.Metres(11, 5)));
-            Assert.True(a.Overlaps(TownRect.Metres(5, 15, 5, 15)));
-            Assert.False(a.Overlaps(TownRect.Metres(10, 20, 0, 10)));
-            Assert.True(a.Touches(TownRect.Metres(10, 20, 0, 10)));  // a shared border
-            Assert.True(a.Touches(TownRect.Metres(10, 20, 10, 20))); // a shared corner
-            Assert.False(a.Touches(TownRect.Metres(11, 20, 0, 10)));
-            Assert.False(a.Touches(TownRect.Metres(5, 15, 5, 15)));  // overlapping is not touching
+            Assert.True(a.Overlaps(TownRect.Metres(5, 5, 15, 15)));
+            Assert.False(a.Overlaps(TownRect.Metres(10, 0, 20, 10)));
+            Assert.True(a.Touches(TownRect.Metres(10, 0, 20, 10)));  // a shared border
+            Assert.True(a.Touches(TownRect.Metres(10, 10, 20, 20))); // a shared corner
+            Assert.False(a.Touches(TownRect.Metres(11, 0, 20, 10)));
+            Assert.False(a.Touches(TownRect.Metres(5, 5, 15, 15)));  // overlapping is not touching
             Assert.Equal(new[] { TownPoint.Metres(0, 0), TownPoint.Metres(10, 0), TownPoint.Metres(10, 10), TownPoint.Metres(0, 10) }, a.Corners());
         }
 

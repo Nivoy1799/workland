@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace Worktown.Sim.Town
 {
@@ -23,7 +24,8 @@ namespace Worktown.Sim.Town
         public bool Equals(TownPoint other) => XMm == other.XMm && ZMm == other.ZMm;
         public override bool Equals(object? obj) => obj is TownPoint p && Equals(p);
         public override int GetHashCode() => unchecked((XMm * 397) ^ ZMm);
-        public override string ToString() => "(" + XMm + ", " + ZMm + ")";
+        public override string ToString() =>
+            "(" + XMm.ToString(CultureInfo.InvariantCulture) + ", " + ZMm.ToString(CultureInfo.InvariantCulture) + ")";
         public static bool operator ==(TownPoint a, TownPoint b) => a.Equals(b);
         public static bool operator !=(TownPoint a, TownPoint b) => !a.Equals(b);
     }
