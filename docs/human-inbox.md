@@ -70,7 +70,7 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-28. **Haven Nine town plan v1, from your Blender session** (branch spec/046-style-lab, docs/town-plan.md and
+28. **Haven Nine town plan v1, from your Blender session** (branch spec/046-style-lab at 146fd33, docs/town-plan.md and
     docs/town-story.md; pictures: style lab round 8). The town is a utopia under a glass Dome that has declined. You
     start with a cart and poor potatoes, and every good meal brings a district back: four levels, from grey to
     thriving, that never go back. Its first package (W1: decisions and docs) needs your approval before anything is
@@ -79,8 +79,8 @@ every question has a default, and work continues on other items until you answer
       dream booths as world content only, never a player loop.
       - Note for the Steam age rating: depicting gambling can raise the rating even without a playable gamble.
       - Default: approve as written, world content only.
-    - **The Low Ring look** uses "pipes and steam". You just dropped steampunk. Default: rust, soot and sodium lamps
-      without steampunk machines.
+    - **The Low Ring look** is fixed already. Commit 146fd33 says "plain concrete service ducts and vent haze, never
+      steampunk".
     - **The setting.** This replaces the clean-utopia framing of docs/setting.md and answers its "too clean heaven"
       question. Money option C (basics free, grey printer food) still fits.
     - **Revival feeds the economy** (+0/10/20/30 % footfall per level). That changes how fast the climb goes, so W3
