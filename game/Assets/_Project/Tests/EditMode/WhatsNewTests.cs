@@ -425,29 +425,40 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void ShippedFile_HasTheSpec042Entry_WithTestSteps()
-        {
-            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
-            WhatsNewEntry entry = null;
-            foreach (WhatsNewEntry e in entries)
-                if (e.id == "2026-11-10-spec-042") entry = e;
-            Assert.IsNotNull(entry, "spec 042 AC5");
-            Assert.AreEqual("2026-11-10", entry.date);
-            Assert.GreaterOrEqual(entry.test.Length, 3);
-            Assert.AreNotSame(entry, WhatsNewRules.Newest(entries), "spec 043 is newer");
-        }
+        public void ShippedFile_HasTheSpec042Entry_WithTestSteps() => Shipped("2026-11-10-spec-042", "2026-11-10", "spec 042 AC5");
 
         [Test]
-        public void ShippedFile_HasTheSpec043Entry_WithTestSteps_AsTheNewest()
+        public void ShippedFile_HasTheSpec043Entry_WithTestSteps() => Shipped("2026-11-11-spec-043", "2026-11-11", "spec 043 AC4");
+
+        [Test]
+        public void ShippedFile_HasTheSpec044Entry_WithTestSteps() => Shipped("2026-11-11-spec-044", "2026-11-11", "spec 044 AC4");
+
+        /// <summary>043 review: the banner shows the file's last entry, so a new spec appends its entry and adds one Shipped test; no
+        /// earlier spec's test names the newest.</summary>
+        [Test]
+        public void ShippedFile_TheNewestEntry_IsTheLastInTheFile()
+        {
+            IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
+            Assert.Greater(entries.Count, 0);
+            Assert.AreSame(entries[entries.Count - 1], WhatsNewRules.Newest(entries), "the newest entry, so the banner shows it");
+        }
+
+        /// <summary>
+        /// 043 review: a spec's entry is shipped with its date and at least three test steps, and is never newer than the newest entry. It
+        /// does not say which entry is the newest, so the next spec does not edit this spec's test.
+        /// </summary>
+        private static WhatsNewEntry Shipped(string id, string date, string ac)
         {
             IReadOnlyList<WhatsNewEntry> entries = WhatsNewRules.Parse(Resources.Load<TextAsset>("WhatsNew").text);
             WhatsNewEntry entry = null;
             foreach (WhatsNewEntry e in entries)
-                if (e.id == "2026-11-11-spec-043") entry = e;
-            Assert.IsNotNull(entry, "spec 043 AC4");
-            Assert.AreEqual("2026-11-11", entry.date);
+                if (e.id == id) entry = e;
+            Assert.IsNotNull(entry, ac);
+            Assert.AreEqual(date, entry.date);
             Assert.GreaterOrEqual(entry.test.Length, 3);
-            Assert.AreSame(entry, WhatsNewRules.Newest(entries), "the newest entry, so the banner shows it");
+            WhatsNewEntry newest = WhatsNewRules.Newest(entries);
+            Assert.LessOrEqual(string.CompareOrdinal(entry.date, newest.date), 0, id + " is not newer than the newest entry");
+            return entry;
         }
     }
 }

@@ -250,6 +250,18 @@ namespace Worktown.Game.Net
             return true;
         }
 
+        /// <summary>
+        /// Spec 044: as <see cref="TakeAway(PickupInteractor, out NetworkObject)"/>, for an item that is despawned into
+        /// <paramref name="exitTo"/> right after: every viewer sees it fly there and hears <paramref name="landing"/>
+        /// (<see cref="Pickup.ServerExitTo"/>).
+        /// </summary>
+        public bool TakeAway(PickupInteractor player, out NetworkObject taken, Vector3 exitTo, Worktown.Game.Audio.SoundKey landing)
+        {
+            if (!TakeAway(player, out taken)) return false;
+            if (taken.TryGetComponent(out Pickup pickup)) pickup.ServerExitTo(exitTo, landing);
+            return true;
+        }
+
         /// <summary>Server: removes the held object from the player's hands without dropping it
         /// (it is about to be despawned, e.g. served).</summary>
         public bool TakeAway(PickupInteractor player, out NetworkObject taken)

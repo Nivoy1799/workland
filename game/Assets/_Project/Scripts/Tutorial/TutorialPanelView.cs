@@ -6,15 +6,21 @@ using Worktown.Game.Art;
 namespace Worktown.Game.Tutorial
 {
     /// <summary>
-    /// Spec 038, UI Toolkit: the tutorial's card at the top centre (a kicker with the progress "3 / 14", the step text, "Skip step" for an
+    /// Spec 038, UI Toolkit: the tutorial's card (a kicker with the progress "3 / 14", the step text, "Skip step" for an
     /// optional step and "Skip tutorial", or "Close" on the done card) and the Mustard edge arrow that points to a target off the screen.
+    /// Spec 044: the card sits compact in the top right corner, above the toast column, so the top of the view stays free (it was a
+    /// 540 px card at the top centre); the arrow is larger.
     /// Palette colours only. Texts change only when the step changes; the arrow only moves (no allocation per frame). Built into the HUD's
     /// document by <see cref="TutorialRunner"/>, so it needs no scene entry.
     /// </summary>
     public sealed class TutorialPanelView
     {
-        public const float CardWidth = 540f; // between the wallet box (left) and the right edge at 1280 px
-        public const float ArrowSize = 46f;
+        /// <summary>Spec 044: px, the card's width in the top right corner (the toast column below it is 380 px wide).</summary>
+        public const float CardWidth = 380f;
+        /// <summary>px from the right and top edges (the wallet box keeps the same margin on the left).</summary>
+        public const float CardMargin = 16f;
+        /// <summary>Spec 044: px (was 46; the 038 play-test found the arrow small).</summary>
+        public const float ArrowSize = 60f;
 
         private readonly VisualElement _row;
         private readonly Label _kicker;
@@ -31,28 +37,30 @@ namespace Worktown.Game.Tutorial
             _row = new VisualElement { name = "tutorial-row", pickingMode = PickingMode.Ignore };
             IStyle row = _row.style;
             row.position = Position.Absolute;
-            row.left = 0;
-            row.right = 0;
-            row.top = 14;
+            row.right = CardMargin;
+            row.top = CardMargin;
+            row.width = CardWidth;
             row.flexDirection = FlexDirection.Row;
-            row.justifyContent = Justify.Center;
+            row.justifyContent = Justify.FlexEnd;
 
             var card = new VisualElement { name = "tutorial-card" };
             card.AddToClassList("panel");
             IStyle c = card.style;
             c.maxWidth = CardWidth;
+            c.paddingTop = 6;
+            c.paddingBottom = 6;
             c.borderLeftWidth = 4;
             c.borderLeftColor = Palette.Mustard;
             _row.Add(card);
 
             _kicker = new Label();
             _kicker.style.color = Palette.Mustard;
-            _kicker.style.fontSize = 13;
+            _kicker.style.fontSize = 12;
             _kicker.style.unityFontStyleAndWeight = FontStyle.Bold;
             card.Add(_kicker);
 
             _text = new Label();
-            _text.style.fontSize = 17;
+            _text.style.fontSize = 15;
             _text.style.whiteSpace = WhiteSpace.Normal;
             _text.style.color = Palette.Cream;
             card.Add(_text);
@@ -60,15 +68,17 @@ namespace Worktown.Game.Tutorial
             var buttons = new VisualElement();
             buttons.style.flexDirection = FlexDirection.Row;
             buttons.style.justifyContent = Justify.FlexEnd;
-            buttons.style.marginTop = 4;
+            buttons.style.marginTop = 2;
             _skipStep = new Button(() => skipStep?.Invoke()) { text = "Skip step" };
             _skipAll = new Button(() => skipAll?.Invoke()) { text = "Skip tutorial" };
+            _skipStep.style.fontSize = 12;
+            _skipAll.style.fontSize = 12;
             buttons.Add(_skipStep);
             buttons.Add(_skipAll);
             var hint = new Label();
             _hint = hint;
             hint.style.color = Palette.Steel;
-            hint.style.fontSize = 12;
+            hint.style.fontSize = 11;
             hint.style.marginRight = 8;
             hint.style.alignSelf = Align.Center;
             buttons.Insert(0, hint);

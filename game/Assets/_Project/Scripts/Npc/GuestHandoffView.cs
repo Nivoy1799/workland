@@ -10,6 +10,8 @@ namespace Worktown.Game.Npc
     /// the dish (<see cref="HandoffRules.ParcelOf"/>: wrap paper, a bag, a box) flies from the serving counter into its right hand on
     /// a short ease-out arc while its arm comes up (the character's hold pose), and stays in the hand to the register and out of the
     /// shop. The server's bubble says thanks. A guest first seen while paying already holds it. Display only.
+    /// Spec 044: an eat-in guest leaves its plate: after paying, the plate goes on the same arc onto the dish return and is gone there
+    /// (<see cref="HandoffRules.LeavesPlate"/>); the arm comes down.
     /// </summary>
     [RequireComponent(typeof(Customer))]
     public sealed class GuestHandoffView : MonoBehaviour
@@ -23,9 +25,15 @@ namespace Worktown.Game.Npc
         private float _start = float.NegativeInfinity;
         private bool _holding;
         private int _lastMood = -1;
+        // Spec 044: the plate on its way to the dish return.
+        private bool _returning;
+        private Vector3 _returnTo;
 
         /// <summary>True while the guest holds its dish (tests and the tour log).</summary>
         public bool Holding => _holding && _parcel != null;
+
+        /// <summary>Spec 044: the eat-in plate is on its way to the dish return (or there).</summary>
+        public bool ReturningPlate => _returning && _parcel != null;
 
         /// <summary>The hand-off arc is still flying.</summary>
         public bool Flying => _holding && Time.unscaledTime - _start < HandoffRules.FlySeconds;
@@ -48,6 +56,19 @@ namespace Worktown.Game.Npc
         {
             if (next == CustomerRules.MoodWaiting) Drop(); // a pooled guest starts over
             else if (next == CustomerRules.MoodPaying) Take(previous == CustomerRules.MoodWaiting); // fly from the counter; a late joiner holds it
+            else if (_holding && _parcel != null && previous >= 0 && HandoffRules.LeavesPlate((byte)previous, next, _customer.EatIn.Value, _customer.Dish.Value))
+                ReturnPlate();
+        }
+
+        /// <summary>Spec 044: the plate leaves the hand for the dish return (or the counter when there is none).</summary>
+        private void ReturnPlate()
+        {
+            Station target = NearestStation(StationKind.DishReturn) ?? NearestStation(StationKind.Counter);
+            _returnTo = target != null ? target.transform.position + Vector3.up * (ArtSizeTable.ServingCounterHeight * 0.5f + 0.05f)
+                : transform.position + Vector3.up * 0.9f + transform.forward * 0.5f;
+            _from = _parcel.transform.position;
+            _start = Time.unscaledTime;
+            _returning = true;
         }
 
         /// <summary>The dish into the hand: from the counter on an arc (<paramref name="fly"/>), or held at once (a late joiner).</summary>
@@ -70,6 +91,7 @@ namespace Worktown.Game.Npc
         private void Drop()
         {
             _holding = false;
+            _returning = false;
             if (_parcel != null) Destroy(_parcel);
             _parcel = null;
         }
@@ -90,21 +112,30 @@ namespace Worktown.Game.Npc
                 _lastMood = mood;
             }
             if (!_holding || _parcel == null) return;
-            if (_visual != null) _visual.MarkHolding(); // the arm comes up and stays up
             float t = (Time.unscaledTime - _start) / HandoffRules.FlySeconds;
+            if (_returning)
+            {
+                // Spec 044: onto the dish return, then gone (the arm is down).
+                if (t >= 1f) Drop();
+                else _parcel.transform.position = HandoffRules.Arc(_from, _returnTo, t);
+                return;
+            }
+            if (_visual != null) _visual.MarkHolding(); // the arm comes up and stays up
             Vector3 hand = HandPoint();
             Transform p = _parcel.transform;
             p.position = t >= 1f ? hand : HandoffRules.Arc(_from, hand, t);
             p.rotation = Quaternion.LookRotation(transform.forward, Vector3.up);
         }
 
-        private Station NearestCounter()
+        private Station NearestCounter() => NearestStation(StationKind.Counter);
+
+        private Station NearestStation(StationKind kind)
         {
             Station best = null;
             float bestSqr = float.MaxValue;
             foreach (Station s in FindObjectsByType<Station>(FindObjectsSortMode.None))
             {
-                if (s.Kind != StationKind.Counter) continue;
+                if (s.Kind != kind) continue;
                 float sqr = (s.transform.position - transform.position).sqrMagnitude;
                 if (sqr >= bestSqr) continue;
                 bestSqr = sqr;

@@ -504,10 +504,13 @@ namespace Worktown.Game.Editor
 
         // Spec 022: the ticket rail board above the counter. Two rows of three cards. Spec 027a: above the front counter's
         // street half at the serving counter, turned to face the aisle (north), so the cook reads it; its bottom (2.5 - 0.575 m)
-        // clears the guests' heads.
+        // clears the guests' heads. Spec 044: raised (centre 2.5 -> 3.0 m, bottom about 2.46 m) so the guests' order bubbles are seen
+        // under it from the aisle and the back line, in first and third person (TicketRailSceneTests), and tilted down towards the
+        // kitchen by RailTilt so the cards face the cook's eye below; the cards are unlit, so they read as bright from every angle.
         private const int TicketCards = 6;
-        private static readonly Vector3 RailPosition = new Vector3(CounterX, 2.5f, FrontCounterZ - 0.15f);
-        private static readonly Quaternion RailRotation = Quaternion.Euler(0f, 180f, 0f);
+        public const float RailTilt = 20f;
+        private static readonly Vector3 RailPosition = new Vector3(CounterX, 3.0f, FrontCounterZ - 0.15f);
+        private static readonly Quaternion RailRotation = Quaternion.Euler(0f, 180f, 0f) * Quaternion.Euler(-RailTilt, 0f, 0f);
         private static readonly Vector2 RailSize = new Vector2(2.5f, 1.15f);
         private static readonly Vector2 CardSize = new Vector2(0.74f, 0.4f);
         private const float CardStepX = 0.8f;
@@ -536,7 +539,7 @@ namespace Worktown.Game.Editor
             title.name = "Title";
             title.text = "ORDERS";
 
-            Material cardMat = CreateMaterial(Root + "/Settings/TicketCard.mat", Palette.Cream);
+            Material cardMat = CreateUnlitMaterial(Root + "/Settings/TicketCard.mat", Palette.Cream); // spec 044: unlit, bright from below
             Material strikeMat = CreateMaterial(Root + "/Settings/TicketStrike.mat", Palette.Ink); // spec 032
             var cards = new List<TextMesh>(TicketCards);
             var backs = new List<Renderer>(TicketCards);
@@ -3631,6 +3634,23 @@ namespace Worktown.Game.Editor
                 material = new Material(shader);
                 AssetDatabase.CreateAsset(material, path);
             }
+            material.color = color;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        /// <summary>Spec 044: an opaque URP Unlit material (the colour as it is, whatever the light or the angle), e.g. the ticket cards.
+        /// An existing asset gets the unlit shader.</summary>
+        private static Material CreateUnlitMaterial(string path, Color color)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            else if (material.shader != shader) material.shader = shader;
             material.color = color;
             EditorUtility.SetDirty(material);
             return material;

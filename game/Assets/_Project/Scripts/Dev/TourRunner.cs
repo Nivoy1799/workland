@@ -353,6 +353,7 @@ namespace Worktown.Game.Dev
             StartCoroutine(WatchFryer(() => capturing));
             StartCoroutine(WatchGriddle(() => capturing)); // spec 030: the griddle close-up and the remote flip
             StartCoroutine(WatchAssembly(() => capturing)); // spec 031: the assembly board close-up and the remote stack
+            StartCoroutine(WatchExitFlights(() => capturing)); // spec 044: the remote flight of an item into a pot, the trash or the sink
             float stillFor = 0f, goneSince = -1f;
             float nextShot = _tour.ObserverShotEvery > 0f ? Time.unscaledTime + _tour.ObserverShotEvery : float.PositiveInfinity;
             int shots = 0;
@@ -398,7 +399,7 @@ namespace Worktown.Game.Dev
                         }
                     }
                 }
-                if (!capturing && !_fryerCapturing && shots < MaxObserverShots && Time.unscaledTime >= nextShot)
+                if (!capturing && !_fryerCapturing && !_exitCapturing && shots < MaxObserverShots && Time.unscaledTime >= nextShot)
                 {
                     shots++;
                     nextShot += _tour.ObserverShotEvery;
@@ -456,6 +457,63 @@ namespace Worktown.Game.Dev
         }
 
         private bool _fryerCapturing;
+        private bool _exitCapturing;
+        /// <summary>Spec 044: the observer films this many remote exit flights (each one close up, then the camera goes back).</summary>
+        private const int ExitFlightsFilmed = 3;
+
+        /// <summary>
+        /// Spec 044, observer: another player's item flying into a pot, the trash, the bin or the sink (Art/ExitFlightLook). For the first
+        /// <see cref="ExitFlightsFilmed"/> flights the camera moves to 1.4 m beside the flight, takes 8 frames 0.04 s apart ("remote-flight"),
+        /// and goes back to where it was.
+        /// </summary>
+        private IEnumerator WatchExitFlights(Func<bool> busy)
+        {
+            if (!_tour.HasObserverCamera) yield break;
+            bool started = false;
+            Vector3 from = Vector3.zero, to = Vector3.zero;
+            void OnStarted(Vector3 a, Vector3 b)
+            {
+                if (started) return;
+                started = true;
+                from = a;
+                to = b;
+            }
+            Worktown.Game.Art.ExitFlightLook.Started += OnStarted;
+            try
+            {
+                int filmed = 0;
+                while (!_finished && filmed < ExitFlightsFilmed)
+                {
+                    if (!started || busy() || _fryerCapturing)
+                    {
+                        if (started && (busy() || _fryerCapturing)) started = false; // missed this one
+                        yield return null;
+                        continue;
+                    }
+                    Camera cam = Camera.main;
+                    if (cam == null) yield break;
+                    _exitCapturing = true;
+                    Vector3 position = cam.transform.position;
+                    Quaternion rotation = cam.transform.rotation;
+                    Vector3 middle = (from + to) * 0.5f;
+                    Vector3 side = Vector3.Cross(Vector3.up, to - from);
+                    if (side.sqrMagnitude < 1e-4f) side = Vector3.right;
+                    Vector3 eye = middle + side.normalized * 1.4f + Vector3.up * 0.5f;
+                    cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(middle - eye));
+                    filmed++;
+                    Debug.Log("[Tour] observer: frames 'remote-flight' " + filmed + " from " + from + " to " + to);
+                    yield return _capture.Frames("remote-flight", 8, 0.04f);
+                    cam.transform.SetPositionAndRotation(position, rotation);
+                    _exitCapturing = false;
+                    started = false;
+                }
+            }
+            finally
+            {
+                Worktown.Game.Art.ExitFlightLook.Started -= OnStarted;
+                _exitCapturing = false;
+            }
+        }
 
         /// <summary>
         /// Spec 029, observer of a tour with a fryer: when basket 0 first goes into the oil the fixed camera moves to a close-up of

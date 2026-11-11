@@ -19,6 +19,15 @@ namespace Worktown.Game.Npc
         /// </summary>
         public static ArtKey ParcelOf(byte dish, bool eatIn) => eatIn && IsPlateDish(dish) ? ArtKey.FoodPlate : ParcelOf(dish);
 
+        /// <summary>
+        /// Spec 044 (035 feels off: "eat-in guests leave holding their plate"): an eat-in guest with a plate dish that has paid (its mood
+        /// leaves <see cref="CustomerRules.MoodPaying"/> for a leaving mood) puts the plate on the dish return before it walks out (there are
+        /// no tables yet; the plate comes back dirty through the dish return). Take-away parcels and builds stay in the hand.
+        /// </summary>
+        public static bool LeavesPlate(byte previousMood, byte mood, bool eatIn, byte dish) =>
+            previousMood == CustomerRules.MoodPaying && mood != CustomerRules.MoodPaying && mood != CustomerRules.MoodWaiting
+            && eatIn && IsPlateDish(dish);
+
         /// <summary>Spec 035: the dishes served on a plate (everything but the assembly board's builds).</summary>
         public static bool IsPlateDish(byte dish)
         {

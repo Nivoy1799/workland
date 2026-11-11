@@ -85,6 +85,11 @@ namespace Worktown.Game.Player
         private double _holdPhase;
         private float _holdWeight;
         private int _holdFrame = -100;
+        // Spec 044: arm targets set this frame (ArmPoseRules), applied after the animation; their weights fade like the hold.
+        private Animator _animator;
+        private Vector3 _reachLeft, _reachRight;
+        private int _reachLeftFrame = -100, _reachRightFrame = -100;
+        private float _reachLeftWeight, _reachRightWeight;
         private CharacterAnimState _state = CharacterAnimState.Idle;
         private float _speed;
         private Vector3 _lastPosition;
@@ -121,6 +126,40 @@ namespace Worktown.Game.Player
 
         /// <summary>Called every frame by an item this character carries: raise the right arm.</summary>
         public void MarkHolding() => _holdFrame = Time.frameCount;
+
+        /// <summary>Spec 044: called every frame while the left hand should point at <paramref name="target"/> (a carried box).</summary>
+        public void ReachLeft(Vector3 target)
+        {
+            _reachLeft = target;
+            _reachLeftFrame = Time.frameCount;
+        }
+
+        /// <summary>Spec 044: called every frame while the right hand should point at <paramref name="target"/> (a box, a wiping cloth).</summary>
+        public void ReachRight(Vector3 target)
+        {
+            _reachRight = target;
+            _reachRightFrame = Time.frameCount;
+        }
+
+        /// <summary>Spec 044: true while an arm is turned towards a target (tests and the tour log).</summary>
+        public bool IsReaching => _reachLeftWeight > 0f || _reachRightWeight > 0f;
+
+        private void LateUpdate()
+        {
+            float dt = Time.deltaTime;
+            _reachLeftWeight = CharacterAnimRules.FadeWeight(_reachLeftWeight, Time.frameCount - _reachLeftFrame <= 2, dt);
+            _reachRightWeight = CharacterAnimRules.FadeWeight(_reachRightWeight, Time.frameCount - _reachRightFrame <= 2, dt);
+            if (_animator == null || !_animator.isHuman) return;
+            if (_reachLeftWeight > 0f) TurnArm(HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftHand, _reachLeft, _reachLeftWeight);
+            if (_reachRightWeight > 0f) TurnArm(HumanBodyBones.RightUpperArm, HumanBodyBones.RightHand, _reachRight, _reachRightWeight);
+        }
+
+        private void TurnArm(HumanBodyBones upper, HumanBodyBones hand, Vector3 target, float weight)
+        {
+            Transform upperArm = _animator.GetBoneTransform(upper), handBone = _animator.GetBoneTransform(hand);
+            if (upperArm == null || handBone == null) return;
+            upperArm.rotation = ArmPoseRules.Reach(upperArm.position, handBone.position, target, weight) * upperArm.rotation;
+        }
 
         /// <summary>The character of the player with this owner client id, or null (not spawned here yet).</summary>
         public static CharacterVisual FindPlayer(int ownerClientId)
@@ -256,6 +295,7 @@ namespace Worktown.Game.Player
                 }
             }
             animator.applyRootMotion = false; // root motion is in the clips, the server moves the body
+            _animator = animator; // spec 044: the bones the arm targets turn
 
             _graph = PlayableGraph.Create(name + " character");
             _graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);

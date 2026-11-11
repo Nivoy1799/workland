@@ -18,6 +18,7 @@ namespace Worktown.Game.UI
     /// Spec 022: the shift next to the clock and the open orders from the ticket rail.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
+    [DefaultExecutionOrder(100)] // spec 044 (027b feels off): after PickupInteractor.Update, so the prompt shows this frame's aim, not the last
     public sealed class HudView : MonoBehaviour
     {
         private const float ToastSeconds = 4f;
@@ -428,7 +429,7 @@ namespace Worktown.Game.UI
                 case CookOutcome.PaysCash: return "They pay cash";
                 case CookOutcome.TrayFull: return "The tray is full";
                 case CookOutcome.TrayEmpty: return "The tray is empty";
-                case CookOutcome.NeedsCup: return "Take a cup first"; // spec 033
+                case CookOutcome.NeedsCup: return "Put a cup on the drip tray first"; // spec 033; 044 (042 known limit): the cup stands on the tray now
                 case CookOutcome.CupClosed: return "It has its lid";
                 case CookOutcome.OtherDrink: return "That cup has another drink";
                 case CookOutcome.CupFull: return "The cup is full";

@@ -182,3 +182,6 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
   see the level about one round trip late; in third person E cannot take an empty cup back off the tray; HudView still
   says "Take a cup first" on a refused press (needs a Scripts/UI scope); the tour prompt reads "pick up empty cup"
   during our own pour.
+- 043 review (approved; must-fix comment and nits 3-7 in the 044 round): barely overdone food (up to Max + 0.02) still
+  rates about 0.95; griddle stars use the mean of both sides; sauteed apple Perfect window 2.5-4.9 s at the 2x pan;
+  onion and tomato placeholder window 0..1; seitan Perfect is only 2 s a side. Human question 16.

@@ -3,6 +3,7 @@ using FishNet.Managing;
 using FishNet.Object;
 using FishNet.Transporting;
 using UnityEngine;
+using Worktown.Game.Audio;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
 using Worktown.Game.Net;
@@ -173,6 +174,23 @@ namespace Worktown.Game.Shop
             Publish();
         }
 
+        /// <summary>
+        /// Spec 044: where an item goes into <paramref name="station"/> as every client draws it (the owner's look uses the same points): the
+        /// trash can's or the bin's opening, the sink's basin slot, else half a metre above the station.
+        /// </summary>
+        public static Vector3 ExitPoint(Station station)
+        {
+            if (station == null) return Vector3.zero;
+            if (station.TryGetComponent(out Worktown.Game.Art.TrashCanView can)) return can.Opening;
+            if (station.TryGetComponent(out Worktown.Game.Art.BinView bin)) return bin.Opening;
+            if (station.Kind == StationKind.Sink)
+            {
+                StockSlot basin = station.GetComponentInChildren<StockSlot>(); // the sink's one slot (the basin)
+                if (basin != null) return basin.Anchor + Vector3.up * 0.05f;
+            }
+            return station.transform.position + Vector3.up * 0.5f;
+        }
+
         /// <summary>Whether <paramref name="nob"/> is a dirty dish (never food, never cookware).</summary>
         public static bool IsDirtyDish(NetworkObject nob) => nob != null && nob.TryGetComponent(out DirtyDish _);
 
@@ -194,16 +212,16 @@ namespace Worktown.Game.Shop
                     outcome = option == CleaningRules.TakeDirtyOption ? TakeDirty(player) : CookOutcome.InvalidOption;
                     break;
                 case StationKind.Sink:
-                    outcome = option == CleaningRules.SinkPutOption ? PutInSink(player)
+                    outcome = option == CleaningRules.SinkPutOption ? PutInSink(player, station)
                         : option == CleaningRules.ScrubStartOption ? StartScrub(player, station)
                         : option == CleaningRules.ScrubStopOption ? StopScrub(player, station)
                         : CookOutcome.InvalidOption;
                     break;
                 case StationKind.TrashCan:
-                    outcome = option == CleaningRules.TrashOption ? UseTrash(player) : CookOutcome.InvalidOption;
+                    outcome = option == CleaningRules.TrashOption ? UseTrash(player, station) : CookOutcome.InvalidOption;
                     break;
                 case StationKind.Bin:
-                    outcome = option == CleaningRules.BinOption ? Bin(player) : CookOutcome.InvalidOption;
+                    outcome = option == CleaningRules.BinOption ? Bin(player, station) : CookOutcome.InvalidOption;
                     break;
                 default:
                     outcome = CookOutcome.UnknownStation;
@@ -232,13 +250,13 @@ namespace Worktown.Game.Shop
             return CookOutcome.Ok;
         }
 
-        private CookOutcome PutInSink(PickupInteractor player)
+        private CookOutcome PutInSink(PickupInteractor player, Station sink)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held) || !IsDirtyDish(held)) return CookOutcome.NotDirty;
             CookOutcome put = _room.Dishes.PutInSink(held.ObjectId);
             if (put != CookOutcome.Ok) return put;
             _objects.Remove(held.ObjectId);
-            _pickups.TakeAway(player, out _);
+            _pickups.TakeAway(player, out _, ExitPoint(sink), SoundRules.IntoTheSinkSound); // spec 044: onlookers see it go in
             _networkManager.ServerManager.Despawn(held);
             Debug.Log("[Cleaning] player " + player.OwnerId + " put a dirty plate in the sink (" + _room.Dishes.InBasin + " in it)");
             return CookOutcome.Ok;
@@ -286,7 +304,7 @@ namespace Worktown.Game.Shop
                 + _room.Dishes.InBasin + " left in the sink)");
         }
 
-        private CookOutcome UseTrash(PickupInteractor player)
+        private CookOutcome UseTrash(PickupInteractor player, Station trash)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held))
             {
@@ -308,7 +326,7 @@ namespace Worktown.Game.Shop
             if (IsDirtyDish(held) || IsTrashBag(held)) return CookOutcome.CannotDiscard; // wash the dish; the bag goes to the bin outside
             CookOutcome can = _room.CanDiscard(_kitchen != null && _kitchen.CanDiscardHeld(player));
             if (can != CookOutcome.Ok) return can;
-            CookOutcome gone = _kitchen.DiscardHeld(player, out string what);
+            CookOutcome gone = _kitchen.DiscardHeld(player, out string what, ExitPoint(trash)); // spec 044: onlookers see it go in
             if (gone != CookOutcome.Ok) return gone;
             _room.Discarded();
             Debug.Log("[Cleaning] player " + player.OwnerId + " threw " + what + " away (trash " + _room.TrashFill + "/"
@@ -316,13 +334,13 @@ namespace Worktown.Game.Shop
             return CookOutcome.Ok;
         }
 
-        private CookOutcome Bin(PickupInteractor player)
+        private CookOutcome Bin(PickupInteractor player, Station bin)
         {
             if (!_pickups.TryGetHeld(player, out NetworkObject held) || !IsTrashBag(held)) return CookOutcome.NotABag;
             CookOutcome binned = _room.Binned(held.ObjectId);
             if (binned != CookOutcome.Ok) return binned;
             _objects.Remove(held.ObjectId);
-            _pickups.TakeAway(player, out _);
+            _pickups.TakeAway(player, out _, ExitPoint(bin), SoundRules.DiscardSound(true)); // spec 044 (035 feels off): onlookers see the bag go in
             _networkManager.ServerManager.Despawn(held);
             Debug.Log("[Cleaning] player " + player.OwnerId + " took the trash out");
             if (_feed != null) _feed.ServerAdd("Player " + player.OwnerId + " took the trash out");

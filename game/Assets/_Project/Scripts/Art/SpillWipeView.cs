@@ -21,6 +21,11 @@ namespace Worktown.Game.Art
         [SerializeField] private Transform _cloth;
 
         private static SoundCatalog _soundCatalog;
+        // Spec 044: the views that can lend their cloth pose to a wiper's held cloth (client only).
+        private static readonly System.Collections.Generic.List<SpillWipeView> Enabled = new System.Collections.Generic.List<SpillWipeView>();
+        /// <summary>m: a cloth holder this close to the dispenser is the one who wipes.</summary>
+        public const float WiperRange = 1.6f;
+        private int _claimedFrame = -100;
         private StationContents _contents;
         private AudioSource _loop;
         private bool _predicting;
@@ -61,6 +66,38 @@ namespace Worktown.Game.Art
             _loop.maxDistance = 10f;
         }
 
+        private void OnEnable()
+        {
+            if (!Enabled.Contains(this)) Enabled.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            Enabled.Remove(this);
+        }
+
+        /// <summary>
+        /// Spec 044 (035 feels off: "the third-person wipe cloth in the hand does not move"): a cloth held in a hand by someone standing at
+        /// a dispenser that is being wiped goes round on the puddle (<paramref name="pose"/>), and that view stops drawing its own cloth, so
+        /// there is one cloth and it moves; the holder's arm reaches for it. False when nobody wipes near <paramref name="wiper"/>.
+        /// </summary>
+        public static bool TryClothFor(Vector3 wiper, out Pose pose)
+        {
+            for (int i = 0; i < Enabled.Count; i++)
+            {
+                SpillWipeView view = Enabled[i];
+                if (view == null || !view._shown) continue;
+                Vector3 d = view.transform.position - wiper;
+                d.y = 0f;
+                if (d.sqrMagnitude > WiperRange * WiperRange) continue;
+                view._claimedFrame = Time.frameCount;
+                pose = view.ClothPose(Time.unscaledTimeAsDouble);
+                return true;
+            }
+            pose = default;
+            return false;
+        }
+
         public void Predict(bool on)
         {
             _predicting = true;
@@ -98,7 +135,7 @@ namespace Worktown.Game.Art
             }
             if (_shown && _predicting && PredictionDrawnFrame < 0) PredictionDrawnFrame = Time.frameCount;
             bool own = _predicting && _predicted;
-            bool drawCloth = _shown && !(own && OwnClothInHand);
+            bool drawCloth = _shown && !(own && OwnClothInHand) && Time.frameCount - _claimedFrame > 2; // spec 044: a held cloth goes round instead
             if (_cloth != null && _cloth.gameObject.activeSelf != drawCloth) _cloth.gameObject.SetActive(drawCloth);
             if (!_shown) return;
             float share = CleaningRules.HoldShare(CleaningRules.HoldWipe, nowD - _start);

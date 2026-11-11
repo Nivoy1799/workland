@@ -31,6 +31,12 @@ namespace Worktown.Game.Net
     {
         /// <summary>Client id of the holder, or <see cref="PickupRegistry.NoHolder"/>. Server writes, everyone reads.</summary>
         public readonly SyncVar<int> HolderClientId = new SyncVar<int>(PickupRegistry.NoHolder);
+        /// <summary>Spec 044: where the item goes when the server takes it out of the world (into a pot, the trash, the bin, the sink, a
+        /// slot), set just before its despawn (FishNet sends pending SyncVars before the despawn). Every viewer that did not predict it
+        /// draws it flying there (<see cref="ExitFlightLook"/>).</summary>
+        public readonly SyncVar<Vector3> ExitPoint = new SyncVar<Vector3>(Vector3.zero);
+        /// <summary>Spec 044: 0 = no exit; else the landing sound + 1 (<see cref="Worktown.Game.Audio.SoundKey"/>).</summary>
+        public readonly SyncVar<byte> ExitSound = new SyncVar<byte>(0);
 
         [Tooltip("Spec 039: a tool with a handle (knife, spatula, cloth): put down, its handle points to the cook (ToolRest).")]
         [SerializeField] private bool _handleTool;
@@ -83,10 +89,13 @@ namespace Worktown.Game.Net
 
         // Spec 034: this pickup is a delivery box (its carry pose).
         private bool _isBox;
+        // Spec 044: this pickup is the wipe cloth (it goes round on a spill while its holder wipes).
+        private bool _isCloth;
 
         private void Awake()
         {
             _isBox = TryGetComponent(out Worktown.Game.Shop.SupplyBox _);
+            _isCloth = TryGetComponent(out Worktown.Game.Cooking.WipeCloth _);
             _collider = GetComponent<Collider>();
             _tween = new ItemTween(transform);
             _heldGoal = HeldGoal;
@@ -111,6 +120,15 @@ namespace Worktown.Game.Net
             // Spec 020: scene objects and server-spawned items (a respawned knife, food made in the hands) start in
             // their resting pose; keep its tilt for every later drop or place.
             _restTilt = PlaceSpots.TiltOf(transform.rotation);
+            if (ExitSound.Value != 0) ExitSound.Value = 0; // a pooled item starts without the exit of its last life
+        }
+
+        /// <summary>Spec 044, server: the item is about to be despawned into <paramref name="point"/>; viewers see it fly there and hear
+        /// <paramref name="sound"/> when it lands. Call right before the despawn.</summary>
+        internal void ServerExitTo(Vector3 point, Worktown.Game.Audio.SoundKey sound)
+        {
+            ExitPoint.Value = point;
+            ExitSound.Value = (byte)((int)sound + 1);
         }
 
         public override void OnStartClient()
@@ -136,8 +154,17 @@ namespace Worktown.Game.Net
         public override void OnStopClient()
         {
             base.OnStopClient();
+            // Spec 044: taken out of the world into something: the viewers who did not predict it see it fly there.
+            if (_renderHooked && ExitFlightRules.ShowsFlight(ExitSound.Value != 0, _tween.HasDrawn, _look.HasPrediction))
+            {
+                _tween.Restore();
+                ExitFlightLook.Begin(transform, _tween.Drawn, ExitPoint.Value, (Worktown.Game.Audio.SoundKey)(ExitSound.Value - 1), Time.unscaledTime);
+            }
             Unhook();
         }
+
+        /// <summary>Spec 044: this client's id (-1 before it has a connection).</summary>
+        private int LocalClientId => ClientManager != null && ClientManager.Connection != null ? ClientManager.Connection.ClientId : ItemLook.NoHolder;
 
         /// <summary>Spec 039: a tool with a handle; it rests with the handle towards the cook (<see cref="ToolRest"/>).</summary>
         public bool IsHandleTool => _handleTool;
@@ -223,7 +250,19 @@ namespace Worktown.Game.Net
             int holder = _look.DrawnHolder(HolderClientId.Value);
             if (holder == PickupRegistry.NoHolder) return;
             CharacterVisual visual = HolderVisual(holder, Time.unscaledTime);
-            if (visual != null) visual.MarkHolding();
+            if (visual == null) return;
+            if (_isBox && visual.DrawsHeldInHand)
+            {
+                // Spec 044 (034 feels off): both hands on the box's sides, not the one-hand holding arm.
+                ArmPoseRules.BoxHands(visual.transform.position, visual.Yaw, out Vector3 left, out Vector3 right);
+                visual.ReachLeft(left);
+                visual.ReachRight(right);
+                return;
+            }
+            visual.MarkHolding();
+            // Spec 044 (035 feels off): the cloth goes round on the spill being wiped, the arm reaches for it.
+            if (_isCloth && visual.DrawsHeldInHand && Worktown.Game.Art.SpillWipeView.TryClothFor(visual.transform.position, out Pose cloth))
+                visual.ReachRight(cloth.position);
         }
 
         /// <summary>The character of <paramref name="holder"/>, looked up at most every <see cref="HolderLookupSeconds"/>.</summary>
@@ -267,6 +306,9 @@ namespace Worktown.Game.Net
         {
             Pose root = ItemTween.RootPose(transform);
             ItemFrame frame = _look.Resolve(HolderClientId.Value, root, _tween.HasDrawn, _tween.Drawn, now, _heldGoal);
+            // Spec 044: another player's put-down lands on its spot: its "tock" for this viewer (the one who put it down heard it at the click).
+            if (frame.LandedBy != ItemLook.NoHolder && frame.LandedBy != LocalClientId)
+                Worktown.Game.Audio.KitchenSounds.PlayOnce(Worktown.Game.Audio.SoundRules.PlaceSound(Worktown.Game.Audio.SoundRules.MaterialOf(this), false), root.position);
             if (frame.Begin != TweenStyle.None)
             {
                 FeelSettings feel = FeelSettings.Current;
@@ -300,6 +342,8 @@ namespace Worktown.Game.Net
                     // Spec 034: a delivery box is carried in front of the chest with both hands (HoldViewRules.BoxCarry*), not in one hand.
                     if (_isBox) pose = new Pose(visual.transform.position + Vector3.up * HoldViewRules.BoxCarryHeight
                         + frame * (Vector3.forward * HoldViewRules.BoxCarryForward), frame);
+                    // Spec 044: a wiping holder's cloth is drawn going round on the spill (the same pose the dispenser drew its own cloth at).
+                    else if (_isCloth && Worktown.Game.Art.SpillWipeView.TryClothFor(visual.transform.position, out Pose cloth)) pose = cloth;
                     return true;
                 }
                 if (!visual.DrawsHeldInHand && visual.TryGetComponent(out HeldItemView view) && view.TryGetViewPose(this, out pose, out _viewScale))

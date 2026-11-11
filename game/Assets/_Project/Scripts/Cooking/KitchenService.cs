@@ -796,7 +796,11 @@ namespace Worktown.Game.Cooking
         /// Spec 035: the discard: the held food is removed and despawned, or the held cookware's food is cleared. No money and no stock
         /// move (the anti-faucet rule: a discard refunds nothing and creates nothing).
         /// </summary>
-        public CookOutcome DiscardHeld(PickupInteractor player, out string what)
+        public CookOutcome DiscardHeld(PickupInteractor player, out string what) => DiscardHeld(player, out what, null);
+
+        /// <summary>Spec 044: as <see cref="DiscardHeld(PickupInteractor, out string)"/>; held food flies into <paramref name="opening"/>
+        /// for the onlookers (the lid's thump when it lands).</summary>
+        public CookOutcome DiscardHeld(PickupInteractor player, out string what, Vector3? opening)
         {
             what = "nothing";
             if (!CanDiscardHeld(player)) return CookOutcome.CannotDiscard;
@@ -813,7 +817,8 @@ namespace Worktown.Game.Cooking
             what = food != null && food.DisplayName.Value.Length > 0 ? food.DisplayName.Value : "food";
             CookOutcome removed = _kitchen.TryDiscard(held.ObjectId, null);
             if (removed != CookOutcome.Ok) return removed;
-            _pickups.TakeAway(player, out _);
+            if (opening.HasValue) _pickups.TakeAway(player, out _, opening.Value, Worktown.Game.Audio.SoundRules.DiscardSound(false));
+            else _pickups.TakeAway(player, out _);
             _networkManager.ServerManager.Despawn(held);
             return CookOutcome.Ok;
         }
@@ -1065,7 +1070,7 @@ namespace Worktown.Game.Cooking
             CookOutcome put = _kitchen.TryPutInto(held.ObjectId, vessel.ObjectId, vessel.Kind, Tick);
             if (put != CookOutcome.Ok) return put;
             string name = food.DisplayName.Value; // read before despawn
-            _pickups.TakeAway(player, out _);
+            _pickups.TakeAway(player, out _, vessel.ContentPoint, Worktown.Game.Audio.SoundKey.PlaceFood); // spec 044: onlookers see it fly in
             _networkManager.ServerManager.Despawn(held);
             RefreshVessel(vessel);
             Debug.Log("[Kitchen] player " + player.OwnerId + " put " + name + " into the " + VesselRules.Name(vessel.Kind));

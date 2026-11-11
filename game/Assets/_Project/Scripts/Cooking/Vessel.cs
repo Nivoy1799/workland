@@ -43,6 +43,8 @@ namespace Worktown.Game.Cooking
 
         private bool _visualDirty;
         private bool _labelDirty;
+        // Spec 044: the owner's predicted contents (a tip or a scoop) until the synced looks change or the timeout.
+        private readonly ContentsPrediction _prediction = new ContentsPrediction();
         private bool _heatDirty;
 
         public VesselKind Kind => _kind;
@@ -86,7 +88,11 @@ namespace Worktown.Game.Cooking
         private void Awake()
         {
             Names.OnChange += (_, _, _, _, _) => _labelDirty = true;
-            Looks.OnChange += (_, _, _, _, _) => _visualDirty = true;
+            Looks.OnChange += (_, _, _, _, _) =>
+            {
+                _visualDirty = true;
+                _prediction.SyncedChanged(); // spec 044: the server answered
+            };
             Mode.OnChange += (_, _, _) =>
             {
                 _labelDirty = true;
@@ -102,6 +108,20 @@ namespace Worktown.Game.Cooking
             _visualDirty = true;
             _heatDirty = true;
         }
+
+        /// <summary>Spec 044, the owner's client: draw <paramref name="looks"/> as the contents now, until the synced contents change (the
+        /// server's answer) or <paramref name="timeout"/> seconds pass (then the real contents again).</summary>
+        internal void PredictContents(IReadOnlyList<FoodLook> looks, float timeout)
+        {
+            _prediction.Begin(looks, Time.unscaledTime + timeout);
+            _visualDirty = true;
+        }
+
+        /// <summary>Spec 044: the contents as this client draws them (a predicted tip or scoop first).</summary>
+        public IReadOnlyList<FoodLook> SeenLooks => _prediction.Shown(Looks);
+
+        /// <summary>Spec 044: the model of the contents' last part (for a scoop's flying copy), or null.</summary>
+        public Transform LastPartModel => _visual != null ? _visual.LastPart : null;
 
         /// <summary>Server: publish the heat bytes (KitchenService's <see cref="HeatSync"/> limits the rate); only changes go out.</summary>
         internal void ServerSetHeat(byte progress, byte zone)
@@ -149,11 +169,12 @@ namespace Worktown.Game.Cooking
         private void LateUpdate()
         {
             if (IsServerOnlyStarted) return; // the headless server draws nothing
+            if (_prediction.Expired(Time.unscaledTime)) _visualDirty = true; // no answer in time: the real contents again
             if (_visualDirty)
             {
                 _visualDirty = false;
                 _heatDirty = true;
-                if (_visual != null) _visual.ShowParts(Looks);
+                if (_visual != null) _visual.ShowParts(_prediction.Shown(Looks));
             }
             if (_heatDirty)
             {
