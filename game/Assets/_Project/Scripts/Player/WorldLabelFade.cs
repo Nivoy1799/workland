@@ -28,6 +28,15 @@ namespace Worktown.Game.Player
         public const float ItemScale = 0.5f;
         public const float BubbleScale = 0.4f;
         private const float ScanSeconds = 0.5f;
+        /// <summary>
+        /// Follow-up 047: for this long after the own player spawns, a scan every <see cref="SettleScanSeconds"/> (not every
+        /// <see cref="ScanSeconds"/>). The shop's
+        /// objects of a new session come active over the first frames (FishNet spawns them around the player); a label found only by
+        /// the next periodic scan showed without its panel meanwhile.
+        /// </summary>
+        public const float SettleSeconds = 1f;
+        /// <summary>Follow-up 047 review: the scan interval while the session settles (0.1 s, not every frame).</summary>
+        public const float SettleScanSeconds = 0.1f;
         private const float PadX = 0.07f, PadY = 0.05f; // panel padding in label units
         private const float BackOffset = 0.03f; // label units behind the text
         private const float RectPad = 4f; // pixels around a label's screen rectangle
@@ -86,6 +95,7 @@ namespace Worktown.Game.Player
         private Material _panelMaterial;
         private MaterialPropertyBlock _hiddenBlock;
         private float _nextScan;
+        private float _activatedAt;
         private bool _active;
 
         /// <summary>Alpha of a label <paramref name="distance"/> metres from the camera in first person: 1 from
@@ -96,12 +106,16 @@ namespace Worktown.Game.Player
             return Mathf.Clamp01((distance - FadeEnd) / (FadeStart - FadeEnd));
         }
 
+        /// <summary>Follow-up 047, pure: the wait until the next scan, <paramref name="sinceActivate"/> seconds after the player spawned.</summary>
+        public static float ScanDelay(float sinceActivate) => sinceActivate < SettleSeconds ? SettleScanSeconds : ScanSeconds;
+
         public void Activate()
         {
             if (_active) return;
             _active = true;
             _interactor = GetComponent<PickupInteractor>();
             _nextScan = 0f;
+            _activatedAt = Time.unscaledTime;
         }
 
         private void OnDestroy()
@@ -250,7 +264,7 @@ namespace Worktown.Game.Player
         // Finds new labels now and then (items spawn and despawn) and drops the destroyed ones.
         private void Scan()
         {
-            _nextScan = Time.unscaledTime + ScanSeconds;
+            _nextScan = Time.unscaledTime + ScanDelay(Time.unscaledTime - _activatedAt);
             _rings = FindObjectsByType<HeatRingView>(FindObjectsSortMode.None);
             if (_counter == null)
                 foreach (Station station in FindObjectsByType<Station>(FindObjectsSortMode.None))

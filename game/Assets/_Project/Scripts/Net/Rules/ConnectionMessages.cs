@@ -10,6 +10,7 @@ namespace Worktown.Game.Net.Rules
                 case DisconnectReason.VersionMismatch: return "Version mismatch";
                 case DisconnectReason.ServerFull: return "The shop is full";
                 case DisconnectReason.Kicked: return "Removed from the shop";
+                case DisconnectReason.KickedBefore: return "Kicked by the host";
                 case DisconnectReason.NoAnswer: return "No answer";
                 case DisconnectReason.ConnectionLost: return "Connection lost";
                 case DisconnectReason.Unreachable: return "Could not connect";
@@ -35,6 +36,8 @@ namespace Worktown.Game.Net.Rules
                     return "All " + (has ? detail : JoinRules.MaxPlayers.ToString()) + " places are taken. Try again later.";
                 case DisconnectReason.Kicked:
                     return "The host removed you from the shop.";
+                case DisconnectReason.KickedBefore:
+                    return "The host removed you from this shop earlier, so you cannot rejoin it. You can join again when the host opens a new shop.";
                 case DisconnectReason.NoAnswer:
                     return "The host did not get an answer from this game in time. Try again.";
                 case DisconnectReason.ConnectionLost:
@@ -63,6 +66,14 @@ namespace Worktown.Game.Net.Rules
 
         /// <summary>The sentence under an unknown reason's title.</summary>
         public const string UnknownText = "The other game ended the connection for a reason this version does not know. The host may run a newer version.";
+
+        /// <summary>
+        /// The error screen offers "Try again" (when there is a target): not after a kick or a refused rejoin, a version mismatch or a
+        /// closed shop (trying again cannot help there).
+        /// </summary>
+        public static bool CanRetry(DisconnectReason reason, bool hasTarget) =>
+            hasTarget && reason != DisconnectReason.Kicked && reason != DisconnectReason.KickedBefore
+            && reason != DisconnectReason.VersionMismatch && reason != DisconnectReason.HostClosed;
 
         /// <summary>The rejoin line, with whole seconds left.</summary>
         public static string Rejoining(float secondsLeft) =>

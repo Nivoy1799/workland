@@ -25,6 +25,9 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Server: the host closed the shop.</summary>
         HostClosed = 8,
         /// <summary>Spec 049, server: the host's network tick stalled (TickWatchdog), so the host closed the shop.</summary>
-        HostStalled = 9
+        HostStalled = 9,
+        /// <summary>Follow-up 047, server: the host kicked this player earlier in this session (SessionBans), so it cannot rejoin until
+        /// the shop closes.</summary>
+        KickedBefore = 10
     }
 }

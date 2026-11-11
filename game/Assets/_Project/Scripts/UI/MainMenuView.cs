@@ -328,8 +328,7 @@ namespace Worktown.Game.UI
                     _cardTitle.text = ConnectionMessages.Title(flow.Reason);
                     _cardText.text = ConnectionMessages.Text(flow.Reason, flow.Detail);
                     Show(_track, false);
-                    bool canRetry = flow.Reason != DisconnectReason.Kicked && flow.Reason != DisconnectReason.VersionMismatch
-                        && flow.Reason != DisconnectReason.HostClosed && flow.Target != null;
+                    bool canRetry = ConnectionMessages.CanRetry(flow.Reason, flow.Target != null);
                     ShowButtons(cancel: false, retry: canRetry, dismiss: true);
                     break;
             }

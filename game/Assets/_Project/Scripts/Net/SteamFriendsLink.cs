@@ -12,6 +12,8 @@ namespace Worktown.Game.Net
     /// can be invited (<see cref="OpenInviteDialog"/>); Steam starts a friend's game with that flag, or hands it to a running game
     /// (<see cref="JoinRequested"/>). <see cref="HostingFriends"/> lists friends playing this game with a shop open. Does nothing
     /// without Steam (the menu says so) and in dedicated server builds (no Steam friends there). Owned by NetBootstrap.
+    /// Follow-up 047: the friends-list line, <c>steam_display</c> = "#Status_Hosting" with %players% (or "#Status_Playing" for a
+    /// guest); the tokens live in game/Steam/rich_presence_localization.vdf, which must be uploaded in Steamworks for the real app id.
     /// </summary>
     public sealed class SteamFriendsLink
     {
@@ -22,6 +24,8 @@ namespace Worktown.Game.Net
         private Callback<GameRichPresenceJoinRequested_t> _joinRequested;
 #endif
         private bool _presenceSet;
+        /// <summary>Follow-up 047: the presence set is the host's (connect, players) rather than a guest's.</summary>
+        private bool _presenceHosting;
         private float _nextStatus;
         private bool _wired;
 
@@ -46,8 +50,11 @@ namespace Worktown.Game.Net
             }
         }
 
-        /// <summary>Every frame: the join callback once Steam is up; the rich presence while hosting (and cleared after).</summary>
-        public void Update(bool hosting, int players, int maxPlayers)
+        /// <summary>
+        /// Every frame: the join callback once Steam is up; the rich presence while hosting (connect, the friends-list line with the
+        /// players) or playing in a friend's shop (the line only; follow-up 047), cleared after.
+        /// </summary>
+        public void Update(bool hosting, bool playing, int players, int maxPlayers)
         {
             if (!Available) return;
 #if !UNITY_SERVER
@@ -56,19 +63,40 @@ namespace Worktown.Game.Net
                 _wired = true;
                 _joinRequested = Callback<GameRichPresenceJoinRequested_t>.Create(OnJoinRequested);
             }
-            if (hosting && _steam.LocalSteamId != 0)
+            hosting = hosting && _steam.LocalSteamId != 0;
+            if (_presenceSet && _presenceHosting != hosting && (hosting || playing))
+            {
+                // Host to guest (or back) without a pause: start from a clean presence (no stale connect string).
+                SteamFriends.ClearRichPresence();
+                _presenceSet = false;
+            }
+            if (hosting)
             {
                 if (!_presenceSet)
                 {
                     _presenceSet = true;
+                    _presenceHosting = true;
                     SteamFriends.SetRichPresence(RichPresenceRules.ConnectKey, RichPresenceRules.ConnectString(_steam.LocalSteamId));
+                    SteamFriends.SetRichPresence(RichPresenceRules.DisplayKey, RichPresenceRules.DisplayToken(true));
                     _nextStatus = 0f;
                     Debug.Log("[Steam] rich presence: friends can join " + _steam.LocalSteamId);
                 }
                 if (Time.unscaledTime >= _nextStatus)
                 {
                     _nextStatus = Time.unscaledTime + StatusEverySeconds;
+                    SteamFriends.SetRichPresence(RichPresenceRules.PlayersKey, RichPresenceRules.PlayersValue(players));
                     SteamFriends.SetRichPresence(RichPresenceRules.StatusKey, RichPresenceRules.Status(players, maxPlayers));
+                }
+            }
+            else if (playing)
+            {
+                if (!_presenceSet)
+                {
+                    _presenceSet = true;
+                    _presenceHosting = false;
+                    SteamFriends.SetRichPresence(RichPresenceRules.DisplayKey, RichPresenceRules.DisplayToken(false));
+                    SteamFriends.SetRichPresence(RichPresenceRules.StatusKey, RichPresenceRules.PlayingStatus);
+                    Debug.Log("[Steam] rich presence: playing in a friend's shop");
                 }
             }
             else if (_presenceSet)
@@ -83,7 +111,7 @@ namespace Worktown.Game.Net
         /// <summary>Opens Steam's invite dialog for this host's shop. False without Steam or when not hosting.</summary>
         public bool OpenInviteDialog()
         {
-            if (!Available || !_presenceSet || _steam.LocalSteamId == 0) return false;
+            if (!Available || !_presenceSet || !_presenceHosting || _steam.LocalSteamId == 0) return false;
 #if !UNITY_SERVER
             SteamFriends.ActivateGameOverlayInviteDialogConnectString(RichPresenceRules.ConnectString(_steam.LocalSteamId));
 #endif

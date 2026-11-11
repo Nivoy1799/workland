@@ -20,6 +20,8 @@ namespace Worktown.Game.Net
     /// Spec 047: feeds the connection's events into <see cref="Flow"/> (the loading, error and rejoin screens) and makes its rejoin
     /// attempts; the version check, the places and the kick belong to the JoinAuthenticator; Steam invites and rich presence to
     /// <see cref="Friends"/>.
+    /// Follow-up 047: a join while hosting asks first (<see cref="RequestJoin"/>, <see cref="LeaveQuestion"/>, Rules.LeaveShopRules);
+    /// quitting while hosting holds the quit until the guests have the HostClosed notice (Application.wantsToQuit, Rules.HostQuitRules).
     /// </summary>
     public sealed class NetBootstrap : MonoBehaviour
     {
@@ -34,6 +36,10 @@ namespace Worktown.Game.Net
         private JoinAuthenticator _join;
         private JoinTarget _queuedJoin;
         private bool _closing;
+        /// <summary>Follow-up 047: the held quit may now go through (the close is done, or its limit passed).</summary>
+        private bool _quitLetThrough;
+        private bool _quitHeld;
+        private float _quitHeldAt;
         /// <summary>A dedicated server (<c>-server</c>, or a server build's default): nobody plays on it, so a stall ends the process.</summary>
         private bool _dedicated;
 
@@ -50,6 +56,12 @@ namespace Worktown.Game.Net
         public NetworkManager NetworkManager => _networkManager;
         public SteamBootstrap Steam => _steam;
 
+        /// <summary>
+        /// Follow-up 047: a join waiting for the host's answer to "Leave your shop?" (LobbyView shows the question), or null.
+        /// <see cref="AnswerLeave"/> answers it.
+        /// </summary>
+        public JoinTarget LeaveQuestion { get; private set; }
+
         /// <summary>Last connection message for the debug overlay.</summary>
         public string Status { get; private set; } = string.Empty;
 
@@ -64,6 +76,7 @@ namespace Worktown.Game.Net
         private void Start()
         {
             SetUpJoin();
+            Application.wantsToQuit += OnWantsToQuit;
             Watchdog = gameObject.AddComponent<TickWatchdog>();
             Watchdog.Bind(this);
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
@@ -120,6 +133,7 @@ namespace Worktown.Game.Net
 
         private void OnDestroy()
         {
+            Application.wantsToQuit -= OnWantsToQuit;
             Friends?.Shutdown();
             if (_networkManager == null) return;
             _networkManager.ClientManager.OnAuthenticated -= OnClientAuthenticated;
@@ -177,18 +191,60 @@ namespace Worktown.Game.Net
         }
 
         /// <summary>
-        /// Spec 047: a join from Steam (a friend's Join Game or an invite while the game runs): leaves the current session first,
-        /// then joins.
+        /// Spec 047: a join from Steam (a friend's Join Game or an invite while the game runs). Follow-up 047: through
+        /// <see cref="RequestJoin"/>, so a host is asked first.
         /// </summary>
-        public void JoinSteam(string steamId)
+        public void JoinSteam(string steamId) => RequestJoin(JoinTarget.BySteam(steamId));
+
+        /// <summary>
+        /// Follow-up 047: a join while this game may be in a session (Rules.LeaveShopRules): not in one, it joins at once; a guest
+        /// leaves its shop, then joins; the host is asked "Leave your shop?" first (<see cref="LeaveQuestion"/>); a dedicated server
+        /// ignores it. A newer join replaces a waiting question's.
+        /// </summary>
+        public void RequestJoin(JoinTarget target)
         {
-            if (!IsRunning)
+            if (target == null || target.Kind == JoinTargetKind.Host) return;
+            switch (LeaveShopRules.Decide(_dedicated, _closing, _networkManager.IsServerStarted, _networkManager.IsClientStarted))
             {
-                ConnectSteam(steamId);
-                return;
+                case JoinChoice.JoinNow:
+                    Connect(target);
+                    break;
+                case JoinChoice.JoinWhenClosed:
+                    _queuedJoin = target; // the own shop is already closing: join once it is shut (Update)
+                    break;
+                case JoinChoice.LeaveThenJoin:
+                    _queuedJoin = target;
+                    Leave();
+                    break;
+                case JoinChoice.AskFirst:
+                    LeaveQuestion = target;
+                    Debug.Log("[Net] a join to " + target.Describe() + " while hosting: asking first");
+                    break;
+                default:
+                    Debug.Log("[Net] a dedicated server joins nothing (" + target.Describe() + ")");
+                    break;
             }
-            _queuedJoin = JoinTarget.BySteam(steamId);
+        }
+
+        /// <summary>
+        /// Follow-up 047: the host's answer to "Leave your shop?": Leave closes the shop (the guests get the HostClosed notice) and
+        /// joins once it is shut; Stay keeps the shop open and drops the join.
+        /// </summary>
+        public void AnswerLeave(bool leave)
+        {
+            JoinTarget target = LeaveQuestion;
+            LeaveQuestion = null;
+            if (target == null) return;
+            Debug.Log("[Net] leave the shop for " + target.Describe() + "? " + (leave ? "Leave" : "Stay"));
+            if (!leave) return;
+            _queuedJoin = target;
             Leave();
+        }
+
+        private void Connect(JoinTarget target)
+        {
+            if (target.Kind == JoinTargetKind.Address) ConnectTugboat(target.Address, target.Port);
+            else ConnectSteam(target.Address);
         }
 
         private bool ClientSteam(string steamId)
@@ -311,7 +367,73 @@ namespace Worktown.Game.Net
             {
                 // 049 review: a dedicated server has no player to read the screen; a non-zero exit tells its supervisor.
                 Debug.LogError("[Net] stall: the dedicated server quits (exit " + TickStallRules.DedicatedExitCode + ")");
+                _quitLetThrough = true; // follow-up 047 review: never held, so the exit code survives (HostQuitRules also skips dedicated)
                 Application.Quit(TickStallRules.DedicatedExitCode);
+            }
+        }
+
+        // ---- Follow-up 047: quitting while hosting ----
+
+        /// <summary>
+        /// Unity asks before it quits (Alt-F4, the window's close button, Application.Quit). A host with guests sends the HostClosed
+        /// notice and holds the quit while it goes out (CloseSoon), then quits (Rules.HostQuitRules). A crash never gets here.
+        /// </summary>
+        private bool OnWantsToQuit()
+        {
+            int guests = RemoteGuests();
+            if (!HostQuitRules.HoldsQuit(_networkManager != null && _networkManager.IsServerStarted, guests, _quitLetThrough,
+                    Application.isEditor, Args.IsScripted, _dedicated))
+                return true;
+            if (_quitHeld)
+            {
+                // A second quit while the first is held: the first one goes through soon. Review: unless the hold outlived its limit
+                // (the coroutine that ends it died), then this one goes through.
+                if (HostQuitRules.StillHeld(Time.unscaledTime - _quitHeldAt)) return false;
+                Debug.LogWarning("[Net] the held quit outlived " + HostQuitRules.LimitSeconds + " s: quitting now");
+                _quitLetThrough = true;
+                return true;
+            }
+            _quitHeld = true;
+            _quitHeldAt = Time.unscaledTime;
+            Debug.Log("[Net] quitting while hosting: telling " + guests + " guests the shop closed first");
+            Flow.Leave(true);
+            if (!_closing)
+            {
+                // Review: a throw from the notice must not skip the close and the quit below.
+                GuardedCall.Run(() => _join?.NotifyClosing(), "[Net] quit: the HostClosed notice", Debug.LogWarning);
+                StartCoroutine(CloseSoon());
+            }
+            StartCoroutine(QuitWhenClosed());
+            return false;
+        }
+
+        private IEnumerator QuitWhenClosed()
+        {
+            float start = Time.unscaledTime;
+            yield return null;
+            while (!HostQuitRules.QuitNow(_closing, _networkManager != null && _networkManager.IsServerStarted, Time.unscaledTime - start))
+                yield return null;
+            Debug.Log("[Net] the shop is closed: quitting (" + (Time.unscaledTime - start).ToString("0.0") + " s)");
+            _quitLetThrough = true;
+            Application.Quit();
+        }
+
+        /// <summary>Active connections other than the host's own; 0 when not the server, or when FishNet throws (then the quit is not
+        /// held: better to quit than to hang).</summary>
+        private int RemoteGuests()
+        {
+            try
+            {
+                if (_networkManager == null || !_networkManager.IsServerStarted) return 0;
+                int count = 0;
+                foreach (NetworkConnection connection in _networkManager.ServerManager.Clients.Values)
+                    if (connection != null && connection.IsActive && !connection.IsLocalClient) count++;
+                return count;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Net] quit: the guests could not be counted (" + e.Message + "), quitting without the notice");
+                return 0;
             }
         }
 
@@ -347,7 +469,8 @@ namespace Worktown.Game.Net
         private void Update()
         {
             if (_networkManager == null) return;
-            Friends?.Update(_networkManager.IsServerStarted && _networkManager.IsClientStarted, _join != null ? _join.PlayerCount : 0,
+            Friends?.Update(_networkManager.IsServerStarted && _networkManager.IsClientStarted,
+                !_networkManager.IsServerStarted && Flow.State == JoinState.InGame, _join != null ? _join.PlayerCount : 0,
                 _join != null ? _join.MaxPlayers : JoinRules.MaxPlayers);
             if ((Flow.State == JoinState.Loading || Flow.State == JoinState.Rejoining) && OwnPlayerSpawned()) Flow.PlayerSpawned();
 
@@ -373,7 +496,13 @@ namespace Worktown.Game.Net
             {
                 JoinTarget queued = _queuedJoin;
                 _queuedJoin = null;
-                ConnectSteam(queued.Address);
+                Connect(queued);
+            }
+            if (LeaveQuestion != null
+                && !LeaveShopRules.StillAsking(true, _dedicated, _closing, _networkManager.IsServerStarted, _networkManager.IsClientStarted))
+            {
+                Debug.Log("[Net] the shop closed before the answer: the join to " + LeaveQuestion.Describe() + " is dropped");
+                LeaveQuestion = null;
             }
         }
 

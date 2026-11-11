@@ -16,6 +16,8 @@ namespace Worktown.Game.Net
     /// is refused (NoAnswer). The server keeps the admitted names and sends the LobbyRoster to everyone on every join and leave; the
     /// host kicks through <see cref="Kick"/> and says goodbye through <see cref="NotifyClosing"/>. Lives on the NetworkManager object
     /// (FishNet's ServerManager finds it there). Only connection messages: no game data.
+    /// Follow-up 047: a kicked player is banned for the session (Rules.SessionBans, keyed on what the transport knows: the SteamID64
+    /// over Steam, else the IP address); its rejoin is refused as KickedBefore. The list is cleared when the server stops.
     /// </summary>
     public sealed class JoinAuthenticator : Authenticator
     {
@@ -45,6 +47,10 @@ namespace Worktown.Game.Net
         private readonly Dictionary<int, float> _pending = new Dictionary<int, float>();
         private readonly Dictionary<int, string> _names = new Dictionary<int, string>();
         private readonly List<int> _expired = new List<int>();
+        private readonly SessionBans _bans = new SessionBans();
+
+        /// <summary>Server: players kicked in this session (Rules.SessionBans; cleared when the shop closes).</summary>
+        public int BannedCount => _bans.Count;
 
         public override void InitializeOnce(NetworkManager networkManager)
         {
@@ -95,7 +101,10 @@ namespace Worktown.Game.Net
         {
             // Once per connection: a second request (or one after the answer) is ignored.
             if (connection.IsAuthenticated || !_pending.Remove(connection.ClientId)) return;
-            DisconnectReason reason = JoinRules.Decide(request.Build, BuildHash, _names.Count, MaxPlayers);
+            // IsLocalClient has no effect here: FishNet marks the host's own connection as local only after it is authenticated
+            // (OnLocalAuthenticated). The host is safe anyway: its own client joins first, when the session's ban list is empty.
+            bool kickedBefore = _bans.IsBanned(BanKey(connection), connection.IsLocalClient);
+            DisconnectReason reason = JoinRules.Decide(request.Build, BuildHash, _names.Count, MaxPlayers, kickedBefore);
             if (reason != DisconnectReason.None)
             {
                 string detail = reason == DisconnectReason.VersionMismatch ? "host build " + Rules.BuildHash.Short(BuildHash)
@@ -144,9 +153,14 @@ namespace Worktown.Game.Net
             if (NetworkManager == null || !NetworkManager.IsServerStarted) return false;
             if (!NetworkManager.ServerManager.Clients.TryGetValue(clientId, out NetworkConnection connection) || !connection.IsActive) return false;
             if (!JoinRules.CanKick(true, connection.IsLocalClient)) return false;
+            string key = BanKey(connection);
+            bool banned = _bans.Ban(key, connection.IsLocalClient);
             NetworkManager.ServerManager.Broadcast(connection, new ConnectionNotice { Reason = (byte)DisconnectReason.Kicked, Detail = string.Empty }, false);
             connection.Disconnect(false);
-            Debug.Log("[Net] player " + clientId + " kicked by the host");
+            // The kind of key only: the Steam id or the address itself stays out of the log.
+            Debug.Log("[Net] player " + clientId + " kicked by the host" + (banned
+                ? ", banned for this session by " + (key.StartsWith(SessionBans.SteamPrefix, StringComparison.Ordinal) ? "Steam id" : "address")
+                : ", not banned (no address)"));
             return true;
         }
 
@@ -158,6 +172,20 @@ namespace Worktown.Game.Net
                 if (connection != null && connection.IsActive && !connection.IsLocalClient)
                     NetworkManager.ServerManager.Broadcast(connection,
                         new ConnectionNotice { Reason = (byte)reason, Detail = string.Empty }, false);
+        }
+
+        /// <summary>Server: the connection's ban key from its transport address (never from the client's own data).</summary>
+        private static string BanKey(NetworkConnection connection)
+        {
+            try
+            {
+                return SessionBans.KeyOf(connection.GetAddress());
+            }
+            catch (Exception e) // a transport that cannot name the address: nothing to ban by
+            {
+                Debug.LogWarning("[Net] player " + connection.ClientId + ": no address for the ban list (" + e.Message + ")");
+                return string.Empty;
+            }
         }
 
         /// <summary>Server: the admitted name of a connection, or empty.</summary>
@@ -176,6 +204,7 @@ namespace Worktown.Game.Net
             {
                 _pending.Clear();
                 _names.Clear();
+                _bans.Clear();
             }
         }
 

@@ -10,6 +10,29 @@ namespace Worktown.Game.Net.Rules
         public const string ConnectKey = "connect";
         public const string StatusKey = "status";
 
+        /// <summary>
+        /// Follow-up 047: the friends-list line. Steam shows <see cref="DisplayKey"/>'s token from the app's rich-presence localization
+        /// (<see cref="LocalizationFile"/>, uploaded in Steamworks for the real app id; not possible with the test app 480), with
+        /// %players% filled from <see cref="PlayersKey"/>. Without the upload Steam shows only the game's name.
+        /// </summary>
+        public const string DisplayKey = "steam_display";
+        public const string PlayersKey = "players";
+        public const string HostingToken = "#Status_Hosting";
+        public const string PlayingToken = "#Status_Playing";
+
+        /// <summary>The localization file, relative to the Unity project folder (game/), outside Assets (Unity does not import it).</summary>
+        public const string LocalizationFile = "Steam/rich_presence_localization.vdf";
+
+        /// <summary>The <see cref="StatusKey"/> text of a guest ("View game info" in Steam).</summary>
+        public const string PlayingStatus = "Cooking in a friend's shop";
+
+        /// <summary>The steam_display token: hosting a shop, else playing in someone's.</summary>
+        public static string DisplayToken(bool hosting) => hosting ? HostingToken : PlayingToken;
+
+        /// <summary>The %players% value (whole number, invariant culture).</summary>
+        public static string PlayersValue(int players) =>
+            System.Math.Max(0, players).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         public static string ConnectString(ulong hostSteamId) => "-steam " + hostSteamId;
 
         /// <summary>The host's SteamID64 from a connect string ("-steam 7656..."; anything else around it is ignored).</summary>

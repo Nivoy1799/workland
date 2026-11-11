@@ -1,0 +1,11 @@
+"lang"
+{
+	"english"
+	{
+		"tokens"
+		{
+			"#Status_Hosting"	"Running a shop (%players%/16)"
+			"#Status_Playing"	"Cooking in a friend's shop"
+		}
+	}
+}

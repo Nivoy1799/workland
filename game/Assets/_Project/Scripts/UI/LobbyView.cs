@@ -12,6 +12,8 @@ namespace Worktown.Game.UI
     /// Spec 047: the lobby is the host's shop itself; Tab opens this panel over it: who is in (the roster from the JoinAuthenticator,
     /// players appear as they join), Kick next to each other player for the host, Invite friends (Steam) for the host, and Leave the
     /// shop (a client) or Close the shop (the host). Thin: rows from Rules.LobbyLine, actions on NetBootstrap.
+    /// Follow-up 047: also the host's "Leave your shop?" question (Rules.LeaveShopRules) when a join arrives while hosting
+    /// (NetBootstrap.LeaveQuestion): Leave or Stay, over the shop, with the cursor free.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class LobbyView : MonoBehaviour
@@ -32,6 +34,10 @@ namespace Worktown.Game.UI
         private bool _reportedOpen;
         private PlayerInputReader _input;
         private JoinAuthenticator _subscribed;
+        private VisualElement _ask;
+
+        /// <summary>The "Leave your shop?" question shows.</summary>
+        public bool IsAsking => _ask != null && _ask.style.display == DisplayStyle.Flex;
 
         public bool IsOpen => _open;
 
@@ -64,12 +70,46 @@ namespace Worktown.Game.UI
             _box.Add(_hint);
             _box.style.display = DisplayStyle.None;
             documentRoot.Add(_box);
+            BuildQuestion(documentRoot);
+        }
+
+        private void BuildQuestion(VisualElement documentRoot)
+        {
+            _ask = new VisualElement { name = "leave-question" };
+            _ask.AddToClassList("panel");
+            _ask.AddToClassList("menu-card");
+            var title = new Label(LeaveShopRules.Question);
+            title.AddToClassList("card-title");
+            _ask.Add(title);
+            var text = new Label(LeaveShopRules.Warning);
+            text.AddToClassList("card-text");
+            _ask.Add(text);
+            var row = new VisualElement();
+            row.AddToClassList("menu-row");
+            var leave = new Button(() => PressLeaveAnswer(true)) { text = LeaveShopRules.LeaveLabel, name = "leave-shop" };
+            leave.AddToClassList("menu-button");
+            row.Add(leave);
+            var stay = new Button(() => PressLeaveAnswer(false)) { text = LeaveShopRules.StayLabel, name = "stay-in-shop" };
+            stay.AddToClassList("menu-button");
+            row.Add(stay);
+            _ask.Add(row);
+            _ask.style.display = DisplayStyle.None;
+            documentRoot.Add(_ask);
+        }
+
+        /// <summary>The host's answer (the Leave and Stay buttons; the menu tour).</summary>
+        public void PressLeaveAnswer(bool leave)
+        {
+            Debug.Log("[Menu] " + (leave ? "leave the shop" : "stay in the shop"));
+            _bootstrap.AnswerLeave(leave);
         }
 
         private void OnDisable()
         {
             _box?.RemoveFromHierarchy();
             _box = null;
+            _ask?.RemoveFromHierarchy();
+            _ask = null;
             if (_subscribed != null) _subscribed.RosterChanged -= MarkDirty;
             _subscribed = null;
             Report(false);
@@ -116,9 +156,12 @@ namespace Worktown.Game.UI
                 _hint.text = KeyPrompts.KeyName(GameSettings.CurrentBindings, ControlAction.Players) + " closes";
             }
             if (!inGame && _open) SetOpen(false);
-            bool visible = _open && inGame;
+            // Review: shown whenever a question waits (a host is asked even while its own client is between states).
+            bool asking = _bootstrap.LeaveQuestion != null;
+            bool visible = _open && inGame && !asking;
             _box.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-            Report(visible);
+            if (_ask != null) _ask.style.display = asking ? DisplayStyle.Flex : DisplayStyle.None;
+            Report(visible || asking);
             if (visible && _dirty) Rebuild();
         }
 
