@@ -64,9 +64,10 @@ namespace Worktown.Game.Net.Rules
         /// 0 = not given: <see cref="NetRateRules.DefaultRemoteHz"/>). For the human's A/B (docs/feel.md 9). Needs <c>-host</c> or <c>-server</c>.</summary>
         public int RemoteHz { get; private set; }
         /// <summary>Spec 054 (experiment, dev builds): <c>-player-collision on|off</c>; off: players walk through each other, on the
-        /// server and in every client's prediction alike (the host decides, PlayerController.CollidesWithPlayers). Default on.
+        /// server and in every client's prediction alike (the host decides, SessionPhysics.PlayersCollide). 053 review (inbox question
+        /// 23): default off, players pass through each other; <c>on</c> is the A/B.
         /// Needs <c>-host</c> or <c>-server</c>.</summary>
-        public bool PlayerCollision { get; private set; } = true;
+        public bool PlayerCollision { get; private set; } = false;
         /// <summary>Spec 054: true when <c>-player-collision</c> was given.</summary>
         public bool PlayerCollisionGiven { get; private set; }
         /// <summary>Spec 053: <c>-new-shop</c>, host a new food corner with its own save file and skip the title screen.</summary>

@@ -40,6 +40,7 @@
 - Server is authoritative. Clients send intents ("put ingredient X in pan"), the server
   validates with /sim and replicates results.
 - MonoBehaviours are thin adapters between Unity, FishNet and /sim.
+- Every wire change bumps `ProtocolSurface.Revision` (the build hash; spec 054 review).
 
 ### /ai-gateway
 - Exposes typed content endpoints to the game server and speaks the OpenAI-compatible chat completions API to the upstream.

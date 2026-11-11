@@ -251,7 +251,7 @@ namespace Worktown.Game.Dev
         }
 
         private static long Balance(PlayerController me) =>
-            me != null && me.TryGetComponent(out Wallet wallet) ? wallet.Balance.Value : -1L;
+            me != null && me.TryGetComponent(out Wallet wallet) ? wallet.BalanceOrUnknown : -1L;
 
         private static PlayerController FindOwnPlayer()
         {

@@ -128,6 +128,14 @@ namespace Worktown.Game.Net
                     break;
                 case LaunchMode.Host:
                     // Spec 053: -new-shop and -continue host with a save; -host is the open kitchen (dev and tests).
+                    // 053 review: -continue checks the save first; a broken one shows its error on the title (or ends a scripted run).
+                    if (Args.ContinueShop && (Saves == null || Saves.Newest() is not { Ok: true }))
+                    {
+                        Save.SaveLoadResult newest = Saves?.Newest();
+                        FailSaveStart(newest != null ? newest.Error : Save.SaveError.NotJson);
+                        Status = "title screen";
+                        break;
+                    }
                     StartHost(Args.NewShop ? Save.ShopStart.NewShop : Args.ContinueShop ? Save.ShopStart.Continue : Save.ShopStart.OpenKitchen);
                     break;
                 case LaunchMode.ClientTugboat:
@@ -198,6 +206,38 @@ namespace Worktown.Game.Net
 
         /// <summary>Spec 053, the title screen's Continue: the newest save.</summary>
         public void ContinueShop() => StartHost(Save.ShopStart.Continue);
+
+        /// <summary>Spec 053 review: the exit code of a scripted run whose <c>-continue</c> found no save that loads.</summary>
+        public const int SaveStartExitCode = 3;
+
+        private Save.SaveError? _saveStartError;
+
+        /// <summary>
+        /// Spec 053 review: Continue (the title, or <c>-continue</c>) cannot load the newest save: never a new shop instead. A scripted run
+        /// exits with <see cref="SaveStartExitCode"/>; otherwise a running host closes again and the title shows the save's error card
+        /// (<see cref="TakeSaveStartError"/>). The file is kept.
+        /// </summary>
+        public void FailSaveStart(Save.SaveError error)
+        {
+            Debug.LogError("[Net] Continue: the newest save does not load (" + error + ")");
+            if (Args.IsScripted)
+            {
+                _quitLetThrough = true;
+                Application.Quit(SaveStartExitCode);
+                return;
+            }
+            _saveStartError = error;
+            if (IsRunning) Leave();
+        }
+
+        /// <summary>Spec 053 review, the title screen: the save error of a failed Continue, once.</summary>
+        public bool TakeSaveStartError(out Save.SaveError error)
+        {
+            error = _saveStartError ?? Save.SaveError.None;
+            bool any = _saveStartError.HasValue;
+            _saveStartError = null;
+            return any;
+        }
 
         /// <summary>Spec 053: the host's save service (on the NetworkManager), or null.</summary>
         public Save.SaveService SaveService => _networkManager != null ? _networkManager.GetComponent<Save.SaveService>() : null;

@@ -14,6 +14,8 @@ namespace Worktown.Game.Save
 
         public string ReadAllText(string path) => File.ReadAllText(path, Utf8);
 
+        public long Length(string path) => new FileInfo(path).Length;
+
         public void WriteAllText(string path, string text)
         {
             using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))

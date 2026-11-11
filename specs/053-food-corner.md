@@ -253,5 +253,34 @@ The captured balance adds the cost of supply orders still on their way (they are
 **Follow-ups:** boxes lying at the back door or waiting are not saved (a load starts clean; stage 1 has none). The menu tour now ends
 in a food corner (its New shop), without a save (no `-save-dir`). Inbox question 17 (cents) stays open: its spec adds the v1 to v2 step.
 
+### 053 review fixes (2026-11-11, after db5beb3)
+1. **TransformGoals never throws** (must-fix): the body is in try/catch; the first failure logs one warning and turns the helper off
+   for the run. The test now checks the shapes (the queue is an `ICollection`, the current goal a reference) and clears a real
+   NetworkTransform added in EditMode (by reflection: the test assembly has no FishNet reference).
+2. **One synced shop balance** (netcode): `Economy/ShopLedger.cs`, a global scene object with `SyncVar<long> Balance`; `EconomyService`
+   publishes every change there once. `Wallet` keeps no SyncVar: it is a thin reader (`TryGetBalance`) for the HUD, the summary and
+   the tours. Traffic no longer grows with N squared. Every money step is unchanged (still one sim debit, the refund backstops, server
+   only). `ProtocolSurface.Revision` = 3; the ledger's sync line is pinned and no Wallet sync line may exist (`NetReview054Tests`).
+3. **Pass-through by default** (inbox question 23, default A): see spec 054.
+- `-continue` (or the title's Continue) with a broken save never opens a new shop: `NetBootstrap.FailSaveStart` exits a scripted
+  run with code 3, otherwise the shop closes again (or never opens) and the title shows the save's error card.
+- A newer-version save that is the only file still offers Continue (line "Saved by a newer version of Worktown"), so its card shows
+  (`MenuRules.OffersContinue`, tested).
+- `SaveStore` checks the file's length (1 MB) before reading it (`ISaveFiles.Length`; test: refused unread).
+- `ShiftSummaryView` caches the stage and the local wallet (lookups at most once a second) and rebuilds the goal line only when its
+  inputs change.
+- `StockRoom.Drop`'s refund after a failed fill has a test (the charge goes through, the slot fills meanwhile, the payment comes back once).
+- docs/architecture.md: "Every wire change bumps ProtocolSurface.Revision."
+
+**The rent goal, measured (not changed).** The corner tour (one scripted cook, screenshots on) serves a fries guest every 82 s
+(82.4 s and 164.8 s in `.verify/visual053b`); each guest paid about $615 (bill about $503 plus tip about $112), a potato costs $48
+at the bulk price, the pitch fee is $575 per service, a service is 360 s plus the 15 s summary. From the starting $2,875 the goal
+needs $31,625 more:
+- one cook at the tour's pace: about 4.4 guests a service, about $1,920 net a service, **about 16.5 services, 1.7 h**;
+- the stock ceiling: the potato slot holds 12 and stage 1 has no terminal, so at most 12 fries a service, about $6,235 net,
+  **about 5.1 services, 0.53 h**, whatever the crew size (a crew of 2 or more reaches it).
+Spec 052's stage 1 target (enter stage 2) is 0.75 to 1.5 h. A solo cook lands a little above it, any larger crew well below it,
+and the slot's 12, not the goal, sets the crew's pace. The guests' demand per service was not measured (the tour served only 2).
+
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

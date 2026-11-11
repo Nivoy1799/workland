@@ -37,6 +37,10 @@ namespace Worktown.Game.UI
         private Label _footer;
         private Label _goal; // spec 053: the food corner's goal progress
         private Worktown.Game.Climb.ShopStage _shopStage;
+        // 053 review: the goal line is rebuilt only when its inputs change, and the lookups run at most once a second.
+        private Wallet _wallet;
+        private float _nextLookup;
+        private (long Balance, long Goal, bool Reached, bool Shown) _goalShown = (-1, -1, false, true);
         private TicketRailView _rail;
         private bool _pinned;
         private float _demoAt = -1f;
@@ -113,16 +117,26 @@ namespace Worktown.Game.UI
         /// <summary>Spec 053: "Save for the rent: $230 / $400 (57 %)" at the food corner (the one shop wallet), hidden in the open kitchen.</summary>
         private void UpdateGoal()
         {
-            if (_shopStage == null) _shopStage = Worktown.Game.Climb.ShopStage.Find();
-            string text = string.Empty;
-            if (_shopStage != null && _shopStage.StageNow != Worktown.Game.Climb.ShopStageRules.OpenKitchen && _shopStage.GoalMoney.Value > 0)
+            if ((_shopStage == null || _wallet == null) && Time.unscaledTime >= _nextLookup)
             {
-                PickupInteractor player = LocalPlayer.Find(FishNet.InstanceFinder.NetworkManager);
-                long balance = player != null && player.TryGetComponent(out Wallet wallet) ? wallet.Balance.Value : 0L;
-                text = GoalText(balance, _shopStage.GoalMoney.Value, _shopStage.GoalReached.Value);
+                _nextLookup = Time.unscaledTime + 1f;
+                if (_shopStage == null) _shopStage = Worktown.Game.Climb.ShopStage.Find();
+                if (_wallet == null)
+                {
+                    PickupInteractor player = LocalPlayer.Find(FishNet.InstanceFinder.NetworkManager);
+                    if (player != null) player.TryGetComponent(out _wallet);
+                }
             }
-            _goal.text = text;
-            _goal.style.display = text.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            bool shown = _shopStage != null && _shopStage.StageNow != Worktown.Game.Climb.ShopStageRules.OpenKitchen && _shopStage.GoalMoney.Value > 0;
+            long balance = 0L;
+            if (shown && _wallet != null) _wallet.TryGetBalance(out balance);
+            long goal = shown ? _shopStage.GoalMoney.Value : 0L;
+            bool reached = shown && _shopStage.GoalReached.Value;
+            var inputs = (balance, goal, reached, shown);
+            if (inputs == _goalShown) return;
+            _goalShown = inputs;
+            _goal.text = shown ? GoalText(balance, goal, reached) : string.Empty;
+            _goal.style.display = shown ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         /// <summary>Spec 053: the summary's goal line (with the reached message once the goal flipped).</summary>

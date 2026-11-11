@@ -133,9 +133,10 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void LaunchArgs_PlayerCollision_DefaultsOn_TheHostDecides()
+        public void LaunchArgs_PlayerCollision_DefaultsOff_TheHostDecides()
         {
-            Assert.IsTrue(LaunchArgs.Parse(new[] { "-host" }).PlayerCollision, "on by default");
+            // 053 review (inbox question 23, default A): players pass through each other unless -player-collision on (the A/B).
+            Assert.IsFalse(LaunchArgs.Parse(new[] { "-host" }).PlayerCollision, "off by default");
             LaunchArgs off = LaunchArgs.Parse(new[] { "-host", "-player-collision", "off" });
             Assert.IsTrue(off.IsValid, off.Error);
             Assert.IsFalse(off.PlayerCollision);

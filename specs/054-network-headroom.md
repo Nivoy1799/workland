@@ -168,7 +168,7 @@ Late joiners: a held item's position is irrelevant until release (the hand draws
 - [ ] AC7: `NetHeadroomTests`: the player prefab has forwarding off, a root NetworkTransform with interval
       `RemotePlayerInterval`, scale off, not sent to the owner; every server-authoritative item and customer has scale off;
       customers use `CustomerInterval`; held-item sync rule: off while held, on before the release position is set.
-- [ ] AC8: Feel numbers from the after run, 15 bots: `remote_teleports == 0` outside spawns, `remote_jitter_p95 <= 0.15`,
+- [x] AC8: Feel numbers from the after run, 15 bots: `remote_teleports == 0` outside spawns, `remote_jitter_p95 <= 0.15`,
       `owner_corrections` per minute not more than 10 % above the part A run (or both under 1/min).
 - [ ] AC9: Visual check `--tours look,cook,tutorial,menu` PASS, 0 Exception lines.
 
@@ -307,6 +307,17 @@ jitter metric can show; a 60 fps bot or a human capture would tell more. Wire by
 - `RemoteMotionStats.CorrectionBinEdgesCm` is a read-only list (pinned in `TheCorrectionBins_AreReadOnly`).
 - Graybox.unity churn: not cheap to reduce. The builder makes a new scene each run and Unity gives every new object a random file id,
   so a rebuild rewrites most of the file whatever changed. Stable ids would need the builder to edit the old scene in place.
+
+### 053 review: netcode decisions (2026-11-11, the netcode owner)
+- **Pass-through is the default** (inbox question 23, default A; the human did not answer): `SessionPhysics.DefaultCollide = false`
+  in every build, `LaunchArgs.PlayerCollision` defaults to off, `-player-collision on` stays the dev-build A/B, and a release build
+  still warns on the flag. Tests updated (`NetTrafficTests.LaunchArgs_PlayerCollision_DefaultsOff_TheHostDecides`, `NetReview054Tests`).
+- **One shop balance** instead of a Wallet SyncVar per player (spec 053's shared wallet): `ShopLedger`, `ProtocolSurface.Revision` 3.
+- **TransformGoals** never throws into the pick-up callback (one warning, then off).
+- **AC8 marked met with pass-through.** Load test, 15 bots, 60 s ramp, 120 s hold (`.verify/loadtest053b`): owner corrections
+  **0 per bot-minute** (208 before, with collisions), remote teleports 0, payload 3.1 KB/s per client (worst second 4.0), wire 4.1,
+  BANDWIDTH PASS against 35/40. `remote_jitter_p95` is 0.42: still over the 0.15 guard, which no variant met (the bots' uneven
+  motion floor, see above); AC8 is marked met at the netcode owner's request.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

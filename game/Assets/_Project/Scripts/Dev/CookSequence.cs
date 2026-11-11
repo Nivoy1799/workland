@@ -1803,11 +1803,11 @@ namespace Worktown.Game.Dev
             yield return actor.Use("next page", next.Anchor, InteractionAction.Page, () => me.DevTerminal(next),
                 capture.Before("terminal-next-aim", "terminal-page", TourRules.ClickFramesSeconds));
             yield return actor.Use("page back", back.Anchor, InteractionAction.Page, () => me.DevTerminal(back));
-            long before = me.TryGetComponent(out Worktown.Game.Economy.Wallet wallet) ? wallet.Balance.Value : -1;
+            long before = me.TryGetComponent(out Worktown.Game.Economy.Wallet wallet) ? wallet.BalanceOrUnknown : -1;
             yield return actor.Use("order a pack of tomatoes", tomatoRow.Anchor, InteractionAction.Order, () => me.DevTerminal(tomatoRow),
                 capture.Before("terminal-order-aim", "terminal-order", TourRules.ClickFramesSeconds));
             yield return new WaitForSecondsRealtime(0.5f);
-            long after = wallet != null ? wallet.Balance.Value : -1;
+            long after = wallet != null ? wallet.BalanceOrUnknown : -1;
             Debug.Log("[Stock] ordered at the terminal: the wallet went from " + before + " to " + after + " (" + (before - after) + " paid)");
             yield return capture.Shot("terminal-ordered");
             yield return actor.LevelView();

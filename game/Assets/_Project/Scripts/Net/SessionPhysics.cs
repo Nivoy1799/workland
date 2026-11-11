@@ -6,13 +6,17 @@ namespace Worktown.Game.Net
 {
     /// <summary>
     /// 054 review: the session's one physics rule, on one global scene object instead of one copy per player: whether players collide
-    /// with each other (spec 054 experiment, <c>-player-collision</c>, dev builds; on by default). The host decides when its server
+    /// with each other. 053 review (inbox question 23, default A): they pass through each other by default in every build;
+    /// <c>-player-collision on</c> (dev builds) is the A/B flag that makes them collide. The host decides when its server
     /// starts; every client applies the same layer rule (Player against Player) when the scene object arrives, which is before its own
     /// player spawns, so the server and the owner's prediction never disagree. The world, stations and NPCs are unaffected. No RPC.
     /// </summary>
     public sealed class SessionPhysics : NetworkBehaviour
     {
-        public readonly SyncVar<bool> PlayersCollide = new SyncVar<bool>(true);
+        /// <summary>The default rule: players pass through each other (053 review, inbox question 23).</summary>
+        public const bool DefaultCollide = false;
+
+        public readonly SyncVar<bool> PlayersCollide = new SyncVar<bool>(DefaultCollide);
 
         private void Awake()
         {
@@ -25,14 +29,14 @@ namespace Worktown.Game.Net
         public override void OnStartServer()
         {
             base.OnStartServer();
-            bool collide = true;
+            bool collide = DefaultCollide;
             NetBootstrap boot = FindFirstObjectByType<NetBootstrap>();
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
-            collide = boot == null || boot.Args.PlayerCollision;
+            if (boot != null && boot.Args.PlayerCollisionGiven) collide = boot.Args.PlayerCollision; // the A/B flag
 #else
             // 054 review: a release build never takes the experiment's flag, and says so instead of ignoring it silently.
             if (boot != null && boot.Args.PlayerCollisionGiven)
-                Debug.LogWarning("[Net] -player-collision is a development-build experiment; this build keeps players colliding");
+                Debug.LogWarning("[Net] -player-collision is a development-build experiment; in this build players pass through each other");
 #endif
             if (PlayersCollide.Value != collide) PlayersCollide.Value = collide;
             Apply();
@@ -47,7 +51,7 @@ namespace Worktown.Game.Net
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            ApplyRule(true); // the next session starts from the default
+            ApplyRule(DefaultCollide); // the next session starts from the default
         }
 
         private void Apply() => ApplyRule(PlayersCollide.Value);

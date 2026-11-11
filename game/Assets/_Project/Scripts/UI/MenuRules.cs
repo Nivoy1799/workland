@@ -27,6 +27,16 @@ namespace Worktown.Game.UI
         public static string ContinueLine(long day, long balance) =>
             "Day " + System.Math.Max(1L, day) + " \u00b7 " + Worktown.Game.Economy.EconomyRules.Money(System.Math.Max(0L, balance));
 
+        /// <summary>Spec 053 review: the line under Continue when the only (or newest) save comes from a newer build.</summary>
+        public const string NewerContinueLine = "Saved by a newer version of Worktown";
+
+        /// <summary>
+        /// Spec 053 review: the title offers Continue when a save loads, or when the newest one was made by a newer build (pressing it
+        /// shows that card instead of hiding the shop).
+        /// </summary>
+        public static bool OffersContinue(bool anySaveLoads, Worktown.Game.Save.SaveError newestError) =>
+            anySaveLoads || newestError == Worktown.Game.Save.SaveError.NewerVersion;
+
         /// <summary>Spec 053: the line under Continue when the newest save does not load (pressing it shows why).</summary>
         public const string BrokenContinueLine = "The newest save could not be loaded";
 

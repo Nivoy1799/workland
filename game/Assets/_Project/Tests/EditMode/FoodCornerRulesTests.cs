@@ -103,12 +103,31 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(1, rich.Charges);
         }
 
+        [Test]
+        public void TheDrop_RefundsWhenTheFillFailsAfterThePayment()
+        {
+            var room = new StockRoom();
+            int potato = StockCatalog.IndexOf("potato");
+            // The charge goes through, but meanwhile the slot filled up (another path): the fill fails and the payment comes back.
+            var wallet = new Wallet(100000) { OnCharge = () => room.ReturnUpToCapacity(potato, 99) };
+            int units = room.Drop(potato, Economy, wallet, out long cost);
+            Assert.AreEqual(0, units, "nothing dropped");
+            Assert.AreEqual(0, cost);
+            Assert.AreEqual(1, wallet.Charges, "charged once");
+            Assert.AreEqual(1, wallet.Refunds, "refunded once");
+            Assert.AreEqual(100000, wallet.Money, "never charged without the stock");
+        }
+
         private sealed class Wallet : ISupplyWallet
         {
             private long _money;
             public int Charges;
+            public int Refunds;
+            public System.Action OnCharge;
 
             public Wallet(long money) => _money = money;
+
+            public long Money => _money;
 
             public bool CanAfford(long cost) => _money >= cost;
 
@@ -118,10 +137,15 @@ namespace Worktown.Game.Tests
                 if (cost > _money) return Cooking.CookOutcome.NotEnoughMoney;
                 _money -= cost;
                 Charges++;
+                OnCharge?.Invoke();
                 return Cooking.CookOutcome.Ok;
             }
 
-            public void Refund(long cost) => _money += cost;
+            public void Refund(long cost)
+            {
+                _money += cost;
+                Refunds++;
+            }
         }
     }
 }

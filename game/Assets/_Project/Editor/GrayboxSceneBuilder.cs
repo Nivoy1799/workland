@@ -554,6 +554,12 @@ namespace Worktown.Game.Editor
             SetField(sessionNob, "_isGlobal", true);
             sessionObject.AddComponent<SessionPhysics>();
 
+            // 053 review (netcode): the one shop balance, synced once for everyone (each player's Wallet reads it).
+            var ledgerObject = new GameObject("ShopLedger");
+            NetworkObject ledgerNob = ledgerObject.AddComponent<NetworkObject>();
+            SetField(ledgerNob, "_isGlobal", true);
+            SetField(networkManager.GetComponent<EconomyService>(), "_ledger", ledgerObject.AddComponent<ShopLedger>());
+
             Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Plaster);
             int covers = 0;
             var stations = new List<Station>(UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None));

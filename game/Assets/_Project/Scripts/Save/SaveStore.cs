@@ -114,6 +114,8 @@ namespace Worktown.Game.Save
             if (path == null || !_files.Exists(path)) return SaveLoadResult.Fail(SaveError.NotJson, path);
             try
             {
+                // 053 review: a huge file is refused unread.
+                if (_files.Length(path) > ShopSaveCodec.MaxBytes) return SaveLoadResult.Fail(SaveError.TooLarge, path);
                 return _codec.TryParse(_files.ReadAllText(path));
             }
             catch (Exception)

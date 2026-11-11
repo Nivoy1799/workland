@@ -254,8 +254,11 @@ namespace Worktown.Game.UI
             bool hasSave = false;
             try
             {
-                hasSave = store != null && store.HasSlot && store.HasSave();
-                if (hasSave) newest = store.Newest();
+                if (store != null && store.HasSlot)
+                {
+                    newest = store.Newest();
+                    hasSave = MenuRules.OffersContinue(store.HasSave(), newest != null ? newest.Error : Save.SaveError.None);
+                }
             }
             catch (Exception e)
             {
@@ -270,6 +273,7 @@ namespace Worktown.Game.UI
                     _hostButtons.Add(MenuButton(ContinueId, choice, ContinueShop));
                     _continueLine = new Label(newest != null && newest.Ok
                         ? MenuRules.ContinueLine(newest.Save.clock.day, newest.Save.money.balance)
+                        : newest != null && newest.Error == Save.SaveError.NewerVersion ? MenuRules.NewerContinueLine
                         : MenuRules.BrokenContinueLine) { enableRichText = false };
                     _continueLine.AddToClassList("menu-text");
                     _hostButtons.Add(_continueLine);
@@ -392,6 +396,12 @@ namespace Worktown.Game.UI
             }
             if (!_wasShowing) Open(Page.Title);
             _wasShowing = true;
+            // 053 review: a Continue that failed on the server (or -continue) shows the save's error card here.
+            if (flow.State == JoinState.Menu && _saveCardText != null && _bootstrap.TakeSaveStartError(out Save.SaveError saveError))
+            {
+                _saveCardText.text = MenuRules.SaveErrorText(saveError);
+                _saveCardOpen = true;
+            }
             UnityEngine.Cursor.lockState = CursorLockMode.None;
             UnityEngine.Cursor.visible = true;
             DriveCamera();

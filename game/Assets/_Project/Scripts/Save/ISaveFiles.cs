@@ -11,6 +11,8 @@ namespace Worktown.Game.Save
     {
         bool Exists(string path);
         string ReadAllText(string path);
+        /// <summary>The file's size in bytes (053 review: checked before it is read).</summary>
+        long Length(string path);
         /// <summary>Writes (creates or overwrites) <paramref name="path"/>; may throw midway.</summary>
         void WriteAllText(string path, string text);
         /// <summary>

@@ -145,8 +145,8 @@ namespace Worktown.Game.UI
             _root.style.display = player != null ? DisplayStyle.Flex : DisplayStyle.None;
             if (player == null) return;
 
-            bool hasWallet = player.TryGetComponent(out Wallet wallet);
-            long balance = hasWallet ? wallet.Balance.Value : 0L;
+            long balance = 0L;
+            bool hasWallet = player.TryGetComponent(out Wallet wallet) && wallet.TryGetBalance(out balance); // spec 053: the shop ledger
             if (hasWallet != _walletKnown || balance != _walletShown)
             {
                 _walletKnown = hasWallet;

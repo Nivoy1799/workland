@@ -25,9 +25,11 @@ namespace Worktown.Game.Net
         /// prefab is put together: the order of its NetworkBehaviours (their indexes on the wire), its NetworkObject's prediction and
         /// state forwarding flags, or a NetworkTransform's settings that change what it sends. Every such wire change bumps this number,
         /// so an older and a newer build refuse each other cleanly. 1: up to spec 047 (no line). 2: spec 054 (the player root's
-        /// NetworkTransform, no state forwarding, items silent while held, no scale sync; 054 review: item teleports).
+        /// NetworkTransform, no state forwarding, items silent while held, no scale sync; 054 review: item teleports). 3: the 053 review
+        /// (one ShopLedger balance instead of a Wallet SyncVar per player; players pass through each other by default).
+        /// Every wire change bumps it (docs/architecture.md).
         /// </summary>
-        public const int Revision = 2;
+        public const int Revision = 3;
 
         /// <summary>The line that carries <see cref="Revision"/>.</summary>
         public static string RevisionLine => "revision " + Revision;

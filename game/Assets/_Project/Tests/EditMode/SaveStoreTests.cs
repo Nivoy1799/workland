@@ -21,8 +21,18 @@ namespace Worktown.Game.Tests
             public int Deletes;
             private DateTime _now = new DateTime(2026, 11, 11, 9, 0, 0, DateTimeKind.Utc);
 
+            public int Reads;
+            public long? FakeLength;
+
             public bool Exists(string path) => Files.ContainsKey(path);
-            public string ReadAllText(string path) => Files.TryGetValue(path, out string t) ? t : throw new FileNotFoundException(path);
+
+            public string ReadAllText(string path)
+            {
+                Reads++;
+                return Files.TryGetValue(path, out string t) ? t : throw new FileNotFoundException(path);
+            }
+
+            public long Length(string path) => FakeLength ?? (Files.TryGetValue(path, out string t) ? t.Length : 0);
 
             public void WriteAllText(string path, string text)
             {
@@ -176,6 +186,35 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(store.IsTaken(IdB));
             Assert.IsTrue(store.CreateNew(Shop(IdB, 7), out _));
             Assert.AreEqual(2, store.Files().Count);
+        }
+
+        [Test]
+        public void AHugeFile_IsRefusedUnread()
+        {
+            var files = new FakeFiles();
+            SaveStore store = Store(files);
+            Assert.IsTrue(store.Write(Shop(IdA, 100), out _));
+            files.FakeLength = ShopSaveCodec.MaxBytes + 1L;
+            files.Reads = 0;
+            Assert.AreEqual(SaveError.TooLarge, store.Load(store.PathFor(IdA)).Error);
+            Assert.AreEqual(0, files.Reads, "the size is checked before the file is read");
+        }
+
+        [Test]
+        public void ANewerVersion_AsTheOnlyFile_StillOffersContinue()
+        {
+            var files = new FakeFiles();
+            SaveStore store = Store(files);
+            ShopSave newer = Shop(IdA, 300);
+            newer.formatVersion = 99;
+            files.Files[store.PathFor(IdA)] = UnityEngine.JsonUtility.ToJson(newer);
+            files.Times[store.PathFor(IdA)] = _clock;
+            Assert.IsFalse(store.HasSave(), "nothing this build can load");
+            SaveLoadResult newest = store.Newest();
+            Assert.AreEqual(SaveError.NewerVersion, newest.Error);
+            Assert.IsTrue(UI.MenuRules.OffersContinue(store.HasSave(), newest.Error), "Continue shows, so its card can say why");
+            Assert.IsFalse(UI.MenuRules.OffersContinue(false, SaveError.NotJson), "a broken file alone offers nothing");
+            Assert.IsFalse(UI.MenuRules.OffersContinue(false, SaveError.None));
         }
 
         [Test]

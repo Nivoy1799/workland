@@ -155,9 +155,12 @@ namespace Worktown.Game.Save
             SaveLoadResult newest = store != null && store.HasSlot ? store.Newest() : null;
             if (newest == null || !newest.Ok)
             {
-                Debug.LogError("[Save] Continue found no save that loads (" + (newest != null ? newest.Error + " in " + System.IO.Path.GetFileName(newest.Path) : "none")
-                    + "); the file is kept and a new food corner opens instead");
-                BeginNewShop();
+                // 053 review: never a new shop instead: the shop closes again and the title shows why (a scripted run exits with an error).
+                SaveError error = newest != null ? newest.Error : SaveError.NotJson;
+                Debug.LogError("[Save] Continue found no save that loads (" + (newest != null ? error + " in " + System.IO.Path.GetFileName(newest.Path) : "none")
+                    + "); the file is kept");
+                if (_stage != null) _stage.ServerBegin(ShopStageRules.OpenKitchen, 0, 0, false);
+                if (_bootstrap != null) _bootstrap.FailSaveStart(error);
                 return;
             }
             foreach (string note in newest.Notes) Debug.LogWarning("[Save] clamped: " + note);

@@ -22,13 +22,14 @@ namespace Worktown.Game.Economy
 
         [SerializeField] private NetworkManager _networkManager;
         [SerializeField] private MarketBoard _board;
+        [Tooltip("Spec 053 review: the one synced shop balance (a global scene object).")]
+        [SerializeField] private ShopLedger _ledger;
 
         private TownEconomy _economy = TownEconomy.CreateDemo();
         private float _secondsIntoHour;
         // Spec 053: the shown day of a loaded game (the economy itself starts fresh at day 1), every player's wallet, and what the shop
         // earned and spent in this game (for the save).
         private long _tickOffset;
-        private readonly List<Wallet> _wallets = new List<Wallet>();
         private long _earned;
         private long _spent;
 
@@ -145,7 +146,6 @@ namespace Worktown.Game.Economy
             // a joining or rejoining player adds no money.
             if (_economy.TryOpenAccount(EconomyRules.ShopAccount, EconomyRules.StartingGrant))
                 Debug.Log("[Economy] the shop opened with " + EconomyRules.Money(EconomyRules.StartingGrant) + " (the open kitchen)");
-            if (player != null && player.TryGetComponent(out Wallet wallet) && !_wallets.Contains(wallet)) _wallets.Add(wallet);
             if (player != null) Debug.Log("[Economy] player " + player.OwnerId + " joined; the shop has " + EconomyRules.Money(ShopBalance));
             PublishWallets();
         }
@@ -293,20 +293,14 @@ namespace Worktown.Game.Economy
             return ok;
         }
 
-        /// <summary>Spec 053: the one shop balance to every player's wallet (a player gone is forgotten).</summary>
+        /// <summary>
+        /// Spec 053: the one shop balance for every player. 053 review (netcode): synced once on the ShopLedger (a global object), not
+        /// once per player's Wallet to every observer; each Wallet reads it.
+        /// </summary>
         private void PublishWallets()
         {
-            long balance = System.Math.Max(0L, ShopBalance);
-            for (int i = _wallets.Count - 1; i >= 0; i--)
-            {
-                Wallet wallet = _wallets[i];
-                if (wallet == null || !wallet.IsSpawned)
-                {
-                    _wallets.RemoveAt(i);
-                    continue;
-                }
-                if (wallet.IsServerInitialized) wallet.ServerSet(balance);
-            }
+            if (_ledger == null) _ledger = FindFirstObjectByType<ShopLedger>();
+            if (_ledger != null) _ledger.ServerSet(System.Math.Max(0L, ShopBalance));
         }
 
         private void PublishBoard()
