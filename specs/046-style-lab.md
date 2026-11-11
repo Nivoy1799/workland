@@ -214,6 +214,14 @@ the whole town in the rain from the air with the Canopy over the core, Main Stre
 promenade in spring, summer, autumn and winter, and three tries for the Wreck in the same valley shot (the Albatross
 as Ark Flight 9, the Pelican freight plane, the Stella starliner). Output `docs/art/stylelab/round-7/`.
 
+## Round 8: Haven Nine, its borders and its dark side (human, 2026-11-11: "it's still too clean ... we also need some
+harshness, like even robots which are defect ... dark districts ... it's too utopia"; then: "the town should have some
+kind of border ... so the players can't escape the town ... and we need like a real story behind all of it")
+Pictures for spec 051 sections 5b and 5c (the story is `docs/town-story.md`, draft 2): the high organic Dome over the
+whole town with the Storm Ring on the horizon, the Dome's lit ribs from below at night, and three borders (the
+Albatross built through the wall, the wall running into the lake with its water gate, the sealed tunnel door to
+Haven Eight), plus the Low Ring at night. Output `docs/art/stylelab/round-8/`.
+
 ## Open questions
 0. **Real-world cultures in the town?** So far the world has only its own fictional history (D27, D28). Can a
    business be "Mexican-inspired" or "Japanese-inspired", or do we invent fictional regional cuisines that echo real
@@ -329,6 +337,20 @@ Round 7 (2026-11-11, Opus):
 - Seasons swap the leaf and flower colours the older kits read (`future.LEAVES`, `world.LEAVES`, `future.FLOWERS`)
   once per frame, which is safe because every frame runs in its own Blender process.
 - Fix from round 6: the airship hull now has 36 profile steps and the rust panels sit on the hull's flat faces.
+
+Round 8 (2026-11-11, Opus):
+- Page: https://claude.ai/artifact/VCszDibQnpUFGyD4oKEzNm (source `docs/art/stylelab/round-8/compare.html`).
+- `lab/dome.py` (the Dome shell, its leaf-vein ribs, the Storm Ring, a local wall piece for close frames, the seal
+  collar, the round pressure door), `lab/lowring.py` (broken robots, scrap, overflowing bins, neon with dead letters,
+  sodium lamps, betting screens, dream booths, pipes, steam) and `lab/scene8.py`; six frames by
+  `tools/blender/stylelab/render_round8.py`.
+- The Dome is a (angle, radius) grid on an ellipse with a bubble profile, z = top * (1 - s^2.4)^0.5, a leaning crown
+  and soft lumps. Its ribs are bevelled curves. The air frame turns the town's Wreck so its nose points out through
+  the wall, by swapping `world.wreck` while `scene6.town` builds.
+- The haze box washed the far storm clouds to beige, so the far frames use a much thinner haze. The two night frames
+  render without ink: in the dark the outlines read as white wireframe.
+- Weak spots: the Wildbelt edge and the service airlocks have no picture; the Wreck's nose outside the glass stays
+  dark; the light shaft through the Low Ring's deck hardly shows.
 
 ## Blockers
 (none)

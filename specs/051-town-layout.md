@@ -6,7 +6,9 @@ owner: architect
 builder: opus
 ---
 
-# 051: The town plan (DRAFT, 2026-11-11, not decided; first answers in, see "Answers")
+# 051: The town plan (DRAFT, 2026-11-11; v1 pulled together in docs/town-plan.md, waiting for approval)
+
+> **Read `docs/town-plan.md` first.** It is the v1 plan built from this spec, its answers and the story (`docs/town-story.md`, draft 3), with the work packages for implementation. Where the two differ, the town plan is newer. This spec keeps the full history and the details it points to.
 
 ## Goal
 Decide where everything in the town happens, how big the map must be, where and how the world ends without an
@@ -164,6 +166,35 @@ work as the west edge. They change the story a little (docs/town-story.md):
 | B. Pelican | a 2100s freight plane, broken behind the wing, its cargo door swung up, a T-tail on the skyline | good: your original idea. The landing reads harder, so the story needs a lucky belly landing |
 | C. Stella | a 2100s starliner (a retro rocket) lying on its side, nose in the hillside, rows of lit portholes | the most retro-future picture, but a rocket carrying cows needs a bigger story |
 
+**Picked: A, the Albatross** (2026-11-11).
+
+### 5b. The borders, round 8: one Dome wall with a reason (replaces the soft edges above)
+The human wants hard borders that players cannot cross, with a reason in the story. The whole town now sits under
+the **Dome** (question 9), so the Dome wall is the border all around, and behind it the **Storm Ring** (the black
+cloud wall made by the old Weather Engines, docs/town-story.md) explains why nobody leaves.
+
+| Edge | What you see | What stops you |
+|---|---|---|
+| **West: the Wreck** | the dome glass sealed around the Albatross's hull: tail inside, nose outside in the storm. The night market and a betting hall are inside the hull | a bulkhead welded shut where the wall crosses the hull; through its porthole you see the nose outside in the storm |
+| **South: the Wildbelt** | a wild strip along the inside of the wall where the freed animals live | the sanctuary fence, then the glass |
+| **East: the lake** | the wall runs down into the water; fish swim against the glass | the water gate, opened only for cleaning robots |
+| **North: the train tunnel** | the round pressure door, the seasonal cargo train from Haven Eight, "Transit closed. Next service: Autumn" | goods only. Later updates may open travel to other Havens |
+| **All round: service airlocks** | robots go out to sweep the glass | "Keepers and robots only" |
+| **Up** | the ribs, about 250 m up | the glass; players never fly |
+
+The last-resort collider and the server safe-spot check from section 5 stay unchanged. AC2 stays unchanged.
+
+The Dome, proposed size: an organic shell (not a flat roof) of about 760 × 600 m over the 640 × 480 m bowl, its
+top about 250 m up, higher than every tower. Ribs like a leaf's veins, lit at night. Officially "the Sail"; the Low
+Ring calls it "the Lid".
+
+### 5c. The Low Ring (round 8, the darker side)
+The human found the town too clean. Proposal: the ground floors of the towers and the land around the Dome's feet
+are in shade all day. That is the **Low Ring**: soot black, rust, orange sodium lamps, flickering signs, steam,
+broken robots, a scrap pile, betting halls on drone races, credit slots and dream booths (all fictional vices).
+It is shown in the world (places, NPCs, stories), never as a gambling loop the player grinds (open question 16).
+Its problems are jobs: broken robots (the mechanic), overflowing bins (collecting), lonely people (late food).
+
 ### 6. Day and night
 - **One town clock**, run by the host. It runs only while the game runs (game-design v1).
 - Proposed length: **1 game day = 40 real minutes**: dawn 3, day 24, dusk 3, night 10. See open question 1.
@@ -202,6 +233,25 @@ Weather is planned by the town, which suits 2222, and sometimes it comes in wild
 The human's idea: a shield over the town that keeps the rain off and collects everything, with the leaves saved to
 make soil. Here it is the **Canopy** (locals call it "the Sail"): a high glass roof over the town core, built in
 2161 after a hail summer, with its lattice copied from the Albatross's envelope (docs/town-story.md).
+
+> **Round 8 change (question 9 answered):** the Canopy below is replaced by the **Dome** over the whole town
+> (section 5b): organic, about 250 m high, closed at the sides. Rain, leaves, scraps and soil work as described
+> below. What changes:
+> - The weather inside is **planned** by the Keepers: a daily **Rain Hour** waters the town, roof panels open on
+>   fine days, and the seasons still come in through them. Storms, hail and lightning hit the glass from outside.
+> - The covered-or-outside trade-off becomes a schedule: open-panel days bring footfall to outdoor tables, the Rain
+>   Hour empties them for a while, and storm days keep people under roofs. Still deterministic from the seed.
+> - The Low Ring (section 5c) lies in the towers' shade, so its streets stay dim even at noon.
+>
+> **Compost loop, concrete proposal (question 13):**
+> 1. Cooking makes scraps (peels, trimmings); /sim computes the amount per recipe. They go into the bin at the
+>    kitchen's back door.
+> 2. Robots empty the bins on a fixed route. In the Low Ring some robots are broken, so bins overflow there: a
+>    smell and fewer customers nearby.
+> 3. Players can empty bins by hand with a cart and are paid a little per kilo at the Compost Works: an easy first
+>    job and a reason to go to the Low Ring. In autumn, sweeping leaves off the Dome is the seasonal version.
+> 4. The Compost Works turns scraps into soil over a few game days. A full soil stock makes greenhouse produce up to
+>    about 10% cheaper; a low one makes it dearer. All in /sim, seeded and deterministic.
 
 **What it is:**
 - a glass vault on Googie tree columns over the core: Station Square, Main Street, Fountain Cross, the Market Hall
@@ -293,6 +343,39 @@ Comfort settings (spec 048):
 Decision lines (D numbers) for these get added to docs/decisions.md when this branch is merged, because main is
 ahead and the numbers must not clash.
 
+## Answers to round 7 (from the human, 2026-11-11)
+- Main feedback: the town is **too clean and too utopian**. It needs harshness: broken robots, dark districts,
+  black colours, gambling and addiction, a society that has everything and is only partly happy. Direction proposed
+  in chat; not yet shown in frames (round 8).
+8. Season length 7 game days: "sounds good". **Accepted.**
+9. Canopy coverage: **the whole town**, organic (a dome or sphere, not flat), and **much higher**, above the towers.
+   Section 7b needs a rewrite: if the whole town is covered, only the outside (the Wreck, the Wildbelt, the lake)
+   keeps the full weather.
+10. The Wreck: **A, the Albatross**.
+11. Town name: asked for more ideas, then: "Haven Nine sounds not so bad". **Haven Nine** (proposed, near final).
+- Clarified intent: the human wants **hard, creative borders** the players cannot cross (the world is not endless),
+  plus **a real story** for why the town exists and what changed in history. Section 5's soft edges get reworked
+  around that; directions proposed in chat.
+12. Sleeping: unsure. The night must stay **playable** (late deliveries, night shifts, the look). Still open.
+13. Compost to soil: asked for a concrete loop (by hand, by robots, or both). Proposal in chat. Still open.
+14. Founder names: asked what they mean. Explained in chat. Still open.
+15. Starting in the hundredth year: **no**, not a specific jubilee. The centennial hook in docs/town-story.md goes.
+
+## Answers to round 8 (from the human, 2026-11-11)
+12. Sleeping: "that's a good proposal". **Accepted:** the night never skips; the bed saves, ends the shift, gives a
+    "rested" bonus.
+13. Compost loop: "skip for now". **Parked**, no /sim effect planned.
+14. Founders: "very, very unsure". Still open.
+- **New core idea from the human (under discussion, not decided):** the Haven was a working utopia about 50 years
+  ago (no one had to work, robots did everything). Since then it has declined: nobody knows how to repair the
+  robots, food quality has dropped, people drift into addiction. The game starts in that rough town with poor
+  ingredients ("only shitty potatoes"), and as the players climb, they bring quality back and the town visibly
+  changes for the better around them. **Written up** as the revival in docs/town-plan.md section 4 and
+  docs/town-story.md draft 3 ("you can go draft three ... let's focus on making a version 1").
+- Going outside (a gate, a suit, collecting new seeds, the lab growing better food): **a later release**, not v1.
+- Robot repair: "feel free to add in mechanics again ... in later stage, just to make it doable, early access
+  release". **Later release**, as a mechanic role that revises D35 (docs/town-plan.md section 4.5).
+
 ## Open questions (original list, answered above)
 1. **Day length:** 40 real minutes per game day (proposed)? Shorter means more sunsets per evening; longer means calmer
    shifts.
@@ -312,6 +395,16 @@ ahead and the numbers must not clash.
 11. **Town name:** Seedfall (proposed), Albatross Landing, or Kettlebay? See docs/town-story.md.
 12. **Sleeping:** the night skips only when every player is in bed (proposed), or never?
 13. **Compost to soil in /sim:** a small effect on greenhouse prices (proposed), or only for the look?
+
+## Open questions (round 8)
+12. **Sleeping** (still open): the night never skips (proposed). About 10 of the 40 minutes are night, played like
+    the day (night market, late deliveries, bars); the bed saves, ends your shift and gives a "rested" bonus.
+13. **Compost loop** (still open): the four steps in section 7b (proposed)?
+14. **Founders** (still open): keep Rosa Vell and Captain Ilse Marrow? Heroes, or told differently in the Low Ring?
+16. **Gambling and addiction:** only in the world, as places, NPCs and stories (proposed), or also something the
+    player can do with in-game credits? (A playable betting loop can raise the age rating.)
+17. **The dark layer:** keep "is the storm really still deadly?" as a rumour (proposed), make it a plot, or drop it?
+18. **Later updates open the outside** (proposed long-term path), or does the Dome stay closed forever?
 
 ## Implementation notes
 (None yet; this is a design draft.)

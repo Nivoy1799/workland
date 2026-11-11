@@ -38,6 +38,8 @@ renders without outlines. Several frames run in separate Blender processes.
 Round 5 (the town in 2222) with `render_round5.py` and round 6 (the whole town plan, its edges, weather and light,
 spec 051) with `render_round6.py`, same options as round 4. Round 7 (the Canopy, the four seasons, three tries for
 the Wreck) with `render_round7.py`; for example `--only spring,summer,autumn,winter`.
+Round 8 (Haven Nine under its Dome, the borders, the Low Ring) with `render_round8.py`; for example
+`--only dome_air,low_ring`.
 
 Round 7 made the airship's hull finer (36 profile steps instead of 10) so its rust panels lie on the skin, so a
 re-render of round 6 no longer matches its committed `r6_wreck.jpg` pixel for pixel.
@@ -69,6 +71,9 @@ re-render of round 6 no longer matches its committed `r6_wreck.jpg` pixel for pi
 | `lab/canopy.py` | round 7 kit: the Canopy (glass vault, lattice, gutter, tree columns, cisterns), rain and snow that stop at the glass, the lightning running across the lattice, season colours, trees, firs, fallen leaves, petals, snowman, banners |
 | `lab/wrecks.py` | round 7: two more Wrecks with the airship's layout, the Pelican freight plane and the Stella starliner |
 | `lab/scene7.py` | round 7 frames: the town in the rain from the air, Main Street under the Canopy in a storm, one promenade in four seasons, the three Wrecks |
+| `lab/dome.py` | round 8 kit: the Dome over the whole town (glass, lattice, leaf-vein ribs), the Storm Ring, bare land and dead trees outside, a local wall piece, the seal collar, the round pressure door |
+| `lab/lowring.py` | round 8 kit for the Low Ring: broken robots, scrap pile, overflowing bins, neon with dead letters, sodium lamps, betting screens, dream booths, pipes, steam |
+| `lab/scene8.py` | round 8 frames: the Dome from outside and from below at night, the Wreck through the wall, the wall in the lake, the tunnel door to Haven Eight, the Low Ring |
 | `lab/post.py` | greyscale, colour-blind simulation (Machado 2009), pixel compare |
 
 ## Rules the scripts keep
