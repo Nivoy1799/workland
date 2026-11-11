@@ -128,3 +128,49 @@ Quick run 2026-11-11 10:07 on fresh builds: PASS (crash, watchdog with the bot's
 `.verify/visual049b` PASS.
 
 **Checks.** Visual check `--tours look,cook,tutorial,menu --out .verify/visual049` on fresh builds: PASS, 0 Exception lines in every log, no tick stall; `verify.sh` PASS (EditMode 1339, was 1322; sim 400).
+
+**Host freeze investigation (049b).** Finding: in both cases the host **process died**. It did not stall while still
+alive, so the tick watchdog would not have fired.
+- Evidence, 047c. Unity's native crash report `Crash_2026-11-11_024338590` (02:43:38 UTC, 03:43:38 local) belongs to the
+  cook observer/host. The client's "Server has timed out" came at 03:44:38, exactly FishNet's 60 s client timeout
+  (`ClientManager._remoteServerTimeoutDuration`) later. The client's fry ring rose until about 20 s after the lower and
+  then froze. The host log shows about 20 s of observer frames after "Fryer basket 0: Lowered" (nothing was due from the
+  cook in that time), then `Crash!!!`. Read with a small minidump parser: the fault is 0xC0000005 with flag 8 (DEP, an
+  *execute* of non-executable memory at 0x1be267984b5, not inside any module), on the **main thread**. The return
+  address on top of the stack is in JIT code (0x1bddc7984c0, the call site with 0x4A000000 more in its high bits), below
+  it mono runtime-invoke and UnityPlayer. So managed code called through a corrupted or stale code pointer. All other
+  threads were idle: finalizer, thread pool, Steam, sockets.
+- Evidence, 039b. The client's pan stopped at "Cooking 22" about 5 s after "burner on". The client timed out at 21:44:33,
+  60 s after the host's log ends. The host log ends with the `get_LocalTick` NRE. Its trace has one frame (IL 0x0, no
+  caller), it arrived through Unity's UnhandledException catcher, and then come Steam's
+  "Trying to close low level socket support" lines. Those are printed when the process exits (DLL detach). There is no
+  `Crash!!!`. A managed thread's unhandled exception does *not* end the player (049's crash test logs "done" afterwards).
+  A one-frame NRE (Mono's name for an access violation in JIT code) followed by process exit fits a thread entering JIT
+  code through a bad pointer, then a Mono abort. That is the same signature as 047c.
+- Hypotheses checked against the sources (read only):
+  1. `~FishySteamworks` → `Shutdown()`. Unlikely. A live transport cannot be collected, because Multipass and native
+     hold it. At quit, `OnDestroy` → `Shutdown` runs first and sets `_shutdownCalled`, so the finalizer returns at once.
+     A duplicate that was never started returns too (`_shutdownCalled` starts true). The logs show no duplicate
+     NetworkManager. `~Tugboat` and the Tugboat socket finalizers are no-ops after `OnDestroy`.
+  2. FishNet finalizers on the finalizer thread: `SyncList` (our `Food.Parts` and `Vessel` lists die all through the cook
+     tour), `UniversalTickSmoother`. The SyncList ones return their collections to `CollectionCaches`, which locks. The
+     smoothers are pooled, so they are not collected. Managed only, so they cannot cause a DEP fault.
+  3. Thread-unsafe LiteNetLib/Tugboat use. Native sockets are off (`UseNativeSockets = false`), the stop path is not
+     threaded, and events are polled on the main thread.
+  4. Native callbacks into managed code. Steamworks.NET uses manual dispatch, and we register no warning or debug hooks.
+     FishNet's threaded smoothers are off (no `FISHNET_THREADED_TICKSMOOTHERS`). Our own threads: only TourCapture's
+     PNG tasks (managed arrays) and CrashLog.
+  Left open: a native-side corruption, from Unity or Mono, the Steam overlay (`gameoverlayrenderer64.dll` is loaded in the
+  host), or the GPU driver. Without UnityPlayer and mono symbols the dump cannot name it. Both deaths happened while heat
+  was cooking food: the fryer in 047c, pan and pot in 039b.
+- Reproduction: 4 cook tours on the current builds (`.verify/freeze-1..4`), one at a time. All PASS: 0 Exception lines,
+  no tick stall, no crash log entry, no native crash. **Not reproduced** in 4 runs.
+- Changed (no C#): `scripts/visual-check.sh` now passes `-crash-log <out>/<tour>-tour.crash.log` and `-observer.crash.log`
+  to each window. Before, both shared the default file in the data folder. It also copies any Unity native crash report
+  written during a tour (`%TEMP%/DefaultCompany/Worktown/Crashes`, newer than a mark file) into
+  `<out>/<tour>-native-crash/`. A native crash fails the tour, and the report line counts crash log entries and native
+  crashes. The next death will leave its dump and per-window log in the run folder.
+- Checks: `verify.sh` PASS (EditMode 1350, sim 400, gateway 175). Visual check `--tours look,cook,tutorial,menu --out .verify/visual049c`: PASS, with 0 crash log entries and 0 native crashes in every tour.
+- Follow-ups (not done): a client-side "host gone" sooner than FishNet's 60 s Development timeout. A run with Steam's
+  overlay off for the observer, to rule it in or out. If the native crash repeats, take a full-memory dump with
+  symbols (Unity's symbol server) to name the faulting frame.

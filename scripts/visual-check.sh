@@ -18,7 +18,9 @@
 #
 # Needs Git Bash on Windows and the development builds (game/Builds/Windows, game/Builds/LinuxServer for wsl):
 #   Unity -batchmode -quit -projectPath game -executeMethod Worktown.Game.Editor.Build.WorktownBuild.BuildAll
-# Exit code: 0 when every tour wrote its sheet, both windows exited with 0 in time and no log has an Exception.
+# Exit code: 0 when every tour wrote its sheet, both windows exited with 0 in time, no log has an Exception and Unity wrote
+# no native crash report (spec 049b: copied to <out>/<tour>-native-crash/; each window's crash log is <out>/<tour>-tour.crash.log
+# and <out>/<tour>-observer.crash.log).
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,7 +36,7 @@ while [ $# -gt 0 ]; do
     --out) OUT="${2:?--out needs a directory}"; shift 2 ;;
     --server) SERVER="${2:?--server needs local or wsl}"; shift 2 ;;
     --gfx) GFX="${2:?--gfx needs d3d11, d3d12 or default}"; shift 2 ;;
-    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -51,6 +53,10 @@ OUT="$(cd "$OUT" && pwd)"
 OUT_WIN="$(cygpath -w "$OUT")"
 WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew)
 if [ "$GFX" != "default" ]; then WINDOW+=("-force-$GFX"); fi  # D3D11 by default: D3D12 crashed on exit after tours (spec 045)
+# Spec 049b: Unity's own native crash reports (crash.dmp and the log) land here, outside the run folder; a crash during a
+# tour is copied into <out>/<tour>-native-crash/ so the evidence stays with the run.
+CRASH_DIR=""
+if [ -n "${TEMP:-}" ]; then CRASH_DIR="$(cygpath -u "$TEMP")/DefaultCompany/Worktown/Crashes"; fi
 
 timeout_for() {
   case "$1" in
@@ -118,9 +124,16 @@ IFS=',' read -r -a tour_list <<< "$TOURS"
 for tour in "${tour_list[@]}"; do
   case "$tour" in look|walk|cook|tutorial|menu) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
   if [ "$tour" = "menu" ] && [ "$SERVER" != "local" ]; then echo "the menu tour needs --server local (its host is the observer window)" >&2; failed=1; continue; fi
-  rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer"
+  rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer" "${OUT:?}/${tour:?}-native-crash"
+  rm -f "${OUT:?}/${tour:?}-tour.crash.log" "${OUT:?}/${tour:?}-observer.crash.log"
   tour_log="$OUT/$tour-tour.log"
   observer_log="$OUT/$tour-observer.log"
+  # Spec 049b: each window writes its own crash log (049's CrashLog: exceptions from every thread, the tick watchdog's dump)
+  # into the run folder instead of the shared default in the player's data folder.
+  tour_crash="$OUT/$tour-tour.crash.log"
+  observer_crash="$OUT/$tour-observer.crash.log"
+  crash_mark="$OUT/.native-crash-mark"
+  touch "$crash_mark"
   deadline=$(( $(date +%s) + $(timeout_for "$tour") ))
   echo "==> tour $tour ($SERVER server)"
 
@@ -130,7 +143,7 @@ for tour in "${tour_list[@]}"; do
   # Spec 047: the menu tour starts on the title screen and joins through it (no -connect).
   tour_connect=(-connect "$ADDRESS")
   if [ "$tour" = "menu" ]; then tour_connect=(); fi
-  "$GAME" "${tour_connect[@]}" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$tour_log")" &
+  "$GAME" "${tour_connect[@]}" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -crash-log "$(cygpath -w "$tour_crash")" -logFile "$(cygpath -w "$tour_log")" &
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
   sleep 3
@@ -140,9 +153,9 @@ for tour in "${tour_list[@]}"; do
   # Spec 038: the tutorial host has the tour's stock and trash set-up and the tutorial's calm guests (its scripted orders come first).
   if [ "$tour" = "tutorial" ]; then host_extra=(-tour-orders -tutorial); fi
   if [ "$SERVER" = "local" ]; then
-    "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${host_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
+    "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${host_extra[@]}" "${WINDOW[@]}" -crash-log "$(cygpath -w "$observer_crash")" -logFile "$(cygpath -w "$observer_log")" &
   else
-    "$GAME" -connect "$ADDRESS" -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -logFile "$(cygpath -w "$observer_log")" &
+    "$GAME" -connect "$ADDRESS" -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -crash-log "$(cygpath -w "$observer_crash")" -logFile "$(cygpath -w "$observer_log")" &
   fi
   observer_pid=$!
 
@@ -158,12 +171,28 @@ for tour in "${tour_list[@]}"; do
   for log in "$tour_log" "$observer_log"; do
     if [ -f "$log" ]; then exceptions=$(( exceptions + $(grep -c "Exception" "$log" || true) )); fi
   done
+  # Spec 049b: crash log entries (any thread, the tick watchdog) and Unity native crash reports written during this tour.
+  crash_entries=0
+  for log in "$tour_crash" "$observer_crash"; do
+    if [ -f "$log" ]; then crash_entries=$(( crash_entries + $(grep -c "=== Worktown crash log entry ===" "$log" || true) )); fi
+  done
+  native=0
+  if [ -n "$CRASH_DIR" ] && [ -d "$CRASH_DIR" ]; then
+    while IFS= read -r dir; do
+      [ -n "$dir" ] || continue
+      mkdir -p "$OUT/$tour-native-crash"
+      cp -r "$dir" "$OUT/$tour-native-crash/" 2>/dev/null || true
+      native=$(( native + 1 ))
+    done < <(find "$CRASH_DIR" -mindepth 1 -maxdepth 1 -type d -newer "$crash_mark" 2>/dev/null)
+  fi
+  rm -f "${crash_mark:?}"
   status="ok"
-  if [ "$tour_code" != "0" ] || [ "$observer_code" != "0" ] || [ "$exceptions" -gt 0 ] || [ ! -f "$OUT/$tour/sheet.png" ]; then
+  if [ "$tour_code" != "0" ] || [ "$observer_code" != "0" ] || [ "$exceptions" -gt 0 ] || [ "$native" -gt 0 ] || [ ! -f "$OUT/$tour/sheet.png" ]; then
     status="FAILED"
     failed=1
   fi
-  line="$tour: $status (tour exit $tour_code, observer exit $observer_code, Exception lines $exceptions)"
+  line="$tour: $status (tour exit $tour_code, observer exit $observer_code, Exception lines $exceptions, crash log entries $crash_entries, native crashes $native)"
+  if [ "$native" -gt 0 ]; then line="$line"$'\n'"    native crash report(s): $OUT/$tour-native-crash/"; fi
   for sheet in "$OUT/$tour/sheet.png" "$OUT/$tour-observer/sheet.png"; do
     if [ -f "$sheet" ]; then line="$line"$'\n'"    $sheet"; fi
   done
