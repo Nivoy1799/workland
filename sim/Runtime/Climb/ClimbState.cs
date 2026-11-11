@@ -13,7 +13,8 @@ namespace Worktown.Sim.Climb
     /// Spec 052b: <see cref="Balance"/> is reference (4-player) money, the crew's progress (D40, see <see cref="CrewScaling"/>).
     /// <see cref="Owned"/> may hold an id several times (copies). <see cref="ActiveMenu"/> is the dish ids guests may order
     /// (buying order; the stage 1 dish first), <see cref="JobTier"/> the stake tier per big job, <see cref="RecentMissed"/> the
-    /// missed share (permille) of the last normal services, newest last.
+    /// missed share (permille) of the last normal services, newest last (cleared on a menu change and a new stage), <see cref="LastNet"/>
+    /// the real net of the last normal service (the bar a big job must clear, 052b review).
     /// </summary>
     public sealed record ClimbState(
         int ServiceIndex,
@@ -34,7 +35,8 @@ namespace Worktown.Sim.Climb
         int Trophies,
         IReadOnlyList<string> ActiveMenu,
         IReadOnlyDictionary<string, int> JobTier,
-        IReadOnlyList<int> RecentMissed)
+        IReadOnlyList<int> RecentMissed,
+        long LastNet = 0)
     {
         /// <summary>True when <paramref name="purchaseId"/> is owned (at least one copy).</summary>
         public bool Owns(string purchaseId) => Count(purchaseId) > 0;

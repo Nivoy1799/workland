@@ -132,6 +132,23 @@ namespace Worktown.Sim.Tests.Climb
         }
 
         [Fact]
+        public void ALeaveChangesOnlyLaterServices() // 052b review: 4 -> 1
+        {
+            ClimbCatalog d = ClimbCatalog.CreateDefault();
+            var engine = new ClimbEngine(d);
+            var four = new CrewSetup(4, "average", ClimbStrategy.Reference, 1);
+            ClimbState s = engine.Start(four);
+            (ClimbState a, ServiceResult r1) = engine.RunService(s, four);
+            Assert.Equal(1000, r1.GoalPermille);
+            var solo = four with { Players = 1 }; // three players leave
+            (ClimbState b, ServiceResult r2) = engine.RunService(a, solo);
+            Assert.Equal(137, r2.GoalPermille);
+            Assert.Equal(a.Balance - r2.Spent + r2.NetReference, b.Balance); // the 4-player progress stays
+            Assert.True(r2.Revenue < r1.Revenue); // a quarter of the guests
+            Assert.Equal(CrewScaling.ToReference(r2.Net, 137, d.MoneyScale), r2.NetReference); // each solo dollar counts 1 / 0.137
+        }
+
+        [Fact]
         public void CapacityScalesWorkSpotsAndStaffWithDemand()
         {
             ClimbState two = T.State(ClimbStage.FirstRestaurant, 0, "booth_kit", "helper");

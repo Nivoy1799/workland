@@ -66,22 +66,18 @@ namespace Worktown.Sim.Climb
             PlayerProfile profile = Catalog.Profile(setup.ProfileId);
             CrewFactors crew = CrewScaling.For(Catalog, setup.Players);
             (ClimbState s, IReadOnlyList<string> bought, long spent) = ClimbPolicy.Decide(Catalog, state, setup);
-            (ClimbState fitted, string? dropped, string? added) = MenuFit.Apply(Catalog, s);
-            s = fitted;
             IRandom rng = EconomyRng.ForTick(setup.Seed, s.ServiceIndex);
             int seconds = setup.ServiceSeconds + setup.BetweenSeconds;
             long unit = Catalog.MoneyScale;
             long upkeep = CrewScaling.ScaleMoney(Catalog.Upkeep(s.Stage, s.Owned), crew.DemandPermille, unit);
-            IReadOnlyList<DishDef> menu = MenuFit.Active(Catalog, s);
 
-            BigJobDef? job = null;
-            foreach (BigJobDef j in ClimbPolicy.ReadyJobs(Catalog, s))
-                if (s.Balance >= 2 * ClimbPolicy.DepositNow(Catalog, s, j)) { job = j; break; }
+            // 052b review: a big job only when it is expected to pay at least a normal service; it changes no menu.
+            BigJobDef? job = ClimbPolicy.ChooseJob(Catalog, s, setup);
             if (job != null)
-            {
-                (ClimbState js, ServiceResult jr) = RunBigJob(s, setup, profile, crew, rng, job, menu, bought, spent, upkeep, seconds);
-                return (js, jr with { MenuDropped = dropped, MenuAdded = added });
-            }
+                return RunBigJob(s, setup, profile, crew, rng, job, MenuFit.Active(Catalog, s), bought, spent, upkeep, seconds);
+            (ClimbState fitted, string? dropped, string? added) = MenuFit.Apply(Catalog, s);
+            s = fitted;
+            IReadOnlyList<DishDef> menu = MenuFit.Active(Catalog, s);
 
             // 3. Guests per channel.
             IReadOnlyList<ChannelDef> channels = Catalog.ActiveChannels(s.Stage, s.Owned);
@@ -179,6 +175,7 @@ namespace Worktown.Sim.Climb
                 Rivals = nextRivals.AsReadOnly(),
                 RecentStars = stars.AsReadOnly(),
                 RecentMissed = MenuFit.Record(s.RecentMissed, missedPermille),
+                LastNet = net,
             };
             var result = new ServiceResult(s.ServiceIndex, s.Stage, null, s.PlaySeconds, seconds, chosen, sv.Served, sv.Missed,
                 sv.Mistakes, sv.Revenue, sv.IngredientCost, upkeep, 0, spent, end.Balance, avgQuality, wait, starsTenths, newRep,
@@ -256,6 +253,22 @@ namespace Worktown.Sim.Climb
             if (revenue <= 0 || tipPermille <= 0) return 0;
             long u = Math.Max(1L, unit);
             return revenue * tipPermille / (1000 * u) * u;
+        }
+
+        /// <summary>
+        /// 052b review: the guests a crew can serve in one service on <paramref name="channel"/>, without draws: its capacity
+        /// over the active menu's average guest actions, with remakes at the mean mistake rate (floored).
+        /// </summary>
+        public static int ServableGuests(ClimbCatalog catalog, ClimbState state, PlayerProfile profile, int players, int serviceSeconds,
+            int demandPermille, ChannelDef channel)
+        {
+            IReadOnlyList<DishDef> menu = MenuFit.Active(catalog, state);
+            if (menu.Count == 0) return 0;
+            (int actions, int skill) = Capacity(catalog, state, profile, players, serviceSeconds, demandPermille);
+            long sum = 0;
+            foreach (DishDef d in menu) sum += GuestActions(catalog, state, channel, d);
+            long perGuestTimes1000 = sum * (1000 + MistakePermille(skill)); // x menu.Count
+            return (int)Math.Min(int.MaxValue, (long)actions * 1000 * menu.Count / Math.Max(1L, perGuestTimes1000));
         }
 
         /// <summary>Chance of a mistake (permille): <c>(1000 - skill) / 8</c>.</summary>
@@ -365,12 +378,15 @@ namespace Worktown.Sim.Climb
             else
             {
                 ChannelDef counter = Catalog.CounterOf(s.Stage)!;
-                int count = CrewScaling.ScaleCount(job.GuestsAt(tier), crew.DemandPermille);
+                // 052b review: no more guests than the crew can serve; the tier raises the price, not the crowd.
+                int count = Math.Min(CrewScaling.ScaleCount(job.Guests, crew.DemandPermille),
+                    ServableGuests(Catalog, s, profile, setup.Players, setup.ServiceSeconds, crew.DemandPermille, counter));
+                int pricePermille = job.PricePermilleAt(tier);
                 var orders = new List<(int, DishDef, int)>(count);
                 for (int g = 0; g < count; g++)
                 {
                     DishDef dish = menu[rng.NextInt(0, menu.Count)];
-                    orders.Add((GuestActions(Catalog, s, counter, dish), dish, job.PricePermille));
+                    orders.Add((GuestActions(Catalog, s, counter, dish), dish, pricePermille));
                 }
                 Serving sv = Serve(s, setup, profile, crew, orders, rng);
                 chosen = count; served = sv.Served; missed = sv.Missed; mistakes = sv.Mistakes;

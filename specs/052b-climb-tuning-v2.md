@@ -192,7 +192,7 @@ the open questions. Then approve the game-side spec.
 8. Lost competitions keep the stake tier. [yes; stakes only grow with success]
 
 ## Implementation notes
-Built 2026-11-11/12 (builder) on `spec/052b-climb-tuning` (on top of 037, 572cae0). Not committed. Sim tests 506 -> 556
+Built 2026-11-11/12 (builder) on `spec/052b-climb-tuning` (on top of 037, 572cae0); committed as 68e3597, review fixes below (uncommitted). Sim tests 506 -> 556
 (one 052 few-players test removed with the check, 51 new; Climb tests about 0.6 s). `env -u UNITY_PATH bash scripts/verify.sh`
 green (Unity skipped). `git diff 572cae0 -- sim/Runtime/Cooking sim/Runtime/Core sim/Runtime/Economy game scripts` is empty.
 
@@ -286,21 +286,71 @@ is that crew's real goal. A drop above 12 needs a bigger potato slot, or two loa
 Known gap (Open question 3): stages 2-5 are not calibrated to the game. The S1 pace now comes from the drop: 2 fries per
 player per service. A 4-crew at full work would need a rent goal of about $600 to reach the T1 band.
 
+## 052b review fixes
+The review of 68e3597 asked for changes. These fixes are not committed yet. Sim tests 556 -> 566, and
+`env -u UNITY_PATH bash scripts/verify.sh` is green. Nothing changed outside `/sim` and this spec.
+- **Big jobs lost money, and the crew always took them (the real cause of T7).**
+  - Before: event guests grew with each tier, but the crew's capacity stayed flat, so a tier-5 festival netted -$540 to
+    -$750. Stadium day lost money even at tier 0, and average crews lost 28 of 33 cook-offs. The policy took any ready job
+    once the balance held 2x its deposit.
+  - Events: guests are now capped at what the crew can serve (`ClimbEngine.ServableGuests`: capacity over the active menu's
+    average guest actions, with remakes at the mean mistake rate). Each tier raises the price per guest
+    (`BigJobDef.PricePermilleAt`, which replaces `GuestsAt`) together with the deposit, and a cook-off's prize grows with the
+    deposit. So stakes still grow with success.
+  - Policy: `ClimbPolicy.ChooseJob` takes the first ready job whose deposit the balance covers twice and whose expected
+    net is at least the last normal service's net (`ClimbState.LastNet`). The expected net (`ExpectedJobNet`) uses no
+    random draws. For a cook-off it is the exact win chance (`WinPermille`, counted over both ±100 ranges) times the prize.
+    For an event it is the servable guests at the menu price times the tier factor. Both subtract ingredients, upkeep and
+    the deposit.
+  - Result for 4 players, average profile, seed 1: cook-off +$1,069 (22 runs), festival +$1,029, stadium day +$2,116,
+    against +$240 for a normal service.
+- **T7 rule (review):**
+  - The mean is taken over the last 5 *normal* services. Big-job services are skipped in the window and are never counted
+    as idle.
+  - A service is idle only when its balance is at least 3x that mean and no goal cost lies in 3-20x. The band is unchanged.
+  - The old `if (mean <= 0) continue` let a losing crew that held money escape the check. Now a mean of 0 or less counts as
+    one whole unit, under the same rule, and the mean is floored.
+- **T5:** the share window is longer below 4 players (`ClimbTargets.ShareWindowFor`: 10 x 4 / n, so 40 for solo, 20 for 2,
+  13 for 3).
+- **T1p:** a big crew must also not be faster than 0.85x of 4 players in any stage (`PlateauMinPermille`). The 8- and
+  16-player crews now sit at 0.95-1.0x.
+- **Menu nits:**
+  - A big-job service skips MenuFit (the job is chosen first) and records no missed share.
+  - Any drop or re-add clears `RecentMissed`, so re-adds no longer chain.
+  - `EnterNextStage` also clears `RecentMissed`.
+- **Leave test:** 4 -> 1 (`ALeaveChangesOnlyLaterServices`).
+- **Tuning, 3 rounds after the fixes** (numbers only):
+  - F1: street festival price 1100 -> 1600 permille and deposit $600 -> $300; stadium day 2000 permille and $500 (was 1200
+    and $1,000). Events are now worth taking.
+  - F2: decor $3,000 -> $1,500 and cars $15,000 -> $7,500, so the two flat sinks cover normal-service means from $75 to
+    $2,500. The line cook went $2,000 -> $1,500, but that broke T3 and T8, so it was reverted in F3.
+  - F3: car upkeep $10 -> $0, because piled-up cars ate the solo crew's normal net.
+- **Result:**
+  - `--players 1,4,16`: 80/90 -> **85/90**. Default crews: 128/143 -> **135/143**. `--calibration`: 3/3.
+  - T5 and T8 pass for every crew.
+  - The table of hours per stage and the GAME NUMBERS are unchanged; stage 5 entry moved by 0.1 h or less.
+  - Still failing: T7 for 1p novice/average/expert (13/12/7 idle services), for 2p novice/average (1/2) and for 4p novice
+    (2, in S4); T4 for 1p and 2p novice.
+
 ## Blockers
-Tuning stopped after 3 rounds (AC11 fails, an allowed outcome). Failing lines, `--players 1,4,16 --seeds 5`:
-`FAIL T7` for 1p novice/average/expert (195/70/50 idle services, in S4 and S5), 4p novice/average/expert (11/17/84), and 16p
-average/expert (29/53). Also `FAIL T4 1p novice fastest balanced+plus1 10.0 h >= 0.85 x reference 12.8 h` and
-`FAIL T5 1p novice max share 84% (S3 tables)`.
-1. **T7 is a measurement artefact of lumpy big-job income.** Almost every idle service comes right after a big job. A lost
-   cook-off deposit, or a won prize, swings the 5-service mean. A lost deposit pulls the mean to $5-30 a service, and then
-   no cost lies between 3x and 20x of it, although the crew keeps buying (decor, cars, the next stake). Best guess: let T7
-   take the mean over normal services only, or ignore means below a floor. Either is a target change, for the human.
-   Geometric sinks (growth 1500) outgrew a flat income within about 60 services, so R2 made them flat. Whether money "grows
-   with income" now rests on the stake tiers alone.
+Tuning stopped after 3 rounds, and again after 3 rounds on the review fixes (AC11 fails, an allowed outcome). Failing
+lines after the fixes, `--players 1,4,16 --seeds 5`: `FAIL T7` for 1p novice/average/expert (13/12/7 idle services, in S4
+and S5) and 4p novice (2, in S4), and `FAIL T4 1p novice fastest balanced+plus1 10.0 h >= 0.85 x reference 12.7 h`.
+1. **T7 (rewritten after the review).**
+   - **The true cause** was the big jobs, not the measurement. Events grew guests that the crew could not serve while the
+     deposit grew too, stadium day lost money even at tier 0, and the policy took any ready job. So stage 5 crews kept
+     paying deposits for losses: the income really did not grow, and goals fell out of the 3-20x band.
+   - **Fixed** as the review decided (see "052b review fixes"). Big jobs now pay more than a normal service.
+   - **What is left is small crews.** A solo or 2-crew earns most of its money from events, and its normal services net
+     only $40-80 real. Under the review's normal-services-only mean, almost every cost is then above 20x. A 4-player
+     novice waits in S4 for its stars while holding about $3,500, and the cheapest goal ($2,000) is above 20x its $75 mean.
+   - **Best guess:**
+     - a cheap repeatable stage 4 sink for poor crews;
+     - or measure T7 for small crews over all services, now that jobs are profitable.
+     - Either one is a design or target call.
 2. **Plus1 is still faster where a channel has no rival** (custom orders, buffet, partly tables). Guests only compare you
-   with the outside option, so +1 unit loses about 12 % of guests for about 14 % more per guest. With R1/R2's shorter S4 the
-   gain falls under 15 % for every crew except solo novices. This is the out-of-scope price-unit finding of (b). The fix
-   lies in the price weight and the outside weight, which the game's menu board shares (037), or in a rival per channel.
-3. **T5 1p novice** is noise of tiny numbers: a solo sees about 6 tables guests a service, and the rival's share swings.
-4. **Stage 1 versus the game's goal:** see the known gap above. Raising `rent_restaurant` breaks FoodCornerRulesTests
+   with the outside option, so +1 unit loses about 12 % of guests for about 14 % more per guest. The gain stays under 15 %
+   for every crew except 1p and 2p novices. This is the out-of-scope price-unit finding of (b). The fix lies in the price
+   weight and the outside weight, which the game's menu board shares (037), or in a rival per channel.
+3. **Stage 1 versus the game's goal:** see the known gap above. Raising `rent_restaurant` breaks FoodCornerRulesTests
    (30000), so it needs a /game change first.

@@ -112,6 +112,71 @@ namespace Worktown.Sim.Climb
         public static long DepositNow(ClimbCatalog catalog, ClimbState state, BigJobDef job) =>
             job.DepositAt(state.TierOf(job.Id), catalog.MoneyScale);
 
+        /// <summary>The spread of each competition score draw: <c>NextInt(-Spread, Spread + 1)</c>.</summary>
+        public const int CompetitionSpread = 100;
+
+        /// <summary>
+        /// 052b review: the chance (permille, floored) that <c>crew + x &gt; rival + y</c> with x and y each uniform in
+        /// -100..100, as the engine draws them. No draws: counted exactly over the 201 x 201 pairs.
+        /// </summary>
+        public static int WinPermille(int crewScore, int rivalScore)
+        {
+            const int n = 2 * CompetitionSpread + 1;
+            long d = (long)rivalScore - crewScore, wins = 0;
+            for (int x = -CompetitionSpread; x <= CompetitionSpread; x++)
+                wins += Math.Max(0L, Math.Min(n, x - d + CompetitionSpread)); // y from -100 up to x - d - 1
+            return (int)(wins * 1000 / ((long)n * n));
+        }
+
+        /// <summary>
+        /// 052b review: the expected real net of <paramref name="job"/> for this crew now, without draws: a competition is
+        /// win chance x prize; an event serves the guests the crew can serve (<see cref="ClimbEngine.ServableGuests"/>) at the
+        /// active menu's average price times the tier's price factor, less the ingredients at the mean mistake rate. Both pay
+        /// the upkeep and the deposit (all scaled for the crew, D40).
+        /// </summary>
+        public static long ExpectedJobNet(ClimbCatalog catalog, ClimbState state, CrewSetup setup, BigJobDef job)
+        {
+            long unit = catalog.MoneyScale;
+            CrewFactors crew = CrewScaling.For(catalog, setup.Players);
+            PlayerProfile profile = catalog.Profile(setup.ProfileId);
+            int tier = state.TierOf(job.Id);
+            long upkeep = CrewScaling.ScaleMoney(catalog.Upkeep(state.Stage, state.Owned), crew.DemandPermille, unit);
+            long deposit = CrewScaling.ToReal(job.DepositAt(tier, unit), crew.GoalPermille, unit);
+            if (job.Kind == BigJobKind.Competition)
+            {
+                int win = WinPermille(profile.SkillPermille + catalog.QualityBonus(state.Owned), job.RivalScorePermille);
+                long prize = CrewScaling.ToReal(job.PrizeAt(tier, unit), crew.GoalPermille, unit);
+                return prize * win / 1000 - deposit - upkeep;
+            }
+            IReadOnlyList<DishDef> menu = MenuFit.Active(catalog, state);
+            ChannelDef? counter = catalog.CounterOf(state.Stage);
+            if (menu.Count == 0 || counter == null) return -deposit - upkeep;
+            int guests = Math.Min(CrewScaling.ScaleCount(job.Guests, crew.DemandPermille),
+                ClimbEngine.ServableGuests(catalog, state, profile, setup.Players, setup.ServiceSeconds, crew.DemandPermille, counter));
+            long price = 0, cost = 0;
+            foreach (DishDef d in menu)
+            {
+                price += state.Prices.TryGetValue(d.Id, out long p) ? p : d.ReferencePrice;
+                cost += d.IngredientCost;
+            }
+            int mistake = ClimbEngine.MistakePermille(ClimbEngine.Capacity(catalog, state, profile, setup.Players, setup.ServiceSeconds, crew.DemandPermille).SkillPermille);
+            long revenue = guests * price * job.PricePermilleAt(tier) / (1000L * menu.Count * unit) * unit;
+            long ingredients = guests * cost * (1000 + mistake) / 1000 * (1000 - catalog.CostSavedPermille(state.Owned)) / (1000L * menu.Count * unit) * unit;
+            return revenue - ingredients - upkeep - deposit;
+        }
+
+        /// <summary>
+        /// 052b review: the big job the crew takes instead of the next normal service, or null: the first ready job (id order)
+        /// whose deposit the balance covers twice and whose expected net (<see cref="ExpectedJobNet"/>) is at least the last
+        /// normal service's net.
+        /// </summary>
+        public static BigJobDef? ChooseJob(ClimbCatalog catalog, ClimbState state, CrewSetup setup)
+        {
+            foreach (BigJobDef j in ReadyJobs(catalog, state))
+                if (state.Balance >= 2 * DepositNow(catalog, state, j) && ExpectedJobNet(catalog, state, setup, j) >= state.LastNet) return j;
+            return null;
+        }
+
         /// <summary>What money could be saved for (T7): the next copy of every candidate purchase of the stage (the gate included)
         /// and the current-tier deposits of the big jobs this crew can take (stage 5, requirement owned; a cooldown only delays
         /// them), ascending.</summary>
@@ -197,6 +262,7 @@ namespace Worktown.Sim.Climb
                 Stage = next,
                 StageEnteredSeconds = Array.AsReadOnly(entered),
                 RecentStars = Array.Empty<int>(),
+                RecentMissed = Array.Empty<int>(), // 052b review: a new stage starts a new menu history
                 Reputation = Math.Max(s.Reputation, catalog.StageOf(next).ReputationFloorPermille),
             };
         }

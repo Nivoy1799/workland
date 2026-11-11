@@ -82,17 +82,25 @@ namespace Worktown.Sim.Tests.Climb
         public void AtMostOneChangePerServiceAndNeverAboveMaxDishes() // AC4
         {
             ClimbState s = Menu(new[] { "fries" }, 0, 0, 0);
+            (ClimbState a, string? none, string? first) = MenuFit.Apply(D, s);
+            Assert.Null(none);
+            Assert.Equal("lemonade", first);
+            Assert.Empty(a.RecentMissed); // 052b review: a change clears the window
+            (ClimbState b, string? d2, string? a2) = MenuFit.Apply(D, a);
+            Assert.Null(d2);
+            Assert.Null(a2); // no chained re-add without three fresh quiet services
             var seen = new List<int>();
-            for (int k = 0; k < 6; k++)
+            s = b;
+            for (int k = 0; k < 4; k++)
             {
-                (ClimbState next, string? dropped, string? added) = MenuFit.Apply(D, s);
+                (ClimbState next, string? dropped, string? added) = MenuFit.Apply(D, s with { RecentMissed = new[] { 0, 0, 0 } });
                 Assert.False(dropped != null && added != null);
                 Assert.True(next.ActiveMenu.Count <= D.StageOf(ClimbStage.ServiceMix).MaxDishes);
                 Assert.True(next.ActiveMenu.Count - s.ActiveMenu.Count <= 1);
                 seen.Add(next.ActiveMenu.Count);
                 s = next;
             }
-            Assert.Equal(new[] { 2, 3, 4, 5, 5, 5 }, seen);
+            Assert.Equal(new[] { 3, 4, 5, 5 }, seen);
         }
 
         [Fact]

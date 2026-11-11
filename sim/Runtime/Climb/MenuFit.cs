@@ -69,11 +69,13 @@ namespace Worktown.Sim.Climb
             return (Ids(active), null, null);
         }
 
-        /// <summary>Applies <see cref="Next"/> to the state.</summary>
+        /// <summary>Applies <see cref="Next"/> to the state; a change clears <see cref="ClimbState.RecentMissed"/>.</summary>
         public static (ClimbState State, string? Dropped, string? Added) Apply(ClimbCatalog catalog, ClimbState state)
         {
             (IReadOnlyList<string> active, string? dropped, string? added) = Next(catalog, state);
-            return (state with { ActiveMenu = active }, dropped, added);
+            // 052b review: a change clears the missed window, so the next change needs fresh services (no chained re-adds).
+            bool changed = dropped != null || added != null;
+            return (state with { ActiveMenu = active, RecentMissed = changed ? Array.Empty<int>() : state.RecentMissed }, dropped, added);
         }
 
         /// <summary>The missed list after a normal service that missed <paramref name="missedPermille"/> (newest last, at most <see cref="Kept"/>).</summary>

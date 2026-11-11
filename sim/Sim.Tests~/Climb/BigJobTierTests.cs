@@ -15,7 +15,7 @@ namespace Worktown.Sim.Tests.Climb
         {
             Assert.Equal(new long[] { 1000, 1400, 1960, 2744, 2744 }, Enumerable.Range(0, 5).Select(t => Job.DepositAt(t)));
             Assert.Equal(new long[] { 5000, 7000, 9800, 13720 }, Enumerable.Range(0, 4).Select(t => Job.PrizeAt(t)));
-            Assert.Equal(new[] { 100, 140, 196, 274 }, Enumerable.Range(0, 4).Select(t => Job.GuestsAt(t)));
+            Assert.Equal(new[] { 1000, 1400, 1960, 2744 }, Enumerable.Range(0, 4).Select(t => Job.PricePermilleAt(t))); // 052b review: the price grows, not the guests
             Assert.Equal(274400, (Job with { Deposit = 100000 }).DepositAt(3, 100)); // cents, floored to whole dollars each step
         }
 
@@ -58,7 +58,8 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(2, s.TierOf("contest"));
 
             var lose = new ClimbEngine(Jobs(5000));
-            ClimbState l = T.WithPrices(T.State(ClimbStage.BeyondKitchen, 10_000, owned));
+            // A sure loss is taken only by a crew whose normal service would lose even more (052b review: expected net >= last net).
+            ClimbState l = T.WithPrices(T.State(ClimbStage.BeyondKitchen, 10_000, owned)) with { LastNet = -1000 };
             (l, r) = lose.RunService(l, setup);
             Assert.Equal("contest", r.BigJobId);
             Assert.Equal(0, r.Revenue);

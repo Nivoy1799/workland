@@ -118,7 +118,7 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(-1, run.SharePermille(ClimbStage.FoodCorner, "booth", 10));
             Assert.Equal(5, run.LongestDebtStreak()); // service 2 and the four of stage 2
             Assert.Equal(0, run.IdleMoneyServices(3, 20, 5));
-            Assert.Equal(4, run.IdleMoneyServices(1, 1, 5, ClimbStage.FirstRestaurant));
+            Assert.Equal(0, run.IdleMoneyServices(1, 1, 5, ClimbStage.FirstRestaurant)); // 052b review: a balance below the mean holds no idle money
             Assert.Equal(0, run.IdleMoneyServices(1, 1, 5, ClimbStage.ServiceMix));
         }
 
@@ -148,6 +148,32 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(3 * T.Step, run.SecondsIn(ClimbStage.FoodCorner));
             Assert.Equal(-1, run.SecondsIn(ClimbStage.FirstRestaurant)); // not completed
             Assert.Equal(1000, run.Crew.DifficultyPermille); // neutral when not given
+        }
+
+        [Fact]
+        public void IdleMoneyUsesNormalServicesAndNeedsMoneyHeld() // 052b review: the T7 rule
+        {
+            // Normal services net $100 with a $1,000 balance; goals at $5,000 (50x): out of reach, so idle.
+            ClimbRun idle = T.Run(4, "average", ClimbStrategy.Reference, 1, new[] { 5 }, (i, st, r) => r with { BalanceAfter = 1000, GoalCosts = new[] { 5000L } });
+            Assert.Equal(5, idle.IdleMoneyServices(3, 20, 5));
+            // The same with a balance below 3 x the mean ($300): no money held, nothing is idle.
+            ClimbRun poor = T.Run(4, "average", ClimbStrategy.Reference, 1, new[] { 5 }, (i, st, r) => r with { BalanceAfter = 299, GoalCosts = new[] { 5000L } });
+            Assert.Equal(0, poor.IdleMoneyServices(3, 20, 5));
+            // A big job (a -$900 deposit) is skipped in the window and in the count: the mean stays $100, goals at $500 are in reach.
+            ClimbRun job = T.Run(4, "average", ClimbStrategy.Reference, 1, new[] { 6 }, (i, st, r) => i == 2
+                ? r with { BigJobId = "cook_off", Revenue = 0, Upkeep = 0, JobCost = 900, BalanceAfter = 1000, GoalCosts = new long[0] }
+                : r with { BalanceAfter = 1000, GoalCosts = new[] { 500L } });
+            Assert.Equal(0, job.IdleMoneyServices(3, 20, 5));
+            // A losing crew that holds money: its mean counts as one unit, and nothing costs 3-20 units, so it is idle too.
+            ClimbRun losing = T.Run(4, "average", ClimbStrategy.Reference, 1, new[] { 3 }, (i, st, r) => r with { Revenue = 0, Upkeep = 50, BalanceAfter = 1000, GoalCosts = new[] { 500L } });
+            Assert.Equal(3, losing.IdleMoneyServices(3, 20, 5));
+        }
+
+        [Fact]
+        public void SmallCrewsGetALongerShareWindow() // 052b review: T5 for n < 4
+        {
+            ClimbTargets t = ClimbTargets.Default;
+            Assert.Equal((40, 20, 13, 10, 10), (t.ShareWindowFor(1), t.ShareWindowFor(2), t.ShareWindowFor(3), t.ShareWindowFor(4), t.ShareWindowFor(16)));
         }
 
         [Fact]

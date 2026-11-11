@@ -129,22 +129,32 @@ namespace Worktown.Sim.Climb
         }
 
         /// <summary>
-        /// Service ends where money has no use (T7): the mean net income of the last <paramref name="window"/> services is
-        /// positive and no goal cost lies between <paramref name="minTimes"/> and <paramref name="maxTimes"/> times it.
+        /// Service ends where money has no use (T7). 052b review rule: only normal services count, and the mean is the net of the
+        /// last <paramref name="window"/> normal services (big jobs are skipped in the window and in the count), floored to whole
+        /// units. A service is idle when the crew holds money, a balance of at least <paramref name="minTimes"/> x the mean, and no
+        /// goal cost lies between <paramref name="minTimes"/> and <paramref name="maxTimes"/> times the mean. A mean of 0 or less
+        /// counts as one whole unit (the same rule for a losing crew: money it holds has nothing within reach of its income).
         /// </summary>
         public int IdleMoneyServices(int minTimes, int maxTimes, int window, ClimbStage? stage = null)
         {
             int idle = 0;
+            int w = Math.Max(1, window);
             for (int i = 0; i < Services.Count; i++)
             {
-                if (stage != null && Services[i].Stage != stage) continue;
-                int from = Math.Max(0, i - Math.Max(1, window) + 1);
+                ServiceResult r = Services[i];
+                if (r.BigJobId != null || (stage != null && r.Stage != stage)) continue;
                 long sum = 0;
-                for (int k = from; k <= i; k++) sum += Services[k].NetReference; // spec 052b: reference money, as the goal costs
-                long mean = sum / ((i - from + 1) * MoneyScale) * MoneyScale; // spec 037: in whole units, as in the whole-dollar model
-                if (mean <= 0) continue;
+                int n = 0;
+                for (int k = i; k >= 0 && n < w; k--)
+                {
+                    if (Services[k].BigJobId != null) continue;
+                    sum += Services[k].NetReference; // spec 052b: reference money, as the goal costs
+                    n++;
+                }
+                long mean = Math.Max(MoneyScale, GuestChoice.FloorDiv(sum, n * MoneyScale) * MoneyScale); // whole units (spec 037)
+                if (r.BalanceAfter < minTimes * mean) continue; // no money held: nothing is idle
                 bool goal = false;
-                foreach (long cost in Services[i].GoalCosts)
+                foreach (long cost in r.GoalCosts)
                     if (cost >= minTimes * mean && cost <= maxTimes * mean) { goal = true; break; }
                 if (!goal) idle++;
             }

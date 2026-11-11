@@ -185,6 +185,7 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(840, next.EnteredSeconds(ClimbStage.FirstRestaurant));
             Assert.Empty(next.RecentStars);
             Assert.Equal(400, next.Reputation);
+            Assert.Empty(ClimbPolicy.EnterNextStage(C, s with { RecentMissed = new[] { 500 } }).RecentMissed); // 052b review: a new menu history
             ClimbState five = T.State(ClimbStage.BeyondKitchen);
             Assert.Same(five, ClimbPolicy.EnterNextStage(C, five)); // a stage is never lost or passed beyond 5
         }

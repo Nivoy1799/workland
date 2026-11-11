@@ -185,7 +185,7 @@ namespace Worktown.Sim.Tests.Climb
             Assert.True(r.Served > 0);
             (s, r) = T.Engine.RunService(s, setup);
             Assert.Null(r.BigJobId); // both on cooldown
-            (_, r) = T.Engine.RunService(s with { ServiceIndex = 4, Balance = 1000 }, setup);
+            (_, r) = T.Engine.RunService(s with { ServiceIndex = 4, Balance = 1000, LastNet = 0 }, setup); // 052b review: the job must beat the last normal net
             Assert.Equal("contest", r.BigJobId);
         }
 

@@ -91,10 +91,11 @@ namespace Worktown.Sim.Tests.Climb
         [Fact]
         public void T7FailsOnIdleMoney() // AC10
         {
-            TargetCheck t7 = One(Eval(Good(custom: (i, st, r) => st == ClimbStage.ServiceMix ? r with { GoalCosts = new long[0] } : r)), "T7", "4p");
+            // 052b review: idle needs money held (a balance of at least 3 x the mean); the fixture holds $1,000 on a $100 mean.
+            TargetCheck t7 = One(Eval(Good(custom: (i, st, r) => st == ClimbStage.ServiceMix ? r with { GoalCosts = new long[0], BalanceAfter = 1000 } : r)), "T7", "4p");
             Assert.False(t7.Passed);
             Assert.Contains("(in S3)", t7.Detail);
-            Assert.False(One(Eval(Good(custom: (i, st, r) => r with { GoalCosts = new[] { 100000L } })), "T7", "4p").Passed); // out of reach
+            Assert.False(One(Eval(Good(custom: (i, st, r) => r with { GoalCosts = new[] { 100000L }, BalanceAfter = 1000 })), "T7", "4p").Passed); // out of reach
         }
 
         [Fact]
@@ -174,10 +175,11 @@ namespace Worktown.Sim.Tests.Climb
         {
             ClimbRun four = P(4, T.Good);
             Assert.True(One(Eval(four, P(8, T.Good)), "T1p", "8p").Passed);
-            Assert.True(One(Eval(four, P(16, new[] { 5, 16, 30, 36, 20 })), "T1p", "16p").Passed); // faster is fine
+            Assert.True(One(Eval(four, P(16, new[] { 6, 16, 30, 36, 20 })), "T1p", "16p").Passed); // a little faster is fine (0.89x)
+            Assert.False(One(Eval(four, P(16, new[] { 6, 12, 30, 36, 20 })), "T1p", "16p").Passed); // 052b review: below 0.85x is too fast
             TargetCheck slow = One(Eval(four, P(8, new[] { 6, 24, 30, 36, 20 })), "T1p", "8p");
             Assert.False(slow.Passed);
-            Assert.Contains("1.33x of 4p (S2", slow.Detail);
+            Assert.Contains("1.33x (S2", slow.Detail);
             Assert.DoesNotContain(Eval(P(8, T.Good)), c => c.Id == "T1p"); // no 4-player runs: no line
             Assert.DoesNotContain(Eval(four, P(2, T.Good)), c => c.Id == "T1p"); // only above the reference crew
         }

@@ -487,14 +487,14 @@ namespace Worktown.Sim.Climb
                 P("campaign_1", "Ad Campaign I", 5, PurchaseKind.Productive, 1000, 0, Ceiling(100, null)),
                 P("campaign_2", "Ad Campaign II", 5, PurchaseKind.Productive, 2000, 0, Ceiling(100, null)),
                 P("campaign_3", "Ad Campaign III", 5, PurchaseKind.Productive, 4000, 0, Ceiling(100, null)),
-                P("car_collection", "Car Collection", 5, PurchaseKind.Status, 15000, 10, Rep(5), 0, 1000),
-                P("decor", "Decor", 5, PurchaseKind.Status, 3000, 0, Rep(10), 0, 1000),
+                P("car_collection", "Car Collection", 5, PurchaseKind.Status, 7500, 0, Rep(5), 0, 1000),
+                P("decor", "Decor", 5, PurchaseKind.Status, 1500, 0, Rep(10), 0, 1000),
             };
             var bigJobs = new[]
             {
                 new BigJobDef("cook_off", "Cook-Off", BigJobKind.Competition, 800, 0, 1000, 700, 4000, null, 4, 1200, 5),
-                new BigJobDef("street_festival", "Street Festival", BigJobKind.Event, 600, 150, 1100, 0, 0, "food_truck", 4, 1200, 5),
-                new BigJobDef("stadium_day", "Stadium Day", BigJobKind.Event, 1000, 250, 1200, 0, 0, "food_truck", 6, 1200, 5),
+                new BigJobDef("street_festival", "Street Festival", BigJobKind.Event, 300, 150, 1600, 0, 0, "food_truck", 4, 1200, 5),
+                new BigJobDef("stadium_day", "Stadium Day", BigJobKind.Event, 500, 250, 2000, 0, 0, "food_truck", 6, 1200, 5),
             };
             var weights = new ChoiceWeights(Quality: 900, Reputation: 700, Price: 2600, Wait: 300, Variety: 80, Outside: 700, Min: 20);
             IEnumerable<PurchaseDef> shop = stage1Extras ? purchases

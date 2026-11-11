@@ -66,8 +66,8 @@ namespace Worktown.Sim.Climb
                     List<ClimbRun> four = Of(targets.ReferencePlayers, targets.ReferenceProfileId, reference);
                     if (four.Count > 0)
                     {
-                        int worst = int.MinValue;
-                        string where = "";
+                        int worst = int.MinValue, least = int.MaxValue;
+                        string where = "", whereLeast = "";
                         bool ok = true;
                         for (ClimbStage st = ClimbStage.FoodCorner; st < ClimbStage.BeyondKitchen; st++)
                         {
@@ -75,12 +75,14 @@ namespace Worktown.Sim.Climb
                             if (baseline == Dnf) continue;
                             long mine = Median(refRuns.Select(r => SecondsOrDnf(r, st)).ToList());
                             int ratio = mine == Dnf ? 9999 : baseline == 0 ? 1000 : (int)Math.Min(9999, mine * 1000 / baseline);
-                            if (ratio > targets.PlateauPermille) ok = false;
+                            // Not longer than 4 players (the plateau), and (052b review) not faster than PlateauMinPermille of it.
+                            if (ratio > targets.PlateauPermille || ratio < targets.PlateauMinPermille) ok = false;
                             if (ratio > worst) { worst = ratio; where = $"S{(int)st} {H(mine)} h vs {H(baseline)} h"; }
+                            if (ratio < least) { least = ratio; whereLeast = $"S{(int)st}"; }
                         }
                         if (worst != int.MinValue)
                             checks.Add(new TargetCheck("T1p", ok,
-                                $"{p}p {targets.ReferenceProfileId} max stage time {Ratio(worst)}x of {targets.ReferencePlayers}p ({where}) <= {Ratio(targets.PlateauPermille)}x"));
+                                $"{p}p {targets.ReferenceProfileId} stage time {Ratio(least)}x ({whereLeast}) to {Ratio(worst)}x ({where}) of {targets.ReferencePlayers}p in {Ratio(targets.PlateauMinPermille)}-{Ratio(targets.PlateauPermille)}x"));
                     }
                 }
 
@@ -149,7 +151,7 @@ namespace Worktown.Sim.Climb
                     {
                         foreach (string ch in rr.SelectMany(r => r.RivalChannels(st)).Distinct())
                         {
-                            var shares = rr.Select(r => (long)r.SharePermille(st, ch, targets.ShareWindow)).Where(v => v >= 0).ToList();
+                            var shares = rr.Select(r => (long)r.SharePermille(st, ch, targets.ShareWindowFor(p))).Where(v => v >= 0).ToList();
                             if (shares.Count == 0) continue;
                             int m = (int)Median(shares);
                             if (m > maxShare) { maxShare = m; shareWhere = $"S{(int)st} {ch}"; }
