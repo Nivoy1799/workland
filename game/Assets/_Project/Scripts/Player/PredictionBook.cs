@@ -5,21 +5,17 @@ namespace Worktown.Game.Player
 {
     /// <summary>
     /// Spec 027b (review), pure: the owner's predicted looks that are still waiting for the server, and the matching of
-    /// the server's answers to requests. Every request is numbered when it is sent and the server answers every one, in
-    /// order (one reliable channel; a rate-limited request gets a TooFast answer), so the n-th answer belongs to the n-th
-    /// request. An answer only reaches a prediction when it is that prediction's request and of the matching kind. A
-    /// refusal is applied only when its request was the only one in flight: should an answer ever go missing, a later
-    /// refusal could be counted for the wrong request, so with more in flight the synced state or the timeout decides.
-    /// After a quiet spell (<see cref="LedgerResetSeconds"/>, or three round trips if longer) every older request counts
-    /// as answered, so the numbering catches up; a late answer with nothing in flight is ignored. A newer prediction for
-    /// the same item replaces the older one silently; predictions for other items keep going until they resolve on their
-    /// own, so a quick second click never makes the first item bounce.
+    /// the server's answers to requests. Spec 045: every request carries its number (<see cref="Sent"/>) and the server
+    /// echoes it in its answer (a rate-limited request gets a TooFast answer), so an answer reaches only the prediction of
+    /// that very request, and only when it is of the matching kind. Nothing is counted: an answer that comes late (a server
+    /// stall over a second, a slow round trip) can never be taken for a newer request's, and a refusal applies at once, also
+    /// with more requests in flight. An answer for a number this book never sent, or one already answered, is ignored. A
+    /// newer prediction for the same item replaces the older one silently; predictions for other items keep going until they
+    /// resolve on their own, so a quick second click never makes the first item bounce. The echo is only matched here; the
+    /// server never trusts it for anything.
     /// </summary>
     public sealed class PredictionBook<T> where T : class
     {
-        /// <summary>s: no request for this long and nothing older is still waiting for its answer.</summary>
-        public const float LedgerResetSeconds = 1f;
-
         /// <summary>A prediction that was confirmed or denied (<see cref="Update"/>).</summary>
         public readonly struct Resolved
         {
@@ -43,8 +39,7 @@ namespace Worktown.Game.Player
 
         private readonly List<Entry> _entries = new List<Entry>();
         private int _sent;
-        private int _answered;
-        private float _lastSend = float.NegativeInfinity;
+        private int _lastAnswered;
 
         public int Count => _entries.Count;
 
@@ -60,18 +55,8 @@ namespace Worktown.Game.Player
             }
         }
 
-        /// <summary>
-        /// A request that the server answers went out at <paramref name="now"/>; returns its number. After a quiet spell of
-        /// <see cref="LedgerResetSeconds"/> (or three round trips, when <paramref name="roundTrip"/> is longer) every older
-        /// request counts as answered, so one that was never answered cannot shift the numbering for good.
-        /// </summary>
-        public int Sent(float now, float roundTrip = 0f)
-        {
-            float quiet = Math.Max(LedgerResetSeconds, 3f * (float.IsNaN(roundTrip) ? 0f : Math.Max(0f, roundTrip)));
-            if (now - _lastSend > quiet) _answered = _sent;
-            _lastSend = now;
-            return ++_sent;
-        }
+        /// <summary>A request that the server answers goes out: returns its number, sent with it and echoed in the answer.</summary>
+        public int Sent() => ++_sent;
 
         /// <summary>
         /// Tracks <paramref name="prediction"/> for request <paramref name="request"/> (from <see cref="Sent"/>). An older
@@ -86,23 +71,18 @@ namespace Worktown.Game.Player
         }
 
         /// <summary>
-        /// The next answer arrived: it reaches only the prediction of that request, if the kind matches. A refusal is applied
-        /// only when that request was the only one in flight; with more in flight (an older one may have gone unanswered)
-        /// it could belong to another request, so it is ignored and the prediction waits for the synced state or its
-        /// timeout. An "ok" only restarts a timeout, so it is always applied. An answer with nothing in flight (late, after
-        /// a quiet-spell reset) is ignored. 031b: returns the number of the request it answered (0 when ignored).
+        /// The answer to request <paramref name="request"/> (the number the server echoed) arrived: it reaches only that request's
+        /// prediction, if the kind matches; an "ok" restarts its timeout, a refusal denies it. Answers come in order (one reliable
+        /// channel), so a number this book never sent or one not newer than the last answered is ignored. Returns the request it
+        /// answered (0 when ignored).
         /// </summary>
-        public int Answer(AnswerKind kind, bool ok, float now)
+        public int Answer(int request, AnswerKind kind, bool ok, float now)
         {
-            if (_answered >= _sent) return 0;
-            bool alone = _sent - _answered == 1;
-            _answered++;
+            if (request <= _lastAnswered || request > _sent) return 0;
+            _lastAnswered = request;
             foreach (Entry e in _entries)
-            {
-                if (e.Request != _answered || AnswerFor(e.Prediction.Kind) != kind) continue;
-                if (ok || alone) e.Prediction.NoteAnswer(ok, now);
-            }
-            return _answered;
+                if (e.Request == request && AnswerFor(e.Prediction.Kind) == kind) e.Prediction.NoteAnswer(ok, now);
+            return request;
         }
 
         /// <summary>Reads the synced state of every waiting prediction; adds those that resolved to <paramref name="resolved"/>.</summary>

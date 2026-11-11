@@ -49,6 +49,7 @@ namespace Worktown.Game.Tests
         [TestCase("RequestStation", 2)]
         [TestCase("RequestPlace", 2)]
         [TestCase("RequestUse", 2)]
+        // Spec 045: each request also carries its number last (an int the server only echoes in its answer), so the counts are + 1.
         public void InteractorRequests_KeepTheirArguments(string rpc, int parameters)
         {
             MethodInfo method = Find(InteractorType)
@@ -56,7 +57,10 @@ namespace Worktown.Game.Tests
                 .Where(m => m.Name == rpc)
                 .SingleOrDefault(m => m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"));
             Assert.IsNotNull(method, rpc + " is not a ServerRpc");
-            Assert.AreEqual(parameters, method.GetParameters().Length, rpc);
+            ParameterInfo[] all = method.GetParameters();
+            Assert.AreEqual(parameters + 1, all.Length, rpc);
+            Assert.AreEqual(typeof(int), all[all.Length - 1].ParameterType, rpc + ": the request number");
+            Assert.AreEqual("request", all[all.Length - 1].Name, rpc);
         }
 
         [Test]
@@ -65,8 +69,8 @@ namespace Worktown.Game.Tests
             MethodInfo method = Find(InteractorType)
                 .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly)
                 .Single(m => m.Name == "RequestPlace" && m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"));
-            CollectionAssert.AreEqual(new[] { typeof(int), typeof(int) }, method.GetParameters().Select(p => p.ParameterType).ToArray(),
-                "surface and spot index only, never a position");
+            CollectionAssert.AreEqual(new[] { typeof(int), typeof(int), typeof(int) }, method.GetParameters().Select(p => p.ParameterType).ToArray(),
+                "surface and spot index (and spec 045's request number) only, never a position");
         }
 
         /// <summary>Spec 021 AC7: the use request names an object and an action number, never a value or an item.</summary>
@@ -77,9 +81,10 @@ namespace Worktown.Game.Tests
                 .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly)
                 .Single(m => m.Name == "RequestUse" && m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"));
             ParameterInfo[] parameters = method.GetParameters();
-            Assert.AreEqual(2, parameters.Length);
+            Assert.AreEqual(3, parameters.Length);
             Assert.AreEqual("FishNet.Object.NetworkObject", parameters[0].ParameterType.FullName, "the target cookware");
             Assert.AreEqual(typeof(int), parameters[1].ParameterType, "0 use, 1 stroke, 2 turn");
+            Assert.AreEqual(typeof(int), parameters[2].ParameterType, "spec 045: the request number");
         }
 
         [Test]

@@ -36,12 +36,13 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void StationRequest_StillTakesTwoInts()
+        public void StationRequest_TakesOnlyInts()
         {
             Type interactor = typeof(StationRules).Assembly.GetType("Worktown.Game.Net.PickupInteractor");
             MethodInfo rpc = interactor.GetMethods(Declared)
                 .Single(m => m.Name == "RequestStation" && m.GetCustomAttributes(false).Any(a => a.GetType().Name == "ServerRpcAttribute"));
-            CollectionAssert.AreEqual(new[] { typeof(int), typeof(int) }, rpc.GetParameters().Select(p => p.ParameterType).ToArray());
+            CollectionAssert.AreEqual(new[] { typeof(int), typeof(int), typeof(int) }, rpc.GetParameters().Select(p => p.ParameterType).ToArray(),
+                "station and option, and spec 045's request number");
         }
 
         [TestCase(typeof(Knife))]

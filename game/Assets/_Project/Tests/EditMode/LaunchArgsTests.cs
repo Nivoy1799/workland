@@ -191,5 +191,40 @@ namespace Worktown.Game.Tests
         {
             Assert.IsFalse(Parse("-connect", "127.0.0.1", "-tour", "walk", "-observe", "walk").IsValid);
         }
+
+        // ---- spec 045: the load test (spec 004 tooling) ----
+
+        [Test]
+        public void Bot_WithSeedAndMetrics()
+        {
+            var a = Parse("-batchmode", "-connect", "127.0.0.1:7770", "-bot", "-seed", "7", "-metrics", "out/bot7.jsonl");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.IsTrue(a.IsBot);
+            Assert.AreEqual(7, a.Seed);
+            Assert.AreEqual("out/bot7.jsonl", a.MetricsPath);
+            Assert.AreEqual(LaunchMode.ClientTugboat, a.Mode);
+        }
+
+        [Test]
+        public void Metrics_OnAHostOrServer()
+        {
+            Assert.IsTrue(Parse("-host", "-metrics", "host.jsonl").IsValid);
+            Assert.IsTrue(Parse("-server", "-metrics", "server.jsonl").IsValid);
+            Assert.AreEqual("host.jsonl", Parse("-host", "-metrics", "host.jsonl").MetricsPath);
+            Assert.IsFalse(Parse("-host").IsBot);
+            Assert.AreEqual(string.Empty, Parse("-host").MetricsPath);
+        }
+
+        [Test]
+        public void Bot_NeedsConnect_AndNoTour_MetricsNeedARole_SeedNeedsAnInteger()
+        {
+            Assert.IsFalse(Parse("-host", "-bot").IsValid, "bots join over Tugboat");
+            Assert.IsFalse(Parse("-bot").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-bot", "-tour", "look").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-metrics", "x.jsonl").IsValid, "a plain client writes no metrics");
+            Assert.IsFalse(Parse("-host", "-metrics").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-bot", "-seed", "seven").IsValid);
+            Assert.AreEqual(-3, Parse("-connect", "127.0.0.1", "-bot", "-seed", "-3").Seed);
+        }
     }
 }

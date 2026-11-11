@@ -60,6 +60,7 @@ namespace Worktown.Game.Tests
             public readonly List<PredictionBook<Client>.Resolved> Resolved = new List<PredictionBook<Client>.Resolved>();
             public int Holder = NoHolder;
             public int Nopes;
+            public int Request; // the number the click went out with (the server echoes it)
             public PredictionPhase Phase = PredictionPhase.Pending;
             public float ResolvedAt = float.NaN;
             public bool RootStayed = true;
@@ -84,8 +85,8 @@ namespace Worktown.Game.Tests
             /// <summary>The click: the request goes out, then the look is predicted in the hand (PickupInteractor order).</summary>
             public void ClickPickUp(float now)
             {
-                int request = Book.Sent(now);
-                Book.Add(this, Root, new FeelPrediction(PredictionKind.PickUp, Me, State(this), now, FeelSettings.PresetA().ConfirmTimeout), request);
+                Request = Book.Sent();
+                Book.Add(this, Root, new FeelPrediction(PredictionKind.PickUp, Me, State(this), now, FeelSettings.PresetA().ConfirmTimeout), Request);
                 Look.PredictHeld(Me);
             }
 
@@ -128,7 +129,7 @@ namespace Worktown.Game.Tests
                 if (answer != null && !answered && answer(t) is bool ok)
                 {
                     answered = true;
-                    c.Book.Answer(AnswerKind.Pickup, ok, t);
+                    c.Book.Answer(c.Request, AnswerKind.Pickup, ok, t);
                 }
                 c.Frame(t);
             }
@@ -256,13 +257,13 @@ namespace Worktown.Game.Tests
         {
             var book = new PredictionBook<Thing>();
             var a = new Thing();
-            book.Sent(0f);                       // an older request (refused below)
-            int newer = book.Sent(0.25f);        // the click we predicted
+            int older = book.Sent();             // an older request (refused below)
+            int newer = book.Sent();             // the click we predicted
             FeelPrediction p = Pending(PredictionKind.PickUp, 0.25f);
             book.Add(a, a, p, newer);
-            book.Answer(AnswerKind.Pickup, false, 0.3f); // the answer to the older request
+            book.Answer(older, AnswerKind.Pickup, false, 0.3f); // the answer to the older request
             Assert.AreEqual(PredictionPhase.Pending, p.Phase);
-            book.Answer(AnswerKind.Pickup, false, 0.32f); // its own answer
+            book.Answer(newer, AnswerKind.Pickup, false, 0.32f); // its own answer
             Assert.AreEqual(PredictionPhase.Denied, p.Phase);
         }
 
@@ -272,8 +273,9 @@ namespace Worktown.Game.Tests
             var book = new PredictionBook<Thing>();
             var a = new Thing();
             FeelPrediction p = Pending(PredictionKind.PutInto, 0f);
-            book.Add(a, a, p, book.Sent(0f));
-            book.Answer(AnswerKind.Place, false, 0.1f);
+            int request = book.Sent();
+            book.Add(a, a, p, request);
+            book.Answer(request, AnswerKind.Place, false, 0.1f);
             Assert.AreEqual(PredictionPhase.Pending, p.Phase);
             Assert.AreEqual(AnswerKind.Cook, PredictionBook<Thing>.AnswerFor(PredictionKind.PutInto));
             Assert.AreEqual(AnswerKind.Pickup, PredictionBook<Thing>.AnswerFor(PredictionKind.PickUp));
@@ -282,60 +284,104 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void DroppedRequests_AreForgottenAfterAQuietSecond()
+        public void AnUnansweredRequest_NeverShiftsTheNextOnesAnswer()
         {
+            // Was DroppedRequests_AreForgottenAfterAQuietSecond (spec 045: answers carry their request's number, nothing is counted).
             var book = new PredictionBook<Thing>();
-            book.Sent(0f); // rate-limited by the server: never answered
+            book.Sent(); // never answered
             var a = new Thing();
             FeelPrediction p = Pending(PredictionKind.PickUp, 2f);
-            book.Add(a, a, p, book.Sent(2f));
-            book.Answer(AnswerKind.Pickup, false, 2.05f);
-            Assert.AreEqual(PredictionPhase.Denied, p.Phase, "the numbering caught up, so its own answer reaches it");
+            int own = book.Sent();
+            book.Add(a, a, p, own);
+            book.Answer(own, AnswerKind.Pickup, false, 2.05f);
+            Assert.AreEqual(PredictionPhase.Denied, p.Phase, "its own answer reaches it");
         }
 
         [Test]
         public void UnansweredRequestInsideABurst_ThenARefusalOfTheNext_NeverDeniesTheClick()
         {
             // Second review: request n-1 is never answered (well under a second before the next ones), n is our pick-up and is
-            // answered ok, n+1 is refused. Counted naively, n+1's refusal would land on n.
+            // answered ok, n+1 is refused. Counted naively, n+1's refusal would land on n; with the echoed number it cannot.
             var book = new PredictionBook<Thing>();
-            book.Sent(0f);                                  // n-1: lost
+            book.Sent();                                     // n-1: lost
             var a = new Thing();
             FeelPrediction p = Pending(PredictionKind.PickUp, 0.25f);
-            book.Add(a, a, p, book.Sent(0.25f));            // n
-            book.Answer(AnswerKind.Pickup, true, 0.3f);     // n's ok (counted as n-1's)
-            book.Sent(0.5f);                                // n+1
-            book.Answer(AnswerKind.Pickup, false, 0.55f);   // n+1's refusal (counted as n's, but two were in flight)
-            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "an ambiguous refusal is ignored");
+            int n = book.Sent();
+            book.Add(a, a, p, n);                            // n
+            book.Answer(n, AnswerKind.Pickup, true, 0.3f);   // n's ok
+            int next = book.Sent();                          // n+1
+            book.Answer(next, AnswerKind.Pickup, false, 0.55f); // n+1's refusal
+            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "n+1's refusal is not n's");
             Assert.AreEqual(PredictionPhase.Confirmed, p.Observe(new ItemSnapshot(true, Me, Vector3.zero, 0), 0.6f), "the state still decides");
         }
 
         [Test]
-        public void SlowRoundTrip_DoesNotResetTheNumberingWhileAnAnswerIsStillComing()
+        public void SlowRoundTrip_ALateAnswerOfTheLastRequest_IsNotTheNewOnes()
         {
-            // Second review: with 1.5 s of round trip a request sent 1.2 s after the last must not write the last one off.
+            // Second review: with 1.5 s of round trip a request sent 1.2 s after the last must not take the last one's answer.
             var book = new PredictionBook<Thing>();
-            book.Sent(0f, 1.5f);                            // still in flight
+            int first = book.Sent();                         // still in flight
             var a = new Thing();
             FeelPrediction p = Pending(PredictionKind.PickUp, 1.2f);
-            book.Add(a, a, p, book.Sent(1.2f, 1.5f));
-            book.Answer(AnswerKind.Pickup, false, 1.5f);    // the first request's late refusal
+            int ours = book.Sent();
+            book.Add(a, a, p, ours);
+            book.Answer(first, AnswerKind.Pickup, false, 1.5f); // the first request's late refusal
             Assert.AreEqual(PredictionPhase.Pending, p.Phase, "it was not ours");
-            book.Answer(AnswerKind.Pickup, false, 2.7f);    // ours
+            book.Answer(ours, AnswerKind.Pickup, false, 2.7f);  // ours
             Assert.AreEqual(PredictionPhase.Denied, p.Phase);
+        }
+
+        [Test]
+        public void LateRefusal_AfterAServerStallOverASecond_NeverBouncesANewerPrediction()
+        {
+            // Spec 045 AC2: the server stalls 1.5 s. A request sent at 0 is answered (refused) only at 1.6 s, after the player's next
+            // click at 1.2 s, more than a second later (the old counting book took the quiet second as "all answered" and gave the late
+            // refusal to the new click: a bounce).
+            var book = new PredictionBook<Thing>();
+            int stalled = book.Sent();
+            var a = new Thing();
+            FeelPrediction p = Pending(PredictionKind.PickUp, 1.2f);
+            int newer = book.Sent();
+            book.Add(a, a, p, newer);
+            Assert.AreEqual(stalled, book.Answer(stalled, AnswerKind.Pickup, false, 1.6f), "the stalled request's late refusal");
+            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "the newer prediction keeps its look");
+            Assert.AreEqual(newer, book.Answer(newer, AnswerKind.Pickup, true, 1.65f));
+            Assert.AreEqual(PredictionPhase.Confirmed, p.Observe(new ItemSnapshot(true, Me, Vector3.zero, 0), 1.7f), "no bounce");
+        }
+
+        [Test]
+        public void ARefusal_WithMoreRequestsInFlight_DeniesItsOwnPredictionAtOnce()
+        {
+            // Spec 045: the old book ignored a refusal while two were in flight (round trips over about 0.24 s), so the look waited for
+            // its whole timeout; with the echo the refusal is unambiguous.
+            var book = new PredictionBook<Thing>();
+            var a = new Thing();
+            var b = new Thing();
+            FeelPrediction first = Pending(PredictionKind.PickUp, 0f);
+            FeelPrediction second = Pending(PredictionKind.PickUp, 0.25f);
+            int one = book.Sent();
+            book.Add(a, a, first, one);
+            int two = book.Sent();
+            book.Add(b, b, second, two);
+            book.Answer(one, AnswerKind.Pickup, false, 0.3f);
+            Assert.AreEqual(PredictionPhase.Denied, first.Phase, "denied at its answer, not after the timeout");
+            Assert.AreEqual(PredictionPhase.Pending, second.Phase);
         }
 
         [Test]
         public void LateAnswer_WithNothingInFlight_IsIgnored()
         {
-            // Our request's own "ok" arrives, then a stray answer with nothing in flight: it must not deny the click.
+            // Our request's own "ok" arrives, then a stray answer for the same number, then one for a number never sent: neither may
+            // deny the click.
             var book = new PredictionBook<Thing>();
             var a = new Thing();
             FeelPrediction p = Pending(PredictionKind.PickUp, 0f);
-            book.Add(a, a, p, book.Sent(0f));
-            book.Answer(AnswerKind.Pickup, true, 0.1f);
-            book.Answer(AnswerKind.Pickup, false, 0.2f);
-            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "the ok restarted its timeout, the stray refusal is ignored");
+            int request = book.Sent();
+            book.Add(a, a, p, request);
+            book.Answer(request, AnswerKind.Pickup, true, 0.1f);
+            Assert.AreEqual(0, book.Answer(request, AnswerKind.Pickup, false, 0.2f), "already answered");
+            Assert.AreEqual(0, book.Answer(request + 5, AnswerKind.Pickup, false, 0.25f), "never sent");
+            Assert.AreEqual(PredictionPhase.Pending, p.Phase, "the ok restarted its timeout, the stray refusals are ignored");
         }
 
         [Test]
@@ -356,7 +402,7 @@ namespace Worktown.Game.Tests
             first.Frame(0f);
             first.ClickPickUp(0f);
             var second = new Thing();
-            book.Add(null, second, Pending(PredictionKind.PickUp, 0.25f), book.Sent(0.25f));
+            book.Add(null, second, Pending(PredictionKind.PickUp, 0.25f), book.Sent());
             for (float t = Dt; t <= 0.6f; t += Dt)
             {
                 first.Holder = t >= 0.3f ? Me : NoHolder;
@@ -373,8 +419,8 @@ namespace Worktown.Game.Tests
         {
             var book = new PredictionBook<Thing>();
             var a = new Thing();
-            book.Add(a, a, Pending(PredictionKind.PickUp, 0f), book.Sent(0f));
-            book.Add(a, a, Pending(PredictionKind.Drop, 0.3f), book.Sent(0.3f));
+            book.Add(a, a, Pending(PredictionKind.PickUp, 0f), book.Sent());
+            book.Add(a, a, Pending(PredictionKind.Drop, 0.3f), book.Sent());
             Assert.AreEqual(1, book.Count);
             var ended = new List<Thing>();
             book.Clear(ended);

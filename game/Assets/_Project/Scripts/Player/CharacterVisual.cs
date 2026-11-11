@@ -22,6 +22,7 @@ namespace Worktown.Game.Player
     /// fits the speed and the feet stay planted. Crouching plays the crouch idle standing and the crouch walk moving.
     /// The hand anchor sits on the rig's real right hand bone, the holding pose is masked to the right arm.
     /// </summary>
+    [DefaultExecutionOrder(100)] // 044 review: after Pickup.LateUpdate, so the box hands and the cloth reach use this frame's targets
     public sealed class CharacterVisual : MonoBehaviour
     {
         /// <summary>Name of the hand anchor the art builder adds under the rig's right hand bone.</summary>

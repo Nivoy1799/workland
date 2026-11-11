@@ -53,17 +53,38 @@ namespace Worktown.Game.Cooking
         }
 
         /// <summary>
-        /// 036 review: the server stops: how many loaded cones are still untouched (all <see cref="Spit.PortionsPerCone"/> portions, never
-        /// shaved), so the caller puts them back into the cone stock line; then every spit is bare (<see cref="Clear"/>). A partly
-        /// shaved cone is lost, like food left in a pan.
+        /// 036 review: the server stops at <paramref name="tick"/>: how many loaded cones are still untouched (all
+        /// <see cref="Spit.PortionsPerCone"/> portions, never shaved), so the caller puts them back into the cone stock line; those spits
+        /// are bare. Spec 045: a partly shaved cone is no longer lost: it stays on its spit with the portions it has left and the browning
+        /// it had at the stop (folded to <paramref name="tick"/>), the knob off (an off cone keeps its layer, so the next session's ticks
+        /// cannot heat it until the knob turns), no shave hold. Every catch tray is emptied (food left out, like food in a pan).
         /// </summary>
-        public int ClearReturningUntouched()
+        public int ClearReturningUntouched(uint tick, double tickRate)
         {
             int untouched = 0;
             foreach (Record r in _spits.Values)
-                if (r.Cone != null && r.Cone.Portions == Spit.PortionsPerCone && r.Cone.Shaves == 0) untouched++;
-            Clear();
+            {
+                Fold(r, tick, tickRate);
+                if (r.Cone != null && r.Cone.Portions == Spit.PortionsPerCone && r.Cone.Shaves == 0)
+                {
+                    untouched++;
+                    r.Cone = null;
+                }
+                r.Level = Spit.Off;
+                r.Holding = false;
+                r.Tray.Clear();
+            }
+            Version++;
             return untouched;
+        }
+
+        /// <summary>Spec 045: the spits that keep a partly used cone over a server stop, sorted (the stop's log line).</summary>
+        public void KeptCones(List<int> into)
+        {
+            into.Clear();
+            foreach (KeyValuePair<int, Record> kv in _spits)
+                if (kv.Value.Cone != null && !kv.Value.Cone.IsEmpty) into.Add(kv.Key);
+            into.Sort();
         }
 
         /// <summary>

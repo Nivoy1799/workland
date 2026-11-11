@@ -47,6 +47,7 @@ namespace Worktown.Game.Net
 
         // Server only: this player's request rate limit (review of spec 027b: a token bucket).
         private readonly RequestBucket _serverBucket = new RequestBucket();
+        private readonly SpamGuard _spam = new SpamGuard(); // spec 045: kick after many TooFast replies in a row
 
         [SerializeField] private Transform _holdPoint;
 
@@ -226,6 +227,7 @@ namespace Worktown.Game.Net
 
         public override void OnStartServer()
         {
+            _spam.Reset(); // spec 045: a pooled player object starts a new life
             _service = NetworkManager.GetComponent<PickupService>();
             if (_service == null)
                 Debug.LogError("[Pickup] PickupService missing on the NetworkManager object");
@@ -1026,10 +1028,10 @@ namespace Worktown.Game.Net
             Debug.Log("[Feel] click to visual: " + (frames <= 0 ? "same frame" : frames + " frame(s) later") + " (" + kind + ")");
         }
 
-        /// <summary>The server's next answer: it reaches only the prediction of that very request (PredictionBook).</summary>
-        private int NoteAnswer(AnswerKind kind, bool ok)
+        /// <summary>The server's answer to request <paramref name="request"/> (its echo): it reaches only that request's prediction (PredictionBook).</summary>
+        private int NoteAnswer(int request, AnswerKind kind, bool ok)
         {
-            return _looks.Answer(kind, ok, Time.unscaledTime);
+            return _looks.Answer(request, kind, ok, Time.unscaledTime);
         }
 
         private void PlaySound(SoundKey key, Vector3 position)
@@ -2959,56 +2961,60 @@ namespace Worktown.Game.Net
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
-            RequestStation(stationIndex, option);
+            _lastRequest = _looks.Sent();
+            RequestStation(stationIndex, option, _lastRequest);
         }
 
         private void SendPickup(NetworkObject target)
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
-            RequestPickup(target);
+            _lastRequest = _looks.Sent();
+            RequestPickup(target, _lastRequest);
         }
 
         private void SendDrop()
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
-            RequestDrop();
+            _lastRequest = _looks.Sent();
+            RequestDrop(_lastRequest);
         }
 
         private void SendPlace(int surfaceIndex, int spotIndex)
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
-            RequestPlace(surfaceIndex, spotIndex);
+            _lastRequest = _looks.Sent();
+            RequestPlace(surfaceIndex, spotIndex, _lastRequest);
         }
 
         private void SendUse(NetworkObject target, int action)
         {
             _lastSendTime = Time.unscaledTime;
             _clicks.NoteSent(_lastSendTime);
-            _lastRequest = _looks.Sent(_lastSendTime, RoundTripSeconds());
-            RequestUse(target, action);
+            _lastRequest = _looks.Sent();
+            RequestUse(target, action, _lastRequest);
         }
 
         [ServerRpc]
-        private void RequestPickup(NetworkObject target)
+        private void RequestPickup(NetworkObject target, int request)
         {
-            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+            bool limited = IsRateLimited();
+            if (_spam.Tripped) return; // spec 045: disconnected for spam
+            PickupOutcome outcome = limited ? PickupOutcome.TooFast
                 : _service != null ? _service.TryPickup(this, target) : PickupOutcome.NotFound;
-            ReportResult(Owner, outcome, true);
+            ReportResult(Owner, outcome, true, request);
         }
 
         [ServerRpc]
-        private void RequestDrop()
+        private void RequestDrop(int request)
         {
-            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+            bool limited = IsRateLimited();
+            if (_spam.Tripped) return;
+            PickupOutcome outcome = limited ? PickupOutcome.TooFast
                 : _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
-            ReportResult(Owner, outcome, false);
+            ReportResult(Owner, outcome, false, request);
         }
 
         /// <summary>
@@ -3017,18 +3023,20 @@ namespace Worktown.Game.Net
         /// hands, surface, spot, reach and the rate, and places the item itself (PickupService.TryPlace).
         /// </summary>
         [ServerRpc]
-        private void RequestPlace(int surfaceIndex, int spotIndex)
+        private void RequestPlace(int surfaceIndex, int spotIndex, int request)
         {
-            PickupOutcome outcome = IsRateLimited() ? PickupOutcome.TooFast
+            bool limited = IsRateLimited();
+            if (_spam.Tripped) return;
+            PickupOutcome outcome = limited ? PickupOutcome.TooFast
                 : _service != null ? _service.TryPlace(this, surfaceIndex, spotIndex) : PickupOutcome.NotFound;
-            ReportPlace(Owner, outcome);
+            ReportPlace(Owner, outcome, request);
         }
 
         [TargetRpc]
-        private void ReportPlace(NetworkConnection target, PickupOutcome outcome)
+        private void ReportPlace(NetworkConnection target, PickupOutcome outcome, int request)
         {
             // Review of spec 027b: a rate-limited request is answered too (numbering in step) but shows nothing.
-            NoteAnswer(AnswerKind.Place, outcome == PickupOutcome.Ok);
+            NoteAnswer(request, AnswerKind.Place, outcome == PickupOutcome.Ok);
             if (outcome == PickupOutcome.TooFast) return;
             LastCookOutcome = null;
             LastPickupOutcome = outcome;
@@ -3043,11 +3051,13 @@ namespace Worktown.Game.Net
         /// a stove knob or button (StationRules.StoveOption: burner and switch or mode).
         /// </summary>
         [ServerRpc]
-        private void RequestStation(int stationIndex, int option)
+        private void RequestStation(int stationIndex, int option, int request)
         {
-            CookOutcome outcome = IsRateLimited() ? CookOutcome.TooFast
+            bool limited = IsRateLimited();
+            if (_spam.Tripped) return;
+            CookOutcome outcome = limited ? CookOutcome.TooFast
                 : _kitchen != null ? _kitchen.TryUseStation(this, stationIndex, option) : CookOutcome.UnknownStation;
-            ReportCook(Owner, outcome);
+            ReportCook(Owner, outcome, request);
         }
 
         /// <summary>
@@ -3056,17 +3066,19 @@ namespace Worktown.Game.Net
         /// the player holds and the target's state, checks reach, hands, capacity and the sim, and decides.
         /// </summary>
         [ServerRpc]
-        private void RequestUse(NetworkObject target, int action)
+        private void RequestUse(NetworkObject target, int action, int request)
         {
-            CookOutcome outcome = IsRateLimited() ? CookOutcome.TooFast
+            bool limited = IsRateLimited();
+            if (_spam.Tripped) return;
+            CookOutcome outcome = limited ? CookOutcome.TooFast
                 : _kitchen != null ? _kitchen.TryUseVessel(this, target, action) : CookOutcome.NotAVessel;
-            ReportCook(Owner, outcome);
+            ReportCook(Owner, outcome, request);
         }
 
         [TargetRpc]
-        private void ReportCook(NetworkConnection target, CookOutcome outcome)
+        private void ReportCook(NetworkConnection target, CookOutcome outcome, int request)
         {
-            int answered = NoteAnswer(AnswerKind.Cook, outcome == CookOutcome.Ok);
+            int answered = NoteAnswer(request, AnswerKind.Cook, outcome == CookOutcome.Ok);
             if (answered != 0) AnswerStockLooks(answered, outcome); // spec 034
             if (answered != 0 && answered == _squeezeStartRequest)
             {
@@ -3113,17 +3125,35 @@ namespace Worktown.Game.Net
         /// Server: refuse requests that come faster than a person can click (spam costs no validation work). Spec 019: this
         /// also limits knife strokes. Review of spec 027b: a token bucket per player (RequestBucket: burst 2, one token per
         /// 0.2 s), so requests sent far enough apart but arriving bunched all pass; a refused one is answered with TooFast
-        /// (one small report, the same RPCs) so the client's request numbering never shifts.
+        /// (one small report, the same RPCs; spec 045: with the request's echoed number). Spec 045: after
+        /// SpamGuard.MaxTooFastInARow refusals in a row the client is disconnected (a flood, not a person); the host's own player is
+        /// never kicked from its own server.
         /// </summary>
         private bool IsRateLimited()
         {
-            return !_serverBucket.TryTake(Time.unscaledTimeAsDouble);
+            bool limited = !_serverBucket.TryTake(Time.unscaledTimeAsDouble);
+            if (_spam.Note(limited))
+            {
+                NetworkConnection owner = Owner;
+                if (owner == null || !owner.IsValid || owner.IsLocalClient)
+                {
+                    _spam.Reset(); // the host's own player (or nobody): keep answering
+                }
+                else
+                {
+                    Debug.LogWarning("[Net] player " + owner.ClientId + " disconnected: " + SpamGuard.MaxTooFastInARow
+                        + " requests in a row came too fast (spam)");
+                    NetworkManager.ServerManager.Kick(owner, FishNet.Managing.Server.KickReason.ExcessiveData,
+                        FishNet.Managing.Logging.LoggingType.Off);
+                }
+            }
+            return limited;
         }
 
         [TargetRpc]
-        private void ReportResult(NetworkConnection target, PickupOutcome outcome, bool wasPickup)
+        private void ReportResult(NetworkConnection target, PickupOutcome outcome, bool wasPickup, int request)
         {
-            NoteAnswer(wasPickup ? AnswerKind.Pickup : AnswerKind.Drop, outcome == PickupOutcome.Ok);
+            NoteAnswer(request, wasPickup ? AnswerKind.Pickup : AnswerKind.Drop, outcome == PickupOutcome.Ok);
             if (outcome == PickupOutcome.TooFast) return; // review of spec 027b: answered only to keep the numbering
             LastCookOutcome = null;
             LastPickupOutcome = outcome;

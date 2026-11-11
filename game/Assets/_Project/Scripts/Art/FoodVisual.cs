@@ -130,11 +130,6 @@ namespace Worktown.Game.Art
             ShowFallback(!shown, look);
         }
 
-        /// <summary>
-        /// A station's contents (plating table, bowl, pan, pot): up to four parts at this anchor. Spec 027b: when there are
-        /// more parts than shown before, the new ones drop in from <see cref="FeelSettings.DropHeight"/> above (ease-in over
-        /// <see cref="FeelSettings.DropSeconds"/>), for every viewer; the first contents after a (re)join just appear.
-        /// </summary>
         /// <summary>Spec 044: the model drawn last (the last part of the contents), or null when nothing is drawn.</summary>
         public Transform LastPart
         {
@@ -146,6 +141,11 @@ namespace Worktown.Game.Art
             }
         }
 
+        /// <summary>
+        /// A station's contents (plating table, bowl, pan, pot): up to four parts at this anchor. Spec 027b: when there are
+        /// more parts than shown before, the new ones drop in from <see cref="FeelSettings.DropHeight"/> above (ease-in over
+        /// <see cref="FeelSettings.DropSeconds"/>), for every viewer; the first contents after a (re)join just appear.
+        /// </summary>
         public void ShowParts(IReadOnlyList<FoodLook> parts)
         {
             ReleaseAll();

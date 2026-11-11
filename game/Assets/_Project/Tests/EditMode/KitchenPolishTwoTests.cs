@@ -467,11 +467,12 @@ namespace Worktown.Game.Tests
         public void TheAnswerBook_TellsWhichRequestWasAnswered()
         {
             var book = new PredictionBook<object>();
-            int first = book.Sent(0f);
-            int second = book.Sent(0.3f);
-            Assert.AreEqual(first, book.Answer(AnswerKind.Cook, true, 0.35f));
-            Assert.AreEqual(second, book.Answer(AnswerKind.Cook, false, 0.4f));
-            Assert.AreEqual(0, book.Answer(AnswerKind.Cook, false, 0.5f), "nothing in flight: ignored");
+            int first = book.Sent();
+            int second = book.Sent();
+            Assert.AreEqual(first, book.Answer(first, AnswerKind.Cook, true, 0.35f));
+            Assert.AreEqual(second, book.Answer(second, AnswerKind.Cook, false, 0.4f));
+            Assert.AreEqual(0, book.Answer(second, AnswerKind.Cook, false, 0.5f), "already answered: ignored");
+            Assert.AreEqual(0, book.Answer(second + 1, AnswerKind.Cook, false, 0.5f), "never sent: ignored");
         }
 
         // ---- 10: the held squeeze's timing and queue ----

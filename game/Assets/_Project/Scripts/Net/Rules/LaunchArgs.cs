@@ -28,6 +28,13 @@ namespace Worktown.Game.Net.Rules
         public string Observe { get; private set; } = string.Empty;
         /// <summary>Spec 027: <c>-tour-out dir</c>, where the tour and the observer write their images. Empty = default.</summary>
         public string TourOut { get; private set; } = string.Empty;
+        /// <summary>Spec 045 (the spec 004 load test, dev builds): <c>-bot</c>, drive the own player with a load-test bot. Needs <c>-connect</c>.</summary>
+        public bool IsBot { get; private set; }
+        /// <summary>Spec 045: <c>-seed n</c>, the bot's random seed (0 when not given).</summary>
+        public int Seed { get; private set; }
+        /// <summary>Spec 045: <c>-metrics path</c>, one JSON line per second there (a server or host: its load; a bot: what it received).
+        /// Empty = none.</summary>
+        public string MetricsPath { get; private set; } = string.Empty;
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -91,6 +98,19 @@ namespace Worktown.Game.Net.Rules
                         if (!HasValue(args, i)) return Fail("-tour-out needs a directory");
                         result.TourOut = args[++i];
                         break;
+                    case "-bot":
+                        result.IsBot = true;
+                        break;
+                    case "-seed":
+                        if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int seed))
+                            return Fail("-seed needs an integer");
+                        result.Seed = seed;
+                        i++;
+                        break;
+                    case "-metrics":
+                        if (!HasValue(args, i)) return Fail("-metrics needs a file path");
+                        result.MetricsPath = args[++i];
+                        break;
                 }
             }
 
@@ -99,6 +119,10 @@ namespace Worktown.Game.Net.Rules
             if (result.Tour.Length > 0 && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
             if (result.Observe.Length > 0 && result.Mode != LaunchMode.ClientTugboat && result.Mode != LaunchMode.Host)
                 return Fail("-observe needs -connect or -host");
+            if (result.IsBot && result.Mode != LaunchMode.ClientTugboat) return Fail("-bot needs -connect (bots use Tugboat)");
+            if (result.IsBot && (result.Tour.Length > 0 || result.Observe.Length > 0)) return Fail("-bot excludes -tour and -observe");
+            if (result.MetricsPath.Length > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host && !result.IsBot)
+                return Fail("-metrics needs -server, -host or -bot");
             return result;
         }
 

@@ -115,6 +115,8 @@ namespace Worktown.Game.Dev
             var intents = new ScriptedIntentSource();
             me.IntentSource = intents;
             _actor = new TourActor(me, intents);
+            // Spec 045: scripted roles listen to no devices (the Input System NREs in a 043 observer window).
+            if (_role != Role.CookDemo) FindFirstObjectByType<PlayerInputReader>()?.DisableForScript();
             switch (_role)
             {
                 case Role.CookDemo:
