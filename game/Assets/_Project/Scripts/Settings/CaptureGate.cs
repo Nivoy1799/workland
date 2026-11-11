@@ -26,6 +26,26 @@ namespace Worktown.Game.Settings
         public static bool CaptureReads(int beganFrame, int frame, bool pad, bool padReleasedSince) =>
             frame > beganFrame && (!pad || padReleasedSince);
 
+        /// <summary>Follow-up 2026-11-11 evening: <paramref name="button"/>'s bit in a pad state mask (0 for None).</summary>
+        public static uint PadBit(PadButton button) => button == PadButton.None ? 0u : 1u << (int)button;
+
+        /// <summary>
+        /// Follow-up 2026-11-11 evening: one frame of a gamepad capture over a pad state (<paramref name="held"/>: the buttons down now,
+        /// <paramref name="pressed"/>: the ones pressed this frame, as <see cref="PadBit"/> masks; the real pad's or a tour's simulated
+        /// one). <paramref name="releasedSince"/> becomes true once every button was up since the capture began; then, from a later frame
+        /// than <paramref name="beganFrame"/>, the first pressed button (in PadButton order) is the new binding. None: keep waiting
+        /// (also with no pad: <paramref name="padPresent"/> false).
+        /// </summary>
+        public static PadButton PadCapture(int beganFrame, int frame, bool padPresent, uint held, uint pressed, ref bool releasedSince)
+        {
+            if (!padPresent) return PadButton.None;
+            if (!releasedSince) releasedSince = held == 0u;
+            if (!CaptureReads(beganFrame, frame, true, releasedSince)) return PadButton.None;
+            for (PadButton button = PadButton.South; button <= PadButton.Select; button++)
+                if ((pressed & PadBit(button)) != 0u) return button;
+            return PadButton.None;
+        }
+
         /// <summary>
         /// Follow-up 2026-11-11: the cursor locks again when the last open menu closes (<paramref name="anyMenuOpen"/> false), but only
         /// while playing (<paramref name="playing"/>: the player's input is active). On the title screen it stays free.

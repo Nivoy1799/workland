@@ -28,10 +28,16 @@ namespace Worktown.Game.Economy
             return IsClientInitialized;
         }
 
-        /// <summary>Server: the shop balance changed (kept while the object is not spawned yet; sent when it is, only a change).</summary>
+        /// <summary>
+        /// Server: the shop balance changed (kept while the object is not spawned yet; sent when it is, only a change).
+        /// Follow-up 2026-11-11 evening: no clamp at 0. The shop balance cannot go below 0: every sim debit (grocer, supply orders) is
+        /// refused with InsufficientFunds, TownEconomy.AdjustBalance keeps an account in 0..MaxBalance and the pitch fee takes at most
+        /// the balance (PayFee). The only negative value is BalanceOf's -1 for "no account yet", which EconomyService never publishes.
+        /// So the value is sent as it is; if a later rule ever allowed debt, the HUD would read "-$120" (EconomyRules.Money), not $0.
+        /// </summary>
         internal void ServerSet(long balance)
         {
-            _balance = balance < 0 ? 0 : balance;
+            _balance = balance;
             _known = true;
             Push();
         }

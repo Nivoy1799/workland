@@ -12,7 +12,8 @@
 #                  Close the shop, Continue with its line, Continue. Its saves go to <out>/corner-saves (-save-dir), never the player's.
 #
 #   menu (spec 047): the tour window starts on the title screen (-tour menu, no -connect) and joins the observer window (-host -observe
-#                  menu) through Join by address; the host kicks it; it then opens its own shop and closes it. Local server only.
+#                  menu) through Join by address; the host kicks it; it then opens its own shop (the open kitchen, no save: follow-up
+#                  053) and closes it. Local server only.
 #
 #   --server local (default): the observer is a windowed -host (server plus observer), because the WSL link
 #                  has MTU 1280 while Tailscale runs and nothing spawns there (spec 003).

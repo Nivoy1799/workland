@@ -300,7 +300,9 @@ namespace Worktown.Game.Economy
         private void PublishWallets()
         {
             if (_ledger == null) _ledger = FindFirstObjectByType<ShopLedger>();
-            if (_ledger != null) _ledger.ServerSet(System.Math.Max(0L, ShopBalance));
+            // Follow-up 2026-11-11 evening: no clamp (the balance never goes below 0, see ShopLedger.ServerSet); -1 is "no account yet".
+            long balance = ShopBalance;
+            if (_ledger != null && balance >= 0) _ledger.ServerSet(balance);
         }
 
         private void PublishBoard()

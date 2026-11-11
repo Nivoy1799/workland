@@ -213,24 +213,16 @@ namespace Worktown.Game.UI
                 return;
             }
             // Review: not on the frame the capture began (the click's Enter or A), and a pad only after its buttons were all up once.
-            Gamepad pad = Gamepad.current;
-            if (_capturePad && !_padReleased && pad != null) _padReleased = !AnyPadButtonHeld(pad);
-            if (!CaptureGate.CaptureReads(_captureFrame, Time.frameCount, _capturePad, _padReleased || pad == null)) return;
             if (_capturePad)
             {
-                Gamepad gamepad = pad;
-                if (gamepad == null) return;
-                foreach (PadButton button in PadButtons)
-                {
-                    var control = GameInput.ToGamepadButton(button);
-                    if (control.HasValue && gamepad[control.Value].wasPressedThisFrame)
-                    {
-                        Rebind(action, button);
-                        return;
-                    }
-                }
+                // Follow-up 2026-11-11 evening: one pure path (CaptureGate.PadCapture) over the pad's state: the real pad, or in a
+                // development build the menu tour's simulated one (DevSimulatePad).
+                bool present = ReadPad(out uint held, out uint pressed);
+                PadButton button = CaptureGate.PadCapture(_captureFrame, Time.frameCount, present, held, pressed, ref _padReleased);
+                if (button != PadButton.None) Rebind(action, button);
                 return;
             }
+            if (!CaptureGate.CaptureReads(_captureFrame, Time.frameCount, false, true)) return;
             if (keyboard == null) return;
             foreach (KeyControl key in keyboard.allKeys)
             {
@@ -250,15 +242,59 @@ namespace Worktown.Game.UI
                 + "   (Esc: keep it, Backspace: none)";
         }
 
-        private static bool AnyPadButtonHeld(Gamepad gamepad)
+        /// <summary>The pad's state as CaptureGate masks (held, pressed this frame); false with no pad.</summary>
+        private bool ReadPad(out uint held, out uint pressed)
         {
+            held = 0u;
+            pressed = 0u;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (_devPad)
+            {
+                held = _devHeld;
+                pressed = _devPressed;
+                _devPressed = 0u; // a press lasts one frame, as wasPressedThisFrame does
+                return true;
+            }
+#endif
+            Gamepad gamepad = Gamepad.current;
+            if (gamepad == null) return false;
             foreach (PadButton button in PadButtons)
             {
                 var control = GameInput.ToGamepadButton(button);
-                if (control.HasValue && gamepad[control.Value].isPressed) return true;
+                if (!control.HasValue) continue;
+                var buttonControl = gamepad[control.Value];
+                if (buttonControl.isPressed) held |= CaptureGate.PadBit(button);
+                if (buttonControl.wasPressedThisFrame) pressed |= CaptureGate.PadBit(button);
             }
-            return false;
+            return true;
         }
+
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        private bool _devPad;
+        private uint _devHeld, _devPressed;
+
+        /// <summary>
+        /// Follow-up 2026-11-11 evening, development builds only (the menu tour cannot press a real pad): from the next frame the capture
+        /// reads this pad state instead of the real pad's (<paramref name="held"/> and <paramref name="pressed"/> as CaptureGate.PadBit
+        /// masks; a press counts for one frame). <see cref="DevEndSimulatedPad"/> hands back to the real pad.
+        /// </summary>
+        public void DevSimulatePad(uint held, uint pressed)
+        {
+            _devPad = true;
+            _devHeld = held;
+            _devPressed = pressed;
+        }
+
+        public void DevEndSimulatedPad()
+        {
+            _devPad = false;
+            _devHeld = 0u;
+            _devPressed = 0u;
+        }
+
+        /// <summary>The menu tour: a capture is waiting for a key or a button.</summary>
+        public bool DevCapturing => _capture.HasValue;
+#endif
 
         /// <summary>Frees the cursor while the screen shows over the shop.</summary>
         private void Report(bool open)

@@ -7,6 +7,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
+using Worktown.Game.Save;
+using Worktown.Game.Climb;
 using Worktown.Game.Player;
 using Worktown.Game.Settings;
 using Worktown.Game.UI;
@@ -19,7 +21,7 @@ namespace Worktown.Game.Dev
     /// <item><c>-tour menu</c> starts on the title screen (no mode flag) and goes through it by pressing its buttons (MainMenuView.Press,
     /// the same actions as clicks): the title, Join by address, the loading screen, the shop, the lobby panel; the host kicks it (the
     /// error screen; before that a dropped connection: the rejoin card and back in); back to the menu; it tries to rejoin and is
-    /// refused (follow-up 047: kicked, banned for the session); then it hosts its own shop (New shop: the loading screen, the host's
+    /// refused (follow-up 047: kicked, banned for the session); then it hosts its own shop (the open kitchen, as -host: the loading screen, the host's
     /// lobby) and closes it.</item>
     /// <item><c>-host -observe menu</c> is the host it joins: once the tour player is in, it shows its own lobby (the Kick buttons),
     /// gets a join while hosting (follow-up 047: the "Leave your shop?" question) and stays, drops the tour player's connection without a notice (the tour shows the rejoin card and gets back in by itself), then kicks it
@@ -207,13 +209,22 @@ namespace Worktown.Game.Dev
             Press(MainMenuView.DismissId);
 
             // The host window quits a few seconds after the kick; then this one opens its own shop.
+            // Follow-up 2026-11-11 evening (spec 053): the tour's own shop is the open kitchen, as -host hosts it (spec 053 AC9: the open
+            // kitchen is unchanged), not the title's New shop: that one is a food corner with a save file (the corner tour presses it with
+            // its own -save-dir). So this window never makes a food corner it cannot save, and leaves no save behind.
             yield return Wait(10f);
-            Press(MainMenuView.NewShopId);
+            _bootstrap.StartHost(ShopStart.OpenKitchen);
             yield return _capture.Frames("opening", 4, 0.1f);
             yield return Until(() => Flow.State == JoinState.InGame, "own shop open");
             if (Flow.State != JoinState.InGame) yield break;
             DisableInput();
             yield return Wait(3f);
+            ShopStage stage = ShopStage.Find();
+            if (stage == null || stage.StageNow != ShopStageRules.OpenKitchen)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: the tour's own shop is not the open kitchen");
+            }
             _lobby.SetOpen(true);
             yield return Wait(1f);
             yield return _capture.Shot("lobby-host");
@@ -223,6 +234,15 @@ namespace Worktown.Game.Dev
             yield return Until(() => Flow.State == JoinState.Menu && !_bootstrap.IsRunning, "shop closed, back on the title screen");
             yield return Wait(1.5f);
             yield return _capture.Shot("closed-to-menu");
+            // A clean end: nothing was saved, and the title offers no Continue.
+            SaveService saves = _bootstrap.SaveService;
+            int written = saves != null ? saves.Written : 0;
+            Debug.Log("[Tour] menu: the tour's shop wrote " + written + " save(s); Continue on the title: " + _menu.HasContinue);
+            if (written > 0 || _menu.HasContinue)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: the tour left a save behind");
+            }
         }
 
         // ---- Spec 048: the settings screen ----
@@ -271,6 +291,7 @@ namespace Worktown.Game.Dev
             yield return Wait(0.3f);
             yield return _capture.Shot("settings-rebind-swap");
             SettingsPress(SettingsView.ResetId);
+            yield return PadCapture();
             _settings.ScrollTo(0f);
             _settings.ShowPage(SettingsPage.Comfort);
             yield return Wait(0.3f);
@@ -290,6 +311,50 @@ namespace Worktown.Game.Dev
                 _timeouts++;
                 Debug.LogError("[Tour] menu: Back did not return to the title (" + _menu.CurrentPage + ")");
             }
+        }
+
+        /// <summary>
+        /// Follow-up 2026-11-11 evening (spec 048): a gamepad button captured through the real capture path (the binding button, then
+        /// CaptureGate.PadCapture over the pad's state), with a simulated pad because a tour cannot press a real one
+        /// (SettingsView.DevSimulatePad, development builds only). The A that clicked the button is still held: the capture waits for
+        /// it to be released, then Y binds Jump and Turn (Y's action) swaps onto A. Then the page is reset.
+        /// </summary>
+        private IEnumerator PadCapture()
+        {
+            ControlBindings before = GameSettings.CurrentBindings;
+            if (before.PadOf(ControlAction.Jump) != PadButton.South || before.PadOf(ControlAction.Turn) != PadButton.North)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: the pad defaults are not Jump A and Turn Y before the pad capture");
+            }
+            _settings.DevSimulatePad(CaptureGate.PadBit(PadButton.South), CaptureGate.PadBit(PadButton.South)); // the A that clicked
+            SettingsPress("bind-" + ControlAction.Jump.ToString().ToLowerInvariant() + "-pad");
+            yield return Wait(0.3f);
+            if (!_settings.DevCapturing || GameSettings.CurrentBindings.PadOf(ControlAction.Jump) != PadButton.South)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: the held A ended the pad capture (it must wait for a release)");
+            }
+            yield return _capture.Shot("settings-pad-waiting");
+            _settings.DevSimulatePad(0u, 0u); // released
+            yield return null;
+            yield return null;
+            _settings.DevSimulatePad(CaptureGate.PadBit(PadButton.North), CaptureGate.PadBit(PadButton.North)); // Y
+            yield return null;
+            yield return null;
+            _settings.DevEndSimulatedPad();
+            ControlBindings after = GameSettings.CurrentBindings;
+            Debug.Log("[Tour] menu: pad capture: Jump " + SettingsRules.PadText(after.PadOf(ControlAction.Jump)) + ", Turn "
+                + SettingsRules.PadText(after.PadOf(ControlAction.Turn)));
+            if (_settings.DevCapturing || after.PadOf(ControlAction.Jump) != PadButton.North || after.PadOf(ControlAction.Turn) != PadButton.South)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: Y did not bind Jump with Turn swapped onto A");
+            }
+            yield return Wait(0.3f);
+            yield return _capture.Shot("settings-pad-capture");
+            SettingsPress(SettingsView.ResetId);
+            yield return null;
         }
 
         /// <summary>In the tour's own shop: the settings screen over it (what Esc opens), then the world labels off and on.</summary>

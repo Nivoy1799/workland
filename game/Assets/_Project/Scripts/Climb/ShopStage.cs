@@ -74,10 +74,7 @@ namespace Worktown.Game.Climb
         {
             if (_stage != ShopStageRules.FoodCorner || _supply == null) return 0;
             int units = _supply.DropStock(FoodCornerRules.StockGood, out long cost);
-            string text = units > 0
-                ? "The supplier dropped " + Worktown.Game.Shop.StockCatalog.Describe(Worktown.Game.Shop.StockCatalog.IndexOf(FoodCornerRules.StockGood), units)
-                  + " at the shelf (" + EconomyRules.Money(cost) + ")"
-                : "The supplier brought nothing: the potato slot is full, or the money is short";
+            string text = FoodCornerRules.DeliveryText(units, cost); // follow-up 2026-11-11 evening: "Potatoes delivered -$96"
             Debug.Log("[Stage] " + text);
             if (_feed != null) _feed.ServerAdd(text);
             return units;
