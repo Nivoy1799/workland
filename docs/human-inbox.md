@@ -70,6 +70,35 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+28. **Haven Nine town plan v1, from your Blender session** (branch spec/046-style-lab, docs/town-plan.md and
+    docs/town-story.md; pictures: style lab round 8). The town is a utopia under a glass Dome that has declined. You
+    start with a cart and poor potatoes, and every good meal brings a district back: four levels, from grey to
+    thriving, that never go back. Its first package (W1: decisions and docs) needs your approval before anything is
+    built. I checked it against main:
+    - **Pillar 5 changes** from "peaceful, no crime" to "peaceful, not perfect". The Low Ring has betting halls and
+      dream booths as world content only, never a player loop.
+      - Note for the Steam age rating: depicting gambling can raise the rating even without a playable gamble.
+      - Default: approve as written, world content only.
+    - **The Low Ring look** uses "pipes and steam". You just dropped steampunk. Default: rust, soot and sodium lamps
+      without steampunk machines.
+    - **The setting.** This replaces the clean-utopia framing of docs/setting.md and answers its "too clean heaven"
+      question. Money option C (basics free, grey printer food) still fits.
+    - **Revival feeds the economy** (+0/10/20/30 % footfall per level). That changes how fast the climb goes, so W3
+      is tuned inside the climb simulation (052/052b).
+    - **Clashes to tidy at merge:**
+      - the spec number 046 is used twice (I renumber the style-lab spec);
+      - W2 (the town model) overlaps the draft 050 (street life) and the districts in the climb simulation;
+      - W5 (the Haven Nine graybox) should come after 062a, the kitchen as data.
+    - **Its own 5 questions**, with defaults:
+      1. leave the founders unnamed for now;
+      2. gambling only in the world;
+      3. the storm stays a rumour;
+      4. the Smoke Years appear as museum and jokes only;
+      5. footfall +0/10/20/30 %, tuned in the simulation.
+    - **Proposed order:** W1 (docs, now), then 062a and 057 as planned, then W2/W3/W4 in /sim, W5/W6/W7 in the game,
+      and W8 (the story texts, offline) alongside.
+
+    Say "approve the town plan" (with any changes), and I merge W1 and turn W2-W8 into specs.
 27. **Spec 037 asked for "rating unlocks more menu items over the days"**, but D34 and D37 start the food corner with
     exactly one dish. Default: no rating unlocks in the corner; new dishes come with stage 2 (spec 057, 4 dishes) and
     later stages.
