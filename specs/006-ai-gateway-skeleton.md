@@ -274,7 +274,94 @@ session. Spec 007 is already built without this, so the game-side client gets it
 10. No negative cache in the gateway; the game remembers failures per session (game-side follow-up spec). [yes]
 
 ## Implementation notes
-(Builder fills this in.)
+- Packages: Corvus.Text.Json.Validator 5.8.8 (Apache-2.0; pulls in Corvus.Text.Json and
+  Corvus.Regex.Ecma262, both Apache-2.0), Microsoft.AspNetCore.Mvc.Testing 10.0.15. Corvus gives
+  error paths only through a results collector, which is not used: a failed attempt logs only the
+  outcome code, never the output or its length. Corvus ships analyzer CTJ001 (prefer `u8`
+  literals), which flows into both projects: the gateway uses `u8` literals, the tests set
+  `NoWarn CTJ001`.
+- Auth before rate limit: the built-in rate limiter middleware runs before endpoint filters, so the
+  partition function calls the same `ServiceTokenFilter.IsAuthorized` and returns a no-limiter
+  partition for a bad token or bad server id. Those requests get 401/400 and use no quota (tested).
+  Token bucket: `TokenLimit = burst`, 1 token every `60 s / perMinute`.
+- Upstream typed client: `RemoveAllLoggers()` (no HttpClient request logs at all),
+  `HttpClient.Timeout` infinite, per-attempt timeout via a `CancellationTokenSource` on the
+  injected `TimeProvider`. A malformed 2xx envelope counts as invalid output (retried). Network
+  errors map to 502 `upstream_error`. The last attempt's failure picks the code.
+- Stricter than the spec text: `tags` is required (may be `[]`); duplicate JSON properties are
+  rejected in the request and in upstream output (.NET 10 `AllowDuplicateProperties = false`); a
+  body over 8 KiB is 400 `invalid_request` (the table has no 413). Request regexes use `\z`,
+  because .NET `$` also matches before a trailing newline. Whitespace around the JSON document
+  is valid JSON and is accepted (that is parsing, not repair). `GATEWAY_MODEL` must not contain
+  `|` or whitespace (the cache-key separator).
+- Prompt messages are a `(Role, Content)` tuple list, so no extra message type file. Options
+  validation is `GatewayOptions.Validator` (nested), wired with `ValidateOnStart`.
+- D27 (vegan) was not in the spec. I added one sentence to the system prompt ("the game world is
+  fully vegan: never mention meat, fish, seafood, eggs, dairy, honey or any other animal product").
+  `ItemNamePrompt.Version` stays 1 because nothing has shipped. **Not enforced**: the placeholder
+  moderator holds only profanity and slurs. A vegan word check (in moderation or validation) is a
+  follow-up and a human decision (ties to O6).
+- Tests (first round): 119. No network: the only base URL is
+  `https://upstream.test/v1`, and the stub throws for any other host. verify.sh was run in the
+  worktree as `env -u UNITY_PATH bash scripts/verify.sh`, so the Unity section was skipped. That
+  section is unchanged.
+- Smoke check: the built app started with test env vars. `/healthz` returned 200 and a POST
+  without a token returned 401. Without `GATEWAY_SERVICE_TOKEN`, startup fails with
+  `OptionsValidationException: GATEWAY_SERVICE_TOKEN is required.`
+
+### Review fix round (2026-11-11)
+- **D27 enforced.** `Moderation/VeganContentRule.cs` (new, static) holds a copy of the word list
+  of `Worktown.Sim.Cooking.ContentRules` (sim/Runtime/Cooking/ContentRules.cs) with the same
+  matching: `char.IsLetter` delimits words, lowercase invariant, a word hits when it equals a
+  listed word or that word plus `s` or `es`. It runs in the pipeline after schema validation,
+  first in moderation (before the DI-replaceable `IModerator`, so tests that swap the moderator
+  still get it) and before the cache write. A hit returns 422 `content_rejected` (the error table
+  is unchanged), is not retried, not cached, and the per-request log line gets `reason=vegan_rule`
+  (a new `reason=` field; `-` when there is none). The text is never repaired.
+- **Gateway has no /sim reference** (Open question 7). Only the test project has a
+  `ProjectReference` to `sim/Sim.csproj` (netstandard2.1, builds fine under the net10.0 test
+  project; its output goes to the gitignored `sim/Build~/`). Drift tests: the two lists are equal
+  (same order), and `FindForbidden` agrees with /sim on sample strings.
+- **Upstream bounded and pinned.** `MaxResponseContentBufferSize = 64 KiB`
+  (`OpenAiCompatibleClient.MaxResponseBytes`) and the primary handler is
+  `SocketsHttpHandler { AllowAutoRedirect = false }` (`CreatePrimaryHandler`). A 3xx is a
+  non-retried 502 `upstream_error`. A body over the cap makes HttpClient throw
+  `HttpRequestException`, so it is handled like a network error: retried once, then 502
+  `upstream_error`. Tests swap the primary handler for the stub, so `AllowAutoRedirect` is checked
+  with a unit test on `CreatePrimaryHandler`; the size cap is tested end to end (limit +1 fails,
+  exactly the limit passes).
+- **Hit check covers every prompt input.** `CachedContent` has a new `InputHash` field (deviation
+  from the record in Design): SHA-256 of the built user message (tree, fallback name, tags),
+  `ItemNamePrompt.InputHash`. A hit with another tree or another input hash returns 409
+  `tree_mismatch` (same code and warning text). The cache key is unchanged (AC4).
+- **429 backoff:** 500 ms (`ItemNamePipeline.RateLimitedBackoff`) before the retry of an upstream
+  429, via `Task.Delay(..., TimeProvider, ct)`. Fixed, `Retry-After` from upstream is ignored.
+  Tested with a hand-written `ManualTimeProvider` in the test project (no new package).
+- **Bearer** scheme matched case-insensitively (the token stays exact).
+- Dead code removed: the `IOptions` constructor and `Count` of `InMemoryContentCache`,
+  `SchemaValidator.SchemaText`, `PipelineOutcome.IsSuccess`.
+- New cache tests: full (not added, warning logged) and first write wins.
+- Packages, full list: Corvus.Text.Json.Validator 5.8.8, Corvus.Text.Json 5.8.8,
+  Corvus.Regex.Ecma262 1.0.15 and NodaTime 3.3.1 (Apache-2.0, all transitive from the validator),
+  Microsoft.AspNetCore.Mvc.Testing 10.0.15 (tests).
+- Exception to "one public type per file": `UpstreamResult` (nested `Ok`, `Timeout`, `HttpError`,
+  `NetworkError`) is a closed union, so its cases stay nested in one file. `GatewayOptions.Validator`
+  is nested as well.
+- Tests: 175 (`dotnet test ai-gateway/Gateway.sln`).
+
+## Go-live blockers (D33)
+Under D33 the host is a player's PC, so a game build that calls the gateway ships the service
+token, and the token is public. Nothing in this section is built yet. Before the gateway goes live
+it needs:
+- **Per-host auth** (O5), for example verifying Steam session tickets, instead of one shared token.
+  The rate-limit partition must then come from the verified identity, not from
+  `X-Worktown-Server-Id`.
+- **`fallbackName` built server-side** (gateway side), from game data, not taken from the caller.
+- **Hash-from-tree verification through /sim** (the follow-up to Open question 7): recompute
+  `itemHash` from `canonicalTree` so a caller cannot pair an arbitrary hash with an arbitrary tree.
+- **Cache-poisoning protection.** Today the first writer wins for everyone: the first caller for a
+  hash fixes its prompt inputs and its name for all players. Together with the points above, the
+  cache must only accept entries whose inputs are fully derived and checked server-side.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
