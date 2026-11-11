@@ -4,9 +4,11 @@ using System.IO;
 using FishNet.Connection;
 using FishNet.Managing;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
+using Worktown.Game.Settings;
 using Worktown.Game.UI;
 
 namespace Worktown.Game.Dev
@@ -33,6 +35,7 @@ namespace Worktown.Game.Dev
         private NetBootstrap _bootstrap;
         private MainMenuView _menu;
         private LobbyView _lobby;
+        private SettingsView _settings;
         private TourCapture _capture;
         private int _timeouts;
         private bool _finished;
@@ -64,6 +67,7 @@ namespace Worktown.Game.Dev
             _bootstrap = FindFirstObjectByType<NetBootstrap>();
             _menu = MainMenuView.Find();
             _lobby = LobbyView.Find();
+            _settings = SettingsView.Find();
             if (_bootstrap == null || _menu == null || _lobby == null)
             {
                 Finish(1, "no NetBootstrap, MainMenuView or LobbyView in the scene");
@@ -124,10 +128,7 @@ namespace Worktown.Game.Dev
         {
             yield return Wait(3f);
             yield return _capture.Shot("title");
-            Press(MainMenuView.SettingsId);
-            yield return Wait(0.5f);
-            yield return _capture.Shot("settings");
-            Press(MainMenuView.BackId + "-settings");
+            yield return SettingsPages();
             Press(MainMenuView.JoinAddressId);
             _menu.SetAddress("127.0.0.1:" + LaunchArgs.DefaultTugboatPort);
             yield return Wait(0.5f);
@@ -202,10 +203,98 @@ namespace Worktown.Game.Dev
             yield return Wait(1f);
             yield return _capture.Shot("lobby-host");
             _lobby.SetOpen(false);
+            yield return SettingsInShop();
             _bootstrap.Leave();
             yield return Until(() => Flow.State == JoinState.Menu && !_bootstrap.IsRunning, "shop closed, back on the title screen");
             yield return Wait(1.5f);
             yield return _capture.Shot("closed-to-menu");
+        }
+
+        // ---- Spec 048: the settings screen ----
+
+        /// <summary>
+        /// From the title screen: every page, a rebind that swaps (Jump onto E, Use's key), the comfort page applied live (UI scale 125 %,
+        /// the colour-blind ring colours), each page reset, Back to the title. A scripted run never stores settings: checked first.
+        /// </summary>
+        private IEnumerator SettingsPages()
+        {
+            if (SettingsApplier.Persistent)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: the settings are persistent in a scripted run (they would change this PC's saved settings)");
+            }
+            Press(MainMenuView.SettingsId);
+            yield return Wait(0.5f);
+            if (_settings == null || !_settings.IsOpen)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: Settings did not open the settings screen");
+                yield break;
+            }
+            yield return _capture.Shot("settings-graphics");
+            _settings.ShowPage(SettingsPage.Audio);
+            yield return Wait(0.3f);
+            yield return _capture.Shot("settings-audio");
+            _settings.ShowPage(SettingsPage.Controls);
+            yield return Wait(0.3f);
+            yield return _capture.Shot("settings-controls");
+            _settings.ScrollTo(1f);
+            if (!_settings.Rebind(ControlAction.Jump, Key.E) || GameSettings.CurrentBindings.KeyOf(ControlAction.Use) != Key.Space)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: Jump onto E did not swap with Use");
+            }
+            yield return Wait(0.3f);
+            yield return _capture.Shot("settings-rebind-swap");
+            SettingsPress(SettingsView.ResetId);
+            _settings.ScrollTo(0f);
+            _settings.ShowPage(SettingsPage.Comfort);
+            yield return Wait(0.3f);
+            yield return _capture.Shot("settings-comfort");
+            GameSettings live = GameSettings.Current.Clone();
+            live.UiScale = 1.25f;
+            live.ColourBlindRings = true;
+            GameSettings.Use(live);
+            yield return Wait(0.5f);
+            yield return _capture.Shot("settings-comfort-live");
+            SettingsPress(SettingsView.ResetId);
+            yield return Wait(0.3f);
+            SettingsPress(SettingsView.BackId);
+            yield return Wait(0.3f);
+            if (_settings.IsOpen || _menu.CurrentPage != "Title")
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: Back did not return to the title (" + _menu.CurrentPage + ")");
+            }
+        }
+
+        /// <summary>In the tour's own shop: the settings screen over it (what Esc opens), then the world labels off and on.</summary>
+        private IEnumerator SettingsInShop()
+        {
+            if (_settings == null) yield break;
+            _settings.Open(true);
+            yield return Wait(0.5f);
+            yield return _capture.Shot("settings-in-shop");
+            SettingsPress(SettingsView.BackId);
+            yield return Wait(0.5f);
+            yield return _capture.Shot("labels-on");
+            GameSettings off = GameSettings.Current.Clone();
+            off.Labels = false;
+            GameSettings.Use(off);
+            yield return Wait(0.5f);
+            yield return _capture.Shot("labels-off");
+            GameSettings on = GameSettings.Current.Clone();
+            on.Labels = true;
+            GameSettings.Use(on);
+        }
+
+        private void SettingsPress(string id)
+        {
+            if (!_settings.Press(id))
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: no settings button '" + id + "'");
+            }
         }
 
         // ---- The host: kicks the tour player ----

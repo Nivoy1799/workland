@@ -28,6 +28,7 @@ namespace Worktown.Game.Art
         public const float GriddleLift = 0.16f;
         private float _sideOffset = SideOffset;
         private int _shownMode = -1;
+        private int _shownPalette = -1; // spec 048: RingPalette.Version of the built mesh
         private float _lift;
         private float _side = 1f;
 
@@ -165,7 +166,7 @@ namespace Worktown.Game.Art
 
             int progress = _vessel.HeatProgress.Value;
             int mode = _vessel.Kind == VesselKind.Griddle ? _vessel.Mode.Value : 0;
-            if (progress != _shownProgress || zone != _shownZone || mode != _shownMode) Rebuild(progress, zone, mode);
+            if (progress != _shownProgress || zone != _shownZone || mode != _shownMode || _shownPalette != RingPalette.Version) Rebuild(progress, zone, mode);
             Vector3 ringScreen = cam.WorldToScreenPoint(centre);
             _screenInFront = ringScreen.z > 0f;
             float halfPixels = HeatRingRules.RingPixels * 0.5f;
@@ -185,6 +186,7 @@ namespace Worktown.Game.Art
             _shownProgress = progress;
             _shownZone = zone;
             _shownMode = mode;
+            _shownPalette = RingPalette.Version;
             if (_vessel.Kind == VesselKind.Griddle)
             {
                 // Spec 030: one half per side: the down side from the heat bytes, the up side from the mode byte.

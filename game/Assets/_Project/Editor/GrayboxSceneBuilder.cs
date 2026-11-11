@@ -3599,6 +3599,10 @@ namespace Worktown.Game.Editor
             var lobby = go.AddComponent<LobbyView>(); // spec 047: Tab, who is in the shop
             SetField(lobby, "_bootstrap", bootstrap);
             SetField(lobby, "_style", style);
+            go.AddComponent<Worktown.Game.Settings.SettingsApplier>(); // spec 048: loads and applies the player's settings (the UI scale on this panel)
+            var settings = go.AddComponent<SettingsView>(); // spec 048: the settings screen (title screen, Esc)
+            SetField(settings, "_bootstrap", bootstrap);
+            SetField(settings, "_style", style);
         }
 
         /// <summary>

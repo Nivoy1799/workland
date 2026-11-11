@@ -35,18 +35,8 @@ namespace Worktown.Game.Art
         public static readonly Color PerfectMark = Palette.Mustard;
 
         /// <summary>The fill's colour: Cream while cooking, Sage when good, Mustard when perfect, Terracotta overdone,
-        /// Brick burnt.</summary>
-        public static Color FillColor(HeatZone zone)
-        {
-            switch (zone)
-            {
-                case HeatZone.Good: return Palette.Sage;
-                case HeatZone.Perfect: return Palette.Mustard;
-                case HeatZone.Overdone: return Palette.Terracotta;
-                case HeatZone.Burnt: return Palette.Brick;
-                default: return Palette.Cream;
-            }
-        }
+        /// Brick burnt (spec 048: from <see cref="RingPalette.Current"/>, the colour-blind set when the setting is on).</summary>
+        public static Color FillColor(HeatZone zone) => RingPalette.Current.Fill(zone);
 
         /// <summary>
         /// Shown while something is on the heat (zone not None), not carried, and the vessel stands on a burner that is on
@@ -92,8 +82,8 @@ namespace Worktown.Game.Art
             triangles.Clear();
             float p = Mathf.Clamp01(float.IsNaN(progress01) ? 0f : progress01);
             Arc(0f, 1f, TrackInner, TrackOuter, Track, vertices, colors, triangles);
-            Arc(HeatZoneRules.GoodShare, HeatZoneRules.PerfectShare, MarkInner, MarkOuter, GoodMark, vertices, colors, triangles);
-            Arc(HeatZoneRules.PerfectShare, 1f, MarkInner, MarkOuter, PerfectMark, vertices, colors, triangles);
+            Arc(HeatZoneRules.GoodShare, HeatZoneRules.PerfectShare, MarkInner, MarkOuter, RingPalette.Current.Good, vertices, colors, triangles);
+            Arc(HeatZoneRules.PerfectShare, 1f, MarkInner, MarkOuter, RingPalette.Current.Perfect, vertices, colors, triangles);
             if (p > 0f) Arc(0f, p, FillInner, FillOuter, FillColor(zone), vertices, colors, triangles);
         }
 
@@ -115,11 +105,11 @@ namespace Worktown.Game.Art
             Arc(0f, 1f, TrackInner, TrackOuter, Track, vertices, colors, triangles);
             float g = HeatZoneRules.GoodShare * 0.5f, p = HeatZoneRules.PerfectShare * 0.5f;
             // Side 2, right: shares 0..0.5 clockwise from the top.
-            Arc(g, p, MarkInner, MarkOuter, GoodMark, vertices, colors, triangles);
-            Arc(p, 0.5f - HalfGap, MarkInner, MarkOuter, PerfectMark, vertices, colors, triangles);
+            Arc(g, p, MarkInner, MarkOuter, RingPalette.Current.Good, vertices, colors, triangles);
+            Arc(p, 0.5f - HalfGap, MarkInner, MarkOuter, RingPalette.Current.Perfect, vertices, colors, triangles);
             // Side 1, left: mirrored, shares 1..0.5 counter-clockwise from the top.
-            Arc(1f - p, 1f - g, MarkInner, MarkOuter, GoodMark, vertices, colors, triangles);
-            Arc(0.5f + HalfGap, 1f - p, MarkInner, MarkOuter, PerfectMark, vertices, colors, triangles);
+            Arc(1f - p, 1f - g, MarkInner, MarkOuter, RingPalette.Current.Good, vertices, colors, triangles);
+            Arc(0.5f + HalfGap, 1f - p, MarkInner, MarkOuter, RingPalette.Current.Perfect, vertices, colors, triangles);
             float p1 = Mathf.Clamp01(float.IsNaN(side1Progress) ? 0f : side1Progress);
             float p2 = Mathf.Clamp01(float.IsNaN(side2Progress) ? 0f : side2Progress);
             if (p2 > 0f) Arc(HalfGap, Mathf.Max(HalfGap, 0.5f * p2 - HalfGap), FillInner, FillOuter, FillColor(side2Zone), vertices, colors, triangles);

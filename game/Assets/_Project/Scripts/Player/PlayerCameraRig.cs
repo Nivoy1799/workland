@@ -2,6 +2,7 @@ using System;
 using Unity.Cinemachine;
 using UnityEngine;
 using Worktown.Game.Net;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.Player
 {
@@ -14,9 +15,8 @@ namespace Worktown.Game.Player
     /// </summary>
     public sealed class PlayerCameraRig : MonoBehaviour
     {
-        private const float MouseSensitivity = 0.12f;   // degrees per mouse count (same in both views)
-        private const float StickSensitivity = 160f;    // degrees per second at full tilt
-        private const float ZoomStep = 0.0012f;         // radial scale per wheel count
+        // Spec 048: the mouse and stick speeds (SettingsRules.LookDegrees: sensitivity and invert Y from the settings).
+        private const float ZoomPerNotch = 0.144f;      // radial scale per wheel notch (was 0.0012 per count of a 120-count notch)
         private const int LivePriority = 20;
         private const int IdlePriority = 10;
 
@@ -36,6 +36,9 @@ namespace Worktown.Game.Player
         private Vector3 _lastEyes;
         private float _bobPhase;
         private float _bobSpeed;
+        // Spec 048: the settings last applied (the field of view), and the wheel's notch size.
+        private int _settingsVersion = -1;
+        private float _countsPerNotch;
 
         /// <summary>The view the local player looks through.</summary>
         public ViewMode Mode { get; private set; } = ViewMode.FirstPerson;
@@ -72,7 +75,9 @@ namespace Worktown.Game.Player
             _composer = _thirdPerson.GetComponent<CinemachineRotationComposer>();
             _input = input;
             _eyes = eyes;
+            _countsPerNotch = PlayerInputReader.WheelCountsPerNotch();
             ApplyFeel();
+            ApplySettings();
 
             // Start looking where the body faces.
             float yaw = followTarget.eulerAngles.y;
@@ -120,6 +125,7 @@ namespace Worktown.Game.Player
         {
             if (_input == null) return;
             ApplyFeel();
+            ApplySettings();
             UpdateHeadBob();
             Vector2 look;
             float zoom;
@@ -136,10 +142,8 @@ namespace Worktown.Game.Player
 #endif
             {
                 if (_input.ConsumeToggleView()) SetMode(ViewRules.Toggle(Mode), keepLook: true, save: true);
-                look = _input.Look;
-                if (_input.IsGamepadLook) look *= StickSensitivity * Time.deltaTime;
-                else look *= MouseSensitivity;
-                zoom = _input.Zoom;
+                look = SettingsRules.LookDegrees(_input.Look, _input.IsGamepadLook, Time.deltaTime, GameSettings.Current);
+                zoom = _countsPerNotch > 0f ? _input.Zoom / _countsPerNotch : 0f; // in notches
             }
 
             if (Mode == ViewMode.FirstPerson)
@@ -155,7 +159,7 @@ namespace Worktown.Game.Player
             _orbit.VerticalAxis.Value = Mathf.Clamp(_orbit.VerticalAxis.Value - look.y,
                 _orbit.VerticalAxis.Range.x, _orbit.VerticalAxis.Range.y);
             // The wheel zooms only in third person.
-            _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - zoom * ZoomStep,
+            _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - zoom * ZoomPerNotch,
                 _orbit.RadialAxis.Range.x, _orbit.RadialAxis.Range.y);
         }
 
@@ -181,12 +185,33 @@ namespace Worktown.Game.Player
                 _composer.TargetOffset = new Vector3(0f, feel.ThirdPersonHeight, 0f);
                 _composer.Damping = Vector2.one * feel.ComposerDamping;
             }
-            if (feel.HeadBob && _bob == null && _firstPerson != null)
+            if (HeadBobOn(feel) && _bob == null && _firstPerson != null)
             {
                 _bob = _firstPerson.GetComponent<CinemachineCameraOffset>();
                 if (_bob == null) _bob = _firstPerson.gameObject.AddComponent<CinemachineCameraOffset>();
             }
         }
+
+        /// <summary>
+        /// Spec 048: the field of view from the settings (first person 70..100, third person 10 degrees narrower), on bind and whenever
+        /// the settings change; the head-bob offset is made once head bob is turned on.
+        /// </summary>
+        private void ApplySettings()
+        {
+            if (_settingsVersion == GameSettings.Version) return;
+            _settingsVersion = GameSettings.Version;
+            GameSettings settings = GameSettings.Current;
+            if (_firstPerson != null) _firstPerson.Lens.FieldOfView = SettingsRules.FirstPersonFov(settings.FieldOfView);
+            if (_thirdPerson != null) _thirdPerson.Lens.FieldOfView = SettingsRules.ThirdPersonFov(settings.FieldOfView);
+            if (HeadBobOn(FeelSettings.Current) && _bob == null && _firstPerson != null)
+            {
+                _bob = _firstPerson.GetComponent<CinemachineCameraOffset>();
+                if (_bob == null) _bob = _firstPerson.gameObject.AddComponent<CinemachineCameraOffset>();
+            }
+        }
+
+        /// <summary>Spec 048: head bob is the player's setting (off by default); the F2 feel panel's switch (development builds) as well.</summary>
+        private static bool HeadBobOn(FeelSettings feel) => GameSettings.Current.HeadBob || (feel != null && feel.HeadBob);
 
         /// <summary>Spec 027b, docs/feel.md 5: an optional, very soft first-person head bob (off by default), one dip per
         /// step at the walking cadence.</summary>
@@ -203,7 +228,7 @@ namespace Worktown.Game.Player
             _bobSpeed = CharacterAnimRules.SmoothSpeed(_bobSpeed, speed, dt);
             _bobPhase += dt * Mathf.PI * CharacterAnimRules.TargetCadence(_bobSpeed);
             float strength = Mathf.Clamp01(_bobSpeed / MovementRules.WalkSpeed);
-            bool on = feel.HeadBob && IsFirstPerson && _bobSpeed > CharacterAnimRules.WalkStopSpeed;
+            bool on = HeadBobOn(feel) && IsFirstPerson && _bobSpeed > CharacterAnimRules.WalkStopSpeed;
             _bob.Offset = on ? new Vector3(0f, -feel.HeadBobAmount * strength * Mathf.Abs(Mathf.Sin(_bobPhase)), 0f) : Vector3.zero;
         }
 

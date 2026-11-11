@@ -20,6 +20,7 @@ namespace Worktown.Game.Npc
         private Mesh _mesh;
         private Material _material;
         private int _shownByte = -1;
+        private int _shownPalette = -1; // spec 048: RingPalette.Version of the built mesh
         private readonly List<Vector3> _vertices = new List<Vector3>();
         private readonly List<Color> _colors = new List<Color>();
         private readonly List<int> _triangles = new List<int>();
@@ -66,9 +67,10 @@ namespace Worktown.Game.Npc
             if (!show) return;
             byte left = _customer.Patience.Value;
             float share = GuestPatience.FromByte(left);
-            if (left != _shownByte)
+            if (left != _shownByte || _shownPalette != RingPalette.Version)
             {
                 _shownByte = left;
+                _shownPalette = RingPalette.Version;
                 PatienceRingRules.Build(share, _vertices, _colors, _triangles);
                 HeatRingRules.ToVertexColors(_colors, QualitySettings.activeColorSpace == ColorSpace.Linear);
                 _mesh.Clear();

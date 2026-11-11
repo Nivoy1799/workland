@@ -5,7 +5,8 @@
         "Worktown.Game",
         "Worktown.Sim",
         "FishNet.Runtime",
-        "GameKit.Dependencies"
+        "GameKit.Dependencies",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

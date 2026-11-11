@@ -62,6 +62,14 @@ namespace Worktown.Game.Player
         }
 
         /// <summary>
+        /// Spec 048: whether a label of this kind shows under the settings' labels switch. Off (the spec 040 test: can you tell
+        /// everything apart by its look?) hides the names: station and crate signs and item and cookware labels. Orders, the ticket
+        /// rail and the stove buttons still show; they are information, not names.
+        /// </summary>
+        public static bool ShownWithLabels(LabelKind kind, bool labelsOn) =>
+            labelsOn || (kind != LabelKind.Sign && kind != LabelKind.Item);
+
+        /// <summary>
         /// Whether a label shows at all. <paramref name="facingDot"/> is only used by one-sided kinds;
         /// <paramref name="aimed"/> is the aimed item, <paramref name="held"/> an item the local player carries.
         /// </summary>

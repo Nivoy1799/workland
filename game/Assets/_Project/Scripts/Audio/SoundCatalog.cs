@@ -28,8 +28,12 @@ namespace Worktown.Game.Audio
             return clip != null;
         }
 
-        /// <summary>Per-key gain on top of the master volume (loops quieter than one-shots).</summary>
-        public static float GainOf(SoundKey key)
+        /// <summary>Per-key gain on top of the master volume: <see cref="BaseGainOf"/> times the player's volume of the key's group
+        /// (spec 048, <see cref="AudioMix"/>; 1 by default). The player's master volume is the AudioListener's.</summary>
+        public static float GainOf(SoundKey key) => BaseGainOf(key) * AudioMix.Of(SoundRules.CategoryOf(key));
+
+        /// <summary>The mix's own per-key gain (loops quieter than one-shots).</summary>
+        public static float BaseGainOf(SoundKey key)
         {
             switch (key)
             {

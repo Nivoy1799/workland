@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.Player
 {
@@ -7,6 +8,9 @@ namespace Worktown.Game.Player
     /// Owner-only input from the project's default <c>Player</c> action map (spec 010): Move, Look,
     /// Sprint, Crouch. Keyboard, mouse and gamepad come with the template bindings.
     /// Action-style mouse: cursor locked while playing, Esc or Alt frees it, a click locks it again.
+    /// Spec 048: the keys and gamepad buttons come from the player's bindings (Settings.GameInput): the keyboard walks with its four
+    /// bound keys and the arrows, the Move action keeps only its gamepad stick; run, sneak, jump and the view switch read their
+    /// bound key or button. Look stays the action's (mouse delta, right stick).
     /// </summary>
     public sealed class PlayerInputReader : MonoBehaviour
     {
@@ -14,9 +18,6 @@ namespace Worktown.Game.Player
 
         private InputAction _move;
         private InputAction _look;
-        private InputAction _sprint;
-        private InputAction _crouch;
-        private InputAction _jump;
         private bool _active;
         private bool _crouchToggled;
         private bool _jumpPressed;
@@ -26,8 +27,8 @@ namespace Worktown.Game.Player
         /// <summary>Spec 011: a menu or banner is open, so the cursor stays free and clicks go to the UI.</summary>
         public bool IsUiOpen => _uiOpenCount > 0;
 
-        public Vector2 Move => _active && !IsUiOpen ? _move.ReadValue<Vector2>() : Vector2.zero;
-        public bool Sprint => _active && _sprint.IsPressed();
+        public Vector2 Move => _active && !IsUiOpen ? Vector2.ClampMagnitude(_move.ReadValue<Vector2>() + GameInput.KeyboardMove(), 1f) : Vector2.zero;
+        public bool Sprint => _active && GameInput.Held(ControlAction.Sprint);
         /// <summary>Crouch toggles on each press (C / gamepad east).</summary>
         public bool Crouch => _active && _crouchToggled;
         /// <summary>Spec 012: true while the emote wheel uses the mouse, so the camera stays still.</summary>
@@ -39,6 +40,12 @@ namespace Worktown.Game.Player
         /// <summary>Mouse wheel this frame (positive = rolled away): the zoom in third person; spec 041: the turn in first person
         /// (WheelSteps, read by the PickupInteractor).</summary>
         public float Zoom => _active && Mouse.current != null ? Mouse.current.scroll.ReadValue().y : 0f;
+
+        /// <summary>Spec 048 (041 review): the wheel counts of one notch under the Input System's scroll setting (WheelSteps.CountsPerNotch).
+        /// Main thread only.</summary>
+        public static float WheelCountsPerNotch() => WheelSteps.CountsPerNotch(
+            InputSystem.settings == null || InputSystem.settings.scrollDeltaBehavior == InputSettings.ScrollDeltaBehavior.UniformAcrossAllPlatforms,
+            Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsEditor);
 
         /// <summary>True once per Jump press (Space / gamepad south); the next call returns false
         /// until the button is pressed again. Read once per network tick.</summary>
@@ -56,11 +63,8 @@ namespace Worktown.Game.Player
             bool pressed = _togglePressed;
             _togglePressed = false;
             if (!_active || !pressed || IsUiOpen || SuppressLook) return false;
-            Keyboard keyboard = Keyboard.current;
-            if (keyboard != null && (keyboard.tKey.isPressed || keyboard.gKey.isPressed)) return false;
-            Gamepad gamepad = Gamepad.current;
-            if (gamepad != null && gamepad.leftShoulder.isPressed) return false;
-            return true;
+            // Spec 048: quick chat and the emote wheel by their bound keys and buttons (T, G, LB).
+            return !GameInput.Held(ControlAction.QuickChat) && !GameInput.Held(ControlAction.EmoteWheel);
         }
 
         /// <summary>Spec 011: menus call this when they open (true) and close (false).</summary>
@@ -78,9 +82,8 @@ namespace Worktown.Game.Player
             InputActionMap map = _actions.FindActionMap("Player", true);
             _move = map.FindAction("Move", true);
             _look = map.FindAction("Look", true);
-            _sprint = map.FindAction("Sprint", true);
-            _crouch = map.FindAction("Crouch", true);
-            _jump = map.FindAction("Jump", true);
+            // Spec 048: the keyboard walks by the bound keys (GameInput.KeyboardMove); the action keeps its gamepad stick only.
+            _move.bindingMask = InputBinding.MaskByGroup("Gamepad");
             map.Enable();
             _active = true;
             if (!IsUiOpen) LockCursor(true);
@@ -107,14 +110,11 @@ namespace Worktown.Game.Player
         private void Update()
         {
             if (!_active) return;
-            if (_crouch.WasPressedThisFrame()) _crouchToggled = !_crouchToggled;
-            if (_jump.WasPressedThisFrame()) _jumpPressed = true;
+            if (GameInput.Pressed(ControlAction.Crouch)) _crouchToggled = !_crouchToggled;
+            if (GameInput.Pressed(ControlAction.Jump)) _jumpPressed = true;
+            if (GameInput.Pressed(ControlAction.ToggleView)) _togglePressed = true;
 
             Keyboard keyboard = Keyboard.current;
-            Gamepad gamepad = Gamepad.current;
-            if ((keyboard != null && keyboard.vKey.wasPressedThisFrame)
-                || (gamepad != null && gamepad.rightStickButton.wasPressedThisFrame))
-                _togglePressed = true;
 
             if (keyboard != null && (keyboard.escapeKey.wasPressedThisFrame || keyboard.leftAltKey.wasPressedThisFrame))
                 LockCursor(false);

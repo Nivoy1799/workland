@@ -147,5 +147,24 @@ namespace Worktown.Game.Audio
                 default: return SoundKey.PlaceWood;
             }
         }
+
+        /// <summary>Spec 048: the volume group of a sound (the settings' Effects, Ambience and UI sliders).</summary>
+        public static SoundCategory CategoryOf(SoundKey key)
+        {
+            switch (key)
+            {
+                case SoundKey.Fryer:
+                case SoundKey.MotorHum:
+                    return SoundCategory.Ambience;
+                case SoundKey.Nope:
+                case SoundKey.Perfect:
+                case SoundKey.Warning:
+                case SoundKey.Burnt:
+                case SoundKey.Coin:
+                    return SoundCategory.Ui;
+                default:
+                    return SoundCategory.Effects;
+            }
+        }
     }
 }

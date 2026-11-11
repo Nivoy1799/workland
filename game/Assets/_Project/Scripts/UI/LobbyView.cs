@@ -1,10 +1,10 @@
 using FishNet.Managing;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Player;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.UI
 {
@@ -104,8 +104,7 @@ namespace Worktown.Game.UI
                 _subscribed.RosterChanged += MarkDirty;
             }
             bool inGame = _bootstrap.Flow.State == JoinState.InGame;
-            Keyboard keyboard = Keyboard.current;
-            if (inGame && keyboard != null && keyboard.tabKey.wasPressedThisFrame) SetOpen(!_open);
+            if (inGame && GameInput.Pressed(ControlAction.Players)) SetOpen(!_open); // spec 048: the bound key (Tab)
             if (!inGame && _open) SetOpen(false);
             bool visible = _open && inGame;
             _box.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;

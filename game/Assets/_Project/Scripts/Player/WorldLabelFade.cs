@@ -4,6 +4,7 @@ using Worktown.Game.Art;
 using Worktown.Game.Cooking;
 using Worktown.Game.Net;
 using Worktown.Game.Npc;
+using Worktown.Game.Settings;
 using Worktown.Game.UI;
 
 namespace Worktown.Game.Player
@@ -156,6 +157,7 @@ namespace Worktown.Game.Player
                     ? Vector3.Dot(-entry.Transform.forward, -to / distance) : 1f;
                 float angle = LabelRules.AngleFromCentre(view.forward, to);
                 bool visible = LabelRules.IsVisible(entry.Kind, distance, facing, angle, firstPerson, aimed, held);
+                if (visible && !LabelRules.ShownWithLabels(entry.Kind, GameSettings.Current.Labels)) visible = false; // spec 048
                 float alpha = 1f;
                 if (visible && entry.Kind == LabelKind.Sign && firstPerson)
                 {
