@@ -70,7 +70,8 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-29. **Art direction v2, from your Blender session** (docs/art-direction-v2.md at a7ce5cd; it goes with question 28).
+29. **Art direction v2, from your Blender session** (the Blender session reports that you confirmed S3, P1 and wear
+    following the revival there; say "yes" here and I fold it into docs/art-direction.md) (docs/art-direction-v2.md at a7ce5cd; it goes with question 28).
     When approved, it replaces the look sections of docs/art-direction.md. Scale (D29), characters (D30) and motion
     (D31) stay. Its proposals:
     - **shapes S3:** soft inside, streamline outside;
@@ -82,38 +83,11 @@ every question has a default, and work continues on other items until you answer
 
     Default: approve with S3, P1 and wear following the revival. You can answer here or in the Blender session; I
     merge it together with the town plan.
-28. **Haven Nine town plan v1, from your Blender session** (branch spec/046-style-lab at a7ce5cd, docs/town-plan.md and
-    docs/town-story.md; pictures: style lab round 8). The town is a utopia under a glass Dome that has declined. You
-    start with a cart and poor potatoes, and every good meal brings a district back: four levels, from grey to
-    thriving, that never go back. Its first package (W1: decisions and docs) needs your approval before anything is
-    built. I checked it against main:
-    - **Pillar 5 changes** from "peaceful, no crime" to "peaceful, not perfect". The Low Ring has betting halls and
-      dream booths as world content only, never a player loop.
-      - Note for the Steam age rating: depicting gambling can raise the rating even without a playable gamble.
-      - Default: approve as written, world content only.
-    - **The Low Ring look** is fixed already. Commit 146fd33 says "plain concrete service ducts and vent haze, never
-      steampunk".
-    - **The setting.** This replaces the clean-utopia framing of docs/setting.md and answers its "too clean heaven"
-      question. Money option C (basics free, grey printer food) still fits.
-    - **Revival feeds the economy** (+0/10/20/30 % footfall per level). That changes how fast the climb goes, so W3
-      is tuned inside the climb simulation (052/052b).
-    - **Clashes to tidy at merge:**
-      - the spec number 046 is used twice (I renumber the style-lab spec);
-      - W2 (the town model) overlaps the draft 050 (street life) and the districts in the climb simulation;
-      - W5 (the Haven Nine graybox) should come after 062a, the kitchen as data.
-    - **Its own 5 questions**, with defaults:
-      1. leave the founders unnamed for now;
-      2. gambling only in the world;
-      3. the storm stays a rumour;
-      4. the Smoke Years appear as museum and jokes only;
-      5. footfall +0/10/20/30 %, tuned in the simulation.
-    - **Proposed order:** W1 (docs, now), then 062a and 057 as planned, then W2/W3/W4 in /sim, W5/W6/W7 in the game,
-      and W8 (the story texts, offline) alongside.
-
-    Say "approve the town plan" (with any changes), and I merge W1 and turn W2-W8 into specs.
-27. **Spec 037 asked for "rating unlocks more menu items over the days"**, but D34 and D37 start the food corner with
-    exactly one dish. Default: no rating unlocks in the corner; new dishes come with stage 2 (spec 057, 4 dishes) and
-    later stages.
+27. **Do good reviews unlock extra dishes?** The old spec 037 said: "the better your shop's rating, the more dishes you
+    may put on the menu over the days". But the food corner (stage 1) has exactly one dish, fries, and new dishes come
+    with the next stage (spec 057: 4 dishes in your first restaurant). So the question is how new dishes arrive:
+    - **A (default):** only with the stages. Stage 1 has fries, stage 2 adds 4 dishes, and so on.
+    - **B:** within a stage, too. Good reviews unlock an extra dish before you move up.
 22. **What the climb simulation found (spec 052, merged).** With 4 and 16 players the climb works: stage 5 after about
     19-20 h, inside the targets. Stage 1 to 2 takes about 1.2 h for every crew size. Four design problems remain:
     1. **A solo player gets stuck in stage 2.** One person cannot serve the guests of a full menu: about 156 actions a
@@ -237,6 +211,9 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11 night, question 28 (town plan):** approved "for now, a good starting point" (D41-D47), with the plan's
+  defaults for its own open questions; your framing (climate change, vegan out of need, the collapse, exploring outside
+  later) is in docs/town-story.md. Question 23 reversed: players block each other (D48, spec 054b).
 - **2026-11-11, question 8/24 (crash on quit):** you also see crashes (FindTheNeedle too) and suspect the Intel
   13th/14th gen bug. Claude checked this PC (read-only): i7-13700K (affected family), MSI MPG Z690 FORCE WIFI with
   BIOS A.K0 (2024-10-01), microcode **0x12B** (not the newest 0x12F), RAM 2x32 GB DDR5 at **6600 (XMP)**, above

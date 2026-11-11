@@ -1,0 +1,438 @@
+<title>Worktown Canopy and Seasons</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Round 7 sheet: the same planner's sheet as round 6. Answers first, then the Canopy, the seasons, the story, the Wreck. */
+:root {
+  --bg: #EDF0EA;
+  --surface: #F8FAF6;
+  --ink: #1F2A27;
+  --muted: #5B6964;
+  --line: #CBD3CC;
+  --accent: #C9761F;
+  --accent-soft: #F3DDBF;
+  --good: #2F6E5E;
+  --spring: #D9789A;
+  --summer: #3F7F4A;
+  --autumn: #C8553D;
+  --winter: #4E6E8E;
+  --d-node: #FFFFFF;
+  --d-stroke: #2B3532;
+  --d-arrow: #7A8A84;
+  --d-water: #5E97A8;
+  --d-leaf: #C9761F;
+  --d-soil: #7A5638;
+  --badge-bg: #F3E9D2;
+  --badge-ink: #2F6E5E;
+  --badge-accent: #C8553D;
+  --font-display: "Righteous", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+    --accent: #E9A64A; --accent-soft: #3A2E1E; --good: #8CC5AC;
+    --spring: #EFA3BE; --summer: #8CC58F; --autumn: #E98A6F; --winter: #9DB8D4;
+    --d-node: #232D2A; --d-stroke: #C9D3CE; --d-arrow: #7F8F89; --d-water: #8CC1CF; --d-leaf: #E9A64A; --d-soil: #C49A72;
+    --badge-bg: #2A2620; --badge-ink: #8CC5AC; --badge-accent: #E98A6F;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+  --accent: #E9A64A; --accent-soft: #3A2E1E; --good: #8CC5AC;
+  --spring: #EFA3BE; --summer: #8CC58F; --autumn: #E98A6F; --winter: #9DB8D4;
+  --d-node: #232D2A; --d-stroke: #C9D3CE; --d-arrow: #7F8F89; --d-water: #8CC1CF; --d-leaf: #E9A64A; --d-soil: #C49A72;
+  --badge-bg: #2A2620; --badge-ink: #8CC5AC; --badge-accent: #E98A6F;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.05; }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.15; }
+h3 { font-size: 1.2rem; line-height: 1.2; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 14px; max-width: 72ch; }
+.lede { font-size: 1.1rem; }
+section { display: flex; flex-direction: column; gap: 20px; }
+.sec-head { display: flex; flex-direction: column; gap: 8px; max-width: 72ch; }
+.tag { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.q { white-space: nowrap; font-weight: 600; }
+td.said { font-style: italic; color: var(--muted); }
+.ok { color: var(--good); font-weight: 600; }
+
+.frame { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; align-items: center; }
+.frame.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.frame.flip figure { order: 2; }
+.txt { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.txt ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; color: var(--muted); }
+figure { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+figcaption { font-size: 0.9rem; color: var(--muted); }
+figure button { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; border-radius: 10px; overflow: hidden; width: 100%; }
+figure button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+figure img { display: block; width: 100%; max-width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; }
+
+.loop { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
+.loop svg { display: block; width: 100%; min-width: 560px; height: auto; font-family: var(--font-body); }
+.d-node { fill: var(--d-node); stroke: var(--d-stroke); stroke-width: 1.4; }
+.d-t { fill: var(--ink); font-size: 13px; font-weight: 600; text-anchor: middle; }
+.d-s { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+.d-arrow { fill: none; stroke: var(--d-arrow); stroke-width: 2; }
+.d-water { stroke: var(--d-water); }
+.d-leaf { stroke: var(--d-leaf); }
+.d-soil { stroke: var(--d-soil); }
+.d-head { fill: var(--d-arrow); }
+.d-lbl { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); }
+
+.seasons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.season h3 { display: flex; align-items: center; gap: 10px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.season p { font-size: 0.95rem; color: var(--muted); }
+
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-width: 90ch; }
+.timeline li { display: grid; grid-template-columns: 10.5rem minmax(0, 1fr); gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.timeline .when { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); }
+.timeline .where { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+.lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.lines blockquote { margin: 0; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 14px; font-style: italic; }
+
+.names { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.name-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; }
+.name-card.pick { border: 2px solid var(--accent); }
+.name-card svg { width: 150px; height: 150px; }
+.name-card p { font-size: 0.92rem; color: var(--muted); }
+.b-bg { fill: var(--badge-bg); stroke: var(--badge-ink); stroke-width: 3; }
+.b-ring { fill: none; stroke: var(--badge-ink); stroke-width: 1.2; }
+.b-ink { fill: var(--badge-ink); }
+.b-acc { fill: var(--badge-accent); }
+.b-line { fill: none; stroke: var(--badge-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.b-txt { fill: var(--badge-ink); font-family: var(--font-display); font-size: 13px; letter-spacing: 0.08em; }
+.b-yr { fill: var(--badge-accent); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; }
+
+.wrecks { display: grid; gap: 36px; }
+.pickline { display: inline-block; font-family: var(--font-mono); font-size: 0.75rem; color: var(--good); border: 1px solid var(--good); border-radius: 999px; padding: 2px 10px; width: fit-content; }
+.callout { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; max-width: 80ch; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; max-width: 80ch; display: flex; flex-direction: column; gap: 8px; }
+.panel ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
+.qs { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 80ch; }
+
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1600px); }
+dialog::backdrop { background: rgba(10, 14, 13, 0.85); }
+dialog img { display: block; max-width: 100%; max-height: 86vh; width: auto; height: auto; border-radius: 8px; }
+dialog p { color: #E6ECE8; font-family: var(--font-mono); font-size: 0.85rem; padding-top: 8px; }
+@media (max-width: 900px) {
+  .frame, .frame.flip, .seasons, .names { grid-template-columns: 1fr; }
+  .frame.flip figure { order: 0; }
+  .timeline li { grid-template-columns: 1fr; gap: 4px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  figure img { transition: transform 0.3s ease; }
+  figure button:hover img { transform: scale(1.02); }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Spec 046 · Round 7 · your answers to spec 051</span>
+    <h1>A roof for the rain, and a reason for the town</h1>
+    <p class="lede">Your shield idea became the Canopy: a glass roof over the town core that keeps off the rain, catches the water and the autumn leaves, and turns them into soil for the greenhouses. The four seasons run under and around it. The town got a story, and that story picks the Wreck and names the town.</p>
+    <p class="muted">Concept frames, rough on purpose. Click a picture to see it large. The design is in spec 051 and the story in docs/town-story.md; both are drafts.</p>
+  </header>
+
+  <section id="answers">
+    <div class="sec-head">
+      <span class="tag">What you said</span>
+      <h2>Your answers, and what came of them</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Question</th><th>You said</th><th>Now in the plan</th></tr></thead>
+        <tbody>
+          <tr><td class="q">1 · Day length</td><td class="said">sounds good</td><td><span class="ok">Accepted:</span> 40 real minutes per game day.</td></tr>
+          <tr><td class="q">2 · Seasons</td><td class="said">yeah, maybe a shield over the world against rain that collects everything; leaves make soil</td><td><span class="ok">Yes:</span> four seasons of 7 days each, and the Canopy (below).</td></tr>
+          <tr><td class="q">3 · The Wreck</td><td class="said">try something</td><td>Three tries in the same valley shot. The story favours the airship.</td></tr>
+          <tr><td class="q">4 · Wildbelt animals</td><td class="said">yeah lets try</td><td><span class="ok">Yes.</span> In the story they walked out of the Wreck.</td></tr>
+          <tr><td class="q">5 · Player homes</td><td class="said">yeah</td><td><span class="ok">Yes:</span> a free flat for every player in the Crew House.</td></tr>
+          <tr><td class="q">6 · Monorail</td><td class="said">good start</td><td><span class="ok">Accepted</span> as a real train you ride, as the first version.</td></tr>
+          <tr><td class="q">7 · Town name</td><td class="said">we need some identity, a backstory</td><td>A story, a founding day and three name ideas.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="canopy">
+    <div class="sec-head">
+      <span class="tag">Your shield · the Canopy</span>
+      <h2>A roof over the core, open at the sides</h2>
+      <p class="muted">A glass vault on tree-shaped columns, 40 m high at the rim and 58 m at the top, over Station Square, Main Street, Fountain Cross, the Market Hall and the middle of the Promenade. You walk in and out anywhere, because it is a roof, not a box. Its panels slide open on fine days. The locals call it "the Sail", because its lattice was copied from the Albatross's envelope.</p>
+    </div>
+    <div class="frame">
+      <figure><button type="button" data-full="r7_canopy.jpg" data-caption="The town in the rain: dry under the Canopy, wet outside"><img src="r7_canopy.jpg" alt="The whole town from the air on a rainy day: a huge shallow glass dome with a white lattice covers the town centre, rain falls everywhere around it, the towers stand on the west plateau, the lake and pier on the right, the arena in front" width="1600" height="1000"></button></figure>
+      <div class="txt">
+        <span class="tag">From the air, in the rain</span>
+        <h3>Dry inside, weather outside</h3>
+        <p>Rain falls on the whole bowl but stops on the glass. The ground outside is dark and wet, and the core under the vault stays dry.</p>
+        <ul>
+          <li>Under the Canopy, weather never closes the outdoor tables, so trade is steady.</li>
+          <li>Outside it (the lake, the homes, the meadow, the Wreck, the hill) weather counts in full.</li>
+          <li>Choosing a pitch becomes a trade-off: steady and dear under the glass, or cheaper and weather-dependent outside.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="loop" role="figure" aria-label="What the Canopy collects: rain goes to the cisterns and waters the greenhouses; leaves and kitchen scraps go to the compost works, become soil and feed the greenhouses; the greenhouses grow ingredients for the kitchens, whose scraps go back to compost.">
+      <svg viewBox="0 0 900 300" aria-hidden="true">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-head"/></marker>
+        </defs>
+        <!-- nodes -->
+        <rect class="d-node" x="20" y="40" width="160" height="62" rx="12"/>
+        <text class="d-t" x="100" y="66">The Canopy</text><text class="d-s" x="100" y="86">catches rain and leaves</text>
+        <rect class="d-node" x="250" y="10" width="160" height="62" rx="12"/>
+        <text class="d-t" x="330" y="36">Cisterns</text><text class="d-s" x="330" y="56">at the column feet</text>
+        <rect class="d-node" x="250" y="130" width="160" height="62" rx="12"/>
+        <text class="d-t" x="330" y="156">Compost Works</text><text class="d-s" x="330" y="176">leaves and scraps to soil</text>
+        <rect class="d-node" x="500" y="70" width="170" height="62" rx="12"/>
+        <text class="d-t" x="585" y="96">Greenhouse Hill</text><text class="d-s" x="585" y="116">water + soil = produce</text>
+        <rect class="d-node" x="720" y="70" width="160" height="62" rx="12"/>
+        <text class="d-t" x="800" y="96">Kitchens</text><text class="d-s" x="800" y="116">yours and the rivals'</text>
+        <!-- arrows -->
+        <path class="d-arrow d-water" d="M180,58 C215,48 225,41 248,41" marker-end="url(#ah)"/>
+        <text class="d-lbl" x="190" y="34">rain</text>
+        <path class="d-arrow d-leaf" d="M180,86 C215,110 225,150 248,158" marker-end="url(#ah)"/>
+        <text class="d-lbl" x="176" y="140">leaves, leaf chute</text>
+        <path class="d-arrow d-water" d="M410,41 C455,45 470,75 498,90" marker-end="url(#ah)"/>
+        <text class="d-lbl" x="430" y="40">water</text>
+        <path class="d-arrow d-soil" d="M410,161 C455,158 470,130 498,115" marker-end="url(#ah)"/>
+        <text class="d-lbl" x="438" y="170">soil</text>
+        <path class="d-arrow" d="M670,101 L718,101" marker-end="url(#ah)"/>
+        <text class="d-lbl" x="672" y="92">ingredients</text>
+        <path class="d-arrow d-leaf" d="M800,132 C800,250 560,262 412,180" marker-end="url(#ah)"/>
+        <text class="d-lbl" x="590" y="262">kitchen scraps (the cleaning loop, spec 035)</text>
+      </svg>
+    </div>
+    <p class="callout"><strong>What it does in /sim (proposed).</strong> The town keeps a soil stock. The more leaves and kitchen scraps go to compost, the more the greenhouses grow next season, and greenhouse ingredients get a little cheaper. It is small on purpose: a reason to care, never a chore.</p>
+
+    <div class="frame flip">
+      <figure><button type="button" data-full="r7_storm.jpg" data-caption="Main Street under the Canopy in a thunderstorm"><img src="r7_storm.jpg" alt="Main Street at dusk under the glass lattice of the Canopy during a thunderstorm: lightning hits a rod on the glass and runs across the lattice in white lines, rain streaks on the dark glass above, but the street is dry, the shops are lit and a café table is still out" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt">
+        <span class="tag">Storm · Main Street, under the glass</span>
+        <h3>The lightning hits the roof, the café stays open</h3>
+        <p>The bolt strikes a rod on the vault and runs across the lattice. Rain beats on the glass above, while the street below stays dry: no umbrellas, and the café's table is still out. A board says "storm today, canopy shut, tables open".</p>
+        <ul>
+          <li>Drones are still grounded in a storm; three wait by the flower shop.</li>
+          <li>This replaces round 6's wet Main Street. That wet look now belongs to the streets outside the Canopy.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="seasons">
+    <div class="sec-head">
+      <span class="tag">Four seasons</span>
+      <h2>One promenade, four seasons</h2>
+      <p class="muted">The same view in all four: from the Garden Promenade, under the Canopy, out past its rim to Greenhouse Hill and the dome. Each season has 7 game days (about 4.7 hours of play), its own weather mix, its own demand and its own festival banner. Seasons change the look and the demand, never the paths.</p>
+    </div>
+    <div class="seasons">
+      <figure class="season">
+        <button type="button" data-full="r7_spring.jpg" data-caption="Spring: Blossom Fair"><img src="r7_spring.jpg" alt="The promenade in spring: pink blossom trees, flower beds, petals on the paving, a food cart with guests, the glass Canopy overhead partly open, the green hill and the greenhouse dome beyond" width="1600" height="1000" loading="lazy"></button>
+        <h3><i class="dot" style="background: var(--spring)"></i>Spring</h3>
+        <p>Blossom and petals, a fresh green hill, panels partly open. Salads and greens sell, and the first garden crops arrive. Festival: the Blossom Fair.</p>
+      </figure>
+      <figure class="season">
+        <button type="button" data-full="r7_summer.jpg" data-caption="Summer: Lake Nights"><img src="r7_summer.jpg" alt="The promenade in summer: deep green trees, café parasols with guests, the Canopy wide open with only the lattice left, drones in the air, the hill bright in the sun" width="1600" height="1000" loading="lazy"></button>
+        <h3><i class="dot" style="background: var(--summer)"></i>Summer</h3>
+        <p>Deep green, parasols, the Canopy wide open with lattice shadows. Cold drinks and light dishes sell; the lake is at its best. Festival: Lake Nights.</p>
+      </figure>
+      <figure class="season">
+        <button type="button" data-full="r7_autumn.jpg" data-caption="Autumn: Landing Day, 100 years"><img src="r7_autumn.jpg" alt="The promenade in autumn: orange and red trees, leaves lying on the glass of the closed Canopy, a glass leaf chute running down at the rim, crates of squash by the food cart, the hill golden, a banner reading Landing Day 100 years" width="1600" height="1000" loading="lazy"></button>
+        <h3><i class="dot" style="background: var(--autumn)"></i>Autumn</h3>
+        <p>Leaves land on the closed glass, slide into the gutter and drop down the leaf chute into a "leaves to soil" hopper. Sweeper robots do the paths. Harvest dishes and soups sell, and produce is at its cheapest. Festival: Landing Day.</p>
+      </figure>
+      <figure class="season">
+        <button type="button" data-full="r7_winter.jpg" data-caption="Winter: Winter Lights"><img src="r7_winter.jpg" alt="The promenade in winter: bare trees with string lights, a dry street under the Canopy, snow falling beyond the rim, a snowy hill with firs and a snowman on the path" width="1600" height="1000" loading="lazy"></button>
+        <h3><i class="dot" style="background: var(--winter)"></i>Winter</h3>
+        <p>Snow falls beyond the rim (and settles on the outer panels), while it stays dry and lit underneath. Bare trees carry lights, and steam rises at the cart. Hot drinks and stews sell; only greenhouse produce, a bit dearer. Festival: the Winter Lights market in the Wreck.</p>
+      </figure>
+    </div>
+  </section>
+
+  <section id="story">
+    <div class="sec-head">
+      <span class="tag">Identity</span>
+      <h2>A kitchen town that began with a crash, a cow and a stew</h2>
+      <p class="muted">Draft in docs/town-story.md. It keeps to D27 and D28: the past is only the game's own history, a named era, never real events.</p>
+    </div>
+    <ol class="timeline">
+      <li><span class="when">until ~2110</span><span><strong>The Smoke Years.</strong> The named past era: grey farm cities, animals kept for food. Told only as history and in dry jokes.<span class="where">The museum on Station Square</span></span></li>
+      <li><span class="when">2110s</span><span><strong>The Turn.</strong> Printed food and robots arrive, and the last farms close. The Ark Flights carry the freed animals and the old seed banks to open land.<span class="where">A mural in the station</span></span></li>
+      <li><span class="when">14 Sept 2122</span><span><strong>Ark Flight 9, the airship Albatross,</strong> comes down in a storm in this valley and breaks in two. Nobody is hurt. Captain Ilse Marrow's log: "Landed. Sort of."<span class="where">The Wreck at the west edge</span></span></li>
+      <li><span class="when">the first days</span><span><strong>The animals walk down the cargo ramp</strong> onto the south meadow and refuse to move on. Deer join them later.<span class="where">The Wildbelt, and a plaque at the ramp: "they walked out here"</span></span></li>
+      <li><span class="when">the first harvest</span><span><strong>The crew plants the seed library</strong> on the north slope. The cook, Rosa Vell, makes a potato and tomato stew on the galley stove: the first supper.<span class="where">Greenhouse Hill; Rosa's stove in the museum; her stew every Landing Day</span></span></li>
+      <li><span class="when">2120s–2150s</span><span><strong>The crew stays.</strong> People come from the city 42 km away for real, hand-grown food, and Main Street grows down to the lake.<span class="where">Main Street; the Road to Nowhere</span></span></li>
+      <li><span class="when">2161</span><span><strong>The Hail Summer</strong> ruins one harvest, and the town builds the Canopy with the airship's lattice.<span class="where">The Canopy and the Weather Office</span></span></li>
+      <li><span class="when">2222, now</span><span><strong>The hundredth year.</strong> This autumn is the Centennial Landing Day, with a cooking competition between the best teams: the stage 5 goal. You arrive by monorail with one dish and a cart, as Rosa started with one stove.<span class="where">Your game</span></span></li>
+    </ol>
+    <div class="lines">
+      <blockquote>"Grandma says the cows chose the town, not us."</blockquote>
+      <blockquote>"Landed. Sort of. Best thing ever written in a logbook."</blockquote>
+      <blockquote>"I have computed Rosa's stew 4,000 times. It is never as good. I do not understand." (a robot)</blockquote>
+    </div>
+
+    <div class="sec-head">
+      <h3>Three names for the town</h3>
+      <p class="muted">The game's title (O1) stays open. The town name can match it or not.</p>
+    </div>
+    <div class="names">
+      <div class="name-card pick">
+        <svg viewBox="0 0 160 160" role="img" aria-label="Seedfall badge: a sprouting seed with two wings, est. 2122">
+          <circle class="b-bg" cx="80" cy="80" r="74"/>
+          <circle class="b-ring" cx="80" cy="80" r="62"/>
+          <path class="b-line" d="M38,84 C52,66 66,70 76,80 M122,84 C108,66 94,70 84,80"/>
+          <path class="b-line" d="M44,92 C56,80 68,82 76,88 M116,92 C104,80 92,82 84,88"/>
+          <ellipse class="b-acc" cx="80" cy="96" rx="9" ry="12"/>
+          <path class="b-line" d="M80,84 C80,72 86,64 94,60 M80,78 C78,70 72,66 66,64"/>
+          <text class="b-txt" x="80" y="42" text-anchor="middle">SEEDFALL</text>
+          <text class="b-yr" x="80" y="128" text-anchor="middle">EST. 2122</text>
+        </svg>
+        <span class="pickline">proposed</span>
+        <h3>Seedfall</h3>
+        <p>The seeds that fell from the sky. Short and easy to say in many languages, and it hints at autumn and growing.</p>
+      </div>
+      <div class="name-card">
+        <svg viewBox="0 0 160 160" role="img" aria-label="Albatross Landing badge: an airship over a hill, est. 2122">
+          <circle class="b-bg" cx="80" cy="80" r="74"/>
+          <circle class="b-ring" cx="80" cy="80" r="62"/>
+          <ellipse class="b-ink" cx="78" cy="78" rx="34" ry="11"/>
+          <path class="b-ink" d="M108,78 L122,68 L120,78 L122,88 z"/>
+          <rect class="b-acc" x="70" y="88" width="16" height="6" rx="2"/>
+          <path class="b-line" d="M28,110 C52,96 70,104 80,106 C94,100 112,96 132,110"/>
+          <text class="b-txt" x="80" y="44" text-anchor="middle">THE LANDING</text>
+          <text class="b-yr" x="80" y="130" text-anchor="middle">EST. 2122</text>
+        </svg>
+        <h3>Albatross Landing</h3>
+        <p>Names the ship; "the Landing" for short. Warm, but long.</p>
+      </div>
+      <div class="name-card">
+        <svg viewBox="0 0 160 160" role="img" aria-label="Kettlebay badge: a kettle with steam over waves, est. 2122">
+          <circle class="b-bg" cx="80" cy="80" r="74"/>
+          <circle class="b-ring" cx="80" cy="80" r="62"/>
+          <path class="b-ink" d="M56,98 C56,76 104,76 104,98 z"/>
+          <rect class="b-ink" x="74" y="72" width="12" height="5" rx="2"/>
+          <path class="b-line" d="M104,86 L116,78"/>
+          <path class="b-line" d="M68,68 C64,60 72,56 68,48 M80,66 C76,58 84,54 80,46 M92,68 C88,60 96,56 92,48"/>
+          <path class="b-line" d="M40,110 C50,104 58,116 68,110 C78,104 86,116 96,110 C106,104 114,116 122,110"/>
+          <text class="b-txt" x="80" y="38" text-anchor="middle">KETTLEBAY</text>
+          <text class="b-yr" x="80" y="132" text-anchor="middle">EST. 2122</text>
+        </svg>
+        <h3>Kettlebay</h3>
+        <p>The town sits in a bowl (a kettle) by a bay, and it is a cooking town. Playful, but it says less about the story.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="wreck">
+    <div class="sec-head">
+      <span class="tag">The Wreck · you said "try something"</span>
+      <h2>Three tries for the west edge</h2>
+      <p class="muted">Same valley, same sunset, same night market inside; only the ship changes. The camera stands further back than in round 6, so you can compare whole silhouettes. Each one ends the world in the west and becomes a stage 5 place.</p>
+    </div>
+    <div class="wrecks">
+      <div class="frame">
+        <figure><button type="button" data-full="r7_wreck_ark.jpg" data-caption="A. The Albatross, Ark Flight 9"><img src="r7_wreck_ark.jpg" alt="The broken airship Albatross across the valley at sunset, overgrown with moss and trees, a glowing market in its belly, a lit cargo hatch and ramp with ARK FLIGHT 9 written above it, and a row of glowing ports on the tail piece" width="1600" height="1000" loading="lazy"></button></figure>
+        <div class="txt">
+          <span class="pickline">proposed</span>
+          <h3>A. The Albatross, Ark Flight 9</h3>
+          <p>The airship from round 6, now with its story: "Ark Flight 9" over the lit cargo hatch and ramp, right of the market, down which the animals walked out, and the glowing seed library ports on the tail piece. At the foot of the ramp (too small to see here) are a plaque, crates and a few hens that never left. Fewer rust panels, and they now lie on the hull.</p>
+          <ul><li>Best fit: an airship comes down softly enough for people and animals to walk away, and it explains the Wildbelt and Greenhouse Hill.</li></ul>
+        </div>
+      </div>
+      <div class="frame flip">
+        <figure><button type="button" data-full="r7_wreck_plane.jpg" data-caption="B. The Pelican, a freight plane"><img src="r7_wreck_plane.jpg" alt="A huge 2100s freight plane called Pelican lying broken and tilted in the valley at sunset, its nose cargo door hinged up, one wing stub pointing at the sky and the other wing resting up the hillside, the market glowing through its side cargo door" width="1600" height="1000" loading="lazy"></button></figure>
+        <div class="txt">
+          <h3>B. The Pelican, a freight plane</h3>
+          <p>Your original idea. A 2100s heavy freight plane lying tilted on the slope, broken behind the wing. Its cargo nose is hinged up, the broken near wing points at the sky, and the far wing rests up the hillside. The market is behind the side cargo door.</p>
+          <ul><li>Good fit: the story stays the same, with a lucky belly landing on the meadow, and the cargo door becomes the ramp.</li></ul>
+        </div>
+      </div>
+      <div class="frame">
+        <figure><button type="button" data-full="r7_wreck_liner.jpg" data-caption="C. The Stella, a starliner"><img src="r7_wreck_liner.jpg" alt="A retro 2100s starliner rocket called Stella lying on its side at sunset, nose buried in the hillside, big swept tail fins, two rows of warmly lit portholes, an airstair down from the open passenger door into the market" width="1600" height="1000" loading="lazy"></button></figure>
+        <div class="txt">
+          <h3>C. The Stella, a starliner</h3>
+          <p>The most retro-future of the three: a 1950s-style rocket liner on its side, nose in the hill, fins in the air, rows of lit portholes and an airstair into the market.</p>
+          <ul><li>Weakest story fit: a rocket carrying cows needs a bigger tale (flights home from the Moon farms), and it is less cosy.</li></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="homes">
+    <div class="sec-head">
+      <span class="tag">Player homes</span>
+      <h2>A flat for every player, for free</h2>
+    </div>
+    <div class="panel">
+      <p>Basics are free in 2222, so each player gets a flat in the <strong>Crew House</strong>: 16 small flats by the Promenade, with a shared kitchen table and a roof garden.</p>
+      <ul>
+        <li>Decorate it with furniture, plants and posters bought with credits.</li>
+        <li>A wardrobe to change your look, and a mailbox for fan letters, rival challenges and the town paper.</li>
+        <li>A bed that ends your day. Proposed: the night only skips when every player is in bed.</li>
+        <li>Your door is private by default. You can open it to friends or invite one player.</li>
+        <li>Flats are part of the host's save. Later, with credits, you can move to a house of your own.</li>
+      </ul>
+      <p class="muted">No picture yet.</p>
+    </div>
+  </section>
+
+  <section id="open">
+    <div class="sec-head">
+      <span class="tag">Your call</span>
+      <h2>New open questions</h2>
+      <p class="muted">Spec 051 questions 8 to 13, then the story's own.</p>
+    </div>
+    <ol class="qs" start="8">
+      <li><strong>Season length:</strong> 7 game days per season (proposed)? Fewer means more festivals per evening of play.</li>
+      <li><strong>Canopy coverage:</strong> only the core (proposed), so the edges keep their weather, or the whole bowl?</li>
+      <li><strong>The Wreck:</strong> A, the Albatross (proposed); B, the Pelican; or C, the Stella?</li>
+      <li><strong>Town name:</strong> Seedfall (proposed), Albatross Landing, or Kettlebay?</li>
+      <li><strong>Sleeping:</strong> the night skips only when every player is in bed (proposed), or never?</li>
+      <li><strong>Compost in /sim:</strong> a small effect on greenhouse prices (proposed), or only for the look?</li>
+      <li><strong>The founders:</strong> keep the names Rosa Vell (the cook) and Ilse Marrow (the captain), with a statue and the museum?</li>
+      <li><strong>The hundredth year:</strong> start the game in it, with the Centennial Landing Day as the stage 5 goal (proposed)?</li>
+    </ol>
+  </section>
+</div>
+
+<dialog id="lightbox" aria-label="Large picture">
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-cap"></p>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById("lightbox"), dlgImg = document.getElementById("lightbox-img"), dlgCap = document.getElementById("lightbox-cap");
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-full]");
+    if (b) {
+      dlgImg.src = b.dataset.full; dlgImg.alt = b.dataset.caption; dlgCap.textContent = b.dataset.caption;
+      if (dlg.showModal) dlg.showModal();
+      return;
+    }
+    if (e.target === dlg || e.target === dlgImg) dlg.close();
+  });
+})();
+</script>

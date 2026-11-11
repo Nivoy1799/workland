@@ -1,0 +1,379 @@
+<title>Haven Nine Borders</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Round 8 sheet: the planner's sheet from rounds 6 and 7, with a second, soot-dark accent for the Low Ring. */
+:root {
+  --bg: #ECEEEA;
+  --surface: #F8F9F6;
+  --ink: #1E2624;
+  --muted: #59655F;
+  --line: #C9D0CA;
+  --accent: #C9761F;
+  --accent-soft: #F3DDBF;
+  --good: #2F6E5E;
+  --soot: #2A2725;
+  --soot-ink: #F1E7D6;
+  --sodium: #E98A2B;
+  --neon: #C8507A;
+  --d-ground: #DCE3D6;
+  --d-out: #C9C1B2;
+  --d-storm: #3A3F48;
+  --d-glass: #6FA3B0;
+  --d-stroke: #2B3532;
+  --d-lake: #8FBCC7;
+  --d-low: #4A4440;
+  --font-display: "Righteous", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121716; --surface: #1A2120; --ink: #E5EAE7; --muted: #98A49F; --line: #2D3836;
+    --accent: #E9A64A; --accent-soft: #392D1D; --good: #8CC5AC;
+    --soot: #0B0D0D; --soot-ink: #F1E7D6; --sodium: #F2A04A; --neon: #EE86AE;
+    --d-ground: #26302C; --d-out: #3A3630; --d-storm: #8C94A0; --d-glass: #8CC1CF; --d-stroke: #C9D3CE;
+    --d-lake: #3E6A75; --d-low: #6D655E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121716; --surface: #1A2120; --ink: #E5EAE7; --muted: #98A49F; --line: #2D3836;
+  --accent: #E9A64A; --accent-soft: #392D1D; --good: #8CC5AC;
+  --soot: #0B0D0D; --soot-ink: #F1E7D6; --sodium: #F2A04A; --neon: #EE86AE;
+  --d-ground: #26302C; --d-out: #3A3630; --d-storm: #8C94A0; --d-glass: #8CC1CF; --d-stroke: #C9D3CE;
+  --d-lake: #3E6A75; --d-low: #6D655E;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px; margin: 0;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.05; }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.15; }
+h3 { font-size: 1.2rem; line-height: 1.2; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 14px; max-width: 72ch; }
+.lede { font-size: 1.1rem; }
+section { display: flex; flex-direction: column; gap: 20px; }
+.sec-head { display: flex; flex-direction: column; gap: 8px; max-width: 72ch; }
+.tag { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.oneline { font-family: var(--font-display); font-size: clamp(1.3rem, 2.6vw, 1.75rem); line-height: 1.25; max-width: 40ch; border-left: 5px solid var(--accent); padding-left: 16px; text-wrap: balance; }
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.q { white-space: nowrap; font-weight: 600; }
+td.said { font-style: italic; color: var(--muted); }
+.ok { color: var(--good); font-weight: 600; }
+
+.frame { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; align-items: center; }
+.frame.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.frame.flip figure { order: 2; }
+.txt { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.txt ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; color: var(--muted); }
+figure { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+figcaption { font-size: 0.9rem; color: var(--muted); }
+figure button { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; border-radius: 10px; overflow: hidden; width: 100%; }
+figure button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+figure img { display: block; width: 100%; max-width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; }
+
+.plan { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
+.plan svg { display: block; width: 100%; min-width: 620px; height: auto; font-family: var(--font-body); }
+.p-out { fill: var(--d-out); }
+.p-storm { fill: none; stroke: var(--d-storm); stroke-width: 34; stroke-dasharray: 2 6; opacity: 0.85; }
+.p-ground { fill: var(--d-ground); }
+.p-lake { fill: var(--d-lake); }
+.p-glass { fill: none; stroke: var(--d-glass); stroke-width: 4; }
+.p-low { fill: none; stroke: var(--d-low); stroke-width: 16; opacity: 0.55; }
+.p-wreck { fill: var(--d-stroke); }
+.p-pin { fill: var(--accent); }
+.p-t { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.p-s { fill: var(--muted); font-size: 11px; }
+.p-m { fill: var(--muted); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; }
+
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; max-width: 92ch; }
+.timeline li { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.timeline .when { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); }
+.timeline .where { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+.timeline li.turn { background: var(--accent-soft); border-radius: 8px; padding-inline: 10px; }
+
+.low { background: var(--soot); color: var(--soot-ink); border-radius: 16px; padding: 28px clamp(16px, 3vw, 32px); display: flex; flex-direction: column; gap: 22px; }
+.low .tag { color: var(--sodium); }
+.low .muted, .low figcaption { color: #B9AE9C; }
+.low .jobs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.low .job { border: 1px solid #4A443E; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.low .job b { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sodium); font-weight: 500; }
+.low .job span { font-size: 0.92rem; }
+.neon { font-family: var(--font-display); color: var(--neon); text-shadow: 0 0 10px var(--neon); }
+
+.lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.lines blockquote { margin: 0; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 14px; font-style: italic; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.panel ol, .panel ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; }
+.callout { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; max-width: 80ch; }
+.qs { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 80ch; }
+
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1600px); }
+dialog::backdrop { background: rgba(10, 14, 13, 0.88); }
+dialog img { display: block; max-width: 100%; max-height: 86vh; width: auto; height: auto; border-radius: 8px; }
+dialog p { color: #E6ECE8; font-family: var(--font-mono); font-size: 0.85rem; padding-top: 8px; }
+@media (max-width: 900px) {
+  .frame, .frame.flip, .pair, .low .jobs { grid-template-columns: 1fr; }
+  .frame.flip figure { order: 0; }
+  .timeline li { grid-template-columns: 1fr; gap: 4px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Style lab · round 8 · spec 046 and 051</span>
+    <h1>Haven Nine</h1>
+    <p class="lede">The town now has hard borders and a reason for them. One high glass Dome covers the whole town,
+      a black Storm Ring stands on every horizon, and each edge of the map is the same wall told a different way.
+      The town also gets its shaded side: the Low Ring.</p>
+    <p class="oneline">A lifeboat that worked too well: the walls that keep everyone safe also keep everyone in.</p>
+  </header>
+
+  <section id="answers">
+    <div class="sec-head">
+      <span class="tag">What you said</span>
+      <h2>Your answers, and what they became</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Topic</th><th>You said</th><th>Now</th></tr></thead>
+        <tbody>
+          <tr><td class="q">Borders</td><td class="said">"some form of blockade so the players can't escape the town"</td><td><span class="ok">Done:</span> the Dome wall all round, with a reason in the story, a different look at each edge.</td></tr>
+          <tr><td class="q">Backstory</td><td class="said">"Why is this town there … what changed in history"</td><td><span class="ok">Draft 2:</span> the Weather Engines, the Storm Ring, the Havens, the crash of Ark Flight 9.</td></tr>
+          <tr><td class="q">Name</td><td class="said">"Haven Nine sounds not so bad"</td><td><span class="ok">Haven Nine</span>, the ninth of twelve Havens. The Low Ring calls the Dome "the Lid".</td></tr>
+          <tr><td class="q">Roof</td><td class="said">"the whole town … organic … more up in the sky"</td><td><span class="ok">The Dome:</span> about 770 × 640 m, 250 m high, ribs like a leaf's veins.</td></tr>
+          <tr><td class="q">Wreck</td><td class="said">"I think we take A"</td><td><span class="ok">The Albatross</span>, now built right through the wall.</td></tr>
+          <tr><td class="q">Too clean</td><td class="said">"only rainbows and sunny days"</td><td><span class="ok">The Low Ring:</span> soot, sodium lamps, broken robots, betting halls, dream booths.</td></tr>
+          <tr><td class="q">Seasons</td><td class="said">"7 days … sounds good"</td><td><span class="ok">Accepted.</span> They still come in through the Dome's open panels.</td></tr>
+          <tr><td class="q">100th year</td><td class="said">"Don't like that specifically"</td><td><span class="ok">Dropped.</span> An ordinary year; Landing Day is a yearly festival.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="plan">
+    <div class="sec-head">
+      <span class="tag">The map edge</span>
+      <h2>One wall, five ways to meet it</h2>
+      <p class="muted">Plan view, north up. Everything you can walk to is inside the glass. Not to scale outside the Dome.</p>
+    </div>
+    <div class="plan">
+      <svg viewBox="0 0 760 520" role="img" aria-labelledby="plan-t plan-d">
+        <title id="plan-t">Plan of Haven Nine and its borders</title>
+        <desc id="plan-d">An oval Dome covers the town. A dashed dark ring of storm surrounds it at a distance. The Wreck crosses the wall on the west, the Wildbelt lines the south wall, the lake meets the wall on the east, the train tunnel leaves to the north. A dark band inside the wall marks the Low Ring.</desc>
+        <rect class="p-out" x="0" y="0" width="760" height="520" rx="10"/>
+        <ellipse class="p-storm" cx="380" cy="262" rx="352" ry="238"/>
+        <ellipse class="p-ground" cx="380" cy="262" rx="250" ry="168"/>
+        <path class="p-lake" d="M 548 140 C 600 170 628 220 630 262 C 628 310 600 360 548 386 C 540 330 536 200 548 140 Z"/>
+        <ellipse class="p-low" cx="380" cy="262" rx="232" ry="150"/>
+        <ellipse class="p-glass" cx="380" cy="262" rx="250" ry="168"/>
+        <rect class="p-wreck" x="96" y="250" width="92" height="20" rx="10" transform="rotate(-4 142 260)"/>
+        <circle class="p-pin" cx="131" cy="260" r="6"/>
+        <circle class="p-pin" cx="380" cy="420" r="6"/>
+        <circle class="p-pin" cx="630" cy="262" r="6"/>
+        <circle class="p-pin" cx="315" cy="98" r="6"/>
+        <text class="p-t" x="70" y="232">The Wreck</text>
+        <text class="p-s" x="70" y="296">nose outside,</text>
+        <text class="p-s" x="70" y="310">market inside</text>
+        <text class="p-t" x="346" y="452">The Wildbelt</text>
+        <text class="p-s" x="320" y="466">animals along the wall</text>
+        <text class="p-t" x="640" y="246">The lake</text>
+        <text class="p-s" x="640" y="282">wall into the water,</text>
+        <text class="p-s" x="640" y="296">water gate 3</text>
+        <text class="p-t" x="250" y="76">Tunnel to Haven Eight</text>
+        <text class="p-s" x="262" y="122">cargo only, sealed door</text>
+        <text class="p-t" x="345" y="250">Upper Town</text>
+        <text class="p-s" x="336" y="266">glass, sun, gardens</text>
+        <text class="p-m" x="420" y="372">LOW RING (shade)</text>
+        <text class="p-m" x="560" y="40">STORM RING</text>
+        <text class="p-m" x="560" y="54">the black wall, always</text>
+        <text class="p-m" x="24" y="500">DOME ≈ 770 × 640 m · CROWN 250 m · OUTSIDE: BARE LAND, NOT WALKABLE</text>
+      </svg>
+    </div>
+  </section>
+
+  <section id="dome">
+    <div class="sec-head">
+      <span class="tag">The Dome</span>
+      <h2>Higher than every tower</h2>
+    </div>
+    <div class="frame">
+      <figure><button type="button" data-full="r8_dome_air.jpg" data-caption="Haven Nine under the Dome, the Storm Ring behind"><img src="r8_dome_air.jpg" alt="The whole town seen from outside: a tall glass dome with white ribs covers green hills, towers, streets and the lake shore; around it bare grey-brown land and dark water, and a black wall of storm cloud fills the sky behind" width="1600" height="1000"></button></figure>
+      <div class="txt">
+        <h3>From outside</h3>
+        <p>The Dome is a bubble, not a lid: steep at the foot, round at the top, its crown 250 m up and leaning a little west. Main ribs run from the crown to the ground and branch like a leaf's veins. Outside it there is only bare land and dark water, and on the horizon the black Storm Ring. Inside: everything you know from round 6.</p>
+      </div>
+    </div>
+    <div class="frame flip">
+      <figure><button type="button" data-full="r8_dome_night.jpg" data-caption="Inside at night: the lit ribs overhead"><img src="r8_dome_night.jpg" alt="Night inside the Dome, seen from Greenhouse Hill: glowing warm-white ribs arch overhead and meet at the crown, the lit towers of Tower Rise stand below them, the dark town and hills under a deep blue night sky" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt">
+        <h3>From below, at night</h3>
+        <p>The look you liked from below, at night. The ribs are lit, so the whole sky becomes a lamp shade over the town. This is also where night play happens: deliveries, the night market, bars.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="borders">
+    <div class="sec-head">
+      <span class="tag">The borders</span>
+      <h2>Where the world ends</h2>
+      <p class="muted">Hard stops, each with a reason. The invisible wall and the server's safe-spot check stay behind them as the last resort.</p>
+    </div>
+    <div class="frame">
+      <figure><button type="button" data-full="r8_wreck_wall.jpg" data-caption="West: the Albatross through the wall"><img src="r8_wreck_wall.jpg" alt="Inside the Dome at dusk: the hull of the airship Albatross, marked Ark Flight 9, runs into the glass wall and is sealed there with a dark collar; under it a lit market with stalls and a Wreck Market sign; outside the glass a dark storm, rain and a lightning bolt over bare land" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt">
+        <h3>West: the Wreck</h3>
+        <p>The wall was built straight through the hull and sealed with a riveted collar. The tail and the market are inside; the nose lies outside in the storm. You can walk the ship as far as the welded bulkhead at the wall.</p>
+      </div>
+    </div>
+    <div class="frame flip">
+      <figure><button type="button" data-full="r8_lake_wall.jpg" data-caption="East: the wall in the lake, water gate 3"><img src="r8_lake_wall.jpg" alt="Standing on a pier inside the Dome: the glass wall rises out of the calm lake, a concrete arch with a striped sluice gate sits in it at the waterline with a small cleaning boat waiting; outside, dark storm clouds, rain and a lightning strike over choppy water" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt">
+        <h3>East: the lake</h3>
+        <p>The wall runs down into the water. Water gate 3 opens for the cleaning craft only. Inside the lake is calm and light; outside it is choppy and grey under the storm.</p>
+      </div>
+    </div>
+    <div class="frame">
+      <figure><button type="button" data-full="r8_train_gate.jpg" data-caption="North: the door to Haven Eight"><img src="r8_train_gate.jpg" alt="A round steel pressure door with yellow and black warning marks in a concrete face cut into the rock, signed Haven Eight 132 km; a grey cargo train marked H8 Cargo stands at a platform with crates, robots and a few people; above the rock the Dome's glass wall" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt">
+        <h3>North: the tunnel</h3>
+        <p>Once a season the sealed cargo train from Haven Eight comes through. Goods only: the board says "Transit closed. Next service: Autumn". Later this door could open for travel between Havens.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Edge</th><th>What you see</th><th>Why you cannot pass</th></tr></thead>
+        <tbody>
+          <tr><td class="q">West: the Wreck</td><td>the hull through the glass, a riveted collar ("SEALED 2161"), the market inside</td><td>a welded bulkhead at the wall; through its porthole, the nose in the storm</td></tr>
+          <tr><td class="q">South: the Wildbelt</td><td>a wild strip inside the wall where the freed animals live</td><td>the sanctuary fence, then the glass</td></tr>
+          <tr><td class="q">East: the lake</td><td>the wall running into the water, fish against the glass</td><td>water gate 3 opens for cleaning craft only</td></tr>
+          <tr><td class="q">North: the tunnel</td><td>the round pressure door, the seasonal cargo train</td><td>"Transit closed. Next service: Autumn"</td></tr>
+          <tr><td class="q">All round</td><td>service airlocks, robots going out to sweep the glass</td><td>"Keepers and robots only"</td></tr>
+          <tr><td class="q">Up</td><td>the ribs, 250 m up</td><td>the glass; players never fly</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="low" class="low">
+    <div class="sec-head">
+      <span class="tag">The Low Ring</span>
+      <h2>Everything, but not a reason</h2>
+      <p class="muted">The ground floors of the towers and the land at the Dome's feet lie in shade all day. Basics are free here too. What is missing is purpose.</p>
+    </div>
+    <figure><button type="button" data-full="r8_low_ring.jpg" data-caption="The Low Ring at night"><img src="r8_low_ring.jpg" alt="A narrow dark street at night between soot-black buildings: neon signs reading Odds and Drone Races Tonight over glowing betting screens, rusty pipes along the walls, an orange sodium lamp, steam from a grate, a queue at a small soup cart with a lit umbrella, a man asleep on a bench, and far away the bright towers of the Upper Town" width="1600" height="1000" loading="lazy"></button>
+      <figcaption>Betting screens and the ODDS sign on the left, the soup cart's queue and a sleeper on the bench on the right, the bright Upper Town at the far end. Further down, out of sight in this frame: dream booths, a slumped serving robot, the scrap pile.</figcaption></figure>
+    <div class="jobs">
+      <div class="job"><b>Broken robots</b><span>No spare parts come in, so the 2130s robots limp, loop old ads and end on the scrap pile. That is the mechanic's work later.</span></div>
+      <div class="job"><b>Full bins</b><span>Broken collectors mean overflowing bins: a smell, fewer customers. Emptying them by hand is an easy first job.</span></div>
+      <div class="job"><b>Bored people</b><span>Betting on drone races, credit slots, dream booths. Shown in the world and its stories, never a loop you grind. All made up.</span></div>
+    </div>
+    <p>Your kitchen is one of the few warm places down here. <span class="neon">Hot soup, made by hand</span> draws a queue in a town where printed food is free.</p>
+  </section>
+
+  <section id="story">
+    <div class="sec-head">
+      <span class="tag">The story, draft 2</span>
+      <h2>What changed in history</h2>
+      <p class="muted">In docs/town-story.md. The past is the game's own named era, never real-world events.</p>
+    </div>
+    <ol class="timeline">
+      <li><span class="when">until about 2090</span><div><b>The Smoke Years.</b> The old world burned too much and the weather broke.<span class="where">the museum, dry jokes</span></div></li>
+      <li class="turn"><span class="when">2090s – 2110s</span><div><b>The Weather Engines.</b> Huge machines calm the sky. They half work: calm valleys, but the storms they push away pile up into the Storm Ring. The fix became a cage.<span class="where">the black wall on every horizon, the old engine mast on the ridge</span></div></li>
+      <li><span class="when">2110s</span><div><b>The Charter and the twelve Havens.</b> Seed libraries, food printers, robots, the animals from the last farms. "No one in a Haven will ever go without."<span class="where">the Charter in the Town Hall, the poster in the Low Ring</span></div></li>
+      <li><span class="when">14 Sep 2122</span><div><b>Ark Flight 9.</b> The Albatross comes through a gap in the storm that closes early and lands hard at the valley's edge. Everyone lives. Captain Ilse Marrow: "Landed. Sort of." Flights 6 and 11 never arrive anywhere.<span class="where">the Wreck, the memorial</span></div></li>
+      <li><span class="when">the first harvest</span><div><b>Rosa's stew.</b> The ship's cook, Rosa Vell, makes the first supper. The animals walk down the ramp and stay.<span class="where">the first recipe you learn, the Wildbelt</span></div></li>
+      <li><span class="when">2120s – 2161</span><div><b>The Dome.</b> Built in stages, closed for good after the Hail Summer, straight through the Wreck.<span class="where">"the Sail" up top, "the Lid" down below</span></div></li>
+      <li><span class="when">2161 – today</span><div><b>The Long Calm.</b> The promise holds, but nothing comes in. Robots break, everything is reused, work is optional, real cooking matters.<span class="where">the whole town</span></div></li>
+      <li><span class="when">today</span><div><b>An ordinary year.</b> One sealed cargo train a season from Haven Eight. Rumours that the storm is thinning.<span class="where">the train hall, NPC talk</span></div></li>
+    </ol>
+    <div class="lines">
+      <blockquote>"Up there they call it the Sail. Down here it's the Lid."</blockquote>
+      <blockquote>"Free food every day, and I still queue for yours. Funny, isn't it."</blockquote>
+      <blockquote>"Welcome to Haven Nine. Welcome to Haven Nine. Welc—"</blockquote>
+      <blockquote>"Landed. Sort of. Best thing ever written in a logbook."</blockquote>
+    </div>
+    <p class="callout"><b>Optional dark layer:</b> the Council says the storm is as deadly as ever; old people in the Low Ring say it is thinning and the doors stay shut to keep the Council in charge. A rumour, never answered early. Later updates could thin the ring and open the outside: new areas, a scavenger job, a trip to Haven Eight.</p>
+  </section>
+
+  <section id="loops">
+    <div class="sec-head">
+      <span class="tag">Inside the glass</span>
+      <h2>Weather, night and compost</h2>
+    </div>
+    <div class="pair">
+      <div class="panel">
+        <h3>Planned weather</h3>
+        <ul>
+          <li>The Keepers hold a daily <b>Rain Hour</b> to water the town.</li>
+          <li>Roof panels open on fine days, so the seasons still come in.</li>
+          <li>Storms, hail and lightning hit the glass from outside.</li>
+          <li>Footfall follows the schedule: open-panel days fill outdoor tables, the Rain Hour empties them.</li>
+          <li><b>Night is never skipped</b> (proposed): about 10 of the 40 minutes, played like the day.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Compost loop (proposed)</h3>
+        <ol>
+          <li>Cooking makes scraps; the sim computes how much per recipe. They go in the back-door bin.</li>
+          <li>Robots empty the bins on a route. Broken ones in the Low Ring leave bins full.</li>
+          <li>Players can empty bins by hand for a little pay per kilo; in autumn, sweep leaves off the Dome.</li>
+          <li>The Compost Works makes soil over a few days. Plenty of soil makes greenhouse food up to about 10% cheaper.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section id="open">
+    <div class="sec-head">
+      <span class="tag">Your call</span>
+      <h2>Open questions</h2>
+      <p class="muted">Spec 051, round 8, and the story.</p>
+      <p class="muted">Still rough in this round: the Storm Ring reads more like a cloud ceiling than a wall, the Wreck's nose outside the glass stays dark, and the Wildbelt edge and the airlocks have no picture yet.</p>
+    </div>
+    <ol class="qs">
+      <li><strong>Sleeping:</strong> the night never skips (proposed); the bed saves, ends your shift and gives a "rested" bonus?</li>
+      <li><strong>Compost:</strong> the four-step loop above (proposed)?</li>
+      <li><strong>Founders:</strong> keep Rosa Vell and Captain Ilse Marrow? Heroes, or told differently in the Low Ring?</li>
+      <li><strong>Gambling and addiction:</strong> only in the world (proposed), or also something the player can do with in-game credits? A playable betting loop can raise the age rating.</li>
+      <li><strong>The dark layer:</strong> keep "is the storm really still deadly?" as a rumour (proposed), make it a plot, or drop it?</li>
+      <li><strong>The outside:</strong> open it in later updates (proposed), or keep the Dome closed forever?</li>
+      <li><strong>The Smoke Years:</strong> only the museum and jokes (proposed), or nothing at all?</li>
+    </ol>
+  </section>
+</div>
+
+<dialog id="lightbox" aria-label="Large picture">
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-cap"></p>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById("lightbox"), dlgImg = document.getElementById("lightbox-img"), dlgCap = document.getElementById("lightbox-cap");
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-full]");
+    if (b) {
+      dlgImg.src = b.dataset.full; dlgImg.alt = b.dataset.caption; dlgCap.textContent = b.dataset.caption;
+      if (dlg.showModal) dlg.showModal();
+      return;
+    }
+    if (e.target === dlg || e.target === dlgImg) dlg.close();
+  });
+})();
+</script>

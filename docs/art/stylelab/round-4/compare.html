@@ -1,0 +1,192 @@
+<title>Worktown Vibe Frames</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: big frames one after another like a storyboard; two strips at the end show how they connect. */
+:root {
+  --bg: #EDF0EA;
+  --surface: #F8FAF6;
+  --ink: #1F2A27;
+  --muted: #5B6964;
+  --line: #CBD3CC;
+  --accent: #C9761F;
+  --accent-soft: #F3DDBF;
+  --font-display: "Righteous", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+    --accent: #E9A64A; --accent-soft: #3A2E1E; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+  --accent: #E9A64A; --accent-soft: #3A2E1E; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.05; }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.15; }
+h3 { font-size: 1rem; margin: 0; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 14px; max-width: 72ch; }
+.lede { font-size: 1.1rem; }
+.frame { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; align-items: center; }
+.frame:nth-of-type(even) { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.frame:nth-of-type(even) figure { order: 2; }
+.frame .txt { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.frame .tag { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.frame ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; color: var(--muted); }
+figure { margin: 0; min-width: 0; }
+figure button { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; border-radius: 10px; overflow: hidden; width: 100%; }
+figure button:focus-visible, .strip a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+figure img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; }
+.strips { display: flex; flex-direction: column; gap: 28px; }
+.strip { display: flex; flex-direction: column; gap: 10px; }
+.strip ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 0; }
+.strip li { display: flex; flex-direction: column; gap: 6px; position: relative; padding-right: 22px; min-width: 0; }
+.strip li:not(:last-child)::after { content: "→"; position: absolute; right: 4px; top: 22%; color: var(--accent); font-size: 1.1rem; }
+.strip a { display: block; border-radius: 8px; overflow: hidden; }
+.strip img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; }
+.strip span { font-size: 0.85rem; }
+.strip small { color: var(--muted); font-size: 0.78rem; }
+.callout { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; max-width: 80ch; }
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1600px); }
+dialog::backdrop { background: rgba(10, 14, 13, 0.85); }
+dialog img { display: block; max-width: 100%; max-height: 86vh; width: auto; height: auto; border-radius: 8px; }
+dialog p { color: #E6ECE8; font-family: var(--font-mono); font-size: 0.85rem; padding-top: 8px; }
+@media (max-width: 860px) {
+  .frame, .frame:nth-of-type(even) { grid-template-columns: 1fr; }
+  .frame:nth-of-type(even) figure { order: 0; }
+  .strip ol { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .strip li:nth-child(2n)::after { content: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  figure img, .strip img { transition: transform 0.3s ease; }
+  figure button:hover img, .strip a:hover img { transform: scale(1.02); }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Spec 046 · Round 4 · Vibe frames</span>
+    <h1>A day in Worktown</h1>
+    <p class="lede">Six frames about how the world feels, not how one model looks: the robots that keep the town tidy, the machines you buy when you grow, what guests see from their table, a rush with the whole crew, a cook-off at night, and the town around it all.</p>
+    <p class="muted">These are concept frames: quick scenes from the lab's kit with ink outlines, so nobody mistakes them for final art. Click a frame to see it large.</p>
+  </header>
+
+  <section class="frame" id="morning">
+    <figure><button type="button" data-full="vibe_morning.jpg" data-caption="Morning clean-up"><img src="vibe_morning.jpg" alt="Morning on the shop street: two round sweeper robots on the pavement, hens crossing, a neighbour with a dog, cooks opening up" width="1600" height="1000"></button></figure>
+    <div class="txt">
+      <span class="tag">Morning · before opening</span>
+      <h2>The town wakes up</h2>
+      <p>Little sweeper robots clean the pavement, a runner robot washes a shop window, hens wander across, a neighbour walks the dog. The cooks stand in their doors.</p>
+      <ul><li>Animals are neighbours here, not food (D27).</li><li>Robots do the chores nobody wants; people do the cooking.</li><li>A calm start before the rush.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame" id="guest">
+    <figure><button type="button" data-full="vibe_guest.jpg" data-caption="The guest's view"><img src="vibe_guest.jpg" alt="View from a diner table with a plate of potato hash and a lemonade: guests at tables and booths, a robot runner, the pass with two cooks, a menu board" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">Service · the guest's seat</span>
+      <h2>What your guests see</h2>
+      <p>From a seat: your plate in front, booths and round tables full, a robot runner bringing the next order, and behind the pass your friends cooking under the menu board.</p>
+      <ul><li>Sit-down tables are a stage 3 service.</li><li>The room is where status shows: it gets nicer as you climb.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame" id="rush">
+    <figure><button type="button" data-full="vibe_rush.jpg" data-caption="Rush hour, co-op"><img src="vibe_rush.jpg" alt="A busy kitchen seen from above the pass: six players in aprons at two stove lines and an island, tickets on the rail, steam, a robot runner at the pass" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">Service · the rush</span>
+      <h2>Everyone in the kitchen</h2>
+      <p>Two stove lines, a prep island, the pass with plates going out, tickets everywhere, steam, mess building up. Six friends, each finding their spot.</p>
+      <ul><li>Roles are free: the work makes them natural.</li><li>The mess is the cleaning gameplay from round 3.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame" id="automat">
+    <figure><button type="button" data-full="vibe_automat.jpg" data-caption="The automat hall"><img src="vibe_automat.jpg" alt="An automat hall: a green wall of little lit windows with dishes, guests choosing, a robot arm stirring a pot, a cook supervising, robots on the floor" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">Stage 4 · automation</span>
+      <h2>The machines you earn</h2>
+      <p>A wall of little windows with a dish in each, a robot arm stirring the pot, a conveyor feeding the wall. The crew moves from doing everything to running the place.</p>
+      <ul><li>An idea from the retro future: the automat restaurant.</li><li>Machines are bought with money you earned, never sold for real money.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame" id="festival">
+    <figure><button type="button" data-full="vibe_festival.jpg" data-caption="The town cook-off"><img src="vibe_festival.jpg" alt="Night cook-off: two stalls, Tomorrow Kitchen and the rival Golden Spoon, a split-flap scoreboard 87 to 91, judges at a table, a crowd under string lights" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">Stage 5 · events</span>
+      <h2>The cook-off</h2>
+      <p>Night, string lights, a crowd. Your stall against the Golden Spoon, a spotless rival chain with matching hats. A split-flap scoreboard: 87 to 91. Three judges, score cards up.</p>
+      <ul><li>Big, planned jobs with big payouts: the heist feeling.</li><li>Rivals have names, faces and a look of their own.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame" id="town">
+    <figure><button type="button" data-full="vibe_town.jpg" data-caption="The town from above"><img src="vibe_town.jpg" alt="The town from above at sunset: a glass garden dome with trees, a street of small restaurants with flats above, a monorail train, cars and people" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">The world</span>
+      <h2>Where food comes from</h2>
+      <p>A glass garden dome where the town grows its food, a street of small restaurants with flats and roof gardens above, a monorail gliding past, searchlights at dusk.</p>
+      <ul><li>The dome is the vegan town's answer to the farms of the dark past.</li><li>Your restaurant is one of many lights on this street.</li></ul>
+    </div>
+  </section>
+
+  <section class="strips" aria-labelledby="clicks">
+    <h2 id="clicks">How it clicks together</h2>
+    <div class="strip" style="--n: 4">
+      <h3>A day</h3>
+      <ol>
+        <li><a href="#morning"><img src="vibe_morning.jpg" alt="Morning" loading="lazy"></a><span>Morning</span><small>robots tidy, you open up</small></li>
+        <li><a href="#rush"><img src="vibe_rush.jpg" alt="Rush" loading="lazy"></a><span>Lunch rush</span><small>everyone cooks, mess builds</small></li>
+        <li><a href="#guest"><img src="vibe_guest.jpg" alt="Guests" loading="lazy"></a><span>Guests</span><small>ratings and money come in</small></li>
+        <li><a href="#festival"><img src="vibe_festival.jpg" alt="Evening" loading="lazy"></a><span>Evening</span><small>an event, or close and clean</small></li>
+      </ol>
+    </div>
+    <div class="strip" style="--n: 5">
+      <h3>The climb</h3>
+      <ol>
+        <li><img src="r3_stage1.jpg" alt="Food cart" loading="lazy"><span>Food corner</span><small>one dish, cash only</small></li>
+        <li><img src="r3_stage2.jpg" alt="Rented shop" loading="lazy"><span>First restaurant</span><small>rent, menu, card</small></li>
+        <li><a href="#guest"><img src="vibe_guest.jpg" alt="Services" loading="lazy"></a><span>Your mix</span><small>tables, delivery, buffet</small></li>
+        <li><a href="#automat"><img src="vibe_automat.jpg" alt="Automation" loading="lazy"></a><span>Automation</span><small>staff and machines</small></li>
+        <li><a href="#festival"><img src="vibe_festival.jpg" alt="Events" loading="lazy"></a><span>Beyond the kitchen</span><small>cook-offs, events, fame</small></li>
+      </ol>
+    </div>
+    <p class="callout">The two strips are the same loop at two speeds: every day earns money and reputation, and that money buys the next step of the climb. The town around you (robots, neighbours, the dome, rivals) stays the same calm, friendly place, so growth is the change you see.</p>
+  </section>
+</div>
+
+<dialog id="lightbox" aria-label="Large picture">
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-cap"></p>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById("lightbox"), dlgImg = document.getElementById("lightbox-img"), dlgCap = document.getElementById("lightbox-cap");
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-full]");
+    if (b) {
+      dlgImg.src = b.dataset.full; dlgImg.alt = b.dataset.caption; dlgCap.textContent = b.dataset.caption;
+      if (dlg.showModal) dlg.showModal();
+      return;
+    }
+    if (e.target === dlg || e.target === dlgImg) dlg.close();
+  });
+})();
+</script>

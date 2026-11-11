@@ -1,0 +1,147 @@
+<title>Worktown 2222</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a storyboard of big frames, then one note on how the future fits the game. */
+:root {
+  --bg: #EDF0EA;
+  --surface: #F8FAF6;
+  --ink: #1F2A27;
+  --muted: #5B6964;
+  --line: #CBD3CC;
+  --accent: #C9761F;
+  --accent-soft: #F3DDBF;
+  --font-display: "Righteous", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+    --accent: #E9A64A; --accent-soft: #3A2E1E; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+  --accent: #E9A64A; --accent-soft: #3A2E1E; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.05; }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.15; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 14px; max-width: 72ch; }
+.lede { font-size: 1.1rem; }
+.hero-img { margin: 0; }
+.frame { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; align-items: center; }
+.frame.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.frame.flip figure { order: 2; }
+.frame .txt { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.frame .tag { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.frame ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; color: var(--muted); }
+figure { margin: 0; min-width: 0; }
+figure button { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; border-radius: 10px; overflow: hidden; width: 100%; }
+figure button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+figure img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; }
+.callout { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; max-width: 80ch; }
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1600px); }
+dialog::backdrop { background: rgba(10, 14, 13, 0.85); }
+dialog img { display: block; max-width: 100%; max-height: 86vh; width: auto; height: auto; border-radius: 8px; }
+dialog p { color: #E6ECE8; font-family: var(--font-mono); font-size: 0.85rem; padding-top: 8px; }
+@media (max-width: 860px) {
+  .frame, .frame.flip { grid-template-columns: 1fr; }
+  .frame.flip figure { order: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  figure img { transition: transform 0.3s ease; }
+  figure button:hover img { transform: scale(1.02); }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Spec 046 · Round 5 · The town in 2222</span>
+    <h1>Worktown 2222</h1>
+    <p class="lede">The same friendly retro-future, two hundred years on: garden towers with ribbon windows and terraces, sky bridges, hover cars in lanes, delivery drones with parcels, an airship over the fair. Our little restaurant street stays at the foot of it all.</p>
+    <p class="muted">Concept frames with ink outlines, quick and rough on purpose. Click a frame to see it large.</p>
+  </header>
+
+  <section class="frame" id="skyline">
+    <figure><button type="button" data-full="r5_skyline-sunset.jpg" data-caption="The street and the skyline, sunset"><img src="r5_skyline-sunset.jpg" alt="Our shop street at sunset with streamline garden towers behind, a monorail train, hover cars and drones in the sky" width="1600" height="1000"></button></figure>
+    <div class="txt">
+      <span class="tag">Your street · sunset</span>
+      <h2>Small shops, big city</h2>
+      <p>Casa Nopal, Tomorrow Kitchen, Yuzu Noodles and the flower shop at street level; behind them a garden courtyard, then the towers: ribbon windows, ribbed Art Deco shafts, terrace trees, glass garden domes on top.</p>
+      <ul><li>The monorail glides past at roof height.</li><li>Hover cars fly in lanes, drones carry parcels, the fair airship hangs in the haze.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame flip" id="night">
+    <figure><button type="button" data-full="r5_skyline-night.jpg" data-caption="The same street at night"><img src="r5_skyline-night.jpg" alt="The same street at night: lit window bands on the towers, neon shop signs, hover cars with light trails" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">Your street · night</span>
+      <h2>The city lights up</h2>
+      <p>Window bands glow, shop signs turn neon, hover cars draw short light trails, searchlights sweep the clouds. The red night of the 1930s painting, in our town.</p>
+    </div>
+  </section>
+
+  <section class="frame" id="garden">
+    <figure><button type="button" data-full="r5_garden.jpg" data-caption="The garden promenade, morning"><img src="r5_garden.jpg" alt="A car-free garden promenade between shops: raised beds with trees and flowers, a fountain, café tables under umbrellas, people, a hen, a sweeper robot, towers and drones above" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">Morning · car-free</span>
+      <h2>The garden promenade</h2>
+      <p>Cars fly, so the ground belongs to people and plants: raised beds with trees and flowers, a fountain, café tables in front of the shops, a hen wandering, a sweeper robot, drones bringing breakfast.</p>
+      <ul><li>Outdoor tables could be one of your services.</li><li>The promenade is where guests choose between you and your rivals.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame flip" id="roof">
+    <figure><button type="button" data-full="r5_roof.jpg" data-caption="The drone pad on our roof"><img src="r5_roof.jpg" alt="The restaurant's rooftop: a landing pad marked TK, a delivery drone, parcels waiting, the cook, herb beds, a small greenhouse, towers and flying traffic beyond" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">Stage 3 · delivery</span>
+      <h2>Delivery from the roof</h2>
+      <p>Your own drone pad marked TK, parcels with order numbers, a drone landing for the next one. Herb beds and a little greenhouse on the same roof: the kitchen grows its own garnish.</p>
+      <ul><li>Drones are the 2222 version of the delivery service.</li><li>The roof garden could feed the ingredient lab in stage 5.</li></ul>
+    </div>
+  </section>
+
+  <section class="frame" id="aerial">
+    <figure><button type="button" data-full="r5_aerial.jpg" data-caption="The town from above, sunset"><img src="r5_aerial.jpg" alt="The town from above at sunset: the shop street with flats behind, a glass garden dome, parks and raised beds, towers all around, a monorail loop, a sky bridge" width="1600" height="1000" loading="lazy"></button></figure>
+    <div class="txt">
+      <span class="tag">The world</span>
+      <h2>A garden with towers in it</h2>
+      <p>The old town street and the garden dome in a park, ringed by towers, a monorail loop and flying lanes. This is the weakest frame of the round: from up here the kit looks like a model railway, so it shows the layout more than the mood.</p>
+    </div>
+  </section>
+
+  <p class="callout"><strong>How 2222 fits the game.</strong> The future is the backdrop; the restaurant stays human-sized. Towers, drones and hover cars make the world feel big and alive, and you still start with a cart on the pavement. Climbing means your place gets a drone pad, a roof garden, a van in the flying lane, and maybe one day the sky-deck on top of a tower.</p>
+</div>
+
+<dialog id="lightbox" aria-label="Large picture">
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-cap"></p>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById("lightbox"), dlgImg = document.getElementById("lightbox-img"), dlgCap = document.getElementById("lightbox-cap");
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-full]");
+    if (b) {
+      dlgImg.src = b.dataset.full; dlgImg.alt = b.dataset.caption; dlgCap.textContent = b.dataset.caption;
+      if (dlg.showModal) dlg.showModal();
+      return;
+    }
+    if (e.target === dlg || e.target === dlgImg) dlg.close();
+  });
+})();
+</script>

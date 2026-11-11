@@ -1,0 +1,238 @@
+<title>Worktown Style Lab 3</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a reading column for the story; image rows ordered like the climb (stage 1, 2, later). */
+:root {
+  --bg: #EDF0EA;
+  --surface: #F8FAF6;
+  --ink: #1F2A27;
+  --muted: #5B6964;
+  --line: #CBD3CC;
+  --accent: #C9761F;
+  --accent-soft: #F3DDBF;
+  --warn: #9A3B22;
+  --font-display: "Righteous", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+    --accent: #E9A64A; --accent-soft: #3A2E1E; --warn: #E58A6C; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141A19; --surface: #1C2422; --ink: #E6ECE8; --muted: #9AA8A2; --line: #2F3B38;
+  --accent: #E9A64A; --accent-soft: #3A2E1E; --warn: #E58A6C; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 68ch; }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.05; }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.15; }
+h3 { font-size: 1rem; margin: 0; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+.code { font-family: var(--font-mono); font-weight: 500; }
+section { display: flex; flex-direction: column; gap: 20px; }
+header.hero { display: flex; flex-direction: column; gap: 20px; }
+header.hero .text { display: flex; flex-direction: column; gap: 14px; max-width: 72ch; }
+.lede { font-size: 1.1rem; }
+.g2, .g3 { display: grid; gap: 12px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+figure button { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; border-radius: 8px; overflow: hidden; }
+figure button:focus-visible, .picker select:focus-visible, .picker textarea:focus-visible, .copy:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+figure img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; }
+figcaption { font-size: 0.85rem; color: var(--muted); }
+figcaption .code { color: var(--ink); font-size: 0.8rem; margin-right: 6px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: center; }
+.stage .txt { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.stage .num { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.note { border-top: 3px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.note.good { border-top-color: var(--accent); }
+.note.flag { border-top-color: var(--warn); }
+.scale { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); border-top: 2px solid var(--line); padding-top: 6px; }
+.picker { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: grid; gap: 16px; }
+.picker .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.picker label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.picker select, .picker textarea { font: 1rem var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.picker textarea { min-height: 72px; resize: vertical; }
+.answer { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.answer output { flex: 1 1 300px; min-width: 0; font-family: var(--font-mono); font-size: 0.9rem; background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; }
+.copy { font: 600 0.95rem var(--font-body); background: var(--accent); color: #1B130A; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1600px); }
+dialog::backdrop { background: rgba(10, 14, 13, 0.82); }
+dialog img { display: block; max-width: 100%; max-height: 86vh; width: auto; height: auto; border-radius: 8px; }
+dialog p { color: #E6ECE8; font-family: var(--font-mono); font-size: 0.85rem; padding-top: 8px; }
+@media (max-width: 760px) {
+  .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stage { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) { .g2, .g3 { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: no-preference) {
+  figure img { transition: transform 0.25s ease; }
+  figure button:hover img { transform: scale(1.03); }
+}
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="text">
+      <span class="eyebrow">Spec 046 · Round 3 · 10 Nov 2026</span>
+      <h1>Worktown Style Lab 3</h1>
+      <p class="lede">The same style, lived in. Surfaces are matte, things have been used, people have bad days, and the street has cracks and weeds. How worn a place looks now tells you where its owners are on the climb.</p>
+      <p class="muted">Click any picture to see it large. The picker at the bottom collects your answers from all three rounds.</p>
+    </div>
+    <figure>
+      <button type="button" data-full="stage1_S3_P1_sunset_g16.jpg" data-caption="Stage 1, the food corner, at sunset">
+        <img src="stage1_S3_P1_sunset_g16.jpg" alt="A second-hand food cart with a yellow parasol and string lights against a worn wall at sunset, two cooks behind it and three guests waiting" width="1600" height="1000">
+      </button>
+      <figcaption><span class="code">stage 1 · sunset</span>The food corner: a second-hand cart, a taped menu, cash only.</figcaption>
+    </figure>
+  </header>
+
+  <section aria-labelledby="climb">
+    <h2 id="climb">The climb in pictures</h2>
+    <div class="stage">
+      <figure><button type="button" data-full="stage1_S3_P1_noon_g16.jpg" data-caption="Stage 1, food corner"><img src="stage1_S3_P1_noon_g16.jpg" alt="The food cart at noon against a wall with faded posters, cracks and a dripping pipe" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt"><span class="num">Stage 1 · food corner</span><h3>Start with what you can find</h3><p class="muted">A cart with a replacement panel in another colour and tape on the corner, a two-burner hob, a parasol, a gas bottle, a cooler, mismatched stools, a cardboard "OPEN :)" sign. Faded posters, a lost-cat note, a dripping pipe and weeds behind.</p></div>
+    </div>
+    <div class="stage">
+      <figure><button type="button" data-full="stage2_S3_P1_overcast_g20.jpg" data-caption="Stage 2, the first rented place"><img src="stage2_S3_P1_overcast_g20.jpg" alt="A worn former laundry on an overcast day, a paper banner over the old sign, a ladder, boxes and trash bags" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt"><span class="num">Stage 2 · first restaurant</span><h3>Move into someone else's shop</h3><p class="muted">The old laundry, rented. A taped paper banner "TOMORROW KITCHEN, opening soon!" hides the faded old sign. Moving boxes, a ladder, a paint tin, bags from clearing out. Overcast, rough grit.</p></div>
+    </div>
+    <div class="stage">
+      <figure><button type="button" data-full="stage3_S3_P1_noon_g08.jpg" data-caption="A later stage, the shop kept up"><img src="stage3_S3_P1_noon_g08.jpg" alt="The same shop, now kept up, a green delivery van at the kerb and a queue of guests" width="1600" height="1000" loading="lazy"></button></figure>
+      <div class="txt"><span class="num">Later · services</span><h3>Kept up, still lived-in</h3><p class="muted">Their own sign, a delivery van, a queue, a "best hash in town" clipping in the window. Lighter grit, but a dented bin and cracks stay: success is not sterile.</p></div>
+    </div>
+    <div class="g2">
+      <figure><button type="button" data-full="stage3_S3_P1_sunset_g08.jpg" data-caption="Later stage at sunset"><img src="stage3_S3_P1_sunset_g08.jpg" alt="The kept-up shop with the van at sunset" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">later · sunset</span></figcaption></figure>
+      <figure><button type="button" data-full="street-lived_S3_P1_sunset_g10.jpg" data-caption="The street, lived-in, at sunset"><img src="street-lived_S3_P1_sunset_g10.jpg" alt="The three-shop street from round 2 with cracks, weeds, bins and paper signs, at sunset" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">street · lived-in · sunset</span>Round 2's street with cracks, weeds, bins, crates and taped signs.</figcaption></figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="grit">
+    <h2 id="grit">How much grit?</h2>
+    <p class="prose muted">Grit is one setting, so every model in the game follows it. It drives matte surfaces, small colour differences between objects, and grime in corners and at the foot of walls. In the game this is baked shading plus one shared dirt texture, which is cheap.</p>
+    <div class="g3">
+      <figure><button type="button" data-full="kitchen_S3_P1_noon_g00.jpg" data-caption="Grit 0, clean"><img src="kitchen_S3_P1_noon_g00.jpg" alt="Kitchen at grit 0, clean and glossy" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">0 · clean</span>Round 2. Glossy, new.</figcaption></figure>
+      <figure><button type="button" data-full="kitchen_S3_P1_noon_g10.jpg" data-caption="Grit 1, lived-in"><img src="kitchen_S3_P1_noon_g10.jpg" alt="Kitchen at grit 1, matte with light grime" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">1 · lived-in</span>Matte, a little uneven.</figcaption></figure>
+      <figure><button type="button" data-full="kitchen_S3_P1_noon_g20.jpg" data-caption="Grit 2, rough"><img src="kitchen_S3_P1_noon_g20.jpg" alt="Kitchen at grit 2, worn, with grime at the foot of the walls" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">2 · rough</span>Worn, grime at wall feet.</figcaption></figure>
+    </div>
+    <div class="scale" aria-hidden="true"><span>clean</span><span>lived-in</span><span>rough</span></div>
+    <h3>The dirt layer during service</h3>
+    <p class="prose muted">Same kitchen, same grit. On the right, mid-rush: sauce on the tiles, flour and stains on the worktop, stacks of dishes, boxes and a crate on the floor, order tickets taped up. Cleaning is already gameplay, so this layer appears during service and goes away when players clean.</p>
+    <div class="g2">
+      <figure><button type="button" data-full="kitchen_S3_P1_noon_g10.jpg" data-caption="Before service"><img src="kitchen_S3_P1_noon_g10.jpg" alt="Kitchen before service" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">before service</span></figcaption></figure>
+      <figure><button type="button" data-full="kitchen-rush_S3_P1_noon_g10.jpg" data-caption="Mid-rush"><img src="kitchen-rush_S3_P1_noon_g10.jpg" alt="Kitchen mid-rush with splatter, dishes, boxes and tickets" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">mid-rush</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="people">
+    <h2 id="people">People on a working day</h2>
+    <p class="prose muted">No more identical smiles. Each face gets an expression and a small asymmetry; aprons pick up stains; hair gets untidy. A new helper joins with a sturdier build and rolled-up trousers.</p>
+    <div class="g2">
+      <figure><button type="button" data-full="cast-lived_S3_P1_noon_g10.jpg" data-caption="The cast on a working day"><img src="cast-lived_S3_P1_noon_g10.jpg" alt="Five people: older woman smiling, cook focused with a stained apron, helper grinning, younger customer yawning, older man neutral" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">cast</span>Smiling, focused, grinning, yawning, neutral.</figcaption></figure>
+      <figure><button type="button" data-full="faces-expr_S3_P1_noon_g10.jpg" data-caption="One face, six expressions"><img src="faces-expr_S3_P1_noon_g10.jpg" alt="The helper's face six times: smile, grin, neutral, focused, tired, yawn" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">expressions</span>Smile, grin, neutral, focused, tired, yawn.</figcaption></figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="models">
+    <h2 id="models">New models from the game design</h2>
+    <div class="g2">
+      <figure><button type="button" data-full="cart_S3_P1_noon_g16.jpg" data-caption="The stage 1 food cart"><img src="cart_S3_P1_noon_g16.jpg" alt="Close view of the food cart: hob with pot, cash tin, tip jar, taped handwritten menu, crates and stools" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">food cart</span>Cash tin, tip jar, taped menu "POTATO HASH 4.50, CASH ONLY".</figcaption></figure>
+      <figure><button type="button" data-full="van_S3_P1_noon_g08.jpg" data-caption="Delivery van"><img src="van_S3_P1_noon_g08.jpg" alt="A rounded retro delivery van in green and cream with the shop name and a roof sign" width="1600" height="1000" loading="lazy"></button><figcaption><span class="code">delivery van</span>For the delivery service; the name and colours come from the business theme.</figcaption></figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="review">
+    <h2 id="review">My review of round 3</h2>
+    <div class="notes">
+      <div class="note good"><h3>Not marketing any more</h3><p>The stage 1 and stage 2 pictures feel like real places with a history. The mess carries the story without words.</p></div>
+      <div class="note good"><h3>Roughness has a job in the game</h3><p>Wear shows the climb, the dirt layer is the cleaning gameplay, and rivals can wear their character (a spotless chain, a cosy family place).</p></div>
+      <div class="note good"><h3>Faces are human now</h3><p>Mixed expressions remove the creepy sameness. The system is cheap: brows, lids and mouth by expression.</p></div>
+      <div class="note flag"><h3>Still rough edges in the lab itself</h3><p>Rough grit can look blotchy on big floors. Stray hair and stains are simple shapes. The van's side lettering and the cart's cash tin lid are placeholders.</p></div>
+      <div class="note flag"><h3>For the game</h3><p>Mess pieces must become decals and a small prop kit, and the dirt layer needs its own spec (when it appears, how cleaning removes it). The handwriting font here is a Windows font; the game needs a licensed one.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="pick-h">
+    <h2 id="pick-h">Put your pick together</h2>
+    <form class="picker" id="picker">
+      <div class="row">
+        <label for="pick-shape">Shapes<select id="pick-shape">
+          <option value="S1">S1 Soft</option><option value="S2">S2 Streamline</option><option value="S3" selected>S3 Mix (soft inside, streamline street)</option>
+        </select></label>
+        <label for="pick-palette">Palette<select id="pick-palette">
+          <option value="P1" selected>P1 Garden pastel</option><option value="P2">P2 Warm streamline</option><option value="P1+P2">Mix of P1 and P2</option>
+        </select></label>
+        <label for="pick-grit">Base grit<select id="pick-grit">
+          <option value="grit 0.5">0.5 (light)</option><option value="grit 1" selected>1 lived-in</option><option value="grit 1.5">1.5</option><option value="grit 2">2 rough</option>
+        </select></label>
+        <label for="pick-climb">Wear shows the climb<select id="pick-climb">
+          <option value="wear follows the climb" selected>Yes</option><option value="same wear at every stage">No, same everywhere</option>
+        </select></label>
+        <label for="pick-cultures">Themes<select id="pick-cultures">
+          <option value="real-world inspired themes are fine" selected>Real-world inspired is fine</option><option value="invent fictional regional cuisines">Invent fictional cuisines</option>
+        </select></label>
+      </div>
+      <label for="pick-notes">Anything to keep or change<textarea id="pick-notes" placeholder="Optional"></textarea></label>
+      <div class="answer">
+        <output id="pick-out" for="pick-shape pick-palette pick-grit pick-climb pick-cultures pick-notes"></output>
+        <button type="button" class="copy" id="pick-copy">Copy</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<dialog id="lightbox" aria-label="Large picture">
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-cap"></p>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById("lightbox"), dlgImg = document.getElementById("lightbox-img"), dlgCap = document.getElementById("lightbox-cap");
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-full]");
+    if (b) {
+      dlgImg.src = b.dataset.full; dlgImg.alt = b.dataset.caption; dlgCap.textContent = b.dataset.caption;
+      if (dlg.showModal) dlg.showModal();
+      return;
+    }
+    if (e.target === dlg || e.target === dlgImg) dlg.close();
+  });
+  var out = document.getElementById("pick-out");
+  var ids = ["pick-shape", "pick-palette", "pick-grit", "pick-climb", "pick-cultures", "pick-notes"];
+  function compose() {
+    var v = ids.map(function (id) { return document.getElementById(id).value.trim(); });
+    out.textContent = "Style lab pick: " + v[0] + ", " + v[1] + ", " + v[2] + "; " + v[3] + "; " + v[4] + "." + (v[5] ? "\nNotes: " + v[5] : "");
+  }
+  ids.forEach(function (id) { document.getElementById(id).addEventListener("input", compose); });
+  document.getElementById("picker").addEventListener("submit", function (e) { e.preventDefault(); });
+  compose();
+  var copyBtn = document.getElementById("pick-copy");
+  copyBtn.addEventListener("click", function () {
+    function selectText() {
+      var r = document.createRange(); r.selectNodeContents(out);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      copyBtn.textContent = "Selected, press Ctrl+C";
+    }
+    try { navigator.clipboard.writeText(out.textContent).then(function () { copyBtn.textContent = "Copied"; }, selectText); }
+    catch (err) { selectText(); }
+    setTimeout(function () { copyBtn.textContent = "Copy"; }, 2500);
+  });
+})();
+</script>

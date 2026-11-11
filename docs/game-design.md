@@ -13,7 +13,9 @@ into a restaurant empire your way.**
    its growth belong to the group.
 3. **Growth is earned and visible.** Every step costs money and proves skill; the place changes as you grow.
 4. **Your restaurant, your mix.** You choose the services you offer and combine them; specialised content comes later.
-5. **A peaceful, native-vegan town (D27, D28).** Competition is against NPC teams and in events. No crime, no harm.
+5. **Peaceful, not perfect (D27, D28, D44).** A native-vegan town (out of need, D42) that has seen hard times: gambling
+   and addiction exist only as world content, never as a player loop. Competition is against NPC teams and in events.
+   Players commit no crime and no harm.
 
 ## How a game starts and continues
 - The host creates a game (a save on the host's PC), and friends join through Steam. Anyone can leave and rejoin.

@@ -1,3 +1,8 @@
+# Worktown setting (SUPERSEDED on 2026-11-11 by D41: docs/town-plan.md and docs/town-story.md)
+
+> This early draft described a clean utopia. The approved setting is Haven Nine, a declined utopia under a Dome
+> (D41). The look rules are in docs/art-direction.md. Kept for history.
+
 # Worktown setting (DRAFT, 2026-11-10, not decided)
 
 Status: draft for the human to think about. Not binding. When decided it gets its own D number, and the palette (D32) and spec 040
