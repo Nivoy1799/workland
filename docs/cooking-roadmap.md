@@ -201,3 +201,7 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
 - 048 review (changes requested, fixes in the 049 round): prompts follow rebinds; key capture no longer leaks into the
   game; own URP asset copy; settings schema version. Open: Esc frees the cursor; the Controls page scrolls at 720p; no
   tour shot of gamepad capture, a resolution change or the colour-blind rings while cooking. Human question 19.
+- 049 review (changes required): the perf-check regression baseline mixes the best value of each metric across runs and
+  shrinks the growth bounds to the noise floor (fix: one best clean row; growth only against the bounds); the watcher can
+  hang if winpid is unreadable; the port check looks only for Worktown.exe; the HostStalled notice to clients is untested
+  (add a bot to the stall test). C# fixes: stall close wrapped, crash-log caps, profile paths scrubbed, more scripted flags.
