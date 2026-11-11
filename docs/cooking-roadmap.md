@@ -216,3 +216,6 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
 - 053/054 (merged 2026-11-11): the shop ledger shows a negative balance as $0 (display only); remote jitter p95 0.42
   stays over the 0.15 guard in every variant (likely the bots' uneven motion); the closed-station covers look rough;
   stage 1 pace depends on the potato slot for crews (question 24).
+- Follow-ups 2026-11-11 evening (053, 044, 048; approved with nits): the covers' "nothing pokes out" test reuses the
+  builder's own rule (add an independent check); two magic numbers in ClosedCoverRules; the sign face is computed
+  twice; DeliveryText can print "-$0"; no tour presses the title's own host button now (note in spec 047).
