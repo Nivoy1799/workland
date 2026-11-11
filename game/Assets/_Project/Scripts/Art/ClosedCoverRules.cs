@@ -26,6 +26,9 @@ namespace Worktown.Game.Art
         /// <summary>m: the sign card stands this far proud of the cloth's front, and the text this far proud of the card.</summary>
         public const float SignProud = 0.004f;
         public const float TextProud = 0.002f;
+        /// <summary>m: the sign card's top edge stands this far plus <see cref="SignTopGap"/> below the cloth's top (the card's half height in between).</summary>
+        public const float SignTopPad = 0.01f;
+        public const float SignTopGap = 0.02f;
         public const int SignFontSize = 48;
         /// <summary>The sign text's character size at full width (about 0.026 m letters, the text about 0.38 m wide).</summary>
         public const float SignCharacterSize = 0.0055f;
@@ -72,16 +75,22 @@ namespace Worktown.Game.Art
             return Mathf.Min(1f, room / SignSize.x);
         }
 
+        /// <summary>The cloth face the sign goes on: the axis unit vector (along x or z) nearest the horizontal direction <paramref name="front"/>.</summary>
+        public static Vector3 FrontFace(Vector3 front) =>
+            Mathf.Abs(front.z) >= Mathf.Abs(front.x) ? new Vector3(0f, 0f, Mathf.Sign(front.z)) : new Vector3(Mathf.Sign(front.x), 0f, 0f);
+
+        /// <summary>The width of the cloth face that <see cref="FrontFace"/> picks.</summary>
+        public static float FaceWidth(Bounds cloth, Vector3 front) => FrontFace(front).z != 0f ? cloth.size.x : cloth.size.z;
+
         /// <summary>
         /// The sign card's centre on the cloth's front: the face towards <paramref name="front"/> (a horizontal unit direction along x or
         /// z), centred across it, a little below the top.
         /// </summary>
         public static Vector3 SignCentre(Bounds cloth, Vector3 front, float scale)
         {
-            bool alongZ = Mathf.Abs(front.z) >= Mathf.Abs(front.x);
-            float half = alongZ ? cloth.extents.z : cloth.extents.x;
-            Vector3 flat = alongZ ? new Vector3(0f, 0f, Mathf.Sign(front.z)) : new Vector3(Mathf.Sign(front.x), 0f, 0f);
-            float y = cloth.max.y - Mathf.Min(cloth.size.y * 0.5f, 0.01f + SignSize.y * scale * 0.5f + 0.02f);
+            Vector3 flat = FrontFace(front);
+            float half = flat.z != 0f ? cloth.extents.z : cloth.extents.x;
+            float y = cloth.max.y - Mathf.Min(cloth.size.y * 0.5f, SignTopPad + SignSize.y * scale * 0.5f + SignTopGap);
             return new Vector3(cloth.center.x, y, cloth.center.z) + flat * (half + SignProud);
         }
     }

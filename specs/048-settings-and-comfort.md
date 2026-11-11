@@ -116,3 +116,11 @@ settings-in-shop (what Esc opens), 25 labels-on, 26 labels-off. The tour fails i
    Runs: see spec 053, "Follow-ups (2026-11-11 evening)". Menu tour `.verify/visual-fu4b`: cell 06 settings-pad-waiting (the capture
    waits while A is held) and 07 settings-pad-capture ("Y was Turn one step: swapped, Turn one step now uses A"), log "pad capture:
    Jump Y, Turn A".
+
+**Review nits (2026-11-11).**
+- `SettingsView.ScrollOverflow` is tour-only: now under `DEVELOPMENT_BUILD || UNITY_EDITOR`, and its one caller (the menu tour's check) too.
+- The menu tour's "needs scrolling" check only means something at 720p: at any other height it logs a warning that it was skipped. The
+  limit is tight, with 8 px of slack (comment says so).
+- Correction to follow-up 6: `CaptureGate.LocksOnClose(_active, IsUiOpen)` behaves exactly like the old branch. The real fix is
+  `CaptureGate.FreesCursor` not freeing the cursor on the closing frame; the lock on close is only the playing-only guard. Comment in
+  `PlayerInputReader.SetUiOpen` says so.

@@ -126,7 +126,8 @@ namespace Worktown.Game.UI
             bar.value = bar.lowValue + Mathf.Clamp01(share) * (bar.highValue - bar.lowValue);
         }
 
-        /// <summary>Follow-up 2026-11-11, the menu tour: how far the shown page reaches past the visible area (0 when it fits).</summary>
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+        /// <summary>Follow-up 2026-11-11, the menu tour (development builds only): how far the shown page reaches past the visible area (0 when it fits).</summary>
         public float ScrollOverflow
         {
             get
@@ -136,6 +137,7 @@ namespace Worktown.Game.UI
                 return float.IsNaN(content) || float.IsNaN(visible) ? 0f : Mathf.Max(0f, content - visible);
             }
         }
+#endif
 
         public void ShowPage(SettingsPage page)
         {

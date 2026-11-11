@@ -602,9 +602,8 @@ namespace Worktown.Game.Editor
             Vector3 front = -station.transform.forward;
             front.y = 0f;
             front = front.sqrMagnitude > 0.01f ? front.normalized : Vector3.back;
-            bool alongZ = Mathf.Abs(front.z) >= Mathf.Abs(front.x);
-            Vector3 face = alongZ ? new Vector3(0f, 0f, Mathf.Sign(front.z)) : new Vector3(Mathf.Sign(front.x), 0f, 0f);
-            float scale = ClosedCoverRules.SignScale(alongZ ? box.size.x : box.size.z);
+            Vector3 face = ClosedCoverRules.FrontFace(front);
+            float scale = ClosedCoverRules.SignScale(ClosedCoverRules.FaceWidth(box, front));
             if (scale <= 0f) return true;
             Vector3 centre = ClosedCoverRules.SignCentre(box, face, scale);
             Quaternion facing = Quaternion.LookRotation(-face, Vector3.up);

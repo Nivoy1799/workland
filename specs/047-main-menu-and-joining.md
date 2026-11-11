@@ -163,6 +163,9 @@ Checks: `verify.sh` PASS (EditMode 1370, was 1353; sim 403; gateway 175); BuildA
 `menu/19-rejoin-refused` ("Kicked by the host", Back to the menu only; the host logs "refused: KickedBefore") and
 `menu-observer/02-leave-question` (Leave / Stay over the shop; Stay kept it open).
 
+**Coverage note (2026-11-11 nits).** No tour presses the title's own host button any more: the menu tour calls `StartHost` directly
+(open kitchen); the corner tour uses New shop / Continue.
+
 **Follow-up review fixes (2026-11-11).**
 - Quit: `NotifyClosing` runs through `GuardedCall` (a throw still starts `CloseSoon` and the quit), `RemoteGuests` counts 0 on a throw
   (quit at once rather than hang), and a second quit goes through once the hold is older than `LimitSeconds` (`HostQuitRules.StillHeld`;

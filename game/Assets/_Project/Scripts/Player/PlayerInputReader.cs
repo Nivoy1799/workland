@@ -76,7 +76,9 @@ namespace Worktown.Game.Player
             _uiOpenCount = Mathf.Max(0, _uiOpenCount + (open ? 1 : -1));
             if (!open && !IsUiOpen) _lastUiClosedFrame = Time.frameCount;
             if (IsUiOpen) LockCursor(false);
-            else if (CaptureGate.LocksOnClose(_active, IsUiOpen)) LockCursor(true); // the title screen keeps its free cursor
+            // The title screen keeps its free cursor (_active is false there). The real fix for the Esc-on-close bug is
+            // CaptureGate.FreesCursor skipping the closing frame; this branch only locks again on close while playing.
+            else if (CaptureGate.LocksOnClose(_active, IsUiOpen)) LockCursor(true);
         }
 
         /// <summary>Called by the owner's player when it spawns.</summary>

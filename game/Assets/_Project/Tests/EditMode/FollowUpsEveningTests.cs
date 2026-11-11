@@ -93,6 +93,21 @@ namespace Worktown.Game.Tests
                         Assert.GreaterOrEqual(cloth.max.z + e, on.max.z, station.name + ": something pokes out (+z)");
                         Assert.LessOrEqual(cloth.min.z - e, on.min.z, station.name + ": something pokes out (-z)");
                     }
+                    // Independent of the builder's rule: no pan or pot renderer over this cloth crosses the cloth's top face.
+                    foreach (Renderer r in renderers)
+                    {
+                        if (r == null || r.GetComponentInParent<ClosedCover>() != null || r.GetComponentInParent<Station>() != null) continue;
+                        if (r is ParticleSystemRenderer || r.GetComponent<TextMesh>() != null) continue;
+                        bool panOrPot = false;
+                        for (Transform t = r.transform; t != null; t = t.parent)
+                            if (t.name.StartsWith("Pan") || t.name.StartsWith("Pot")) { panOrPot = true; break; }
+                        Bounds rb = r.bounds;
+                        bool overCloth = rb.center.x >= cloth.min.x && rb.center.x <= cloth.max.x
+                            && rb.center.z >= cloth.min.z && rb.center.z <= cloth.max.z
+                            && rb.center.y >= cloth.min.y - 0.5f && rb.center.y <= cloth.max.y + 0.5f;
+                        if (!panOrPot || !overCloth) continue;
+                        Assert.LessOrEqual(rb.max.y, cloth.max.y + 1e-3f, station.name + ": " + r.name + " crosses the top face of the cloth");
+                    }
                     Transform card = cover.transform.Find("Cloth and sign/Sign card");
                     if (card == null) continue; // too narrow for a sign
                     Assert.LessOrEqual(Mathf.Max(card.lossyScale.x, card.lossyScale.z), ClosedCoverRules.SignSize.x + 1e-3f, station.name + ": the sign is small");
@@ -127,6 +142,7 @@ namespace Worktown.Game.Tests
         public void TheDelivery_ShowsOnTheHudAsMoneyLeaving_AndPassesTheD27WordCheck()
         {
             Assert.AreEqual("Potatoes delivered -$96 (2 on the shelf)", FoodCornerRules.DeliveryText(2, 96));
+            Assert.AreEqual("Potatoes delivered (2 on the shelf)", FoodCornerRules.DeliveryText(2, 0), "no '-$0'");
             string none = FoodCornerRules.DeliveryText(0, 0);
             StringAssert.StartsWith("No potatoes delivered", none);
             foreach (string text in new[] { FoodCornerRules.DeliveryText(2, 96), none })
