@@ -22,6 +22,9 @@ namespace Worktown.Game.Shop
         private readonly List<RegisterPayment> _line = new List<RegisterPayment>();
 
         public IReadOnlyList<RegisterPayment> Line => _line;
+
+        /// <summary>Spec 053: false at the food corner (cash only): the card terminal refuses with NotOpenYet and changes nothing.</summary>
+        public bool AcceptsCard { get; set; } = true;
         public RegisterPayment Head => _line.Count > 0 ? _line[0] : null;
 
         /// <summary>A guest who was handed its food joins the line (once per guest).</summary>
@@ -43,6 +46,7 @@ namespace Worktown.Game.Shop
         {
             settled = default;
             if (option < 0 || option >= RegisterRules.SlotCount) return CookOutcome.InvalidOption;
+            if (option == RegisterRules.CardOption && !AcceptsCard) return CookOutcome.NotOpenYet; // spec 053
             RegisterPayment head = Head;
             if (head == null) return CookOutcome.NoPayment;
             if (option == RegisterRules.CardOption)

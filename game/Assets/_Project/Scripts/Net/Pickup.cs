@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FishNet.Component.Transforming;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
@@ -12,7 +13,9 @@ namespace Worktown.Game.Net
     /// <summary>
     /// A cube that can be carried (spec 021: also every piece of cookware, with a Vessel). The server moves it to the
     /// holder's hold point every tick;
-    /// NetworkTransform (server-authoritative) replicates the position.
+    /// NetworkTransform (server-authoritative) replicates the position. Spec 054 (B2): not while it is held: then the server's
+    /// NetworkTransform sends nothing and each client moves the root to the holder's hold point itself (<see cref="ReleaseTo"/>,
+    /// <see cref="ApplyHeldSync"/>); the release is sent as a teleport.
     /// While held, the holder OWNS this object (PickupService gives ownership so the client can
     /// find its held cube). Do not add [ServerRpc] methods here without RequireOwnership = false
     /// plus explicit server checks: the holder could otherwise call them.
@@ -101,9 +104,13 @@ namespace Worktown.Game.Net
             _heldGoal = HeldGoal;
             // A carried item never collides: on the holder's screen it trails a tick behind the
             // head, and the predicted jump would hit it from below (spec 010 play-test).
-            HolderClientId.OnChange += (_, holder, _) =>
+            HolderClientId.OnChange += (_, holder, asServer) =>
             {
                 if (_collider != null) _collider.enabled = holder == PickupRegistry.NoHolder;
+                // Spec 054 (B2): a client (not the host: there the server's state is the state) stops its NetworkTransform from
+                // moving the root while it moves it to the holder's hold point itself (FollowHolderOnClient), and lets it go again
+                // when the item is put down: the server's teleport to the rest pose arrives with the change.
+                if (!asServer && !IsServerInitialized) SetClientFollow(holder);
             };
         }
 
@@ -121,6 +128,7 @@ namespace Worktown.Game.Net
             // their resting pose; keep its tilt for every later drop or place.
             _restTilt = PlaceSpots.TiltOf(transform.rotation);
             if (ExitSound.Value != 0) ExitSound.Value = 0; // a pooled item starts without the exit of its last life
+            ApplyHeldSync(gameObject, IsHeld); // spec 054: a pooled item despawned while held syncs again
         }
 
         /// <summary>Spec 044, server: the item is about to be despawned into <paramref name="point"/>; viewers see it fly there and hear
@@ -135,6 +143,7 @@ namespace Worktown.Game.Net
         {
             base.OnStartClient();
             ResetVisual();
+            if (!IsServerInitialized) SetClientFollow(HolderClientId.Value); // spec 054 (B2): a late joiner sees a held item
             if (HolderClientId.Value == PickupRegistry.NoHolder) _clientRestTilt = PlaceSpots.TiltOf(transform.rotation);
             if (!_registered)
             {
@@ -164,6 +173,7 @@ namespace Worktown.Game.Net
                 ExitFlightLook.Begin(transform, _tween.Drawn, ExitPoint.Value, (Worktown.Game.Audio.SoundKey)(ExitSound.Value - 1), Time.unscaledTime);
             }
             Unhook();
+            if (!IsServerInitialized) SetClientFollow(PickupRegistry.NoHolder); // spec 054 (B2): a pooled copy syncs again
         }
 
         /// <summary>Spec 044: this client's id (-1 before it has a connection).</summary>
@@ -254,10 +264,66 @@ namespace Worktown.Game.Net
         /// <summary>The prediction is over (see <see cref="ItemLook.EndPrediction"/>).</summary>
         internal void EndPrediction(bool confirmed) => _look.EndPrediction(confirmed, Time.unscaledTime);
 
+        // ---- Spec 054 (B2): a held item's root on a client ----
+        // The server sends no transform while the item is held, so a client moves the root to the holder's hold point itself, every
+        // frame, exactly where the server keeps it (above the head): labels, sounds, steam and every reader of the root see what they
+        // saw before, and the root starts from there when the server's release teleport arrives. The NetworkTransform's own sync is
+        // off on this client meanwhile, so the two never fight (it has nothing new to move to anyway).
+        private bool _clientFollowing;
+        private int _followHolder = PickupRegistry.NoHolder;
+        private Transform _followHold;
+        private float _nextFollowLookup;
+
+        private void SetClientFollow(int holder)
+        {
+            bool held = holder != PickupRegistry.NoHolder;
+            if (held == _clientFollowing) return;
+            _clientFollowing = held;
+            ApplyHeldSync(gameObject, held);
+            // 054 review: goals still buffered from before the pick-up (a landing within about 100 ms) are stale: the release must not
+            // play them first.
+            if (held && TryGetComponent(out NetworkTransform nt)) TransformGoals.Clear(nt);
+            if (!held)
+            {
+                _followHolder = PickupRegistry.NoHolder;
+                _followHold = null;
+            }
+        }
+
+        /// <summary>Spec 054 (B2), a client: where the server keeps a held item (the holder's hold point); false while unknown.</summary>
+        internal bool TryGetHolderHoldPoint(out Transform holdPoint)
+        {
+            holdPoint = null;
+            int holder = HolderClientId.Value;
+            if (holder == PickupRegistry.NoHolder) return false;
+            if (holder != _followHolder)
+            {
+                _followHolder = holder;
+                _followHold = null;
+                _nextFollowLookup = 0f;
+            }
+            if (_followHold == null && Time.unscaledTime >= _nextFollowLookup)
+            {
+                // A late joiner may see the item before the holder's player object: try again shortly (as HolderVisual does).
+                _nextFollowLookup = Time.unscaledTime + HolderLookupSeconds;
+                CharacterVisual visual = CharacterVisual.FindPlayer(holder);
+                if (visual != null && visual.TryGetComponent(out PickupInteractor interactor)) _followHold = interactor.HoldPoint;
+            }
+            holdPoint = _followHold;
+            return holdPoint != null;
+        }
+
+        private void FollowHolderOnClient()
+        {
+            if (!_clientFollowing) return;
+            if (TryGetHolderHoldPoint(out Transform hold)) transform.SetPositionAndRotation(hold.position, hold.rotation);
+        }
+
         /// <summary>Spec 024: raise the holder's arm while it carries this item (a predicted pick-up counts).</summary>
         private void LateUpdate()
         {
             if (!IsClientInitialized) return;
+            if (!IsServerInitialized) FollowHolderOnClient(); // spec 054 (B2)
             int holder = _look.DrawnHolder(HolderClientId.Value);
             if (holder == PickupRegistry.NoHolder) return;
             CharacterVisual visual = HolderVisual(holder, Time.unscaledTime);
@@ -403,12 +469,45 @@ namespace Worktown.Game.Net
             return false;
         }
 
-        /// <summary>Server: attach to a holder after the registry accepted the claim.</summary>
+        /// <summary>Server: attach to a holder after the registry accepted the claim. Spec 054 (B2): from now on the NetworkTransform
+        /// sends nothing (every viewer draws the item in the holder's hand, and moves the root to the hold point itself).</summary>
         internal void ServerAttach(Transform holdPoint, int clientId)
         {
+            ApplyHeldSync(gameObject, true); // before the move: the hold point is never sent
             _serverHoldPoint = holdPoint;
             HolderClientId.Value = clientId;
             FollowHoldPoint();
+        }
+
+        /// <summary>
+        /// Spec 054 (B2): turns the item's NetworkTransform position and rotation sync off while it is held, on otherwise
+        /// (<see cref="NetRateRules.SyncsTransform"/>). On the server this stops the sends; on a client it only stops the
+        /// NetworkTransform from moving the root while this client moves it to the holder's hold point itself.
+        /// </summary>
+        public static void ApplyHeldSync(GameObject item, bool held)
+        {
+            if (item == null || !item.TryGetComponent(out NetworkTransform nt)) return;
+            bool sync = NetRateRules.SyncsTransform(held);
+            nt.SetSynchronizePosition(sync);
+            nt.SetSynchronizeRotation(sync);
+        }
+
+        /// <summary>
+        /// Spec 054 (B2), server: the release of a held item. Sync goes back on first, the NetworkTransform is told to send a teleport
+        /// of its full state (its last send was before the pick-up), and only then the item gets its pose, so the drop or place pose
+        /// goes out in the next tick and every viewer's root jumps there at once (the 027b settle eases the model).
+        /// </summary>
+        public static void ReleaseTo(GameObject item, Vector3 position, Quaternion rotation)
+        {
+            if (item == null) return;
+            ApplyHeldSync(item, false);
+            // FishNet's send state exists only on a started server object (an unspawned copy has none; NetworkObject's flag is safe to read).
+            if (item.TryGetComponent(out NetworkTransform nt) && item.TryGetComponent(out NetworkObject nob) && nob.IsServerInitialized)
+            {
+                nt.Teleport();
+                nt.ForceSend();
+            }
+            item.transform.SetPositionAndRotation(position, rotation);
         }
 
         /// <summary>
@@ -430,7 +529,7 @@ namespace Worktown.Game.Net
             // bottom, food and boxes at the centre).
             Vector3 rest = IsFree(inFront) ? inFront : atFeet;
             rest.y = BottomOffset;
-            transform.SetPositionAndRotation(rest, PlaceSpots.RestRotation(_restTilt, Quaternion.identity));
+            ReleaseTo(gameObject, rest, PlaceSpots.RestRotation(_restTilt, Quaternion.identity)); // spec 054: sync on first
             _serverHoldPoint = null;
             HolderClientId.Value = PickupRegistry.NoHolder;
         }
@@ -454,14 +553,15 @@ namespace Worktown.Game.Net
         /// </summary>
         internal void ServerPlaceAt(Vector3 position, Quaternion rotation)
         {
-            transform.SetPositionAndRotation(position, rotation);
+            ReleaseTo(gameObject, position, rotation); // spec 054: sync on first
             _serverHoldPoint = null;
             HolderClientId.Value = PickupRegistry.NoHolder;
         }
 
         /// <summary>
         /// 041 review: half the size of the item's box collider in its own axes (scaled), for the turned-footprint check of a place
-        /// (PickupService.PlanPlace). Zero without a box collider (no check then).
+        /// (PickupService.PlanPlace). Zero without a box collider: an item with another collider (a sphere, a mesh) or none is not
+        /// checked at all, its wheel turn is never refused for a neighbour.
         /// </summary>
         internal Vector3 ColliderHalfExtents
         {
@@ -469,6 +569,17 @@ namespace Worktown.Game.Net
             {
                 if (!(_collider is BoxCollider box)) return Vector3.zero;
                 return Vector3.Scale(box.size * 0.5f, transform.lossyScale);
+            }
+        }
+
+        /// <summary>054 round (041 review nit): the centre of the item's box collider in its own axes (scaled), off the pivot; zero
+        /// without a box collider. With <see cref="ColliderHalfExtents"/> it places the footprint where the box really lies.</summary>
+        internal Vector3 ColliderCenter
+        {
+            get
+            {
+                if (!(_collider is BoxCollider box)) return Vector3.zero;
+                return Vector3.Scale(box.center, transform.lossyScale);
             }
         }
 

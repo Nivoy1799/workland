@@ -28,9 +28,12 @@ namespace Worktown.Game.Economy
         }
 
         /// <summary>Default catalog, ticked to the start hour so demand exists.</summary>
-        public static TownEconomy CreateDemo()
+        public static TownEconomy CreateDemo() => CreateGame(EconomyRules.Seed);
+
+        /// <summary>Spec 053: a new game's economy (Initial(), seeded with <paramref name="seed"/>), ticked to the start hour.</summary>
+        public static TownEconomy CreateGame(ulong seed)
         {
-            var economy = new TownEconomy(EconomyCatalog.CreateDefault(), EconomyRules.Seed);
+            var economy = new TownEconomy(EconomyCatalog.CreateDefault(), seed);
             for (int i = 0; i < EconomyRules.StartHour; i++) economy.TickHour();
             return economy;
         }
@@ -149,6 +152,16 @@ namespace Worktown.Game.Economy
             if (BalanceOf(accountId) < 0) return false;
             paid = AdjustBalance(accountId, System.Math.Max(0L, amount));
             return true;
+        }
+
+        /// <summary>
+        /// Spec 053: a fee (the food corner's pitch fee) leaves the account: up to its balance (the wallet is clamped at 0). Returns what
+        /// was paid (0 or more); 0 for an unknown account or no fee.
+        /// </summary>
+        public long PayFee(string accountId, long amount)
+        {
+            if (amount <= 0 || BalanceOf(accountId) < 0) return 0;
+            return -AdjustBalance(accountId, -amount);
         }
 
         /// <summary>Adds <paramref name="delta"/> to the account (clamped to 0..MaxBalance) and to the paid-to-players total; the change made.</summary>

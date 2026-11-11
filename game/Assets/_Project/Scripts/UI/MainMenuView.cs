@@ -20,6 +20,9 @@ namespace Worktown.Game.UI
     public sealed class MainMenuView : MonoBehaviour
     {
         public const string NewShopId = "new-shop";
+        /// <summary>Spec 053: Continue (the newest save) and the save error card's Back.</summary>
+        public const string ContinueId = "continue";
+        public const string SaveBackId = "back-save";
         public const string JoinFriendId = "join-friend";
         public const string JoinAddressId = "join-address";
         public const string SettingsId = "settings";
@@ -59,6 +62,19 @@ namespace Worktown.Game.UI
         private bool _buildShown;
         private Behaviour _pausedBrain;
         private bool _wasShowing;
+        // Spec 053: the host buttons (Continue with its line, New shop), rebuilt each time the title opens, and the save error card.
+        private VisualElement _hostButtons;
+        private Label _continueLine;
+        private VisualElement _saveCard;
+        private Label _saveCardText;
+        private bool _saveCardOpen;
+
+        /// <summary>Spec 053: the title offers Continue now (a save that loads exists), and its line ("Day 4 · $230").</summary>
+        public bool HasContinue { get; private set; }
+        public string ContinueText => _continueLine != null ? _continueLine.text : string.Empty;
+        /// <summary>Spec 053: the save error card shows (its text), for the tour and tests.</summary>
+        public bool SaveCardShowing => _saveCardOpen;
+        public string SaveCardText => _saveCardText != null ? _saveCardText.text : string.Empty;
 
         /// <summary>The title screen or one of its cards shows (not in the shop).</summary>
         public bool IsShowing => _root != null && _root.style.display == DisplayStyle.Flex;
@@ -102,8 +118,8 @@ namespace Worktown.Game.UI
             _side.Add(subtitle);
 
             _title = new VisualElement();
-            foreach (string choice in MenuRules.HostChoices(false))
-                _title.Add(MenuButton(NewShopId, choice, () => _bootstrap.StartHost()));
+            _hostButtons = new VisualElement(); // spec 053: Continue (when a save loads) and New shop, rebuilt when the title opens
+            _title.Add(_hostButtons);
             _title.Add(MenuButton(JoinFriendId, "Join a friend", () => Open(Page.JoinFriend)));
             _title.Add(MenuButton(JoinAddressId, "Join by address", () => Open(Page.JoinAddress)));
             _title.Add(MenuButton(SettingsId, "Settings", () => Open(Page.Settings)));
@@ -164,6 +180,20 @@ namespace Worktown.Game.UI
             _card.Add(row);
             _root.Add(_card);
 
+            // Spec 053: Continue could not load the newest save: why, and Back to the menu (the file is kept).
+            _saveCard = new VisualElement();
+            _saveCard.AddToClassList("panel");
+            _saveCard.AddToClassList("menu-card");
+            var saveTitle = new Label(MenuRules.SaveErrorTitle);
+            saveTitle.AddToClassList("card-title");
+            _saveCard.Add(saveTitle);
+            _saveCardText = new Label { enableRichText = false };
+            _saveCardText.AddToClassList("card-text");
+            _saveCard.Add(_saveCardText);
+            _saveCard.Add(MenuButton(SaveBackId, "Back", CloseSaveCard));
+            Show(_saveCard, false);
+            _root.Add(_saveCard);
+
             var corner = new VisualElement();
             corner.AddToClassList("menu-build");
             _build = new Label();
@@ -210,9 +240,78 @@ namespace Worktown.Game.UI
             if (_addressField != null) _addressField.value = value;
         }
 
+        /// <summary>
+        /// Spec 053: the host buttons from the saves on this PC: Continue with its line when a save loads (MenuRules.HostChoices), then
+        /// New shop. Read when the title opens (a few small files), not every frame.
+        /// </summary>
+        private void RebuildHostButtons()
+        {
+            if (_hostButtons == null) return;
+            _hostButtons.Clear();
+            _continueLine = null;
+            Save.SaveStore store = _bootstrap != null ? _bootstrap.Saves : null;
+            Save.SaveLoadResult newest = null;
+            bool hasSave = false;
+            try
+            {
+                if (store != null && store.HasSlot)
+                {
+                    newest = store.Newest();
+                    hasSave = MenuRules.OffersContinue(store.HasSave(), newest != null ? newest.Error : Save.SaveError.None);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Menu] the saves could not be read: " + e.Message); // never stops the title screen
+                hasSave = false;
+            }
+            HasContinue = hasSave;
+            foreach (string choice in MenuRules.HostChoices(hasSave))
+            {
+                if (choice == "Continue")
+                {
+                    _hostButtons.Add(MenuButton(ContinueId, choice, ContinueShop));
+                    _continueLine = new Label(newest != null && newest.Ok
+                        ? MenuRules.ContinueLine(newest.Save.clock.day, newest.Save.money.balance)
+                        : newest != null && newest.Error == Save.SaveError.NewerVersion ? MenuRules.NewerContinueLine
+                        : MenuRules.BrokenContinueLine) { enableRichText = false };
+                    _continueLine.AddToClassList("menu-text");
+                    _hostButtons.Add(_continueLine);
+                }
+                else
+                {
+                    _hostButtons.Add(MenuButton(NewShopId, choice, () => _bootstrap.StartNewShop()));
+                }
+            }
+        }
+
+        /// <summary>Spec 053: Continue loads the newest save; a broken one shows the error card instead (Back returns to the menu).</summary>
+        private void ContinueShop()
+        {
+            Save.SaveLoadResult newest = null;
+            try { newest = _bootstrap.Saves != null ? _bootstrap.Saves.Newest() : null; }
+            catch (Exception e) { Debug.LogWarning("[Menu] the saves could not be read: " + e.Message); }
+            if (newest == null || !newest.Ok)
+            {
+                Save.SaveError error = newest != null ? newest.Error : Save.SaveError.NotJson;
+                Debug.Log("[Menu] Continue: the newest save does not load (" + error + "); the file is kept");
+                _saveCardText.text = MenuRules.SaveErrorText(error);
+                _saveCardOpen = true;
+                return;
+            }
+            _bootstrap.ContinueShop();
+        }
+
+        private void CloseSaveCard()
+        {
+            _saveCardOpen = false;
+            Open(Page.Title);
+        }
+
         private void Open(Page page)
         {
             _page = page;
+            if (page == Page.Title) RebuildHostButtons(); // spec 053
             Show(_title, page == Page.Title);
             Show(_friend, page == Page.JoinFriend);
             Show(_address, page == Page.JoinAddress);
@@ -297,6 +396,12 @@ namespace Worktown.Game.UI
             }
             if (!_wasShowing) Open(Page.Title);
             _wasShowing = true;
+            // 053 review: a Continue that failed on the server (or -continue) shows the save's error card here.
+            if (flow.State == JoinState.Menu && _saveCardText != null && _bootstrap.TakeSaveStartError(out Save.SaveError saveError))
+            {
+                _saveCardText.text = MenuRules.SaveErrorText(saveError);
+                _saveCardOpen = true;
+            }
             UnityEngine.Cursor.lockState = CursorLockMode.None;
             UnityEngine.Cursor.visible = true;
             DriveCamera();
@@ -306,7 +411,9 @@ namespace Worktown.Game.UI
                 _build.text = MenuRules.BuildLine(Application.version, BuildHash.Short(_bootstrap.Join.BuildHash));
                 _buildShown = true;
             }
-            Show(_side, flow.State == JoinState.Menu && _page != Page.Settings);
+            if (flow.State != JoinState.Menu) _saveCardOpen = false;
+            Show(_saveCard, _saveCardOpen); // spec 053
+            Show(_side, flow.State == JoinState.Menu && _page != Page.Settings && !_saveCardOpen);
             if (_page == Page.Settings && (flow.State != JoinState.Menu || _settingsView == null || !_settingsView.IsOpen)) Open(Page.Title);
             Show(_card, flow.State != JoinState.Menu);
             double now = Time.unscaledTimeAsDouble;

@@ -136,6 +136,7 @@ namespace Worktown.Game.Net
             PickupOutcome planned = PlanPlace(_spots, holding, surfaceIndex, surface, packedSpot, player.transform.position,
                 found && pickup.IsHandleTool, found ? pickup.RestTilt : Quaternion.identity, found ? pickup.BottomOffset : 0f,
                 found ? pickup.ColliderHalfExtents : Vector3.zero, // 041 review: a turn may not lay it over a neighbour
+                found ? pickup.ColliderCenter : Vector3.zero, // 054 round (review nit): where the box sits off the pivot
                 _isOccupied ??= spot => IsSpotOccupied(spot, _probe), out int spotIndex, out Pose rest);
             if (planned != PickupOutcome.Ok) return planned;
             if (!found) return PickupOutcome.NotFound;
@@ -179,6 +180,19 @@ namespace Worktown.Game.Net
             Vector3 playerPosition, bool handleTool, Quaternion restTilt, float bottomOffset, Vector3 halfExtents,
             System.Func<Vector3, bool> occupied, out int spotIndex, out Pose rest)
         {
+            return PlanPlace(spots, holding, surfaceIndex, surface, packedSpot, playerPosition, handleTool, restTilt, bottomOffset,
+                halfExtents, Vector3.zero, occupied, out spotIndex, out rest);
+        }
+
+        /// <summary>
+        /// 054 round (041 review nits): as above, with the centre of the item's box (<paramref name="boxCenter"/>, local and scaled; see
+        /// Pickup.ColliderCenter), so a footprint off the pivot is checked where it lies. A half turn is never checked (PlaceTurn.IsHalfTurn):
+        /// it is never refused. The neighbour test allocates nothing (a state struct and a non-capturing function).
+        /// </summary>
+        public static PickupOutcome PlanPlace(PlaceSpots spots, bool holding, int surfaceIndex, PlaceSurface surface, int packedSpot,
+            Vector3 playerPosition, bool handleTool, Quaternion restTilt, float bottomOffset, Vector3 halfExtents, Vector3 boxCenter,
+            System.Func<Vector3, bool> occupied, out int spotIndex, out Pose rest)
+        {
             rest = default;
             if (!PlaceTurn.TryUnpack(packedSpot, out spotIndex, out int turn)) spotIndex = -1;
             int spotCount = surface != null ? surface.SpotCount : 0;
@@ -194,17 +208,38 @@ namespace Worktown.Game.Net
             Quaternion unturned = ToolRest.RestRotation(handleTool, restTilt, surface.transform.rotation, playerPosition, spot);
             Quaternion rotation = PlaceTurn.Apply(unturned, turn); // spec 041: the player's wheel turn on top of the server's rest
             // 041 review: the wheel's turn may not lay the item over an occupied neighbour spot.
-            if (PlaceTurn.Add(turn, 0) != 0 && halfExtents != Vector3.zero)
+            if (PlaceTurn.Add(turn, 0) != 0 && !PlaceTurn.IsHalfTurn(turn) && halfExtents != Vector3.zero)
             {
                 Quaternion surfaceRotation = surface.transform.rotation;
-                int index = surfaceIndex;
-                bool overlaps = PlaceTurn.TurnOverlaps(surface.Size, spotIndex, PlaceTurn.Footprint(halfExtents, unturned, surfaceRotation),
-                    PlaceTurn.Footprint(halfExtents, rotation, surfaceRotation),
-                    n => spots.IsTaken(index, n) || (occupied != null && occupied(surface.SpotWorldPosition(n))));
+                PlaceTurn.Footprint(halfExtents, boxCenter, unturned, surfaceRotation, out Vector2 restPositive, out Vector2 restNegative);
+                PlaceTurn.Footprint(halfExtents, boxCenter, rotation, surfaceRotation, out Vector2 turnedPositive, out Vector2 turnedNegative);
+                bool overlaps = PlaceTurn.TurnOverlaps(surface.Size, spotIndex, restPositive, restNegative, turnedPositive, turnedNegative,
+                    new NeighbourTest(spots, surfaceIndex, surface, occupied), NeighbourTest.IsTaken);
                 if (overlaps) return PickupOutcome.Taken;
             }
             rest = new Pose(spot + surface.transform.up * bottomOffset, rotation);
             return PickupOutcome.Ok;
+        }
+
+        /// <summary>054 round (041 review nit): what PlanPlace's neighbour test needs, passed by value (no closure per place request).</summary>
+        private readonly struct NeighbourTest
+        {
+            private readonly PlaceSpots _spots;
+            private readonly int _surfaceIndex;
+            private readonly PlaceSurface _surface;
+            private readonly System.Func<Vector3, bool> _occupied;
+
+            public NeighbourTest(PlaceSpots spots, int surfaceIndex, PlaceSurface surface, System.Func<Vector3, bool> occupied)
+            {
+                _spots = spots;
+                _surfaceIndex = surfaceIndex;
+                _surface = surface;
+                _occupied = occupied;
+            }
+
+            /// <summary>In the spot table or found by the occupied probe. One cached delegate (a method group would allocate each call).</summary>
+            public static readonly System.Func<NeighbourTest, int, bool> IsTaken = (t, n) =>
+                t._spots.IsTaken(t._surfaceIndex, n) || (t._occupied != null && t._occupied(t._surface.SpotWorldPosition(n)));
         }
 
         /// <summary>

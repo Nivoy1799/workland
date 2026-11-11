@@ -53,6 +53,18 @@ namespace Worktown.Game.Net
         public SteamFriendsLink Friends { get; private set; }
 
         public LaunchArgs Args { get; private set; } = new LaunchArgs();
+
+        /// <summary>
+        /// Spec 053: how the next (or running) hosted game starts: the open kitchen (<c>-host</c>), a New shop or a Continue (the title
+        /// screen, <c>-new-shop</c>, <c>-continue</c>). The SaveService on the server applies it when the server starts.
+        /// </summary>
+        public Save.ShopStart HostStart { get; private set; } = Save.ShopStart.OpenKitchen;
+
+        /// <summary>
+        /// Spec 053: the host's save files (the folder from <c>-save-dir</c>, else the player's; none in a scripted run without it). Only
+        /// this process's own server and title screen use it; a client never reads or writes a shop save.
+        /// </summary>
+        public Save.SaveStore Saves { get; private set; }
         public NetworkManager NetworkManager => _networkManager;
         public SteamBootstrap Steam => _steam;
 
@@ -91,6 +103,10 @@ namespace Worktown.Game.Net
             Args =LaunchArgs.Parse(Environment.GetCommandLineArgs());
             if (!Args.IsValid)
                 Debug.LogError("[Net] bad command line: " + Args.Error);
+            // Spec 053: scripted runs never touch the player's saves (only a folder they bring with -save-dir).
+            string saveFolder = Save.SaveStore.FolderFor(Args.SaveDir, Args.IsScripted, Application.persistentDataPath);
+            Saves = new Save.SaveStore(saveFolder, new Save.DiskSaveFiles(), Save.ShopSaveCodec.Default, () => DateTime.UtcNow);
+            Debug.Log("[Save] save folder: " + (saveFolder ?? "none (a scripted run without -save-dir)"));
             if (_join != null && Args.MaxPlayers > 0)
             {
                 _join.MaxPlayers = Args.MaxPlayers;
@@ -111,7 +127,16 @@ namespace Worktown.Game.Net
                     StartServer();
                     break;
                 case LaunchMode.Host:
-                    StartHost();
+                    // Spec 053: -new-shop and -continue host with a save; -host is the open kitchen (dev and tests).
+                    // 053 review: -continue checks the save first; a broken one shows its error on the title (or ends a scripted run).
+                    if (Args.ContinueShop && (Saves == null || Saves.Newest() is not { Ok: true }))
+                    {
+                        Save.SaveLoadResult newest = Saves?.Newest();
+                        FailSaveStart(newest != null ? newest.Error : Save.SaveError.NotJson);
+                        Status = "title screen";
+                        break;
+                    }
+                    StartHost(Args.NewShop ? Save.ShopStart.NewShop : Args.ContinueShop ? Save.ShopStart.Continue : Save.ShopStart.OpenKitchen);
                     break;
                 case LaunchMode.ClientTugboat:
                     ConnectTugboat(Args.Address, Args.Port);
@@ -162,9 +187,66 @@ namespace Worktown.Game.Net
         public void StartHost()
         {
             if (IsRunning) return;
+            Debug.Log("[Net] hosting: " + HostStart);
             Flow.BeginHost();
             StartServer();
             ClientTugboat("127.0.0.1", LaunchArgs.DefaultTugboatPort);
+        }
+
+        /// <summary>Spec 053: hosts a game that starts as <paramref name="start"/> (kept for a retry of the same host).</summary>
+        public void StartHost(Save.ShopStart start)
+        {
+            if (IsRunning) return;
+            HostStart = start;
+            StartHost();
+        }
+
+        /// <summary>Spec 053, the title screen's New shop: a new food corner with its own new save file.</summary>
+        public void StartNewShop() => StartHost(Save.ShopStart.NewShop);
+
+        /// <summary>Spec 053, the title screen's Continue: the newest save.</summary>
+        public void ContinueShop() => StartHost(Save.ShopStart.Continue);
+
+        /// <summary>Spec 053 review: the exit code of a scripted run whose <c>-continue</c> found no save that loads.</summary>
+        public const int SaveStartExitCode = 3;
+
+        private Save.SaveError? _saveStartError;
+
+        /// <summary>
+        /// Spec 053 review: Continue (the title, or <c>-continue</c>) cannot load the newest save: never a new shop instead. A scripted run
+        /// exits with <see cref="SaveStartExitCode"/>; otherwise a running host closes again and the title shows the save's error card
+        /// (<see cref="TakeSaveStartError"/>). The file is kept.
+        /// </summary>
+        public void FailSaveStart(Save.SaveError error)
+        {
+            Debug.LogError("[Net] Continue: the newest save does not load (" + error + ")");
+            if (Args.IsScripted)
+            {
+                _quitLetThrough = true;
+                Application.Quit(SaveStartExitCode);
+                return;
+            }
+            _saveStartError = error;
+            if (IsRunning) Leave();
+        }
+
+        /// <summary>Spec 053 review, the title screen: the save error of a failed Continue, once.</summary>
+        public bool TakeSaveStartError(out Save.SaveError error)
+        {
+            error = _saveStartError ?? Save.SaveError.None;
+            bool any = _saveStartError.HasValue;
+            _saveStartError = null;
+            return any;
+        }
+
+        /// <summary>Spec 053: the host's save service (on the NetworkManager), or null.</summary>
+        public Save.SaveService SaveService => _networkManager != null ? _networkManager.GetComponent<Save.SaveService>() : null;
+
+        /// <summary>Spec 053: the host saves its game now (a closing shop, a quit); nothing on a client or without a save.</summary>
+        private void SaveHostGame(Save.SaveTrigger trigger)
+        {
+            if (_networkManager == null || !_networkManager.IsServerStarted) return;
+            GuardedCall.Run(() => SaveService?.SaveNow(trigger), "[Net] saving the shop (" + trigger + ")", Debug.LogWarning);
         }
 
         /// <summary>Joins a host by address over Tugboat (spec 047: "Join by address"; the tours and bots use <c>-connect</c>).</summary>
@@ -282,6 +364,7 @@ namespace Worktown.Game.Net
             if (!running || _closing) return;
             if (_networkManager.IsServerStarted)
             {
+                SaveHostGame(Save.SaveTrigger.HostClosing); // spec 053: saved before the notice and the stop
                 _join?.NotifyClosing();
                 StartCoroutine(CloseSoon());
             }
@@ -399,6 +482,7 @@ namespace Worktown.Game.Net
             Flow.Leave(true);
             if (!_closing)
             {
+                SaveHostGame(Save.SaveTrigger.HostClosing); // spec 053: the shop closes with the quit; saved before the notice
                 // Review: a throw from the notice must not skip the close and the quit below.
                 GuardedCall.Run(() => _join?.NotifyClosing(), "[Net] quit: the HostClosed notice", Debug.LogWarning);
                 StartCoroutine(CloseSoon());

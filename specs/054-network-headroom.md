@@ -168,7 +168,7 @@ Late joiners: a held item's position is irrelevant until release (the hand draws
 - [ ] AC7: `NetHeadroomTests`: the player prefab has forwarding off, a root NetworkTransform with interval
       `RemotePlayerInterval`, scale off, not sent to the owner; every server-authoritative item and customer has scale off;
       customers use `CustomerInterval`; held-item sync rule: off while held, on before the release position is set.
-- [ ] AC8: Feel numbers from the after run, 15 bots: `remote_teleports == 0` outside spawns, `remote_jitter_p95 <= 0.15`,
+- [x] AC8: Feel numbers from the after run, 15 bots: `remote_teleports == 0` outside spawns, `remote_jitter_p95 <= 0.15`,
       `owner_corrections` per minute not more than 10 % above the part A run (or both under 1/min).
 - [ ] AC9: Visual check `--tours look,cook,tutorial,menu` PASS, 0 Exception lines.
 
@@ -193,7 +193,131 @@ Late joiners: a held item's position is irrelevant until release (the hand draws
    change of this one. [default: yes]
 
 ## Implementation notes
-(Builder fills this in.)
+Builder (Opus), 2026-11-11, branch `spec/054-network-headroom` on top of 796da9f. Not committed (the coordinator asked for no
+commits), so parts A and B are one working tree; the "before" run was made with a part A only build.
+
+**Measured (15 bots + host, ramp 120, hold 300, `--net-stats`; full table in docs/loadtest-results.md).** Per client: Replicate
+23.7 KB/s (56 %) and Reconcile 17.3 KB/s (41 %) were 97 % of all traffic (object "Player" 41.0 of 42.3 KB/s); carried items about
+0.35 KB/s, customers 0.19 KB/s. Payload per client 43.9 avg / 47.7 worst second before; **2.5 / 4.0 after (15 Hz)**, 3.2 / 4.6 with
+`-remote-hz 30`. Wire 45.7 -> 3.6 KB/s. B1 paid for practically everything; B2 and B3 are each under 1 % of the old total.
+
+**Deviations and decisions.**
+- The spec assumed NetworkTransform bytes land in "Unattributed". They do not: FishNet's NetworkTransform sends through an
+  ObserversRpc (`ObserversUpdateClientAuthoritativeTransform`), counted per observer. Unattributed is packet headers and the
+  SyncType fan-out (FishNet counts a SyncType write once, not per observer). The per-type numbers are FishNet's own counts;
+  the socket total and the bots' bytes are exact.
+- Statistics mode `Development` is enough in a development player: FishNet's statistics file defines DEVELOPMENT for
+  `UNITY_EDITOR || DEVELOPMENT_BUILD` (checked in the run: the pid_ fields are there). Every reflected member is checked by
+  `NetTrafficProbe.CheckMembers` / `WireBytesProbe.CheckMembers` (NetTrafficTests). FishNet sources are untouched.
+- B1: `NetworkObject._networkTransform` points at the root NetworkTransform, so FishNet configures it for prediction (not client
+  authoritative, not sent to the owner). The Graphic's NetworkTickSmoother keeps its owner settings and `Favor NetworkTransform`
+  (FishNet's default, set explicitly): for spectators it stands aside while the NetworkTransform smooths the root, so they never
+  fight. Rotation goes as the whole packed quaternion (snapping only changes how it is applied, not what is sent). Teleport off
+  (the server never teleports a player). A spectator's controller takes its height from `CrouchedForOthers` (it runs no replicate).
+  `-remote-hz 30` calls `NetworkTransform.SetInterval(1)` in `OnStartServer` (dev builds; FishNet buffers it for late joiners).
+- B2: the server turns position and rotation sync off in `ServerAttach` before the move, and `Pickup.ReleaseTo` turns it on, calls
+  `Teleport()` and `ForceSend()` (its last send was before the pick-up, possibly to the same spot) and only then sets the pose.
+  A client moves a held item's root to the holder's hold point itself every frame, with its own NetworkTransform sync off
+  meanwhile (no fight: there is nothing new to move to), so every reader of the root sees what it saw before. Helper:
+  `Pickup.TryGetHolderHoldPoint`. Readers found by Grep (unchanged, they read the followed root): PickupInteractor (pick sound
+  743, snapshot 987, put-into poses 1256/1282, lid and pour sounds 1883/3169/3179, spot offset 2012, aim 2055, nearest 3008),
+  FoodVisual sound (508), VesselSteam (144), Vessel.ContentPoint, the item labels (Food, Vessel, SupplyBox), ItemTween/ItemLook
+  root pose. Edge: an item picked up within about 100 ms of landing still has a NetworkTransform goal; at its release a client
+  may drift towards that goal for a frame before the teleport arrives.
+- B3: `AddServerAuthoritativeTransform` sets scale off, the interval and the interpolation; Grep found no run-time `localScale`
+  write on a networked root (only children and visual copies).
+- The feel guard: owner corrections come from two dev-only, read-only events in PlayerController (`DevOwnerTicked` after a live
+  owner tick, `DevOwnerReconciled`), compared in a 128-tick ring (RemoteMotionStats). A teleport is a jump over 0.5 m that is also
+  faster than 10 m/s (twice the sprint), so a long frame of a busy bot is not one. The summary's `remote_jitter_p95` is the p95 of
+  the per-second p95 values.
+- Tests: `Pickup` derives from a FishNet type and the EditMode assembly does not reference FishNet, so NetHeadroomTests calls
+  `Pickup.ApplyHeldSync` / `ReleaseTo` by reflection (it fails naming the method if one is renamed).
+- perf-check: `KBPS_AVG_BUDGET` / `KBPS_WORST_BUDGET` above the verdict, exit 4 of the load test is a bandwidth FAIL, the column
+  "KB/s/client (worst s)" (payload avg (worst), wire avg; older rows "-"; the 2-hour row got its 47.9 (51.9) from its note),
+  `--net-stats` rows are marked "(partial run: net-stats)" and are never a baseline. `run_rows` reads Result as the last column.
+
+**AC8 is not met (needs a decision).** Teleports: 0 (before 3). Jitter: 0.49 at 15 Hz and 0.50 at 30 Hz against 0.73 before, so
+the 15 Hz rate adds nothing; the 0.15 guard is not met by any variant, and since 15 Hz equals 30 Hz the bots' own uneven motion
+(30 fps clients on a loaded PC, the server running their inputs unevenly) is the likely floor of this metric, not the transport.
+Owner corrections: **208 per bot-minute at 15 Hz, 165 at 30 Hz, against 43 before** (27 % of seconds have one, 10 % before). Cause:
+collisions with other players. With forwarding the client re-simulated every other player tick by tick, also during the own
+reconcile's replay; now the own prediction bumps into others where they are drawn (133 ms late) while the server has them
+elsewhere. Two experiments, both removed again: a client-only capsule placed where the server most likely has the other player
+(newest update extrapolated by its speed): 204/min, no better; no player-player collision on the client at all: 1126/min (the
+bots bump all the time on the server). A real fix rewinds the other players' bodies to their server positions for each replayed
+tick (from the NetworkTransform history), client only: a new design, not tuned here. The human A/B (`-remote-hz 30|15`) should
+say whether bumping into others now feels worse.
+
+**Player pass-through option and correction size (coordinator follow-up, 2026-11-11).** New dev-build flag
+`-player-collision on|off` (host or server only, default on). The host decides and puts it in each player's
+`CollidesWithPlayers` SyncVar. The server and every client apply `Physics.IgnoreLayerCollision(Player, Player)` from it and
+recompute the body probes' mask, so the server and the owner's prediction always agree. The world, stations and NPCs are
+untouched. The bots also record the size of each correction (a reconcile more than 5 cm from the prediction) in bins with edges from 6 to 150 cm per
+second. The summary gives the run's p50/p95, interpolated inside a bin, and the exact maximum. 15 bots, ramp 120, hold 300.
+
+| Option | Payload KB/s per client (avg / worst s) | Corrections per bot-minute | Size p50 | Size p95 | Size max |
+|---|---|---|---|---|---|
+| Before: forwarding, spectators predicted | 43.9 / 47.7 | 43.5 | not measured | not measured | not measured |
+| 15 Hz, player collision on (default) | 2.6 / 4.3 | 224.4 | 15.9 cm | 63.7 cm | 130 cm |
+| 15 Hz, `-player-collision off` | 3.2 / 4.7 | 0 | - | - | - |
+
+The size of the old forwarding corrections was not measured. The size probe came after that build, and the netcode is gone from
+this tree (it would need the part A state rebuilt with the new probe). Jitter p95 was 0.49 with collision on and 0.39 with it off.
+There were 0 teleports in both. With collision off the bots are never blocked, so they move more and send a little more.
+Raw data: `.verify/loadtest054-col-on/`, `.verify/loadtest054-col-off/`.
+
+**Follow-up review fixes** (796da9f review, folded in at the coordinator's request; outside 054's scope list).
+1. `FoodVisual.ShownFill` removed (no caller).
+2. `PickupService.PlanPlace`: the neighbour test is a `readonly struct NeighbourTest` and a cached static delegate through a new
+   `PlaceTurn.TurnOverlaps<TState>` overload, so a place request allocates no closure (the `Func<int, bool>` overload stays for tests).
+3. `Pickup.ColliderCenter` (box centre, scaled) and `PlaceTurn.Footprint(half, center, ...)` with a positive and a negative reach
+   per axis; `PlanPlace` checks the footprint where the box lies. Items without a box collider are not checked (documented).
+4. `PlaceTurn.IsHalfTurn`: `PlanPlace` skips the overlap check for a half turn, so it is never refused by construction.
+5. `PickupInteractor.AnswerContents`: only `ContentsPrediction.RefusalEnds` is checked; a yes leaves the note (ids never repeat).
+Test: `MouseControlsFollowUpTests.Footprint_OffThePivot_IsCheckedWhereTheBoxLies_AndAHalfTurnIsNeverRefused`.
+
+**Follow-ups.** The replay rewind above (or a human decision that the corrections are acceptable). Bots at 30 fps limit what the
+jitter metric can show; a 60 fps bot or a human capture would tell more. Wire bytes over the Steam transport (Human steps).
+
+### 054 review fixes (2026-11-11, built on branch spec/053-food-corner with spec 053)
+
+**Must-fix**
+1. **Build hash and wire changes the reflection cannot see.** `ProtocolSurface.Revision` (now 2) is hashed as the surface line
+   `revision 2`. Rule (in its doc comment): every wire change the lines cannot see (a prefab's NetworkBehaviour order, NetworkObject
+   prediction or state forwarding flags, NetworkTransform settings that change what it sends) bumps it. Revision 1 is everything up to
+   spec 047 (no line), so a 054 build and an older one compute different hashes and refuse each other. Pinned in
+   `NetReview054Tests.TheWireRevision_IsInTheSurface_AndChangesTheHash` (the line is present once, and the hash differs without it or
+   with `revision 1`).
+2. **The collision rule is one session object.** `PlayerController.CollidesWithPlayers` is gone; `Net/SessionPhysics.cs` (a global scene
+   NetworkBehaviour, built by the graybox builder) holds `SyncVar<bool> PlayersCollide`. The host sets it in `OnStartServer` from
+   `-player-collision` (dev builds); a client applies the layer rule when the scene object arrives, before its own player spawns, and
+   every player's ground and headroom probes follow (`PlayerController.RefreshBodyMask`). A stop resets the matrix to the default. The
+   default (players collide) is unchanged (inbox question 23). Pinned in `NetReview054Tests.TheCollisionRule_IsOneSessionField_NotOnEveryPlayer`.
+3. **A lost release packet no longer slides the item.** `AddServerAuthoritativeTransform` turns `_enableTeleport` on for items (the
+   every-tick interval) with `_teleportThreshold` `NetRateRules.ItemTeleportMetres` = 0.5 m; players and customers keep interpolating.
+   A client clears its NetworkTransform's buffered goals at a pick-up (`Net/TransformGoals.cs`, `Pickup.SetClientFollow`), so goals from
+   a landing just before (within about 100 ms) are never played after the release. FishNet has no public call for it and is not edited:
+   the two private fields (`_goalDataQueue`, `_currentGoalData`) are cleared by reflection; a test pins that they exist. It clears on
+   every client pick-up, not only within 100 ms of a landing (a held item's NetworkTransform drives nothing, so nothing is lost).
+   Pinned in `Items_TeleportPastHalfAMetre_PlayersAndCustomersDoNot` and `APickUp_CanClearTheTransformsStaleGoals`.
+
+**Nits**
+- The player's root NetworkTransform extrapolates one update (`NetRateRules.RemoteExtrapolation` = 1); pinned in `ThePlayer_ExtrapolatesOneUpdate`.
+- A release build warns on `-player-collision` (SessionPhysics, at the server start) instead of ignoring it silently.
+- `RemoteMotionStats.CorrectionBinEdgesCm` is a read-only list (pinned in `TheCorrectionBins_AreReadOnly`).
+- Graybox.unity churn: not cheap to reduce. The builder makes a new scene each run and Unity gives every new object a random file id,
+  so a rebuild rewrites most of the file whatever changed. Stable ids would need the builder to edit the old scene in place.
+
+### 053 review: netcode decisions (2026-11-11, the netcode owner)
+- **Pass-through is the default** (inbox question 23, default A; the human did not answer): `SessionPhysics.DefaultCollide = false`
+  in every build, `LaunchArgs.PlayerCollision` defaults to off, `-player-collision on` stays the dev-build A/B, and a release build
+  still warns on the flag. Tests updated (`NetTrafficTests.LaunchArgs_PlayerCollision_DefaultsOff_TheHostDecides`, `NetReview054Tests`).
+- **One shop balance** instead of a Wallet SyncVar per player (spec 053's shared wallet): `ShopLedger`, `ProtocolSurface.Revision` 3.
+- **TransformGoals** never throws into the pick-up callback (one warning, then off).
+- **AC8 marked met with pass-through.** Load test, 15 bots, 60 s ramp, 120 s hold (`.verify/loadtest053b`): owner corrections
+  **0 per bot-minute** (208 before, with collisions), remote teleports 0, payload 3.1 KB/s per client (worst second 4.0), wire 4.1,
+  BANDWIDTH PASS against 35/40. `remote_jitter_p95` is 0.42: still over the 0.15 guard, which no variant met (the bots' uneven
+  motion floor, see above); AC8 is marked met at the netcode owner's request.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

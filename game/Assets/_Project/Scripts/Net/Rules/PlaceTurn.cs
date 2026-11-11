@@ -82,23 +82,54 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>
+        /// 054 round (041 review nit): the footprint of a box whose centre sits <paramref name="center"/> (local, scaled) off the item's
+        /// pivot. How far it reaches from the pivot on the spot, seen from above: <paramref name="positive"/> towards the surface's +X
+        /// (x) and +Z (y), <paramref name="negative"/> towards -X and -Z (both as distances; a centre far off the pivot can make one
+        /// negative: the box does not reach that side at all).
+        /// </summary>
+        public static void Footprint(Vector3 halfExtents, Vector3 center, Quaternion rest, Quaternion surface,
+            out Vector2 positive, out Vector2 negative)
+        {
+            Vector2 half = Footprint(halfExtents, rest, surface);
+            Vector3 c = Quaternion.Inverse(surface) * rest * center;
+            positive = new Vector2(half.x + c.x, half.y + c.z);
+            negative = new Vector2(half.x - c.x, half.y - c.z);
+        }
+
+        /// <summary>
         /// Whether a footprint of half size <paramref name="half"/> on a spot reaches over the half-way line (plus
         /// <see cref="OverlapSlack"/>) to the neighbour spot <paramref name="dColumn"/>, <paramref name="dRow"/> away (each -1, 0 or 1;
         /// a diagonal neighbour only when it reaches over both lines).
         /// </summary>
-        public static bool Reaches(Vector2 half, int dColumn, int dRow)
+        public static bool Reaches(Vector2 half, int dColumn, int dRow) => Reaches(half, half, dColumn, dRow);
+
+        /// <summary>As above for a footprint off the pivot (<see cref="Footprint(Vector3, Vector3, Quaternion, Quaternion, out Vector2, out Vector2)"/>):
+        /// a neighbour on the + side (column or row +1) is reached by <paramref name="positive"/>, one on the - side by <paramref name="negative"/>.</summary>
+        public static bool Reaches(Vector2 positive, Vector2 negative, int dColumn, int dRow)
         {
             float line = PlaceSpots.Spacing * 0.5f + OverlapSlack;
-            return (dColumn == 0 || half.x > line) && (dRow == 0 || half.y > line);
+            float x = dColumn > 0 ? positive.x : negative.x;
+            float y = dRow > 0 ? positive.y : negative.y;
+            return (dColumn == 0 || x > line) && (dRow == 0 || y > line);
         }
 
         /// <summary>
         /// 041 review, server (PickupService.PlanPlace): true when the turned footprint (<paramref name="turnedHalf"/>) on spot
         /// <paramref name="spot"/> of a top of size <paramref name="top"/> reaches an occupied neighbour spot (<paramref name="taken"/>)
         /// that the unturned rest (<paramref name="restHalf"/>, turn 0) does not reach. So the wheel never lays an item over a
-        /// neighbour; what the item covers without the wheel stays as it was (a half turn has the same footprint and is never refused).
+        /// neighbour; what the item covers without the wheel stays as it was. (PickupService.PlanPlace never asks for a half turn: it is
+        /// never refused, see <see cref="IsHalfTurn"/>.)
         /// </summary>
-        public static bool TurnOverlaps(Vector2 top, int spot, Vector2 restHalf, Vector2 turnedHalf, System.Func<int, bool> taken)
+        public static bool TurnOverlaps(Vector2 top, int spot, Vector2 restHalf, Vector2 turnedHalf, System.Func<int, bool> taken) =>
+            TurnOverlaps(top, spot, restHalf, restHalf, turnedHalf, turnedHalf, taken, (t, n) => t(n));
+
+        /// <summary>
+        /// 054 round (041 review nits): as above for footprints off the pivot (positive and negative reach, see
+        /// <see cref="Footprint(Vector3, Vector3, Quaternion, Quaternion, out Vector2, out Vector2)"/>), with the occupied test as a
+        /// state and a non-capturing function, so the server's place check allocates no closure per request.
+        /// </summary>
+        public static bool TurnOverlaps<TState>(Vector2 top, int spot, Vector2 restPositive, Vector2 restNegative, Vector2 turnedPositive,
+            Vector2 turnedNegative, TState state, System.Func<TState, int, bool> taken)
         {
             if (taken == null || !PlaceSpots.IsValid(top, spot)) return false;
             int columns = PlaceSpots.Columns(top), rows = PlaceSpots.Rows(top);
@@ -110,11 +141,15 @@ namespace Worktown.Game.Net.Rules
                     if (dRow == 0 && dColumn == 0) continue;
                     int c = column + dColumn, r = row + dRow;
                     if (c < 0 || c >= columns || r < 0 || r >= rows) continue;
-                    if (!Reaches(turnedHalf, dColumn, dRow) || Reaches(restHalf, dColumn, dRow)) continue;
-                    if (taken(r * columns + c)) return true;
+                    if (!Reaches(turnedPositive, turnedNegative, dColumn, dRow) || Reaches(restPositive, restNegative, dColumn, dRow)) continue;
+                    if (taken(state, r * columns + c)) return true;
                 }
             }
             return false;
         }
+
+        /// <summary>054 round (041 review nit): a half turn (step <see cref="Steps"/> / 2). PlanPlace skips the overlap check for it, so a
+        /// half turn is never refused by construction (with a footprint off the pivot it is not symmetric).</summary>
+        public static bool IsHalfTurn(int turn) => Add(turn, 0) == Steps / 2;
     }
 }

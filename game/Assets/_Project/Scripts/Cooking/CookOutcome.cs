@@ -115,6 +115,8 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 036: the spit has no cone (or it ran out): load a new one from stock.</summary>
         NoCone,
         /// <summary>Spec 036: the spit still has a cone with seitan on it.</summary>
-        ConeLoaded
+        ConeLoaded,
+        /// <summary>Spec 053: the station, slot or cookware is closed at this stage of the climb ("Opens with your restaurant").</summary>
+        NotOpenYet
     }
 }

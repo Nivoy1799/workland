@@ -407,9 +407,6 @@ namespace Worktown.Game.Art
             DrawLiquid(_shownFill);
         }
 
-        /// <summary>042 follow-up: the level drawn now (fraction of the cup; it eases towards <see cref="DrawnFill"/>); -1 without a cup.</summary>
-        public float ShownFill => _cupShown ? _shownFill : -1f;
-
         private float _shownFill = -1f;
 
         private void DrawLiquid(float fill)

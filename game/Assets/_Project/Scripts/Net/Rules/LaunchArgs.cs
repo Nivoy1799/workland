@@ -13,6 +13,8 @@ namespace Worktown.Game.Net.Rules
         public const ushort DefaultTugboatPort = 7770;
         /// <summary>Spec 047: the menu tour (Dev/MenuTourRunner) starts on the title screen, so it takes no mode flag.</summary>
         public const string MenuTour = "menu";
+        /// <summary>Spec 053: the food corner tour (Dev/CornerTourRunner) starts on the title screen too, with <c>-save-dir</c>.</summary>
+        public const string CornerTour = "corner";
         /// <summary>Spec 047: the highest <c>-max-players</c>.</summary>
         public const int MaxPlayersLimit = 64;
 
@@ -54,6 +56,32 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 049 (dev builds): <c>-stall-test s</c> (1..600), stop the server's network tick after s seconds so the tick watchdog
         /// must close the shop (scripts/perf-check.sh). 0 = off. Needs <c>-host</c> or <c>-server</c>.</summary>
         public int StallTestSeconds { get; private set; }
+        /// <summary>Spec 054 (dev builds): <c>-net-stats</c>, the host or server turns on FishNet's per-packet traffic statistics and its
+        /// metrics line gains the pid_*/obj_* fields (Dev/NetTrafficProbe). Collection allocates: such a run is never a perf baseline.
+        /// Needs <c>-host</c> or <c>-server</c>.</summary>
+        public bool NetStats { get; private set; }
+        /// <summary>Spec 054 (dev builds): <c>-remote-hz 30|15</c>, how often the host sends other players' positions (NetRateRules;
+        /// 0 = not given: <see cref="NetRateRules.DefaultRemoteHz"/>). For the human's A/B (docs/feel.md 9). Needs <c>-host</c> or <c>-server</c>.</summary>
+        public int RemoteHz { get; private set; }
+        /// <summary>Spec 054 (experiment, dev builds): <c>-player-collision on|off</c>; off: players walk through each other, on the
+        /// server and in every client's prediction alike (the host decides, SessionPhysics.PlayersCollide). 053 review (inbox question
+        /// 23): default off, players pass through each other; <c>on</c> is the A/B.
+        /// Needs <c>-host</c> or <c>-server</c>.</summary>
+        public bool PlayerCollision { get; private set; } = false;
+        /// <summary>Spec 054: true when <c>-player-collision</c> was given.</summary>
+        public bool PlayerCollisionGiven { get; private set; }
+        /// <summary>Spec 053: <c>-new-shop</c>, host a new food corner with its own save file and skip the title screen.</summary>
+        public bool NewShop { get; private set; }
+        /// <summary>Spec 053: <c>-continue</c>, host the newest save and skip the title screen.</summary>
+        public bool ContinueShop { get; private set; }
+        /// <summary>Spec 053: <c>-save-dir path</c>, the save folder instead of the player's (tests, tours). Empty = the default (none in a
+        /// scripted run).</summary>
+        public string SaveDir { get; private set; } = string.Empty;
+        /// <summary>Spec 053: this host starts with a save (<c>-new-shop</c> or <c>-continue</c>); <c>-host</c> is the open kitchen.</summary>
+        public bool HostsSave => NewShop || ContinueShop;
+        /// <summary>Spec 053: a tour that starts on the title screen (no mode flag).</summary>
+        public bool TitleTour => Tour == MenuTour || Tour == CornerTour;
+
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -82,6 +110,20 @@ namespace Worktown.Game.Net.Rules
                     case "-host":
                         modeFlags++;
                         result.Mode = LaunchMode.Host;
+                        break;
+                    case "-new-shop": // spec 053
+                        modeFlags++;
+                        result.Mode = LaunchMode.Host;
+                        result.NewShop = true;
+                        break;
+                    case "-continue": // spec 053
+                        modeFlags++;
+                        result.Mode = LaunchMode.Host;
+                        result.ContinueShop = true;
+                        break;
+                    case "-save-dir": // spec 053
+                        if (!HasValue(args, i)) return Fail("-save-dir needs a directory");
+                        result.SaveDir = args[++i];
                         break;
                     case "-connect":
                         modeFlags++;
@@ -158,6 +200,21 @@ namespace Worktown.Game.Net.Rules
                         result.StallTestSeconds = stall;
                         i++;
                         break;
+                    case "-net-stats":
+                        result.NetStats = true;
+                        break;
+                    case "-player-collision":
+                        if (i + 1 >= args.Count || (args[i + 1] != "on" && args[i + 1] != "off"))
+                            return Fail("-player-collision needs on or off");
+                        result.PlayerCollision = args[++i] == "on";
+                        result.PlayerCollisionGiven = true;
+                        break;
+                    case "-remote-hz":
+                        if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int hz) || !NetRateRules.IsRemoteHz(hz))
+                            return Fail("-remote-hz needs " + NetRateRules.TickRate + " or " + NetRateRules.DefaultRemoteHz);
+                        result.RemoteHz = hz;
+                        i++;
+                        break;
                     case "-metrics":
                         if (!HasValue(args, i)) return Fail("-metrics needs a file path");
                         result.MetricsPath = args[++i];
@@ -165,11 +222,16 @@ namespace Worktown.Game.Net.Rules
                 }
             }
 
-            if (modeFlags > 1) return Fail("only one of -server, -host, -connect, -steam is allowed");
+            if (modeFlags > 1) return Fail("only one of -server, -host, -new-shop, -continue, -connect, -steam is allowed");
             if (result.Tour.Length > 0 && result.Observe.Length > 0) return Fail("-tour and -observe exclude each other");
             // Spec 047: the menu tour starts on the title screen (no mode flag); every other tour joins with -connect.
-            if (result.Tour == MenuTour && result.Mode != LaunchMode.Menu) return Fail("-tour menu takes no -server, -host, -connect or -steam");
-            if (result.Tour.Length > 0 && result.Tour != MenuTour && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
+            if (result.TitleTour && result.Mode != LaunchMode.Menu)
+                return Fail("-tour " + result.Tour + " takes no -server, -host, -new-shop, -continue, -connect or -steam");
+            if (result.Tour.Length > 0 && !result.TitleTour && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
+            // Spec 053: the corner tour saves and continues, so it brings its own folder (never the player's saves).
+            if (result.Tour == CornerTour && result.SaveDir.Length == 0) return Fail("-tour corner needs -save-dir");
+            if (result.SaveDir.Length > 0 && result.Mode != LaunchMode.Menu && !result.HostsSave)
+                return Fail("-save-dir needs the title screen, -new-shop or -continue");
             if (result.Observe.Length > 0 && result.Mode != LaunchMode.ClientTugboat && result.Mode != LaunchMode.Host)
                 return Fail("-observe needs -connect or -host");
             if (result.IsBot && result.Mode != LaunchMode.ClientTugboat) return Fail("-bot needs -connect (bots use Tugboat)");
@@ -183,6 +245,12 @@ namespace Worktown.Game.Net.Rules
                 return Fail("-perf-tour excludes -tour and -observe");
             if (result.StallTestSeconds > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
                 return Fail("-stall-test needs -server or -host");
+            if (result.NetStats && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-net-stats needs -server or -host");
+            if (result.RemoteHz > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-remote-hz needs -server or -host");
+            if (result.PlayerCollisionGiven && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-player-collision needs -server or -host (the host decides for everyone)");
             if (result.CrashTest && result.Mode != LaunchMode.Menu) return Fail("-crash-test takes no -server, -host, -connect or -steam");
             return result;
         }

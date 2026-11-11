@@ -59,6 +59,33 @@ namespace Worktown.Game.Tutorial
                 NoTarget),
         });
 
+        /// <summary>Spec 053: the food corner's serve step (fries only, to go).</summary>
+        public const string CornerServeText = "Serve the guest: carry the fries to the serving counter and left click it.";
+        /// <summary>Spec 053: the food corner's payment step (cash only).</summary>
+        public const string CornerPayText =
+            "The guest pays cash at the register: left click coins and notes until the change is right, and hand it over.";
+        /// <summary>Spec 053: the food corner's done card.</summary>
+        public const string CornerDoneText = "That is your food corner. Save for the rent! F1 replays this tutorial.";
+
+        /// <summary>
+        /// Spec 053: stage 1 (the food corner) keeps only the fries steps: move, the potato, the sticks, the fryer, the plate, serve, the
+        /// cash payment, done. The open kitchen (stage 0) and any other stage get <see cref="Default"/>.
+        /// </summary>
+        public static readonly IReadOnlyList<TutorialStep> FoodCorner = Array.AsReadOnly(new[]
+        {
+            Default[(int)TutorialStepId.MoveAndLook],
+            Default[(int)TutorialStepId.TakePotato],
+            Default[(int)TutorialStepId.CutSticks],
+            Default[(int)TutorialStepId.FrySticks],
+            Default[(int)TutorialStepId.PlateFries],
+            new TutorialStep(TutorialStepId.ServeGuest, CornerServeText, false, HasServed, ServeTarget),
+            new TutorialStep(TutorialStepId.TakePayment, CornerPayText, false, HasPaid, PayTarget),
+            new TutorialStep(TutorialStepId.Done, CornerDoneText, false, Never, NoTarget),
+        });
+
+        /// <summary>Spec 053: the steps of the tutorial at climb stage <paramref name="stage"/> (0: the open kitchen).</summary>
+        public static IReadOnlyList<TutorialStep> ForStage(byte stage) => stage == Climb.ShopStageRules.FoodCorner ? FoodCorner : Default;
+
         // ---- Predicates (each public, so the tests pin them one by one) ----
 
         public static bool Moved(in TutorialSnapshot s) => s.Moved >= MoveMetres && s.Turned >= TurnDegrees;

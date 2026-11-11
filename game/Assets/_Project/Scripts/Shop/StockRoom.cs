@@ -312,6 +312,75 @@ namespace Worktown.Game.Shop
             return CookOutcome.Ok;
         }
 
+        // ---- spec 053: the food corner's drop and the host's save ----
+
+        /// <summary>
+        /// Spec 053, the supplier's fixed drop at a service start: line <paramref name="line"/> fills up to its capacity, only as many units
+        /// as <paramref name="wallet"/> can pay at the bulk price (<see cref="Supplier.OrderCost(EconomyCatalog, long, long)"/> of the units,
+        /// one pack of that size), paid once; should the fill still fail after the payment, the payment is refunded (the backstop). A
+        /// refusal (nothing fits, nothing affordable, no offer) charges nothing. Without a wallet the drop is free. Returns the units filled.
+        /// </summary>
+        public int Drop(int line, EconomyCatalog catalog, ISupplyWallet wallet, out long cost)
+        {
+            cost = 0;
+            StockLine l = LineOf(line);
+            if (l == null || catalog == null || !StockCatalog.TryOffer(catalog, line, out SupplierOffer offer)) return 0;
+            int units = Worktown.Game.Climb.FoodCornerRules.DropUnits(l.Count, l.Capacity,
+                n => wallet == null || wallet.CanAfford(Supplier.OrderCost(catalog, offer with { PackSize = n }, 1)));
+            if (units <= 0) return 0;
+            SupplierOffer drop = offer with { PackSize = units, DelayMinutes = 0 };
+            if (wallet != null && wallet.Charge(drop, 1, out cost) != CookOutcome.Ok)
+            {
+                cost = 0;
+                return 0;
+            }
+            StockResult r = Stock.Fill(l.GoodId, units);
+            if (!r.Ok || r.Amount <= 0)
+            {
+                if (wallet != null && cost > 0) wallet.Refund(cost); // never charged without the stock
+                cost = 0;
+                return 0;
+            }
+            Stock = r.Stock;
+            Version++;
+            return r.Amount;
+        }
+
+        /// <summary>Spec 053, the save: the sealed units of every line (StockCatalog order) into <paramref name="counts"/>.</summary>
+        public void ReadCounts(int[] counts)
+        {
+            if (counts == null) return;
+            for (int i = 0; i < Stock.Lines.Count && i < counts.Length; i++) counts[i] = Stock.Lines[i].Count;
+        }
+
+        /// <summary>
+        /// Spec 053, a loaded save (a new game, before its first service): every line gets its saved count (0 up to its capacity;
+        /// <paramref name="counts"/>[i] below 0 keeps the line), sealed, nothing opened; no orders, no boxes (a load starts clean).
+        /// </summary>
+        public void RestoreCounts(IReadOnlyList<int> counts)
+        {
+            var lines = new List<StockLine>(Stock.Lines.Count);
+            for (int i = 0; i < Stock.Lines.Count; i++)
+            {
+                StockLine l = Stock.Lines[i];
+                int saved = counts != null && i < counts.Count ? counts[i] : -1;
+                lines.Add(saved < 0 ? l : l with { Count = System.Math.Min(l.Capacity, saved), OpenPercent = 0 });
+            }
+            Stock = ShopStock.Create(lines);
+            Book = SupplyBook.Empty;
+            _boxes.Clear();
+            _waiting.Clear();
+            Version++;
+        }
+
+        /// <summary>Spec 053, the save: what the orders still on their way cost (they are refunded when the server stops).</summary>
+        public long PendingCost()
+        {
+            long sum = 0;
+            foreach (SupplyOrder o in Book.Pending) sum += System.Math.Max(0L, o.Cost);
+            return sum;
+        }
+
         /// <summary>The synced count of every line (StockCatalog.Presented) into <paramref name="counts"/> (at least StockCatalog.Count long).</summary>
         public void WriteCounts(byte[] counts)
         {

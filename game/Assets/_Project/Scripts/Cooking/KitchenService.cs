@@ -42,6 +42,11 @@ namespace Worktown.Game.Cooking
         [SerializeField] private Worktown.Game.Shop.CleaningService _cleaning;
         [Tooltip("Spec 035: the wipe cloth prefab for replacing a lost cloth (the scene cloth is an instance of it).")]
         [SerializeField] private NetworkObject _clothPrefab;
+        [Tooltip("Spec 053: the shop's stage (closed stations refuse). Optional: without it, the open kitchen.")]
+        [SerializeField] private Worktown.Game.Climb.ShopStage _shopStage;
+
+        /// <summary>Spec 053, server: the stage now (the open kitchen without a stage object).</summary>
+        private byte StageNow => _shopStage != null ? _shopStage.StageNow : Worktown.Game.Climb.ShopStageRules.OpenKitchen;
 
         private const float HomeCheckInterval = 0.5f;
         private const int MaxInitAttempts = 300;
@@ -175,6 +180,8 @@ namespace Worktown.Game.Cooking
             if (stationIndex < 0 || stationIndex >= _stations.Length || _stations[stationIndex] == null)
                 return CookOutcome.UnknownStation;
             Station station = _stations[stationIndex];
+            // Spec 053: a closed station or slot (stage 1, the food corner) refuses first and changes nothing.
+            if (Worktown.Game.Climb.ClosedTargets.IsClosed(StageNow, station, option)) return CookOutcome.NotOpenYet;
             // Spec 034: a carried delivery box unpacks into the slot it is clicked on (reach to that slot's anchor).
             if (_supply != null && Worktown.Game.Shop.StockCatalog.UnpackSlotOf(station.Kind, option) >= 0
                 && _supply.TryGetHeldBox(player, out NetworkObject box, out Worktown.Game.Shop.BoxContents contents))
@@ -685,6 +692,12 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 042, server: PickupService's veto on a place: a tap's cup spot takes only a cup that fits that tap.</summary>
         private bool CanPlaceItem(NetworkObject item, PlaceSurface surface)
         {
+            // Spec 053: nothing goes onto a closed station (a burner, a cup spot, a covered top).
+            if (surface != null && Worktown.Game.Climb.ClosedTargets.IsClosed(StageNow, surface))
+            {
+                Debug.Log("[Kitchen] that place is closed: " + Worktown.Game.Climb.ShopStageRules.NotOpenText);
+                return false;
+            }
             if (item == null || surface == null || !surface.IsCupSpot) return true;
             CookOutcome can = DrinkSteps.CanPlace(item.ObjectId, surface.CupTap);
             if (can != CookOutcome.Ok) Debug.Log("[Kitchen] that does not go under the " + DrinkRules.DrinkName(surface.CupTap) + " tap: " + can);
@@ -1048,6 +1061,8 @@ namespace Worktown.Game.Cooking
         public CookOutcome TryUseVessel(PickupInteractor player, NetworkObject target, int action)
         {
             if (target == null || !target.IsSpawned || !target.TryGetComponent(out Vessel vessel)) return CookOutcome.NotAVessel;
+            // Spec 053: the fixed cookware of a closed station (the griddle's spots, the assembly spot, the spit's cone and tray).
+            if (!Worktown.Game.Climb.ShopStageRules.IsOpenVessel(StageNow, vessel.Kind)) return CookOutcome.NotOpenYet;
             // Spec 029: a fryer basket has no Pickup (it never leaves its fryer); all other cookware must lie free.
             bool hasPickup = target.TryGetComponent(out Pickup pickup);
             CookOutcome reach = VesselRules.CheckUseTarget(vessel.Kind, hasPickup, hasPickup && pickup.IsHeld,

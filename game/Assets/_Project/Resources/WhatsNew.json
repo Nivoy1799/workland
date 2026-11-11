@@ -771,6 +771,25 @@
         "Tip the fries basket onto a plate and scoop from the spit tray: does it show at once?",
         "From the kitchen, look at the queue: can you read the order bubbles under the rail, and the rail's cards?"
       ]
+    },
+    {
+      "id": "2026-11-11-spec-053",
+      "date": "2026-11-11",
+      "title": "Your food corner, and your shop is saved",
+      "items": [
+        "New shop starts a food corner: one dish (fries), walk-up guests who take it to go and pay cash",
+        "One goal on screen: save for the rent; the shift summary shows how far you are",
+        "The money belongs to the shop: one wallet for the whole crew, every sale and every cost shows for everyone",
+        "The supplier drops potatoes at the shelf at the start of each service, paid from the shop wallet; the corner pays a pitch fee after each service",
+        "Stations of the restaurant are covered and say so: Opens with your restaurant",
+        "The host's game is saved after each service, every 5 minutes, and when you close the shop; Continue on the title screen goes on where you stopped"
+      ],
+      "test": [
+        "Play a service alone and with a friend: does the shared wallet feel right?",
+        "Close the shop, quit, start again: does Continue show the right day and money, and bring you back there?",
+        "Is the rent goal too near, too far, or about right?",
+        "Does the corner feel like enough to do for one or two cooks?"
+      ]
     }
   ]
 }

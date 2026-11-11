@@ -88,8 +88,9 @@ namespace Worktown.Game.Shop
             return false;
         }
 
-        /// <summary>034 review: a new economy is a new game: the starting stock (and the tour's), no orders, no boxes.</summary>
-        private void EnsureGame()
+        /// <summary>034 review: a new economy is a new game: the starting stock (and the tour's), no orders, no boxes. Spec 053: public, so
+        /// a loaded save is applied after this reset, never undone by it.</summary>
+        public void EnsureGame()
         {
             object game = _economy != null ? _economy.Game : this;
             if (ReferenceEquals(game, _stockGame)) return;
@@ -219,6 +220,40 @@ namespace Worktown.Game.Shop
             if (_feed != null) _feed.ServerAdd(text);
             PublishIfChanged();
             return CookOutcome.Ok;
+        }
+
+        /// <summary>
+        /// Spec 053, server: the supplier's fixed drop of a service start (stage 1, no terminal yet): line <paramref name="goodId"/> fills
+        /// up to its capacity, paid once from the shop wallet at the bulk price, only what the money covers (StockRoom.Drop). Returns the
+        /// units dropped.
+        /// </summary>
+        public int DropStock(string goodId, out long cost)
+        {
+            cost = 0;
+            if (_economy == null || !_networkManager.IsServerStarted) return 0;
+            EnsureGame();
+            int units = _room.Drop(StockCatalog.IndexOf(goodId), _economy.Catalog, new ShopSupplyWallet(_economy), out cost);
+            PublishIfChanged();
+            return units;
+        }
+
+        /// <summary>Spec 053: the shop wallet for a drop nobody ordered (no player; the money is the group's, pillar 2).</summary>
+        private sealed class ShopSupplyWallet : ISupplyWallet
+        {
+            private readonly EconomyService _economy;
+
+            public ShopSupplyWallet(EconomyService economy) => _economy = economy;
+
+            public bool CanAfford(long cost) => _economy.CanAffordShop(cost);
+
+            public CookOutcome Charge(SupplierOffer offer, int packs, out long cost) =>
+                StockRules.PaidOutcome(_economy.TryBuySupplyShop(offer, packs, out cost));
+
+            public void Refund(long cost)
+            {
+                EconomyError back = _economy.RefundAccount(EconomyRules.ShopAccount, cost);
+                if (back != EconomyError.None) Debug.LogError("[Supply] could not refund the drop's " + EconomyRules.Money(cost) + ": " + back);
+            }
         }
 
         /// <summary>Spec 034: <see cref="ISupplyWallet"/> through the economy service (the bulk price, once; the refund backstop).</summary>

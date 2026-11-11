@@ -1,3 +1,4 @@
+using FishNet.Component.Transforming;
 using FishNet.Object.Prediction;
 using FishNet.Object.Synchronizing;
 using FishNet.Transporting;
@@ -14,6 +15,10 @@ namespace Worktown.Game.Net
     /// crouch, jump) through [Replicate], simulates them at once, and the server runs the same code as the
     /// authority and corrects the owner through [Reconcile]. All numbers come from MovementRules.
     /// Spec 018: in first person the body faces the camera yaw (MoveData.FirstPerson, facing only).
+    /// Spec 054 (B1): inputs and states go only between the owner and the server (no state forwarding). The other players see this
+    /// player through a server-authoritative NetworkTransform on the root at NetRateRules.RemotePlayerInterval (15 Hz), drawn two
+    /// updates behind (about 133 ms), never sent to the owner; the graphic's tick smoother then stands aside for them (it still
+    /// smooths the owner). Crouch for the others stays the CrouchedForOthers SyncVar.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public sealed class PlayerController : TickNetworkBehaviour
@@ -73,6 +78,14 @@ namespace Worktown.Game.Net
         /// <summary>Crouch state for players who do not simulate this object (spectators).</summary>
         public readonly SyncVar<bool> CrouchedForOthers = new SyncVar<bool>(false);
 
+        /// <summary>Spec 054: Player against Player in the physics layer matrix (global). 054 review: the host's rule lives on one session
+        /// object (<see cref="SessionPhysics"/>), not on every player.</summary>
+        public static void ApplyPlayerCollision(bool collide) =>
+            Physics.IgnoreLayerCollision(PhysicsLayers.Player, PhysicsLayers.Player, !collide);
+
+        /// <summary>Spec 054: the ground and headroom probes follow the matrix (SessionPhysics calls this when the rule changes).</summary>
+        internal void RefreshBodyMask() => _bodyMask = PhysicsLayers.BodyMask(gameObject.layer);
+
         [Tooltip("Smoothed visual child (NetworkTickSmoother). The camera follows it.")]
         [SerializeField] private Transform _graphic;
         [Tooltip("Visual body inside the graphic, squashed while crouching.")]
@@ -87,11 +100,13 @@ namespace Worktown.Game.Net
         private float _verticalVelocity;
         private float _yaw;
         private bool _crouched;
-        private MoveData _lastTicked;
         private PlayerInputReader _input;
         private PlayerCameraRig _rig;
 
         public bool IsCrouched => IsOwner || IsServerStarted ? _crouched : CrouchedForOthers.Value;
+
+        /// <summary>Spec 054: the drawn (smoothed) body; the camera follows it. The root without one.</summary>
+        public Transform Graphic => _graphic != null ? _graphic : transform;
 
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         /// <summary>
@@ -115,6 +130,11 @@ namespace Worktown.Game.Net
         }
 
         private IIntentSource _intents;
+
+        /// <summary>Spec 054 (B4, dev builds, read only): the owner's predicted position after each of its own live ticks (not replays).</summary>
+        public event System.Action<uint, Vector3> DevOwnerTicked;
+        /// <summary>Spec 054 (B4, dev builds, read only): the state a reconcile puts the owner's player to, with its tick.</summary>
+        public event System.Action<uint, Vector3> DevOwnerReconciled;
 
         /// <summary>Spec 027, owner only: replaces device input while set; null means the devices, as before.</summary>
         public IIntentSource IntentSource
@@ -141,9 +161,23 @@ namespace Worktown.Game.Net
             _yaw = transform.eulerAngles.y;
         }
 
+        public override void OnStartServer()
+        {
+            base.OnStartServer();
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            // Spec 054 (dev builds): -remote-hz 30 sends this player to the others every tick, for the human's A/B (docs/feel.md 9);
+            // without it the prefab's 15 Hz. SetInterval tells the observers too (FishNet, buffered for late joiners).
+            NetBootstrap boot = FindFirstObjectByType<NetBootstrap>();
+            int interval = NetRateRules.RemotePlayerIntervalFor(boot != null ? boot.Args.RemoteHz : 0);
+            if (interval != NetRateRules.RemotePlayerInterval && TryGetComponent(out NetworkTransform nt)) nt.SetInterval((byte)interval);
+#endif
+            RefreshBodyMask(); // 054 review: the collision rule comes from the session object (SessionPhysics)
+        }
+
         public override void OnStartClient()
         {
             base.OnStartClient();
+            if (!IsServerStarted) RefreshBodyMask(); // spec 054: the host's rule (SessionPhysics arrived with the scene), before the first tick
             if (!IsOwner) return;
             _input = FindFirstObjectByType<PlayerInputReader>();
             PlayerCameraRig rig = FindFirstObjectByType<PlayerCameraRig>();
@@ -205,25 +239,8 @@ namespace Worktown.Game.Net
         private void PerformReplicate(MoveData md, ReplicateState state = ReplicateState.Invalid, Channel channel = Channel.Unreliable)
         {
             float delta = (float)TimeManager.TickDelta;
-
-            // Spectators predict at most one tick ahead with the last known input (FishNet example).
-            if (!IsServerStarted && !IsOwner)
-            {
-                if (state.ContainsTicked())
-                {
-                    _lastTicked = md;
-                }
-                else if (state.IsFuture())
-                {
-                    if (md.GetTick() - _lastTicked.GetTick() > 1)
-                        md = default;
-                    else
-                    {
-                        md = _lastTicked;
-                        md.Jump = false; // a second jump in a row is unlikely; do not predict it (FishNet example)
-                    }
-                }
-            }
+            // Spec 054 (B1): no state forwarding, so only the owner and the server run this; spectators see the root through the
+            // NetworkTransform (the spectator prediction that was here is gone).
 
             // The server never trusts the numbers: clamp everything the client sent.
             Vector2 move = MovementRules.SanitizeMove(md.Move);
@@ -249,12 +266,18 @@ namespace Worktown.Game.Net
                 _verticalVelocity = MovementRules.JumpSpeed();
 
             _controller.Move((_velocity + Vector3.up * _verticalVelocity) * delta);
-
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            // Spec 054 (B4): the feel guard's owner corrections compare this with the server's reconcile of the same tick. Read only.
+            if (DevOwnerTicked != null && IsOwner && !IsServerStarted && state.IsTickedCreated()) DevOwnerTicked(md.GetTick(), transform.position);
+#endif
         }
 
         [Reconcile]
         private void PerformReconcile(StateData sd, Channel channel = Channel.Unreliable)
         {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (DevOwnerReconciled != null && IsOwner && !IsServerStarted) DevOwnerReconciled(sd.GetTick(), sd.Position); // spec 054 (B4), read only
+#endif
             // Disable the controller while teleporting, or its physics stays at the old spot (FishNet example).
             _controller.enabled = false;
             transform.SetPositionAndRotation(sd.Position, Quaternion.Euler(0f, sd.Yaw, 0f));
@@ -302,6 +325,9 @@ namespace Worktown.Game.Net
 
         private void Update()
         {
+            // Spec 054 (B1): a spectator runs no replicate any more, so its copy of the body takes the stance from the SyncVar
+            // (the own controller bumps into a capsule of the height the server has; where it is, is drawn 133 ms late: spec 054 notes).
+            if (IsSpawned && !IsOwner && !IsServerStarted && _crouched != CrouchedForOthers.Value) SetCrouched(CrouchedForOthers.Value);
             if (_eyes != null)
             {
                 // Spec 018: the first-person eyes follow the stance (visual only, like the squash below).

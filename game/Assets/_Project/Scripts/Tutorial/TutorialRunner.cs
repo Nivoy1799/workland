@@ -29,7 +29,9 @@ namespace Worktown.Game.Tutorial
         public const float SnapshotSeconds = 0.2f;
         public const float TargetSeconds = 0.25f;
 
-        private readonly TutorialProgress _progress = new TutorialProgress(TutorialSteps.Default);
+        // Spec 053: the steps follow the shop's stage (the food corner keeps only the fries steps); chosen again when it starts.
+        private TutorialProgress _progress = new TutorialProgress(TutorialSteps.Default);
+        private byte _stepsStage;
         private readonly TutorialWatch _watch = new TutorialWatch();
         private readonly TutorialTargets _targets = new TutorialTargets();
         private TutorialHighlight _highlight;
@@ -141,6 +143,14 @@ namespace Worktown.Game.Tutorial
 
         private void Begin()
         {
+            // Spec 053: the steps of the shop's stage as this client sees it (the synced ShopStage).
+            Climb.ShopStage stage = Climb.ShopStage.Find();
+            byte now = stage != null ? stage.StageNow : Climb.ShopStageRules.OpenKitchen;
+            if (now != _stepsStage || _progress.Steps != TutorialSteps.ForStage(now))
+            {
+                _stepsStage = now;
+                _progress = new TutorialProgress(TutorialSteps.ForStage(now));
+            }
             _progress.Start();
             _watch.Reset();
             _moved = 0f;

@@ -43,6 +43,17 @@ namespace Worktown.Game.Shop
         /// <summary>Counts every change of the trash, the holds or the meter (the dishes count their own).</summary>
         public int Version { get; private set; }
 
+        /// <summary>
+        /// Spec 053, a loaded save (right after <see cref="Reset"/> of its new game): the hygiene meter starts at the saved
+        /// <paramref name="percent"/> (0 to 100) at <paramref name="minute"/>.
+        /// </summary>
+        public void RestoreHygiene(int percent, long minute)
+        {
+            int p = System.Math.Max(0, System.Math.Min(100, percent));
+            Meter = new HygieneMeter(p * HygieneRules.TenthsPerPercent, minute);
+            Version++;
+        }
+
         /// <summary>A new game: clean plates on the shelf, nothing dirty, an empty trash, no holds, the meter at 100 % at <paramref name="minute"/>.</summary>
         public void Reset(long minute)
         {
