@@ -70,7 +70,19 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-28. **Haven Nine town plan v1, from your Blender session** (branch spec/046-style-lab at 146fd33, docs/town-plan.md and
+29. **Art direction v2, from your Blender session** (docs/art-direction-v2.md at a7ce5cd; it goes with question 28).
+    When approved, it replaces the look sections of docs/art-direction.md. Scale (D29), characters (D30) and motion
+    (D31) stay. Its proposals:
+    - **shapes S3:** soft inside, streamline outside;
+    - **palette P1** with a contrast fix, plus light, neon, Low Ring and Dome colours (this revises D32);
+    - **wear follows the revival:** rough at level 0, lived-in at level 3, never spotless;
+    - the four revival looks as swap lists, and light moods;
+    - no outline shader in the game: the ink lines are concept art only;
+    - next in the lab: the same street at levels 0 to 3, side by side.
+
+    Default: approve with S3, P1 and wear following the revival. You can answer here or in the Blender session; I
+    merge it together with the town plan.
+28. **Haven Nine town plan v1, from your Blender session** (branch spec/046-style-lab at a7ce5cd, docs/town-plan.md and
     docs/town-story.md; pictures: style lab round 8). The town is a utopia under a glass Dome that has declined. You
     start with a cart and poor potatoes, and every good meal brings a district back: four levels, from grey to
     thriving, that never go back. Its first package (W1: decisions and docs) needs your approval before anything is
