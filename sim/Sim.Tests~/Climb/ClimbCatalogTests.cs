@@ -159,5 +159,65 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(8, c.Upkeep(ClimbStage.FirstRestaurant, owned));
             Assert.Equal(1, c.Upkeep(ClimbStage.FoodCorner, new string[0]));
         }
+
+        // ---------- spec 052b ----------
+
+        [Fact]
+        public void TheDefaultHasTheNewSinksGateAndStage1Pace()
+        {
+            ClimbCatalog c = ClimbCatalog.CreateDefault();
+            Assert.Equal((4, 0), (c.Purchase("bigger_place").MaxCount, c.Purchase("decor").MaxCount));
+            Assert.Equal(6, c.Purchase("staff_cook").MaxCount);
+            Assert.Equal(1, c.Purchase("bigger_place").Effect.WorkSpots);
+            Assert.Equal("automation_plan", c.StageOf(ClimbStage.Automation).GatePurchaseId);
+            Assert.Equal((2, 2), (c.StageOf(ClimbStage.Automation).GateMinStaff, c.StageOf(ClimbStage.Automation).GateMinMachines));
+            Assert.All(c.BigJobs, j => Assert.True(j.MaxTier > 0 && j.StakeGrowthPermille > 1000));
+            Assert.Equal(0, c.Dish("fries").IngredientCost); // the measured potato floors to 0 units
+            StageDef s1 = c.StageOf(ClimbStage.FoodCorner);
+            Assert.True(s1.WorkPermille > 1000 && s1.TipPermille > 0 && s1.StockPerService > 0);
+            Assert.Equal(ClimbCatalog.DefaultCrewTable, c.CrewTable);
+            // The game pins these (FoodCornerRulesTests): tuning must not move them.
+            Assert.Equal((30000L, 500L, 2500L), (c.Purchase("rent_restaurant").Cost, s1.Upkeep, c.StartingMoney));
+        }
+
+        [Fact]
+        public void Stage1ExtrasCanBeLeftOutForTheGameCorner()
+        {
+            ClimbCatalog game = ClimbCatalog.CreateDefault(stage1Extras: false);
+            Assert.DoesNotContain(game.Purchases, p => p.Stage == ClimbStage.FoodCorner && p.Kind == PurchaseKind.Productive);
+            Assert.Contains(game.Purchases, p => p.Id == "rent_restaurant");
+            Assert.Contains(ClimbCatalog.CreateDefault().Purchases, p => p.Id == "second_basket");
+        }
+
+        [Fact]
+        public void EveryMoneyValueIsAWholeMultipleOfTheScale() // 037 review
+        {
+            ClimbCatalog c = ClimbCatalog.CreateDefault();
+            long s = c.MoneyScale;
+            Assert.All(c.Dishes, d => Assert.Equal(0, (d.IngredientCost % s) + (d.ReferencePrice % s)));
+            Assert.All(c.Purchases, p => Assert.Equal(0, (p.Cost % s) + (p.UpkeepPerService % s)));
+            Assert.All(c.Stages, st => Assert.Equal(0, st.Upkeep % s));
+            Assert.All(c.BigJobs, j => Assert.Equal(0, (j.Deposit % s) + (j.Prize % s)));
+            Assert.All(c.Rivals, r => Assert.Equal(0, r.PriceOffset % s));
+            Assert.Equal(0, c.StartingMoney % s);
+        }
+
+        [Fact]
+        public void RepeatAndGateFieldsAreValidated()
+        {
+            PurchaseDef peeler = T.Purchases.First(p => p.Id == "peeler");
+            ClimbCatalog With(PurchaseDef p) => T.Build(purchases: T.Purchases.Where(x => x.Id != p.Id).Concat(new[] { p }));
+            Assert.Throws<ArgumentException>(() => With(peeler with { MaxCount = -1 }));
+            Assert.Throws<ArgumentException>(() => With(peeler with { CostGrowthPermille = 999 }));
+            Assert.Throws<ArgumentException>(() => With(peeler with { Effect = peeler.Effect with { WorkSpots = -1 } }));
+            PurchaseDef lease = T.Purchases.First(p => p.Id == "lease");
+            Assert.Throws<ArgumentException>(() => With(lease with { MaxCount = 2 })); // a gate is bought once
+            Assert.Throws<ArgumentException>(() => T.Build(bigJobs: new[] { T.BigJobs[0] with { StakeGrowthPermille = 900 } }));
+            Assert.Throws<ArgumentException>(() => T.Build(bigJobs: new[] { T.BigJobs[0] with { MaxTier = 65 } }));
+            Assert.Throws<ArgumentException>(() => T.Build(stages: T.Stages.Select(st => st.Stage == ClimbStage.FoodCorner ? st with { WorkPermille = 0 } : st)));
+            Assert.Throws<ArgumentException>(() => T.Build(stages: T.Stages.Select(st => st.Stage == ClimbStage.FoodCorner ? st with { TipPermille = -1 } : st)));
+            Assert.Throws<ArgumentException>(() => T.Build(stages: T.Stages.Select(st => st.Stage == ClimbStage.FoodCorner ? st with { StockPerService = -1 } : st)));
+            With(peeler with { MaxCount = 0, CostGrowthPermille = 1500 });
+        }
     }
 }

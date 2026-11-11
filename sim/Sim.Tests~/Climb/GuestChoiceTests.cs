@@ -90,14 +90,16 @@ namespace Worktown.Sim.Tests.Climb
             ClimbCatalog c = ClimbCatalog.CreateDefault();
             var engine = new ClimbEngine(c);
             ClimbRun run = engine.Run(new CrewSetup(16, "expert", new ClimbStrategy(PricePolicy.Minus1, SpendPolicy.Builder), 3), 20 * 3600);
-            var allOwned = c.Purchases.Select(p => p.Id).ToList();
+            // Spec 052b: every copy a crew may own, and the crew demand factor of 16 players (D40).
+            var allOwned = c.Purchases.SelectMany(p => Enumerable.Repeat(p.Id, Math.Max(1, p.MaxCount))).ToList();
+            int demand = CrewScaling.For(c, 16).DemandPermille;
             foreach (ServiceResult r in run.Services)
             {
                 if (r.BigJobId != null) continue;
                 for (int i = 0; i < r.ChannelIds.Count; i++)
                 {
                     int all = r.YourGuests[i] + Math.Max(0, r.RivalGuests[i]);
-                    int ceiling = GuestChoice.Ceiling(c.Channel(r.ChannelIds[i]), c.CeilingBonusPermille(allOwned, r.ChannelIds[i]));
+                    int ceiling = CrewScaling.ScaleCount(GuestChoice.Ceiling(c.Channel(r.ChannelIds[i]), c.CeilingBonusPermille(allOwned, r.ChannelIds[i])), demand);
                     Assert.True(all <= ceiling, $"service {r.Index} {r.ChannelIds[i]} {all} > {ceiling}");
                 }
             }

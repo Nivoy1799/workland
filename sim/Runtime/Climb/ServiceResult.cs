@@ -39,6 +39,19 @@ namespace Worktown.Sim.Climb
         /// <summary>Net income of the service: revenue minus ingredients, upkeep and a big job deposit (purchases not counted).</summary>
         public long Net => Revenue - IngredientCost - Upkeep - JobCost;
 
+        /// <summary>Spec 052b: guests who chose you but found the stage 1 stock sold out (not missed, no stars).</summary>
+        public int SoldOut { get; init; }
+        /// <summary>Spec 052b: the dish the crew took off its menu before this service, or null.</summary>
+        public string? MenuDropped { get; init; }
+        /// <summary>Spec 052b: the dish the crew put back on its menu before this service, or null.</summary>
+        public string? MenuAdded { get; init; }
+        /// <summary>Spec 052b (D40): the crew's goal factor G (permille of the 4-player crew) of this service; 1000 by default.</summary>
+        public int GoalPermille { get; init; } = 1000;
+        /// <summary>Spec 052b: the catalog's money per whole unit, for <see cref="NetReference"/> (1 by default).</summary>
+        public long MoneyUnit { get; init; } = 1;
+        /// <summary>Spec 052b (D40): <see cref="Net"/> as reference money, the progress this service added to the balance.</summary>
+        public long NetReference => CrewScaling.ToReference(Net, GoalPermille, MoneyUnit);
+
         /// <summary>One invariant text line with every field, the unit of the run digest.</summary>
         public string Canonical()
         {
@@ -56,6 +69,8 @@ namespace Worktown.Sim.Climb
             for (int i = 0; i < ChannelIds.Count; i++)
                 sb.Append(i == 0 ? "" : ",").Append(ChannelIds[i]).Append(':').Append(YourGuests[i].ToString(c)).Append(':')
                     .Append(RivalGuests[i].ToString(c));
+            sb.Append(" so=").Append(SoldOut.ToString(c)).Append(" m=").Append(MenuDropped ?? "-").Append('/').Append(MenuAdded ?? "-")
+                .Append(" G=").Append(GoalPermille.ToString(c));
             sb.Append(" b=").Append(string.Join(",", Bought)).Append(" goals=");
             for (int i = 0; i < GoalCosts.Count; i++) sb.Append(i == 0 ? "" : ",").Append(GoalCosts[i].ToString(c));
             return sb.ToString();

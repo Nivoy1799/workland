@@ -14,9 +14,11 @@ namespace Worktown.Sim.Climb
     /// </summary>
     public sealed class ClimbRun
     {
-        public ClimbRun(CrewSetup setup, long horizonSeconds, IReadOnlyList<ServiceResult> services, ClimbState final, long moneyScale = 1)
+        public ClimbRun(CrewSetup setup, long horizonSeconds, IReadOnlyList<ServiceResult> services, ClimbState final, long moneyScale = 1,
+            CrewFactors? crew = null)
         {
             MoneyScale = Math.Max(1L, moneyScale);
+            Crew = crew ?? new CrewFactors(setup?.Players ?? 1, 1000, 1000, 1000, 0, 0);
             Setup = setup ?? throw new ArgumentNullException(nameof(setup));
             HorizonSeconds = horizonSeconds;
             Services = new List<ServiceResult>(services ?? throw new ArgumentNullException(nameof(services))).AsReadOnly();
@@ -28,6 +30,8 @@ namespace Worktown.Sim.Climb
         public CrewSetup Setup { get; }
         /// <summary>Spec 037: the catalog's money per whole unit (100: cents, D39); idle-money means are taken in whole units.</summary>
         public long MoneyScale { get; }
+        /// <summary>Spec 052b: the crew factors of this run (D40; neutral when not given).</summary>
+        public CrewFactors Crew { get; }
         public long HorizonSeconds { get; }
         public IReadOnlyList<ServiceResult> Services { get; }
         public ClimbState Final { get; }
@@ -136,7 +140,7 @@ namespace Worktown.Sim.Climb
                 if (stage != null && Services[i].Stage != stage) continue;
                 int from = Math.Max(0, i - Math.Max(1, window) + 1);
                 long sum = 0;
-                for (int k = from; k <= i; k++) sum += Services[k].Net;
+                for (int k = from; k <= i; k++) sum += Services[k].NetReference; // spec 052b: reference money, as the goal costs
                 long mean = sum / ((i - from + 1) * MoneyScale) * MoneyScale; // spec 037: in whole units, as in the whole-dollar model
                 if (mean <= 0) continue;
                 bool goal = false;
@@ -145,6 +149,45 @@ namespace Worktown.Sim.Climb
                 if (!goal) idle++;
             }
             return idle;
+        }
+
+        /// <summary>Spec 052b: play seconds spent in <paramref name="stage"/> (next stage entered minus this one), or -1 when not completed.</summary>
+        public long SecondsIn(ClimbStage stage)
+        {
+            if (!Completed(stage)) return -1;
+            long from = EnteredSeconds(stage);
+            return from < 0 ? -1 : EnteredSeconds(stage + 1) - from;
+        }
+
+        /// <summary>Spec 052b: dishes the crew took off its menu during <paramref name="stage"/>.</summary>
+        public int MenuDrops(ClimbStage stage)
+        {
+            int n = 0;
+            foreach (ServiceResult r in Services) if (r.Stage == stage && r.MenuDropped != null) n++;
+            return n;
+        }
+
+        /// <summary>Spec 052b: dishes the crew put back on its menu during <paramref name="stage"/>.</summary>
+        public int MenuAdds(ClimbStage stage)
+        {
+            int n = 0;
+            foreach (ServiceResult r in Services) if (r.Stage == stage && r.MenuAdded != null) n++;
+            return n;
+        }
+
+        /// <summary>Spec 052b: purchases bought during <paramref name="stage"/> that were already owned (a second or later copy).</summary>
+        public int RepeatBuys(ClimbStage stage)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            int n = 0;
+            foreach (ServiceResult r in Services)
+                foreach (string id in r.Bought)
+                {
+                    counts.TryGetValue(id, out int had);
+                    if (had > 0 && r.Stage == stage) n++;
+                    counts[id] = had + 1;
+                }
+            return n;
         }
 
         /// <summary>The longest run of services that ended below $0.</summary>

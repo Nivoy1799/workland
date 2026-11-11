@@ -129,5 +129,39 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Throws<ArgumentNullException>(() => new ClimbRun(T.Setup(), 1, null!, T.State()));
             Assert.Throws<ArgumentNullException>(() => new ClimbRun(T.Setup(), 1, new ServiceResult[0], null!));
         }
+
+        [Fact]
+        public void RunCountsMenuChangesRepeatBuysAndStageTime() // spec 052b
+        {
+            ClimbRun run = T.Run(4, "average", ClimbStrategy.Reference, 1, new[] { 3, 3 }, (i, st, r) => i switch
+            {
+                0 => r with { Bought = new[] { "stall" } },
+                1 => r with { Bought = new[] { "stall", "peeler" }, MenuDropped = "soup" },
+                3 => r with { Bought = new[] { "stall" }, MenuAdded = "soup" },
+                4 => r with { MenuDropped = "soup" },
+                _ => r,
+            });
+            Assert.Equal(1, run.RepeatBuys(ClimbStage.FoodCorner)); // the second stall
+            Assert.Equal(1, run.RepeatBuys(ClimbStage.FirstRestaurant)); // the third
+            Assert.Equal((1, 0), (run.MenuDrops(ClimbStage.FoodCorner), run.MenuAdds(ClimbStage.FoodCorner)));
+            Assert.Equal((1, 1), (run.MenuDrops(ClimbStage.FirstRestaurant), run.MenuAdds(ClimbStage.FirstRestaurant)));
+            Assert.Equal(3 * T.Step, run.SecondsIn(ClimbStage.FoodCorner));
+            Assert.Equal(-1, run.SecondsIn(ClimbStage.FirstRestaurant)); // not completed
+            Assert.Equal(1000, run.Crew.DifficultyPermille); // neutral when not given
+        }
+
+        [Fact]
+        public void NetReferenceIsNetOverTheGoalFactor() // spec 052b, D40
+        {
+            ServiceResult r = T.Svc(0, ClimbStage.FoodCorner, net: 137, upkeep: 0);
+            Assert.Equal(137, r.NetReference); // G 1000 by default
+            Assert.Equal(1000, (r with { GoalPermille = 137 }).NetReference);
+            Assert.Equal(13700, (r with { GoalPermille = 1000, Revenue = 13700, MoneyUnit = 100 }).NetReference);
+            Assert.Contains(" so=0 m=-/- G=1000 b=", r.Canonical());
+            ClimbState s = T.State(ClimbStage.FoodCorner, 0, "peeler", "peeler");
+            Assert.Equal(2, s.Count("peeler"));
+            Assert.Equal(0, s.TierOf("contest"));
+            Assert.Equal(3, (s with { JobTier = new System.Collections.Generic.Dictionary<string, int> { ["contest"] = 3 } }).TierOf("contest"));
+        }
     }
 }

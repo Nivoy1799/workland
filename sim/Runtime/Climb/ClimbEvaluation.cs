@@ -8,6 +8,9 @@ namespace Worktown.Sim.Climb
     /// Spec 052: checks runs against T1-T8. Medians are over seeds (a DNF counts as never). Groups: player count (ascending),
     /// profile (first-seen order), strategy (<see cref="ClimbStrategy.All"/> order). A target whose runs are missing (e.g. no
     /// novice runs for T3) gives no line. T1 uses the reference profile; T3, T5-T8 the reference strategy; T2 every run.
+    /// Spec 052b: T1 bands scale their lower edge by the crew's h(n) (D40), T1p checks the plateau above 4 players, T4 compares
+    /// the fastest strategy with the reference strategy of the same crew (the old median rule is <see cref="Info"/>, T4m, not
+    /// counted); <see cref="Calibration"/> (C1) and <see cref="GameNumberChecks"/> (T1g) are separate and counted by the caller.
     /// </summary>
     public static class ClimbEvaluation
     {
@@ -46,13 +49,40 @@ namespace Worktown.Sim.Climb
                 // T1 pacing.
                 List<ClimbRun> refRuns = Of(p, targets.ReferenceProfileId, reference);
                 if (refRuns.Count > 0)
+                {
+                    int h = refRuns[0].Crew.DifficultyPermille;
                     for (ClimbStage st = ClimbStage.FirstRestaurant; st <= ClimbStage.BeyondKitchen; st++)
                     {
                         long m = Median(refRuns.Select(r => EnteredOrDnf(r, st)).ToList());
-                        (long from, long to) = targets.BandOf(st);
+                        (long from, long to) = targets.BandOf(st, h); // D40: an easier crew may be faster by h(n)
                         checks.Add(new TargetCheck("T1", m >= from && m <= to,
                             $"{p}p {targets.ReferenceProfileId} S{(int)st} {H(m)} h in {ClimbReport.FormatBand(from)}-{ClimbReport.FormatBand(to)}"));
                     }
+                }
+
+                // T1p plateau (D40): above the reference crew, no stage takes longer than for the reference crew.
+                if (p > targets.ReferencePlayers && refRuns.Count > 0)
+                {
+                    List<ClimbRun> four = Of(targets.ReferencePlayers, targets.ReferenceProfileId, reference);
+                    if (four.Count > 0)
+                    {
+                        int worst = int.MinValue;
+                        string where = "";
+                        bool ok = true;
+                        for (ClimbStage st = ClimbStage.FoodCorner; st < ClimbStage.BeyondKitchen; st++)
+                        {
+                            long baseline = Median(four.Select(r => SecondsOrDnf(r, st)).ToList());
+                            if (baseline == Dnf) continue;
+                            long mine = Median(refRuns.Select(r => SecondsOrDnf(r, st)).ToList());
+                            int ratio = mine == Dnf ? 9999 : baseline == 0 ? 1000 : (int)Math.Min(9999, mine * 1000 / baseline);
+                            if (ratio > targets.PlateauPermille) ok = false;
+                            if (ratio > worst) { worst = ratio; where = $"S{(int)st} {H(mine)} h vs {H(baseline)} h"; }
+                        }
+                        if (worst != int.MinValue)
+                            checks.Add(new TargetCheck("T1p", ok,
+                                $"{p}p {targets.ReferenceProfileId} max stage time {Ratio(worst)}x of {targets.ReferencePlayers}p ({where}) <= {Ratio(targets.PlateauPermille)}x"));
+                    }
+                }
 
                 // T2 real effort.
                 foreach (string profile in profiles)
@@ -89,25 +119,23 @@ namespace Worktown.Sim.Climb
 
                 foreach (string profile in profiles)
                 {
-                    // T4 no shortcut.
-                    var medians = new List<(ClimbStrategy Strategy, long Median)>();
-                    foreach (ClimbStrategy s in ClimbStrategy.All)
-                    {
-                        List<ClimbRun> rs = Of(p, profile, s);
-                        if (rs.Count > 0) medians.Add((s, Median(rs.Select(r => EnteredOrDnf(r, ClimbStage.BeyondKitchen)).ToList())));
-                    }
+                    // T4 no shortcut (spec 052b): the fastest strategy against the reference strategy of the same crew size and
+                    // profile (crew size is not a strategy, so an easier solo is no shortcut, D40).
+                    var medians = StrategyMedians(runs, p, profile);
                     if (medians.Count > 0)
                     {
+                        var refMedian = medians.Where(m => m.Strategy == reference).Select(m => m.Median).DefaultIfEmpty(Dnf).First();
                         var finish = medians.Where(m => m.Median != Dnf).ToList();
-                        if (finish.Count == 0)
-                            checks.Add(new TargetCheck("T4", false, $"{p}p {profile} no strategy reaches S5 (0/{medians.Count} finish)"));
+                        if (!medians.Any(m => m.Strategy == reference))
+                        { /* no reference runs: no line */ }
+                        else if (refMedian == Dnf)
+                            checks.Add(new TargetCheck("T4", false, $"{p}p {profile} the reference {reference.Id} does not reach S5 ({finish.Count}/{medians.Count} finish)"));
                         else
                         {
                             var fastest = finish.OrderBy(m => m.Median).First();
-                            long med = Median(finish.Select(m => m.Median).ToList());
-                            bool ok = fastest.Median * 1000 >= (long)targets.ShortcutPermille * med;
+                            bool ok = fastest.Median * 1000 >= (long)targets.ShortcutPermille * refMedian;
                             checks.Add(new TargetCheck("T4", ok,
-                                $"{p}p {profile} fastest {fastest.Strategy.Id} {H(fastest.Median)} h >= {Ratio(targets.ShortcutPermille)} x median {H(med)} h ({finish.Count}/{medians.Count} finish)"));
+                                $"{p}p {profile} fastest {fastest.Strategy.Id} {H(fastest.Median)} h >= {Ratio(targets.ShortcutPermille)} x reference {H(refMedian)} h ({finish.Count}/{medians.Count} finish)"));
                         }
                     }
 
@@ -186,6 +214,90 @@ namespace Worktown.Sim.Climb
             }
             return checks.AsReadOnly();
         }
+
+        /// <summary>Spec 052b: play seconds spent in <paramref name="stage"/>, <see cref="Dnf"/> when not completed.</summary>
+        public static long SecondsOrDnf(ClimbRun run, ClimbStage stage)
+        {
+            long s = run.SecondsIn(stage);
+            return s < 0 ? Dnf : s;
+        }
+
+        /// <summary>
+        /// Spec 052b: lines that are printed but not counted in RESULT: <c>T4m</c>, the old 052 shortcut rule (fastest strategy
+        /// against the median of the finishing strategies), per crew size and profile, so both rules can be compared.
+        /// </summary>
+        public static IReadOnlyList<TargetCheck> Info(IReadOnlyList<ClimbRun> runs, ClimbTargets targets)
+        {
+            var info = new List<TargetCheck>();
+            foreach (int p in runs.Select(r => r.Setup.Players).Distinct().OrderBy(x => x))
+                foreach (string profile in runs.Select(r => r.Setup.ProfileId).Distinct())
+                {
+                    var medians = StrategyMedians(runs, p, profile);
+                    if (medians.Count == 0) continue;
+                    var finish = medians.Where(m => m.Median != Dnf).ToList();
+                    if (finish.Count == 0)
+                    {
+                        info.Add(new TargetCheck("T4m", false, $"{p}p {profile} no strategy reaches S5 (0/{medians.Count} finish)"));
+                        continue;
+                    }
+                    var fastest = finish.OrderBy(m => m.Median).First();
+                    long med = Median(finish.Select(m => m.Median).ToList());
+                    info.Add(new TargetCheck("T4m", fastest.Median * 1000 >= (long)targets.ShortcutPermille * med,
+                        $"{p}p {profile} fastest {fastest.Strategy.Id} {H(fastest.Median)} h >= {Ratio(targets.ShortcutPermille)} x median {H(med)} h ({finish.Count}/{medians.Count} finish)"));
+                }
+            return info.AsReadOnly();
+        }
+
+        /// <summary>
+        /// Spec 052b C1, counted: calibration runs (the 053 stage 1 setup) per crew size: the median stage 1 services is solo
+        /// <see cref="ClimbTargets.C1SoloTenths"/> +- its tolerance, crews of 2 and more <see cref="ClimbTargets.C1CrewTenths"/> +- its tolerance.
+        /// </summary>
+        public static IReadOnlyList<TargetCheck> Calibration(IReadOnlyList<ClimbRun> runs, ClimbTargets targets)
+        {
+            var checks = new List<TargetCheck>();
+            foreach (int p in runs.Select(r => r.Setup.Players).Distinct().OrderBy(x => x))
+            {
+                List<ClimbRun> rs = runs.Where(r => r.Setup.Players == p).ToList();
+                long m = Median(rs.Select(r => r.Completed(ClimbStage.FoodCorner) ? r.ServicesIn(ClimbStage.FoodCorner) : Dnf).ToList());
+                int target = p == 1 ? targets.C1SoloTenths : targets.C1CrewTenths;
+                int tol = p == 1 ? targets.C1SoloToleranceTenths : targets.C1CrewToleranceTenths;
+                bool ok = m != Dnf && Math.Abs(m * 10 - target) <= tol;
+                checks.Add(new TargetCheck("C1", ok,
+                    $"{p}p calibration S1 {(m == Dnf ? "DNF" : m.ToString())} services in {Tenths(target - tol)}-{Tenths(target + tol)} (053 measured {Tenths(target)})"));
+            }
+            return checks.AsReadOnly();
+        }
+
+        /// <summary>
+        /// Spec 052b T1g, counted: every game-numbers row reaches stage 2 within the S2 band at the game's pace; D40: the lower
+        /// edge scales with the crew's difficulty h(n), as in T1.
+        /// </summary>
+        public static IReadOnlyList<TargetCheck> GameNumberChecks(IReadOnlyList<GameNumbersRow> rows, ClimbTargets targets)
+        {
+            var checks = new List<TargetCheck>();
+            foreach (GameNumbersRow row in rows)
+            {
+                (long from, long to) = targets.BandOf(ClimbStage.FirstRestaurant, row.DifficultyPermille);
+                long seconds = row.TenthsOfHours < 0 ? Dnf : row.TenthsOfHours * 360L;
+                bool ok = seconds != Dnf && seconds >= from && seconds <= to;
+                checks.Add(new TargetCheck("T1g", ok,
+                    $"{row.Players}p game S1 {(seconds == Dnf ? "DNF" : Tenths(row.TenthsOfHours))} h in {ClimbReport.FormatBand(from)}-{ClimbReport.FormatBand(to)}"));
+            }
+            return checks.AsReadOnly();
+        }
+
+        private static List<(ClimbStrategy Strategy, long Median)> StrategyMedians(IReadOnlyList<ClimbRun> runs, int p, string profile)
+        {
+            var medians = new List<(ClimbStrategy Strategy, long Median)>();
+            foreach (ClimbStrategy s in ClimbStrategy.All)
+            {
+                var rs = runs.Where(r => r.Setup.Players == p && r.Setup.ProfileId == profile && r.Setup.Strategy == s).ToList();
+                if (rs.Count > 0) medians.Add((s, Median(rs.Select(r => EnteredOrDnf(r, ClimbStage.BeyondKitchen)).ToList())));
+            }
+            return medians;
+        }
+
+        private static string Tenths(long tenths) => tenths < 0 ? "-" + Tenths(-tenths) : (tenths / 10) + "." + (tenths % 10);
 
         private static string H(long seconds) => seconds == Dnf ? "DNF" : ClimbReport.FormatHours(seconds);
         private static string Pct(int permille) => (permille / 10) + "%";

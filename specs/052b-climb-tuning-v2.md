@@ -192,7 +192,115 @@ the open questions. Then approve the game-side spec.
 8. Lost competitions keep the stake tier. [yes; stakes only grow with success]
 
 ## Implementation notes
-(Builder fills this in: interpretations, tuning log per round, the final report summary and the GAME NUMBERS table.)
+Built 2026-11-11/12 (builder) on `spec/052b-climb-tuning` (on top of 037, 572cae0). Not committed. Sim tests 506 -> 556
+(one 052 few-players test removed with the check, 51 new; Climb tests about 0.6 s). `env -u UNITY_PATH bash scripts/verify.sh`
+green (Unity skipped). `git diff 572cae0 -- sim/Runtime/Cooking sim/Runtime/Core sim/Runtime/Economy game scripts` is empty.
+
+**D40 replaces the crew table of (a) and the goal and stock rows of (e)** (coordinator, 2026-11-11):
+- One pure function, `CrewScaling.For(catalog, players) -> CrewFactors`. Nothing else reads crew size. Its data is the
+  catalog's `CrewTable` (`CrewScaleRow`: MaxPlayers, h(n), patience, and three Fixed overrides for C1 and
+  `--crew-scaling off`). `RowFor` and the table validation are as specified in (a).
+- Reference crew 4. h = 0.55 / 0.75 / 0.9 / 1.0 for 1/2/3/4, 1.0 up to 16 (data). Guest demand D = n/4. D also scales work
+  spots, staff actions, event guests, running costs (stage, channel and purchase upkeep) and the stage 1 drop (rounded up).
+  Without D on spots and staff, a 16-crew would be capacity-bound and break the plateau. G = n x h(n)/4 scales goals and all
+  one-time money. Prices and the cost of each ingredient never scale.
+- Progress is a fraction of the goal. `ClimbState.Balance` is reference (4-player) money: each service adds
+  `CrewScaling.ToReference(net, G)`. Purchases, gates, deposits and the starting money stay at their catalog cost. A join or a
+  leave changes only later services (test `ProgressIsNetOverTheGoalFactor...`). Real money: `ServiceResult` keeps its real
+  amounts and adds `GoalPermille`, `NetReference`, `SoldOut`, `MenuDropped` and `MenuAdded` (init properties, so the
+  positional constructor is unchanged). T7 reads `NetReference`.
+- Patience (a) is kept as data and is 0 in every row: D40 makes solo easy through h, not through patience.
+- Checks, adapted:
+  - T1: the 4-player bands. For a crew with h < 1 the lower edge is multiplied by h (`ClimbTargets.BandOf(stage, h)`), and
+    the upper edge stays.
+  - T1p (new, counted): for every crew above 4, no stage may take longer than 4 players' median (`PlateauPermille` 1000).
+  - T1g: the same h rule on the S2 band.
+  - T4: compares strategies within one crew size, so an easy solo is never flagged as a shortcut.
+- Report: the default `--players` is now 1,2,4,8,16. Each section gets a crew line. A crew-size table (h(n) and hours in each
+  stage) is added, and the per-stage table gains hours, menu drops, re-adds and repeat buys.
+
+**Other interpretations.**
+- Only crews choose their menu (`MenuFit`, run by the engine right after `ClimbPolicy.Decide`). The missed share is per
+  normal service, over the guests who chose you. Prices cover the owned menu, so a dish that comes back has its price.
+- Stock cap: it counts served stage 1 dishes. Sold-out guests stay in `Chosen` and get no draws, actions, stars or wait.
+- `PurchaseDef.CostOf` and `BigJobDef.DepositAt` and `PrizeAt` floor to whole units at each step, so cents give the dollar
+  climb.
+- Scope additions: `PurchaseEffect.WorkSpots` is required by (c). `ServiceResult`, `TargetCheck` (unchanged), `CrewScaling.cs`
+  and `CrewFactors.cs` are new or changed files that the coordinator's single-function request needs. `CreateDefault` gains
+  `crewTable` and `stage1Extras`.
+- C1 and GAME NUMBERS use `stage1Extras: false`, the corner as 053 built it: no second basket and no sign. With the extras,
+  the sim crew spends $140 that the game crew never spends.
+- C1 targets were re-taken from the 037 notes: the corner pays about 10 % less per guest. That gives solo 19.0 +- 2.5
+  services and crews 5.7 +- 1.0. The 037 fix round (quality back in the bill) is not on its branch yet, so these numbers
+  stand until its notes carry the new measurement. They are in `ClimbTargets`.
+- `--game-scale` defaults to 1, not 115: since 037 the game's money is the catalog's cents.
+- 037 review nits: `ClimbReport.Format` reads the money scale from the runs, and the catalog rejects any money value that is
+  not a whole multiple of `MoneyScale`. With today's constructor this holds by construction; the test checks the default.
+- Game-pinned numbers (rent $300, pitch fee $5, start $25, dish prices, choice weights) were not tuned:
+  FoodCornerRulesTests and MenuBoard read them.
+- Two 052 tests were adapted to D40, not weakened. The ceiling test now includes the crew demand factor and every copy. The
+  "16 do not out-earn 4 at stage 1" test now compares progress (`NetReference`).
+
+**Tuning log** (only `CreateDefault` numbers and the crew table; start = the spec's defaults plus D40, S1 WorkSpots 2 -> 4
+so the reference crew has no overflow):
+- R0: 100/143. S1 was too fast in the game (T1g 0.3-0.5 h for every crew). Plus1 was a shortcut, and money sat idle in S4/S5.
+- R1: S1 drop 16 -> 8 per 4 players, the only free S1 pace lever. Second basket and corner sign 60/80 -> 30/40. S4/S5
+  upkeep 160/200 -> 100/130 (S4 earned about $117 a service on $285 upkeep). S1 WorkPermille 3900 -> 3700. Result: 119/143;
+  T1, T1p and T1g pass.
+- R2: S1 TipPermille 220 -> 250 (C1 solo, 4 guests a service). Cook-off rival 700 -> 800. Stake growth 1400 -> 1200, max
+  tier 8 -> 5. Decor $4,000 and car collection $20,000 at growth 1500 -> flat $3,000 and $15,000. S4 items cheaper:
+  runner 1000, fry dump 1500, drink filler 1500, dishwasher 2000, line cook 2000, automation plan 3000. Result: 128/143;
+  C1 passes, T4 passes except 1p novice.
+- R3: cook-off rival back to 700. At 800, average crews lost every cook-off and its deposit drained them. Result: 128/143.
+
+**Final report** (`--seeds 5`, under 10 s; `--players 1,4,16`: 80/90; default 1,2,4,8,16: 128/143; `--calibration`
+3/3). Average crew, reference strategy, hours to enter S2/S3/S4/S5:
+
+| crew | h(n) | S2 | S3 | S4 | S5 |
+|---|---|---|---|---|---|
+| 1 | 0.55 | 0.7 | 2.1 | 4.4 | 9.2 |
+| 2 | 0.75 | 0.9 | 2.8 | 6.4 | 12.6 |
+| 4 | 1.0 | 1.2 | 3.9 | 7.9 | 15.3 |
+| 8 | 1.0 | 1.2 | 3.9 | 7.9 | 15.2 |
+| 16 | 1.0 | 1.2 | 3.9 | 7.9 | 15.1 |
+
+Every crew size passes T1, T1p (8 and 16 match 4 at 1.0x), T1g, T2, T3, T6, T8 and C1. T4 and T5 pass except 1p novice.
+T7 fails (Blockers).
+
+**GAME NUMBERS** (the reference crew at the game's pace, 375 s a service, corner as built; game money):
+
+| players | h | demand | goal x | S1 goal | drop | pitch | start | S2 rent | licence | services | hours |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0.55 | 0.25 | 0.137 | $41.00 | 2 | $1.00 | $3.00 | $12.00 | $164.00 | 5 | 0.5 |
+| 2 | 0.75 | 0.5 | 0.375 | $112.00 | 4 | $2.00 | $9.00 | $25.00 | $450.00 | 6 | 0.6 |
+| 3 | 0.9 | 0.75 | 0.675 | $202.00 | 6 | $3.00 | $16.00 | $37.00 | $810.00 | 7 | 0.7 |
+| 4 | 1 | 1 | 1 | $300.00 | 8 | $5.00 | $25.00 | $50.00 | $1,200.00 | 8 | 0.8 |
+| 6 | 1 | 1.5 | 1.5 | $450.00 | 12 | $7.00 | $37.00 | $75.00 | $1,800.00 | 8 | 0.8 |
+| 8 | 1 | 2 | 2 | $600.00 | 16 | $10.00 | $50.00 | $100.00 | $2,400.00 | 8 | 0.8 |
+| 12 | 1 | 3 | 3 | $900.00 | 24 | $15.00 | $75.00 | $150.00 | $3,600.00 | 8 | 0.8 |
+| 16 | 1 | 4 | 4 | $1,200.00 | 32 | $20.00 | $100.00 | $200.00 | $4,800.00 | 8 | 0.8 |
+
+All amounts are floored to whole dollars, as the engine does. For the game, progress is net / (goal x G), so the shown goal
+is that crew's real goal. A drop above 12 needs a bigger potato slot, or two loads.
+
+Known gap (Open question 3): stages 2-5 are not calibrated to the game. The S1 pace now comes from the drop: 2 fries per
+player per service. A 4-crew at full work would need a rent goal of about $600 to reach the T1 band.
 
 ## Blockers
-(Builder fills this in after 3 failed tuning rounds.)
+Tuning stopped after 3 rounds (AC11 fails, an allowed outcome). Failing lines, `--players 1,4,16 --seeds 5`:
+`FAIL T7` for 1p novice/average/expert (195/70/50 idle services, in S4 and S5), 4p novice/average/expert (11/17/84), and 16p
+average/expert (29/53). Also `FAIL T4 1p novice fastest balanced+plus1 10.0 h >= 0.85 x reference 12.8 h` and
+`FAIL T5 1p novice max share 84% (S3 tables)`.
+1. **T7 is a measurement artefact of lumpy big-job income.** Almost every idle service comes right after a big job. A lost
+   cook-off deposit, or a won prize, swings the 5-service mean. A lost deposit pulls the mean to $5-30 a service, and then
+   no cost lies between 3x and 20x of it, although the crew keeps buying (decor, cars, the next stake). Best guess: let T7
+   take the mean over normal services only, or ignore means below a floor. Either is a target change, for the human.
+   Geometric sinks (growth 1500) outgrew a flat income within about 60 services, so R2 made them flat. Whether money "grows
+   with income" now rests on the stake tiers alone.
+2. **Plus1 is still faster where a channel has no rival** (custom orders, buffet, partly tables). Guests only compare you
+   with the outside option, so +1 unit loses about 12 % of guests for about 14 % more per guest. With R1/R2's shorter S4 the
+   gain falls under 15 % for every crew except solo novices. This is the out-of-scope price-unit finding of (b). The fix
+   lies in the price weight and the outside weight, which the game's menu board shares (037), or in a rival per channel.
+3. **T5 1p novice** is noise of tiny numbers: a solo sees about 6 tables guests a service, and the rival's share swings.
+4. **Stage 1 versus the game's goal:** see the known gap above. Raising `rent_restaurant` breaks FoodCornerRulesTests
+   (30000), so it needs a /game change first.

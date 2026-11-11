@@ -11,6 +11,8 @@ namespace Worktown.Sim.Climb
     /// <see cref="MoneyScale"/> (data is written in whole dollars) and validates (throws <see cref="ArgumentException"/>).
     /// Spec 037 (D39 revises D23): money is integer cents, so <see cref="CreateDefault"/> uses <see cref="CentsPerDollar"/>; the
     /// engine rounds to whole units, so the climb is the same at any scale (the climb report reads the same).
+    /// Spec 052b: every money value must be a whole multiple of MoneyScale (037 review), and the catalog holds the D40 crew table
+    /// (<see cref="CrewTable"/>, read through <see cref="CrewScaling.For"/>).
     /// All numbers of <see cref="CreateDefault"/> are provisional; tuning changes only those.
     /// </summary>
     public sealed class ClimbCatalog
@@ -34,7 +36,8 @@ namespace Worktown.Sim.Climb
 
         public ClimbCatalog(IEnumerable<PlayerProfile> profiles, IEnumerable<DishDef> dishes, IEnumerable<ChannelDef> channels,
             IEnumerable<RivalDef> rivals, IEnumerable<PurchaseDef> purchases, IEnumerable<StageDef> stages,
-            IEnumerable<BigJobDef> bigJobs, ChoiceWeights weights, string stage1DishId, long startingMoney, long moneyScale = 1)
+            IEnumerable<BigJobDef> bigJobs, ChoiceWeights weights, string stage1DishId, long startingMoney, long moneyScale = 1,
+            IEnumerable<CrewScaleRow>? crewTable = null)
         {
             if (moneyScale < 1) throw new ArgumentException("MoneyScale must be at least 1.", nameof(moneyScale));
             MoneyScale = moneyScale;
@@ -49,7 +52,47 @@ namespace Worktown.Sim.Climb
             Weights = weights ?? throw new ArgumentException("Weights are required.", nameof(weights));
             Stage1DishId = stage1DishId;
             StartingMoney = startingMoney * s;
+            CrewTable = Copy(crewTable ?? NeutralCrewTable, nameof(crewTable));
             Validate();
+        }
+
+        /// <summary>
+        /// Spec 052b: one row, no crew scaling at all (demand and goal 1000, the stage's own stock): the default of the
+        /// constructor (unit-test catalogs) and of <c>--crew-scaling off</c>.
+        /// </summary>
+        public static IReadOnlyList<CrewScaleRow> NeutralCrewTable { get; } =
+            Array.AsReadOnly(new[] { new CrewScaleRow(int.MaxValue, 1000, 0, 1000, 1000, 0) });
+
+        /// <summary>
+        /// Spec 052b, D40: the default crew table, h(n) per crew size (data; tuning changes only these numbers): solo is easy,
+        /// 2 and 3 are harder, 4 is the reference (1000), above that a plateau.
+        /// </summary>
+        public static IReadOnlyList<CrewScaleRow> DefaultCrewTable { get; } = Array.AsReadOnly(new[]
+        {
+            new CrewScaleRow(1, 550),
+            new CrewScaleRow(2, 750),
+            new CrewScaleRow(3, 900),
+            new CrewScaleRow(4, 1000),
+            new CrewScaleRow(5, 1000),
+            new CrewScaleRow(16, 1000),
+        });
+
+        /// <summary>
+        /// Spec 052b C1: <paramref name="rows"/> as the game measured stage 1 (spec 053): no crew scaling of demand or goal and a
+        /// fixed stock of <paramref name="stock"/> per service (the potato slot); difficulty and patience stay.
+        /// </summary>
+        public static IReadOnlyList<CrewScaleRow> CalibrationCrewTable(IReadOnlyList<CrewScaleRow> rows, int stock = 12) =>
+            rows.Select(r => r with { FixedDemandPermille = 1000, FixedGoalPermille = 1000, FixedStock = stock }).ToList().AsReadOnly();
+
+        /// <summary>Spec 052b: the crew table, sorted by MaxPlayers (validated). Read through <see cref="CrewScaling.For"/>.</summary>
+        public IReadOnlyList<CrewScaleRow> CrewTable { get; }
+
+        /// <summary>Spec 052b: the first crew row with <paramref name="players"/> &lt;= MaxPlayers (the last row above it).</summary>
+        public CrewScaleRow RowFor(int players)
+        {
+            foreach (CrewScaleRow r in CrewTable)
+                if (players <= r.MaxPlayers) return r;
+            return CrewTable[CrewTable.Count - 1];
         }
 
         public long MoneyScale { get; }
@@ -165,6 +208,16 @@ namespace Worktown.Sim.Climb
             return list;
         }
 
+        /// <summary>Spec 052b: work spots added by owned purchases (per copy).</summary>
+        public int PurchaseWorkSpots(IReadOnlyList<string> owned) => Sum(owned, p => p.Effect.WorkSpots);
+
+        /// <summary>Spec 052b: owned staff copies (purchases with StaffActionsPerMinute above 0).</summary>
+        public int StaffCount(IReadOnlyList<string> owned) => Sum(owned, p => p.Effect.StaffActionsPerMinute > 0 ? 1 : 0);
+
+        /// <summary>Spec 052b: owned machine copies (stage 4 purchases that save actions and are no staff).</summary>
+        public int MachineCount(IReadOnlyList<string> owned) =>
+            Sum(owned, p => p.Stage == ClimbStage.Automation && p.Effect.ActionsSaved > 0 && p.Effect.StaffActionsPerMinute == 0 ? 1 : 0);
+
         /// <summary>Upkeep of one service: the stage, its open channels and every owned purchase (wages included).</summary>
         public long Upkeep(ClimbStage stage, IReadOnlyList<string> owned)
         {
@@ -211,6 +264,7 @@ namespace Worktown.Sim.Climb
                 if (!_channels.ContainsKey(r.ChannelId)) throw new ArgumentException("Rival " + r.Id + ": unknown channel " + r.ChannelId + ".");
                 Permille(r.QualityPermille, "rival " + r.Id); Permille(r.ReputationPermille, "rival " + r.Id);
                 AtLeast(r.WaitSeconds, 0, "rival " + r.Id); AtLeast(r.MaxPriceCuts, 0, "rival " + r.Id); AtLeast(r.MaxQualitySteps, 0, "rival " + r.Id);
+                if (r.PriceOffset % MoneyScale != 0) throw new ArgumentException("Rival " + r.Id + ": PriceOffset must be a whole multiple of MoneyScale.");
             }
             foreach (PurchaseDef p in Purchases)
             {
@@ -221,6 +275,9 @@ namespace Worktown.Sim.Climb
                 AtLeast(e.ReputationBonus, 0, "purchase " + p.Id); AtLeast(e.StaffActionsPerMinute, 0, "purchase " + p.Id);
                 Permille(e.CostSavedPermille, "purchase " + p.Id); Permille(e.CeilingBonusPermille, "purchase " + p.Id);
                 Permille(e.StaffSkillPermille, "purchase " + p.Id);
+                AtLeast(e.WorkSpots, 0, "purchase " + p.Id + " WorkSpots"); AtLeast(p.MaxCount, 0, "purchase " + p.Id + " MaxCount");
+                if (p.CostGrowthPermille < 1000 || p.CostGrowthPermille > MaxPermille) throw new ArgumentException("Purchase " + p.Id + ": CostGrowthPermille must be 1000.." + MaxPermille + ".");
+                if (p.Kind == PurchaseKind.Gate && p.MaxCount != 1) throw new ArgumentException("Purchase " + p.Id + ": a gate is bought once (MaxCount 1).");
             }
             foreach (PurchaseDef p in Purchases)
             {
@@ -248,6 +305,9 @@ namespace Worktown.Sim.Climb
                 if (st.GateStarsTenths < 0 || st.GateStarsTenths > 50) throw new ArgumentException("Stage " + st.Stage + ": GateStarsTenths must be 0..50.");
                 AtLeast(st.GateWindow, 0, "stage " + st.Stage); AtLeast(st.GateMinChannels, 0, "stage " + st.Stage);
                 Permille(st.ReputationFloorPermille, "stage " + st.Stage);
+                Count16(st.GateMinStaff, "stage " + st.Stage + " GateMinStaff"); Count16(st.GateMinMachines, "stage " + st.Stage + " GateMinMachines");
+                if (st.WorkPermille < 1 || st.WorkPermille > MaxPermille) throw new ArgumentException("Stage " + st.Stage + ": WorkPermille must be 1.." + MaxPermille + ".");
+                Permille(st.TipPermille, "stage " + st.Stage + " TipPermille"); AtLeast(st.StockPerService, 0, "stage " + st.Stage + " StockPerService");
                 if (st.GatePurchaseId != null && !_purchases.ContainsKey(st.GatePurchaseId))
                     throw new ArgumentException("Stage " + st.Stage + ": unknown gate purchase " + st.GatePurchaseId + ".");
             }
@@ -260,6 +320,8 @@ namespace Worktown.Sim.Climb
                 Money(j.Deposit, "big job " + j.Id); Money(j.Prize, "big job " + j.Id);
                 AtLeast(j.Guests, 0, "big job " + j.Id); AtLeast(j.CooldownServices, 0, "big job " + j.Id);
                 Permille(j.PricePermille, "big job " + j.Id); Permille(j.RivalScorePermille, "big job " + j.Id);
+                if (j.StakeGrowthPermille < 1000 || j.StakeGrowthPermille > MaxPermille) throw new ArgumentException("Big job " + j.Id + ": StakeGrowthPermille must be 1000.." + MaxPermille + ".");
+                if (j.MaxTier < 0 || j.MaxTier > 64) throw new ArgumentException("Big job " + j.Id + ": MaxTier must be 0..64.");
                 if (j.RequiresPurchase != null && !_purchases.ContainsKey(j.RequiresPurchase))
                     throw new ArgumentException("Big job " + j.Id + ": unknown purchase " + j.RequiresPurchase + ".");
             }
@@ -268,6 +330,28 @@ namespace Worktown.Sim.Climb
             if (Stage1DishId == null || !_dishes.ContainsKey(Stage1DishId)) throw new ArgumentException("Unknown stage 1 dish " + Stage1DishId + ".");
             if (CounterOf(ClimbStage.FoodCorner) == null) throw new ArgumentException("Stage 1 needs a base channel.");
             Money(StartingMoney, "starting money");
+            ValidateCrewTable();
+        }
+
+        private void ValidateCrewTable()
+        {
+            if (CrewTable.Count == 0) throw new ArgumentException("The crew table needs at least one row.");
+            int last = 0;
+            foreach (CrewScaleRow r in CrewTable)
+            {
+                if (r.MaxPlayers <= last) throw new ArgumentException("Crew table: MaxPlayers must be at least 1 and ascending (" + r.MaxPlayers + ").");
+                last = r.MaxPlayers;
+                if (r.DifficultyPermille < 1 || r.DifficultyPermille > MaxPermille) throw new ArgumentException("Crew table: DifficultyPermille must be 1.." + MaxPermille + ".");
+                if (r.PatienceSeconds < 0 || r.PatienceSeconds > 600) throw new ArgumentException("Crew table: PatienceSeconds must be 0..600.");
+                Permille(r.FixedDemandPermille, "crew table FixedDemandPermille"); Permille(r.FixedGoalPermille, "crew table FixedGoalPermille");
+                AtLeast(r.FixedStock, 0, "crew table FixedStock");
+            }
+            if (last < 16) throw new ArgumentException("Crew table: the last row must cover 16 players (MaxPlayers >= 16).");
+        }
+
+        private static void Count16(int value, string what)
+        {
+            if (value < 0 || value > 16) throw new ArgumentException(what + " must be 0..16.");
         }
 
         private static IReadOnlyList<T> Copy<T>(IEnumerable<T> items, string name) where T : class
@@ -311,9 +395,10 @@ namespace Worktown.Sim.Climb
             if (value < 0 || value > MaxPermille) throw new ArgumentException(what + ": permille must be 0.." + MaxPermille + ".");
         }
 
-        private static void Money(long value, string what)
+        private void Money(long value, string what)
         {
             if (value < 0) throw new ArgumentException(what + ": money must be >= 0.");
+            if (value % MoneyScale != 0) throw new ArgumentException(what + ": money must be a whole multiple of MoneyScale " + MoneyScale + " (no cent is floored away).");
         }
 
         private static T Get<T>(Dictionary<string, T> map, string id, string kind)
@@ -322,10 +407,16 @@ namespace Worktown.Sim.Climb
             throw new ArgumentException("Unknown " + kind + " " + id + ".");
         }
 
-        // ---------- default data (PROVISIONAL: tuning changes only these numbers; see spec 052 Implementation notes) ----------
+        // ---------- default data (PROVISIONAL: tuning changes only these numbers; see specs 052 and 052b Implementation notes) ----------
 
-        /// <summary>The default climb data of spec 052 (whole dollars times <paramref name="moneyScale"/>; spec 037: cents by default, D39).</summary>
-        public static ClimbCatalog CreateDefault(long moneyScale = CentsPerDollar)
+        /// <summary>
+        /// The default climb data of spec 052 (whole dollars times <paramref name="moneyScale"/>; spec 037: cents by default, D39).
+        /// Spec 052b: <paramref name="crewTable"/> null is <see cref="DefaultCrewTable"/> (D40). <paramref name="stage1Extras"/> false leaves
+        /// out the stage 1 Productive purchases (second basket, corner sign): the food corner as the game built it (spec 053), for C1
+        /// and the GAME NUMBERS.
+        /// </summary>
+        public static ClimbCatalog CreateDefault(long moneyScale = CentsPerDollar, IReadOnlyList<CrewScaleRow>? crewTable = null,
+            bool stage1Extras = true)
         {
             var profiles = new[]
             {
@@ -335,7 +426,7 @@ namespace Worktown.Sim.Climb
             };
             var dishes = new[]
             {
-                new DishDef("fries", "Fries", 6, 1, 4, 650),
+                new DishDef("fries", "Fries", 6, 0, 4, 650),
                 new DishDef("falafel_wrap", "Falafel Wrap", 10, 3, 9, 700),
                 new DishDef("seitan_wrap", "Seitan Wrap", 11, 3, 10, 730),
                 new DishDef("grilled_veggies", "Grilled Veggies", 9, 2, 8, 670),
@@ -343,11 +434,12 @@ namespace Worktown.Sim.Climb
             };
             var stages = new[]
             {
-                new StageDef(ClimbStage.FoodCorner, 2, 250, 3, 0, 5, 1, "rent_restaurant", 0, 0, 0, false, 300),
-                new StageDef(ClimbStage.FirstRestaurant, 6, 200, 1, 1, 50, 4, "service_license", 35, 5, 0, false, 450),
-                new StageDef(ClimbStage.ServiceMix, 6, 200, 1, 1, 80, 5, null, 36, 5, 2, false, 550),
-                new StageDef(ClimbStage.Automation, 6, 200, 1, 1, 160, 5, null, 36, 20, 0, true, 600),
-                new StageDef(ClimbStage.BeyondKitchen, 6, 200, 1, 1, 200, 5, null, 0, 0, 0, false, 600),
+                new StageDef(ClimbStage.FoodCorner, 4, 250, 3, 0, 5, 1, "rent_restaurant", 0, 0, 0, 0, 0, 300,
+                    WorkPermille: 3700, TipPermille: 250, StockPerService: 8),
+                new StageDef(ClimbStage.FirstRestaurant, 6, 200, 1, 1, 50, 4, "service_license", 35, 5, 0, 0, 0, 450),
+                new StageDef(ClimbStage.ServiceMix, 6, 200, 1, 1, 80, 5, null, 36, 5, 2, 0, 0, 550),
+                new StageDef(ClimbStage.Automation, 6, 200, 1, 1, 100, 5, "automation_plan", 36, 5, 0, 2, 2, 600),
+                new StageDef(ClimbStage.BeyondKitchen, 6, 200, 1, 1, 130, 5, null, 0, 0, 0, 0, 0, 600),
             };
             var channels = new[]
             {
@@ -367,8 +459,8 @@ namespace Worktown.Sim.Climb
             };
             var purchases = new[]
             {
-                P("second_basket", "Second Basket", 1, PurchaseKind.Productive, 60, 0, Saves(2, "fries")),
-                P("corner_sign", "Corner Sign", 1, PurchaseKind.Productive, 80, 0, Ceiling(100, null)),
+                P("second_basket", "Second Basket", 1, PurchaseKind.Productive, 30, 0, Saves(2, "fries")),
+                P("corner_sign", "Corner Sign", 1, PurchaseKind.Productive, 40, 0, Ceiling(100, null)),
                 P("rent_restaurant", "Rent the Restaurant", 1, PurchaseKind.Gate, 300, 0, PurchaseEffect.None),
                 P("dish_falafel_wrap", "Falafel Wrap Recipe", 2, PurchaseKind.Productive, 200, 0, Recipe("falafel_wrap")),
                 P("dish_seitan_wrap", "Seitan Wrap Recipe", 2, PurchaseKind.Productive, 250, 0, Recipe("seitan_wrap")),
@@ -382,36 +474,38 @@ namespace Worktown.Sim.Climb
                 P("tables_room", "Tables Room", 3, PurchaseKind.Productive, 1500, 0, PurchaseEffect.None with { UnlocksChannel = "tables" }),
                 P("buffet_bar", "Buffet Bar", 3, PurchaseKind.Productive, 2000, 0, PurchaseEffect.None with { UnlocksChannel = "buffet" }),
                 P("decor_2", "Decor II", 3, PurchaseKind.Productive, 1200, 0, Rep(30)),
-                P("staff_runner", "Runner", 4, PurchaseKind.Productive, 1500, 35, Staff(22, 600)),
-                P("staff_cook_1", "Line Cook", 4, PurchaseKind.Productive, 2500, 45, Staff(26, 650)),
-                P("staff_cook_2", "Second Line Cook", 4, PurchaseKind.Productive, 2500, 45, Staff(26, 650)),
-                P("auto_fill_drinks", "Auto Drink Filler", 4, PurchaseKind.Productive, 2500, 5, Saves(3, "lemonade")),
-                P("dishwasher", "Dishwasher", 4, PurchaseKind.Productive, 3000, 5, Saves(1, CleaningTarget)),
-                P("fry_dump", "Fry Dump Station", 4, PurchaseKind.Productive, 2000, 5, Saves(2, "fries")),
+                P("bigger_place", "Bigger Place", 3, PurchaseKind.Productive, 3000, 40, PurchaseEffect.None with { WorkSpots = 1, CeilingBonusPermille = 100 }, 4, 1600),
+                P("staff_runner", "Runner", 4, PurchaseKind.Productive, 1000, 35, Staff(22, 600)),
+                P("staff_cook", "Line Cook", 4, PurchaseKind.Productive, 2000, 45, Staff(26, 650), 6, 1300),
+                P("auto_fill_drinks", "Auto Drink Filler", 4, PurchaseKind.Productive, 1500, 5, Saves(3, "lemonade")),
+                P("dishwasher", "Dishwasher", 4, PurchaseKind.Productive, 2000, 5, Saves(1, CleaningTarget)),
+                P("fry_dump", "Fry Dump Station", 4, PurchaseKind.Productive, 1500, 5, Saves(2, "fries")),
+                P("automation_plan", "Automation Plan", 4, PurchaseKind.Gate, 3000, 0, PurchaseEffect.None),
                 P("food_truck", "Food Truck", 5, PurchaseKind.Productive, 6000, 20, PurchaseEffect.None),
                 P("delivery_car", "Delivery Car", 5, PurchaseKind.Productive, 3000, 10, Ceiling(200, "delivery")),
                 P("ingredient_lab", "Ingredient Lab", 5, PurchaseKind.Productive, 4000, 20, PurchaseEffect.None with { QualityBonus = 60 }),
                 P("campaign_1", "Ad Campaign I", 5, PurchaseKind.Productive, 1000, 0, Ceiling(100, null)),
                 P("campaign_2", "Ad Campaign II", 5, PurchaseKind.Productive, 2000, 0, Ceiling(100, null)),
                 P("campaign_3", "Ad Campaign III", 5, PurchaseKind.Productive, 4000, 0, Ceiling(100, null)),
-                P("show_car", "Show Car", 5, PurchaseKind.Status, 20000, 0, Rep(20)),
-                P("decor_3", "Decor III", 5, PurchaseKind.Status, 4000, 0, Rep(10)),
-                P("decor_4", "Decor IV", 5, PurchaseKind.Status, 8000, 0, Rep(10)),
-                P("decor_5", "Decor V", 5, PurchaseKind.Status, 15000, 0, Rep(10)),
-                P("decor_6", "Decor VI", 5, PurchaseKind.Status, 25000, 0, Rep(10)),
+                P("car_collection", "Car Collection", 5, PurchaseKind.Status, 15000, 10, Rep(5), 0, 1000),
+                P("decor", "Decor", 5, PurchaseKind.Status, 3000, 0, Rep(10), 0, 1000),
             };
             var bigJobs = new[]
             {
-                new BigJobDef("cook_off", "Cook-Off", BigJobKind.Competition, 800, 0, 1000, 700, 4000, null, 4),
-                new BigJobDef("street_festival", "Street Festival", BigJobKind.Event, 600, 150, 1100, 0, 0, "food_truck", 4),
-                new BigJobDef("stadium_day", "Stadium Day", BigJobKind.Event, 1000, 250, 1200, 0, 0, "food_truck", 6),
+                new BigJobDef("cook_off", "Cook-Off", BigJobKind.Competition, 800, 0, 1000, 700, 4000, null, 4, 1200, 5),
+                new BigJobDef("street_festival", "Street Festival", BigJobKind.Event, 600, 150, 1100, 0, 0, "food_truck", 4, 1200, 5),
+                new BigJobDef("stadium_day", "Stadium Day", BigJobKind.Event, 1000, 250, 1200, 0, 0, "food_truck", 6, 1200, 5),
             };
             var weights = new ChoiceWeights(Quality: 900, Reputation: 700, Price: 2600, Wait: 300, Variety: 80, Outside: 700, Min: 20);
-            return new ClimbCatalog(profiles, dishes, channels, rivals, purchases, stages, bigJobs, weights, "fries", 25, moneyScale);
+            IEnumerable<PurchaseDef> shop = stage1Extras ? purchases
+                : purchases.Where(p => !(p.Stage == ClimbStage.FoodCorner && p.Kind == PurchaseKind.Productive));
+            return new ClimbCatalog(profiles, dishes, channels, rivals, shop, stages, bigJobs, weights, "fries", 25, moneyScale,
+                crewTable ?? DefaultCrewTable);
         }
 
-        private static PurchaseDef P(string id, string name, int stage, PurchaseKind kind, long cost, long upkeep, PurchaseEffect effect) =>
-            new PurchaseDef(id, name, (ClimbStage)stage, kind, cost, upkeep, effect);
+        private static PurchaseDef P(string id, string name, int stage, PurchaseKind kind, long cost, long upkeep, PurchaseEffect effect,
+            int maxCount = 1, int growthPermille = 1000) =>
+            new PurchaseDef(id, name, (ClimbStage)stage, kind, cost, upkeep, effect, maxCount, growthPermille);
 
         private static PurchaseEffect Saves(int actions, string on) => PurchaseEffect.None with { ActionsSaved = actions, SavedOn = on };
         private static PurchaseEffect Ceiling(int permille, string? channel) => PurchaseEffect.None with { CeilingBonusPermille = permille, CeilingChannel = channel };
