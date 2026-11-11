@@ -58,6 +58,32 @@ builder, tester, reviewer, visual check, verify.sh. Numbers such as prices, timi
 **provisional defaults** chosen by the orchestrator, listed in each spec under "Defaults to review", and
 tuned later by the human.
 
+## Cooking pace (spec 043: one table for every station)
+Real (kitchen) seconds on the heat, at the inbox's "about 2x faster" default (question 3, option A). The numbers live in
+one code file, `sim/Runtime/Cooking/CookingPace.cs`; the pan and pot rows follow from their dose formula at
+`CookingPace.PanPotSpeed` (2x) and the item's cut, so they are measured, not set. Zones: **Good** from the window's start,
+**Perfect** from its middle to its end (the best rating: doneness term 1, Good 0.9), **Overdone** after it, **Burnt** 0.1
+doneness later. Names and menu buckets follow the zones: undercooked is pale / lightly / half-grilled (an order only
+Close), Good and Perfect are golden / grilled / the plain cooked name, Overdone is dark / charred / soft.
+
+| Station | Food | Good | Perfect | Overdone | Burnt | Before 043 (Good / Perfect / Burnt) |
+|---|---|---|---|---|---|---|
+| Pan (190 C) | whole potato | 22 | 28 | 34 | 38 | 44 / 55 / 75 |
+| Pan | potato sticks | 10 | 13 | 15 | 17 | 20 / 25 / 34 |
+| Pan, saute | apple slices | 1.7 (the pan's first moment) | 2.5 | 4.9 | 6.5 | 2 / 5 / 13 |
+| Pot (100 C) | whole potato | 71 | 90 | 109 | 122 | 141 / 180 / 240 |
+| Pot | diced potato | 27 | 35 | 42 | 47 | 54 / 69 / 94 |
+| Pot | onion, tomato (window 0..1) | 5 | 60 | never | never | 5 / 122 / never |
+| Fryer (180 C) | fries | 25 | 30 | 35 | 45 | unchanged |
+| Fryer | falafel | 20 | 25 | 30 | 38 | unchanged |
+| Griddle, per side | seitan strips | 12 | 14 | 16 | 22 | unchanged |
+| Griddle, per side | paprika, eggplant, mushroom | 10 | 12 | 14 | 20 | unchanged |
+| Griddle, per side | flatbread, wrap (toast) | 4 | 5 | 6 | 9 | unchanged |
+| Spit (high heat) | seitan outer layer | 40 | 55 | 70 | 90 | unchanged |
+
+Before 043 the best rating came at the end of the window (Overdone column), the names started earlier than Good on the
+pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and the pan and pot ran at half this pace.
+
 ## Follow-ups from reviews (small, do when touching the area)
 - 027: visual-check.sh trap should `exit 130`; derive the WSL path with `wslpath`; tour args parse in release builds.
 - 027a: FloorPlanTests AC4 drives CustomerQueue/OrderRules directly, not CustomerService serving and Customer
@@ -102,7 +128,8 @@ tuned later by the human.
   in the hand on flip; griddle to plates 4.2 m; per-dish menu prices (spec 037).
 - 030 review (approved after the CombineSides fix, which went into the 031 round): tuning for the human - the "grilled"
   name and the menu's medium bucket start at 9 s per side, before the good window (12 s seitan, 10 s veg), so an
-  undercooked plate can be an exact order; GriddleSides is sim-model only (the server keeps its own sessions).
+  undercooked plate can be an exact order (fixed in 043: buckets follow the zones); GriddleSides is sim-model only (the
+  server keeps its own sessions).
 - 031b review (approved with nits): third-person E squeeze on tap (fixed in 032 round: 0.2 s hold), free busy
   dispenser, tests and nits (in 032 round). Follow-up: no third-person tour shot with food on the heat.
 - 032 (feels off): bills from market values are huge (inbox question 7, spec 037 rescale); "changed their mind"
@@ -128,7 +155,7 @@ tuned later by the human.
   minimum share, failed refunds keep the order, GrocerPaid in the snapshot, scrub auto-stop, full bags only, tests.
   Note for the human (minor): the HUD shows an exact hygiene % (the spec asked for it); effects switch at 50/30.
 - 036 (feels off): best quality comes at the end of the good window (70 s on the spit; fryer and griddle the same),
-  not at the "perfect" cue - a later spec should make "perfect" the best rating everywhere; the scoop is not
+  not at the "perfect" cue - a later spec should make "perfect" the best rating everywhere (done in 043); the scoop is not
   predicted; an open wrap with fillings can't be picked up to scoop onto (the 031 fold-on-click rule); the first-
   person knife saws in the corner; graybox cone and tray labels.
 - 036 review (CHANGES REQUESTED; fixed in the 038 round): cones could not be ordered (no grocer price for
@@ -151,3 +178,7 @@ tuned later by the human.
   dead checks in ControlRules routing; a turned item can overlap neighbours visually; stale spec line.
 - Flaky: Cinemachine NRE in one cook run (destroyed tracked transform at teardown) and a host that ended mid-tour
   without a log line - both for spec 045.
+- 042 review (approved; nits 1-9 go into the 043 round). Known limits: a cup sits 2 cm into the tray grid; other players
+  see the level about one round trip late; in third person E cannot take an empty cup back off the tray; HudView still
+  says "Take a cup first" on a refused press (needs a Scripts/UI scope); the tour prompt reads "pick up empty cup"
+  during our own pour.

@@ -7,9 +7,13 @@ namespace Worktown.Sim.Cooking
     /// (<see cref="Griddle"/>); the op takes "time" (the shorter side) and "long_side".
     /// Spec 036: with <see cref="Spit"/> the components' doneness follows that one curve (the spit's outer layer, <c>time</c> = its heat
     /// time at high heat); the op takes only the cone's meat (<see cref="Cooking.Spit.IsConeMeat"/>).
+    /// Spec 043: with <see cref="ZoneBuckets"/> the op's time buckets (and the griddle's long side) follow the doneness zone of what
+    /// it cooked, not the seconds (<see cref="DonenessZones.BucketIndex"/>; the param then has exactly three buckets: under, done,
+    /// over), and the stat changes stop where the food enters Perfect, so the whole Perfect zone rates best. Every default heat op
+    /// sets it; without it an op works as before 043 (custom test catalogs).
     /// </summary>
     public sealed record HeatProfile(
         float? FixedTemperatureC, float FatGain, float MoistureDelta,
         float CrunchGain, float UmamiGain, float Dilution, DeepFryProfile? Fry = null, GriddleProfile? Grill = null,
-        FryCurve? Spit = null);
+        FryCurve? Spit = null, bool ZoneBuckets = false);
 }

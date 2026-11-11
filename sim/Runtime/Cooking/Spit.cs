@@ -21,8 +21,8 @@ namespace Worktown.Sim.Cooking
         /// <summary>The fixed temperature of the heat panel's face (C; never shown, D21).</summary>
         public const float PanelTempC = 230f;
 
-        // ---- THE spit timings (spec 036 defaults to review), in kitchen seconds at high heat: Good, Perfect, Burnt. ----
-        public static readonly FryCurve OuterCurve = FryCurve.FromKitchenSeconds(MeatId, 40f, 55f, 90f);
+        // The spit timings (kitchen seconds at high heat: Good, Perfect, Burnt) live in the one pace table, CookingPace (spec 043).
+        public static readonly FryCurve OuterCurve = CookingPace.SpitOuter;
 
         /// <summary>Portions on a fresh cone (spec 036 default to review: about 30, 60 g each).</summary>
         public const int PortionsPerCone = 30;

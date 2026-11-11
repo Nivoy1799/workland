@@ -232,6 +232,8 @@ namespace Worktown.Sim.Cooking
             if (!prepared) return true;
             if (tl.NeedsCut && !Assembly.IsCut(layer)) return false;
             if (tl.Ops != null && !Assembly.Contains(tl.Ops, Assembly.HeatOpOf(layer))) return false;
+            // Spec 043: a layer that needs heat and came off it undercooked (pale, half-grilled) is prepared wrong: one step short.
+            if (tl.Ops != null && DonenessZones.IsUndercooked(layer)) return false;
             return true;
         }
 

@@ -42,16 +42,16 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void Fry750TicksSwitchedOn_MatchesTheSimDirectly()
+        public void Fry400TicksSwitchedOn_MatchesTheSimDirectly()
         {
             KitchenState kitchen = KitchenWithSticks(out Item sticks);
             HeatTestKit.SwitchOn(kitchen, Pan, PanBurner);
 
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start));
             Assert.IsFalse(kitchen.TryGet(FoodId, out _), "the food is in the pan, not in the world");
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 750, Rate, out Item fries));
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 400, Rate, out Item fries)); // spec 043: 80 sim s at the 2x pan
 
-            Item expected = NewFactory().Apply("fry", new[] { sticks }, Heat(StoveSettings.PanTempC, 150f)).Item;
+            Item expected = NewFactory().Apply("fry", new[] { sticks }, Heat(StoveSettings.PanTempC, 80f)).Item;
             Assert.AreEqual(expected.Hash, fries.Hash);
             Assert.AreEqual("crispy fried potato sticks", KitchenState.NameOf(fries));
             Assert.AreEqual(1, kitchen.HeatCount(Pan), "preview does not empty the pan");
@@ -78,11 +78,11 @@ namespace Worktown.Game.Tests
             kitchen.SetVesselBurner(Pan, PanBurner, Start);
             kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);                                               // off: nothing yet
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start + 100));  // on
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start + 500));  // off: 400 ticks
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start + 300));  // off: 200 ticks
             Assert.AreEqual(CookOutcome.Ok, kitchen.TryUseBurner(PanBurner, StationRules.StoveSwitch, Start + 2000)); // on
-            // + 350 ticks = 750 ticks on in total = 150 sim s
-            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 2350, Rate, out Item fries));
-            Item expected = NewFactory().Apply("fry", new[] { sticks }, Heat(StoveSettings.PanTempC, 150f)).Item;
+            // + 200 ticks = 400 ticks on in total = 80 sim s (spec 043: the 2x pan)
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPreviewHeatTake(Pan, Start + 2200, Rate, out Item fries));
+            Item expected = NewFactory().Apply("fry", new[] { sticks }, Heat(StoveSettings.PanTempC, 80f)).Item;
             Assert.AreEqual(expected.Hash, fries.Hash);
         }
 
@@ -146,8 +146,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("on · saute", kitchen.BurnerOf(PanBurner).Describe());
             Assert.IsTrue(kitchen.PanIsSaute(Pan), "an empty pan shows its burner's mode");
             kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
-            kitchen.TryPreviewHeatTake(Pan, Start + 750, Rate, out Item sauteed);
-            Item expected = NewFactory().Apply("saute", new[] { sticks }, Heat(StoveSettings.PanTempC, 150f)).Item;
+            kitchen.TryPreviewHeatTake(Pan, Start + 400, Rate, out Item sauteed);
+            Item expected = NewFactory().Apply("saute", new[] { sticks }, Heat(StoveSettings.PanTempC, 80f)).Item;
             Assert.AreEqual(expected.Hash, sauteed.Hash);
         }
 
@@ -191,10 +191,11 @@ namespace Worktown.Game.Tests
             kitchen.TryPutOnHeat(FoodId, Pan, VesselKind.Pan, Start);
             // Spec 030 (orchestrator decision, replaces the 029b zone words): the label is the name a take gives now.
             Assert.AreEqual("potato sticks", kitchen.DescribeHeat(Pan, Start + 10, Rate), "too short: the food's own name");
-            Assert.AreEqual(kitchen.ResultName(Pan, VesselKind.Pan, Start + 750, Rate), kitchen.DescribeHeat(Pan, Start + 750, Rate));
-            StringAssert.Contains("fried potato sticks", kitchen.DescribeHeat(Pan, Start + 750, Rate));
-            StringAssert.DoesNotContain("·", kitchen.DescribeHeat(Pan, Start + 750, Rate), "no zone word of its own");
-            Assert.AreEqual(HeatZone.Good, kitchen.HeatReadingOf(Pan, Start + 750, Rate).Zone, "cooked: the ring says good");
+            Assert.AreEqual(kitchen.ResultName(Pan, VesselKind.Pan, Start + 400, Rate), kitchen.DescribeHeat(Pan, Start + 400, Rate));
+            StringAssert.Contains("fried potato sticks", kitchen.DescribeHeat(Pan, Start + 400, Rate));
+            StringAssert.DoesNotContain("·", kitchen.DescribeHeat(Pan, Start + 400, Rate), "no zone word of its own");
+            Assert.AreEqual(HeatZone.Good, kitchen.HeatReadingOf(Pan, Start + 350, Rate).Zone, "cooked: the ring says good");
+            Assert.AreEqual(HeatZone.Perfect, kitchen.HeatReadingOf(Pan, Start + 400, Rate).Zone, "spec 043: 80 sim s is Perfect");
         }
 
         [Test]

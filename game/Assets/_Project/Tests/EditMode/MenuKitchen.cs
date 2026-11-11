@@ -86,7 +86,7 @@ namespace Worktown.Game.Tests
         public static Item ExactFries()
         {
             var k = new MenuKitchen();
-            k.PanToPlate(k.Buy("potato", 3), 150);
+            k.PanToPlate(k.Buy("potato", 3), 80); // spec 043: Perfect at the 2x pan (150 s is dark now)
             return k.Served();
         }
 
@@ -100,7 +100,7 @@ namespace Worktown.Game.Tests
         public static Item ExactPotatoSoup()
         {
             var k = new MenuKitchen();
-            k.PotToPlate(600, k.Buy("potato", 1));
+            k.PotToPlate(420, k.Buy("potato", 1)); // spec 043: Perfect at the 2x pot (600 s is soft now)
             return k.Served();
         }
 
@@ -120,7 +120,7 @@ namespace Worktown.Game.Tests
         public static Item ExactOnionSoup()
         {
             var k = new MenuKitchen();
-            k.PotToPlate(600, k.Buy("onion"), k.Buy("potato", 1));
+            k.PotToPlate(420, k.Buy("onion"), k.Buy("potato", 1)); // spec 043: the 2x pot
             return k.Served();
         }
 
@@ -151,7 +151,7 @@ namespace Worktown.Game.Tests
         public static Item ExactFriedApple()
         {
             var k = new MenuKitchen();
-            k.PanToPlate(k.Buy("apple", 2), 40, saute: true);
+            k.PanToPlate(k.Buy("apple", 2), 20, saute: true); // spec 043: Perfect at the 2x pan (40 s burns)
             return k.Served();
         }
 

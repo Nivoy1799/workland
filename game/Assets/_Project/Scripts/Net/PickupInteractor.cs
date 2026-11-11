@@ -1857,12 +1857,21 @@ namespace Worktown.Game.Net
         /// <summary>The scene's cup spots, found again only when the place surfaces were looked up again.</summary>
         private void EnsureCupSpots()
         {
+            // 042 review: the cache first; the full refresh only when it was never built or one of its cup spots is gone.
+            if (_cupSpotsFrom != null && _cupSpotsFrom == _allSurfaces && !CupSpotMissing()) return;
             RefreshInteractables();
-            if (_cupSpotsFrom == _allSurfaces) return;
+            if (_cupSpotsFrom == _allSurfaces && !CupSpotMissing()) return;
             _cupSpotsFrom = _allSurfaces;
             _cupSpotList.Clear();
             foreach (PlaceSurface surface in _allSurfaces)
                 if (surface != null && surface.IsCupSpot) _cupSpotList.Add(surface);
+        }
+
+        private bool CupSpotMissing()
+        {
+            for (int i = 0; i < _cupSpotList.Count; i++)
+                if (_cupSpotList[i] == null) return true;
+            return false;
         }
 
         /// <summary>
@@ -1908,16 +1917,16 @@ namespace Worktown.Game.Net
         /// </summary>
         private Food LiddableSpotCup(Station dispenser, byte flags)
         {
-            Food first = null;
+            // 042 review: the one pure rule (DrinkRules.LiddableTap), fed with the cups this client sees.
+            int tap = DrinkRules.LiddableTap(t => SpotByteOf(SpotCup(dispenser, t)),
+                t => DrinkRules.IsPouring(flags, t) || _squeeze.Involves(dispenser.Index, t));
+            if (tap >= 0) return SpotCup(dispenser, tap);
             for (int t = 0; t < DrinkRules.TapCount; t++)
             {
                 Food cup = SpotCup(dispenser, t);
-                if (cup == null) continue;
-                if (first == null) first = cup;
-                bool pouring = DrinkRules.IsPouring(flags, t) || _squeeze.Involves(dispenser.Index, t);
-                if (!pouring && DrinkRules.CanLidOnSpot(SpotByteOf(cup)) == CookOutcome.Ok) return cup;
+                if (cup != null) return cup;
             }
-            return first;
+            return null;
         }
 
         /// <summary>A place surface as the rules see it: a tap's cup spot says which tap (spec 042).</summary>
@@ -2661,8 +2670,10 @@ namespace Worktown.Game.Net
                 if (self != null && c.transform.IsChildOf(self)) continue;
                 if (c.GetComponentInParent<Pickup>() != null || c.TryGetComponent(out PlaceSurface _) || c.TryGetComponent(out StationButton _)) continue;
                 if (own != null && c.GetComponentInParent<Station>() == own) continue;
-                // Spec 042: an item standing inside a station's aim box (a cup on the drink dispenser's tray) is not hidden by it.
-                if (candidate is Pickup && c.bounds.Contains(anchor) && c.GetComponentInParent<Station>() != null) continue;
+                // Spec 042: an item standing inside the drink dispenser's aim box (a cup on its tray) is not hidden by it. 042 review: only
+                // the dispenser (the world AABB of a rotated station is too big to trust for the others).
+                if (candidate is Pickup && c.bounds.Contains(anchor) && c.GetComponentInParent<Station>() is Station box
+                    && box.Kind == StationKind.DrinkDispenser) continue;
                 return false;
             }
             return true;

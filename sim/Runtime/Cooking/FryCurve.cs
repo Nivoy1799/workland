@@ -9,6 +9,9 @@ namespace Worktown.Sim.Cooking
     /// </summary>
     public sealed record FryCurve(string BaseId, float WindowMinAt, float WindowMaxAt, float BurntAt)
     {
+        /// <summary>Spec 043: the sim time the window's Perfect half starts (its middle, <see cref="DonenessWindow.PerfectFrom"/>).</summary>
+        public float PerfectAt => WindowMinAt + (WindowMaxAt - WindowMinAt) * 0.5f;
+
         /// <summary>
         /// From the kitchen's zone timings in real seconds (the 027c ring: Good from the window's minimum, Perfect from the
         /// middle of the window, Burnt at the burn margin), at <see cref="DeepFry.KitchenTimeScale"/> sim seconds per second.

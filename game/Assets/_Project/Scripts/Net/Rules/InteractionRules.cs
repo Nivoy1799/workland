@@ -254,7 +254,7 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 042: whether what the hands hold goes on this cup spot (DrinkRules.CanStand), as the server would answer it.</summary>
         private static CookOutcome CupSpotCheck(Held held, AimTarget target)
         {
-            if (!held.IsHolding) return CookOutcome.HandsFull; // nothing to put down (no prompt)
+            if (!held.IsHolding) return CookOutcome.NothingHeld; // 042 review: nothing to put down (no prompt, no reason)
             return DrinkRules.CanStand(held.IsCup, held.CupLidded, held.CupTap, held.CupLevel, target.Option);
         }
 

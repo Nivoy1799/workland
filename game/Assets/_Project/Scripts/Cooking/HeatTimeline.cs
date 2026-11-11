@@ -7,13 +7,27 @@ namespace Worktown.Game.Cooking
     /// </summary>
     public readonly struct HeatTimeline
     {
+        private readonly double _perfectFrom;
+        private readonly bool _hasPerfect;
+
         public HeatTimeline(double cookFrom, double goodFrom, double end, double overdoneFrom, double burntFrom)
+            : this(cookFrom, goodFrom, end, overdoneFrom, burntFrom, double.NaN)
+        {
+        }
+
+        /// <summary>
+        /// Spec 043: with the measured start of Perfect (the sim's <c>DonenessZones</c>: every part in its window's Perfect half);
+        /// NaN keeps the 027c rule (the middle of the good window).
+        /// </summary>
+        public HeatTimeline(double cookFrom, double goodFrom, double end, double overdoneFrom, double burntFrom, double perfectFrom)
         {
             CookFrom = cookFrom;
             GoodFrom = goodFrom;
             End = end;
             OverdoneFrom = overdoneFrom;
             BurntFrom = burntFrom;
+            _hasPerfect = !double.IsNaN(perfectFrom);
+            _perfectFrom = perfectFrom;
         }
 
         /// <summary>The op's minimum time: before it the food is Raw.</summary>
@@ -28,10 +42,21 @@ namespace Worktown.Game.Cooking
         /// <summary>A part is <see cref="HeatZoneRules.BurnMargin"/> past its window's maximum.</summary>
         public double BurntFrom { get; }
 
-        /// <summary>Where the Perfect half of the good window starts.</summary>
-        public double PerfectFrom => double.IsInfinity(GoodFrom) || End <= GoodFrom
-            ? GoodFrom
-            : GoodFrom + HeatZoneRules.PerfectShareOfWindow * (End - GoodFrom);
+        /// <summary>
+        /// Where Perfect starts. Spec 043: measured from the sim (every part in its window's Perfect half, where the rating is
+        /// best), never before <see cref="GoodFrom"/>; for a single food that cooks evenly it is the middle of the good window.
+        /// Without a measured value (027c timelines built by hand), that middle.
+        /// </summary>
+        public double PerfectFrom
+        {
+            get
+            {
+                if (_hasPerfect) return _perfectFrom < GoodFrom ? GoodFrom : _perfectFrom;
+                return double.IsInfinity(GoodFrom) || End <= GoodFrom
+                    ? GoodFrom
+                    : GoodFrom + HeatZoneRules.PerfectShareOfWindow * (End - GoodFrom);
+            }
+        }
 
         public override string ToString()
         {

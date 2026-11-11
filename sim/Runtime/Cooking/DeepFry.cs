@@ -19,10 +19,9 @@ namespace Worktown.Sim.Cooking
         /// <summary>Burnt: this much doneness past the window's maximum (the game's 027c burn margin).</summary>
         public const float BurnMargin = 0.1f;
 
-        // ---- THE fry timings, in kitchen seconds: Good, Perfect, Burnt (spec 029 default "about 2x faster than the pan",
-        // pending the human's cooking-pace answer). Changing a timing is this one line. ----
-        public static readonly FryCurve Fries = FryCurve.FromKitchenSeconds("potato", 25f, 30f, 45f);
-        public static readonly FryCurve Falafel = FryCurve.FromKitchenSeconds("falafel_mix", 20f, 25f, 38f);
+        // The fry timings (kitchen seconds: Good, Perfect, Burnt) live in the one pace table, CookingPace (spec 043).
+        public static readonly FryCurve Fries = CookingPace.Fries;
+        public static readonly FryCurve Falafel = CookingPace.Falafel;
 
         /// <summary>Spec 029 defaults to review: the even-fry bonus of one shake in the good window, and the greasy penalty.</summary>
         public const float ShakeBonus = 0.10f;

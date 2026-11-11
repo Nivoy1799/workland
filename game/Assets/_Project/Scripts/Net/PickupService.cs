@@ -73,19 +73,31 @@ namespace Worktown.Game.Net
             }
         }
 
+        /// <summary>
+        /// 042 review: the server's pick-up check and claim, pure (TryPickup runs it before it moves anything): the player already
+        /// holds something (AlreadyHolding), the item is out of reach (TooFar), the kitchen's veto says no (<paramref name="allowed"/>
+        /// false, spec 042: someone pours into that cup: Taken), another player holds it (Taken); else the item is claimed for
+        /// <paramref name="clientId"/> (Ok). Nothing is claimed unless the answer is Ok.
+        /// </summary>
+        public static PickupOutcome PlanPickup(PickupRegistry registry, int itemId, int clientId, bool inReach, bool allowed)
+        {
+            if (registry == null) return PickupOutcome.NotFound;
+            if (registry.TryGetHeldItem(clientId, out _)) return PickupOutcome.AlreadyHolding;
+            if (!inReach) return PickupOutcome.TooFar;
+            if (!allowed) return PickupOutcome.Taken;
+            return registry.TryClaim(itemId, clientId) ? PickupOutcome.Ok : PickupOutcome.Taken;
+        }
+
         public PickupOutcome TryPickup(PickupInteractor player, NetworkObject target)
         {
             if (target == null || !target.IsSpawned || !target.TryGetComponent(out Pickup pickup))
                 return PickupOutcome.NotFound;
 
             int clientId = player.Owner.ClientId;
-            if (_registry.TryGetHeldItem(clientId, out _))
-                return PickupOutcome.AlreadyHolding;
-            if (!PickupRules.IsInReach(player.transform.position, pickup.transform.position))
-                return PickupOutcome.TooFar;
-            if (_canTake != null && !_canTake(player, target)) return PickupOutcome.Taken; // spec 042: someone pours into that cup
-            if (!_registry.TryClaim(target.ObjectId, clientId))
-                return PickupOutcome.Taken;
+            PickupOutcome claimed = PlanPickup(_registry, target.ObjectId, clientId,
+                PickupRules.IsInReach(player.transform.position, pickup.transform.position),
+                _canTake == null || _canTake(player, target));
+            if (claimed != PickupOutcome.Ok) return claimed;
 
             target.GiveOwnership(player.Owner);
             pickup.ServerAttach(player.HoldPoint, clientId);

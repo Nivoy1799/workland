@@ -129,7 +129,14 @@ namespace Worktown.Sim.Cooking
                     break;
                 }
                 case OperationKind.Heat:
-                    Heat(op, flat[0], resolved, out stats, out surface, out components, out factor);
+                    Heat(op, flat[0], resolved, out stats, out surface, out components, out factor,
+                        out DonenessZone timeZone, out DonenessZone longZone);
+                    // Spec 043: the time buckets follow the zones (undercooked, done, overdone), not the seconds.
+                    if (op.Heat!.ZoneBuckets)
+                    {
+                        ZoneBucket(op, resolved, "time", timeZone);
+                        if (op.Heat.Grill != null) ZoneBucket(op, resolved, Griddle.LongSideParam, longZone);
+                    }
                     // Spec 029: the basket shapes the input ("{drain} {time} fries", "... falafel balls").
                     if (op.Heat!.Fry != null && DeepFry.TryGetShape(flat[0], out DeepFryShape shaped))
                         template = "{" + DeepFry.DrainParam + "} {time} " + shaped.Name;
@@ -186,6 +193,17 @@ namespace Worktown.Sim.Cooking
             return string.Empty;
         }
 
+        /// <summary>Spec 043: the param's bucket becomes the one of <paramref name="zone"/> (its exact number stays).</summary>
+        private static void ZoneBucket(OperationDef op, List<Resolved> resolved, string name, DonenessZone zone)
+        {
+            ParamDef? def = null;
+            foreach (var p in op.Params) if (p.Name == name) def = p;
+            if (def == null) return;
+            BucketDef bucket = def.Buckets[Math.Min(def.Buckets.Count - 1, DonenessZones.BucketIndex(zone))];
+            for (int i = 0; i < resolved.Count; i++)
+                if (resolved[i].Name == name) resolved[i] = new Resolved(name, bucket, resolved[i].Number);
+        }
+
         private sealed class Resolved
         {
             public Resolved(string name, BucketDef bucket, float number) { Name = name; Bucket = bucket; Number = number; }
@@ -222,7 +240,8 @@ namespace Worktown.Sim.Cooking
         }
 
         private static void Heat(OperationDef op, Item src, List<Resolved> resolved,
-                                 out ItemStats stats, out float surface, out List<ItemComponent> components, out float factor)
+                                 out ItemStats stats, out float surface, out List<ItemComponent> components, out float factor,
+                                 out DonenessZone timeZone, out DonenessZone longZone)
         {
             var profile = op.Heat!;
             float temp = profile.FixedTemperatureC ?? 0f;
@@ -237,13 +256,19 @@ namespace Worktown.Sim.Cooking
                 else if (r.Name == DeepFry.DrainParam) greasy = r.Bucket.Id == DeepFry.Greasy;
             }
 
+            // Spec 043: with zone buckets the stat changes saturate where the food enters Perfect (the curve's middle), so the
+            // whole Perfect zone rates best; before 043 (and without zone buckets) at the window's end.
+            bool zones = profile.ZoneBuckets;
+            float Gain(float seconds, FryCurve curve) => Math.Min(1f, seconds / (zones ? curve.PerfectAt : curve.WindowMaxAt));
+
             var s = src.Stats;
             float g;
             components = new List<ItemComponent>(src.Components.Count);
+            List<ItemComponent>? shortSideParts = null, longSideParts = null;
             float doneSum = 0f;
             if (profile.Spit != null)
             {
-                // Spec 036: the spit's outer layer along its one curve for its heat time; the stat changes saturate at the window's end.
+                // Spec 036: the spit's outer layer along its one curve for its heat time.
                 FryCurve curve = profile.Spit;
                 g = 0f;
                 foreach (var c in src.Components)
@@ -251,7 +276,7 @@ namespace Worktown.Sim.Cooking
                     float d = DeepFry.Doneness(curve, c.Ideal, c.Doneness, time);
                     doneSum += d;
                     components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
-                    g += Math.Min(1f, time / curve.WindowMaxAt);
+                    g += Gain(time, curve);
                 }
                 g /= Math.Max(1, src.Components.Count);
                 factor = src.QualityFactor; // no bonus: shaving again never raises a portion
@@ -259,8 +284,10 @@ namespace Worktown.Sim.Cooking
             else if (profile.Grill != null)
             {
                 // Spec 030: each side along its curve (time = the shorter side, longSide the longer), combined per component; the
-                // stat changes follow the mean of the two sides, saturating at the end of the window.
+                // stat changes follow the mean of the two sides. Spec 043: each side's own zone names its bucket.
                 g = 0f;
+                shortSideParts = new List<ItemComponent>(src.Components.Count);
+                longSideParts = new List<ItemComponent>(src.Components.Count);
                 foreach (var c in src.Components)
                 {
                     FryCurve curve = profile.Grill.CurveFor(c.BaseId);
@@ -269,14 +296,16 @@ namespace Worktown.Sim.Cooking
                     float d = Griddle.CombineSides(a, b, c.Ideal);
                     doneSum += d;
                     components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
-                    g += 0.5f * (Math.Min(1f, time / curve.WindowMaxAt) + Math.Min(1f, longSide / curve.WindowMaxAt));
+                    shortSideParts.Add(new ItemComponent(c.BaseId, a, c.Ideal));
+                    longSideParts.Add(new ItemComponent(c.BaseId, b, c.Ideal));
+                    g += 0.5f * (Gain(time, curve) + Gain(longSide, curve));
                 }
                 g /= Math.Max(1, src.Components.Count);
                 factor = src.QualityFactor;
             }
             else if (profile.Fry != null)
             {
-                // Spec 029: each component along its fry curve; the stat changes saturate at the end of its window.
+                // Spec 029: each component along its fry curve.
                 float seconds = DeepFry.EffectiveSeconds(time, temp);
                 g = 0f;
                 foreach (var c in src.Components)
@@ -285,23 +314,35 @@ namespace Worktown.Sim.Cooking
                     float d = DeepFry.Doneness(curve, c.Ideal, c.Doneness, seconds);
                     doneSum += d;
                     components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
-                    g += Math.Min(1f, seconds / curve.WindowMaxAt);
+                    g += Gain(seconds, curve);
                 }
                 g /= Math.Max(1, src.Components.Count);
                 factor = DeepFry.FactorAfter(src.QualityFactor, shaken, greasy); // capped: re-frying never stacks the bonus (029b)
             }
             else
             {
-                float dose = Math.Max(0f, (temp - 60f) / 120f) * (time / 180f) * (0.5f + src.Surface);
+                // The pan and the pot (spec 005 dose), spec 043: at the one pace table's speed.
+                float rate = 1f - 0.5f * s.HeatTolerance;
+                float dose = Math.Max(0f, (temp - 60f) / 120f) * (time * CookingPace.PanPotSpeed / 180f) * (0.5f + src.Surface);
                 g = Math.Min(1f, dose);
+                if (zones)
+                {
+                    // Spec 043: no more stat change once every component is in its Perfect half (none for food already there).
+                    float perfectDose = 0f;
+                    foreach (var c in src.Components)
+                        if (rate > 0f) perfectDose = Math.Max(perfectDose, (c.Ideal.PerfectFrom - c.Doneness) / rate);
+                    g = Math.Min(g, perfectDose);
+                }
                 foreach (var c in src.Components)
                 {
-                    float d = ItemCanonical.Clamp01(c.Doneness + dose * (1f - 0.5f * s.HeatTolerance));
+                    float d = ItemCanonical.Clamp01(c.Doneness + dose * rate);
                     doneSum += d;
                     components.Add(new ItemComponent(c.BaseId, d, c.Ideal));
                 }
                 factor = src.QualityFactor;
             }
+            timeZone = DonenessZones.Of(shortSideParts ?? components);
+            longZone = longSideParts != null ? DonenessZones.Of(longSideParts) : timeZone;
             components.Sort(ItemCanonical.CompareComponents);
             float doneness = ItemCanonical.Clamp01(doneSum / components.Count);
 
