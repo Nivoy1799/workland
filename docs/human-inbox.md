@@ -70,6 +70,26 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+25. **Two new drafts (nothing gets built until you approve them).**
+    - **052b climb tuning v2** (/sim only). It applies the defaults from questions 22 and 24:
+      - solo and small-crew scaling, and the crew chooses its menu;
+      - repeatable costs that grow with income;
+      - stage 4 unlocked by buying automation;
+      - a stage 1 pace per crew size.
+
+      It then reruns the simulation until every crew size passes. Defaults inside it:
+      - calibrate only stage 1 to the game for now (the game is about 4x slower per guest than the sim assumes for
+        stage 2, measured once stage 2 exists);
+      - crew size = the players present when the service starts.
+    - **056 offline dish names (D38).** Names are generated once on your PC with your own key, through the gateway's
+      strict pipeline and vegan check. You review them, and they ship as a data file, with the built-in names as
+      fallback. No key goes into git. Defaults:
+      - you review every name (about 1,500); the alternative is all finished dishes plus a 10 % sample of the rest;
+      - names show on the food label only, so aiming still shows the doneness words.
+
+      Shipping real names also waits for O6 (moderation).
+
+    Say "approve 052b", "approve 056", or both.
 24. **How long stage 1 takes (spec 053, merged).** The rent goal is $34,500. Measured in the game:
     - **One cook** serves a guest about every 82 s and needs about 16 services, roughly 1.7 h. That is a bit over the
       0.75-1.5 h target.
