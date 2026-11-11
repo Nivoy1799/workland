@@ -1,0 +1,30 @@
+namespace Worktown.Game.Net.Rules
+{
+    /// <summary>
+    /// Follow-up 047, pure: quitting the game while hosting (Alt-F4, the window's close button, a normal quit). Unity asks
+    /// Application.wantsToQuit first; the host then sends every guest the HostClosed notice (JoinAuthenticator.NotifyClosing) and holds
+    /// the quit for <see cref="NoticeSeconds"/> while it goes out (NetBootstrap's CloseSoon), then quits for real. At most
+    /// <see cref="LimitSeconds"/> in all, so a broken close never keeps the game open. A crash sends nothing: the guests then show
+    /// "Connection lost" after FishNet's remote timeout (60 s) and try to rejoin for 30 s.
+    /// </summary>
+    public static class HostQuitRules
+    {
+        /// <summary>The close's own wait (NetBootstrap.CloseSoon: the notice survives a resend over the Steam relay).</summary>
+        public const float NoticeSeconds = 1f;
+
+        /// <summary>The longest the quit is held, whatever happens.</summary>
+        public const float LimitSeconds = 2f;
+
+        /// <summary>
+        /// True: hold this quit (send the notice first). Only a server with guests that has not already let the quit through; never in
+        /// the Editor (leaving Play mode must not wait), never in a scripted run (tours, bots, the stall and crash tests quit with their
+        /// own exit code, which a second Application.Quit would lose).
+        /// </summary>
+        public static bool HoldsQuit(bool serverStarted, int remoteGuests, bool quitLetThrough, bool editor, bool scripted) =>
+            serverStarted && remoteGuests > 0 && !quitLetThrough && !editor && !scripted;
+
+        /// <summary>The held quit goes through: the close finished (the server stopped), or the limit passed.</summary>
+        public static bool QuitNow(bool closing, bool serverStarted, float heldSeconds) =>
+            heldSeconds >= LimitSeconds || (!closing && !serverStarted);
+    }
+}

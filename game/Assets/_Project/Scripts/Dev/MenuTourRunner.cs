@@ -18,10 +18,11 @@ namespace Worktown.Game.Dev
     /// <list type="bullet">
     /// <item><c>-tour menu</c> starts on the title screen (no mode flag) and goes through it by pressing its buttons (MainMenuView.Press,
     /// the same actions as clicks): the title, Join by address, the loading screen, the shop, the lobby panel; the host kicks it (the
-    /// error screen; before that a dropped connection: the rejoin card and back in); back to the menu; then it hosts its own shop (New
-    /// shop: the loading screen, the host's lobby) and closes it.</item>
+    /// error screen; before that a dropped connection: the rejoin card and back in); back to the menu; it tries to rejoin and is
+    /// refused (follow-up 047: kicked, banned for the session); then it hosts its own shop (New shop: the loading screen, the host's
+    /// lobby) and closes it.</item>
     /// <item><c>-host -observe menu</c> is the host it joins: once the tour player is in, it shows its own lobby (the Kick buttons),
-    /// drops the tour player's connection without a notice (the tour shows the rejoin card and gets back in by itself), then kicks it
+    /// gets a join while hosting (follow-up 047: the "Leave your shop?" question) and stays, drops the tour player's connection without a notice (the tour shows the rejoin card and gets back in by itself), then kicks it
     /// and quits (freeing the port for the tour's own shop).</item>
     /// </list>
     /// Shots and the sheet go to <c>tour-out/menu</c> and <c>tour-out/menu-observer</c>; quits with 0, or 1 if a step timed out.
@@ -191,6 +192,20 @@ namespace Worktown.Game.Dev
             yield return Wait(1f);
             yield return _capture.Shot("menu-again");
 
+            // Follow-up 047: the kicked player tries to rejoin the same shop: refused for the rest of the session.
+            Press(MainMenuView.JoinAddressId);
+            _menu.SetAddress("127.0.0.1:" + LaunchArgs.DefaultTugboatPort);
+            Press(MainMenuView.ConnectAddressId);
+            yield return Until(() => Flow.State == JoinState.Message, "the rejoin refused");
+            yield return Wait(0.5f);
+            yield return _capture.Shot("rejoin-refused");
+            if (Flow.Reason != DisconnectReason.KickedBefore)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: expected KickedBefore for the rejoin, got " + Flow.Reason);
+            }
+            Press(MainMenuView.DismissId);
+
             // The host window quits a few seconds after the kick; then this one opens its own shop.
             yield return Wait(10f);
             Press(MainMenuView.NewShopId);
@@ -317,6 +332,23 @@ namespace Worktown.Game.Dev
             _lobby.SetOpen(true);
             yield return Wait(1f);
             yield return _capture.Shot("lobby-host-with-guest");
+            _lobby.SetOpen(false);
+            // Follow-up 047: a join arrives while hosting (as Steam's Join Game would): the question, then Stay.
+            _bootstrap.RequestJoin(JoinTarget.ByAddress("127.0.0.1", (ushort)(LaunchArgs.DefaultTugboatPort + 1)));
+            yield return Wait(0.5f);
+            if (!_lobby.IsAsking)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: no \"Leave your shop?\" question while hosting");
+            }
+            yield return _capture.Shot("leave-question");
+            _lobby.PressLeaveAnswer(false);
+            yield return Wait(0.5f);
+            if (_lobby.IsAsking || _bootstrap.LeaveQuestion != null || !_bootstrap.NetworkManager.IsServerStarted)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: Stay did not keep the shop open");
+            }
             // A lost connection: the server drops the tour player without a notice; it rejoins by itself within 30 s.
             int dropped = RemoteClient(_bootstrap.NetworkManager);
             if (dropped < 0 || !_bootstrap.NetworkManager.ServerManager.Clients.TryGetValue(dropped, out NetworkConnection drop))
@@ -340,7 +372,9 @@ namespace Worktown.Game.Dev
             }
             yield return Wait(1.5f);
             yield return _capture.Shot("after-kick");
-            yield return Wait(2f);
+            // Follow-up 047: the tour player's refused rejoin comes in meanwhile (the session's ban list).
+            yield return Until(() => _bootstrap.Join.BannedCount > 0, "the kicked player is banned for the session");
+            yield return Wait(6f);
         }
 
         private static int RemoteClient(NetworkManager nm)

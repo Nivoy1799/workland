@@ -26,6 +26,13 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>
+        /// Follow-up 047, server: as <see cref="Decide(string,string,int,int)"/>, but a player the host kicked earlier in this session
+        /// (<paramref name="kickedBefore"/>: SessionBans, the transport's Steam id or address) is refused first, as KickedBefore.
+        /// </summary>
+        public static DisconnectReason Decide(string clientBuild, string serverBuild, int playersIn, int maxPlayers, bool kickedBefore) =>
+            kickedBefore ? DisconnectReason.KickedBefore : Decide(clientBuild, serverBuild, playersIn, maxPlayers);
+
+        /// <summary>
         /// The name other players see: control and format characters (bidi controls, zero-width) dropped, '&lt;' and '&gt;'
         /// dropped (the labels show plain text; this is defence in depth against rich-text tags), at most one combining mark per
         /// letter, spaces folded, cut to <see cref="MaxNameLength"/>; an empty result becomes "Cook n" (n = the connection's id + 1).

@@ -129,6 +129,40 @@ material, size and switch back on destroy.
   ordered by `MetadataToken` (the hash is unchanged, declaration order was already used); doc lines for struct parameters in
   `ProtocolSurface`, the pending entry's start in `JoinAuthenticator`, the stall wording in `SpamGuard`; the build line is set once.
 
+**Follow-ups (2026-11-11).** Five items of the list above; all in `game/Assets/_Project` plus `game/Steam/`. No RPC, SyncVar or
+broadcast changed: the only new wire value is the reason byte `KickedBefore = 10` inside the existing `ConnectionNotice`
+(`ConnectionSurfaceTests.ANewReason_RidesInTheNotice_AndChangesNoSurfaceLine`; enum values are not hashed, so the build hash is unchanged
+and an older client shows "Disconnected (reason 10)"). Tests: `Followup047Tests`.
+1. **Leave your shop?** `Rules/LeaveShopRules` (+ `JoinChoice`): a join while this game is in a session (`NetBootstrap.RequestJoin`; Steam's
+   Join Game and invites go through `JoinSteam` into it) joins at once when idle, leaves then joins as a guest, asks first as the host,
+   is ignored by a dedicated server. The host's question ("Leave your shop?" / "Your guests will be disconnected.", Leave / Stay) is a
+   card in `UI/LobbyView` (cursor free); Leave closes the shop (HostClosed notice) and joins when it is shut, Stay drops the join; the
+   question lapses if the shop closes first. There is no join-by-address inside a session today (the F1 debug connect buttons hide
+   while connected), so only Steam's path reaches it in play; `RequestJoin` takes address targets too (the tour uses one).
+2. **Quit while hosting.** `NetBootstrap` hooks `Application.wantsToQuit`: a host with guests sends HostClosed (`NotifyClosing`), runs
+   the usual `CloseSoon` (1 s), then quits; `Rules/HostQuitRules` holds the quit at most 2 s whatever happens. Not held in the Editor
+   (leaving Play mode) nor in scripted runs (`LaunchArgs.IsScripted`: tours, bots, metrics, crash/perf/stall tests), since a second
+   `Application.Quit()` would lose their exit code; so no tour exercises it (pure rule only). A crash sends nothing: guests then see
+   "Connection lost" after FishNet's remote timeout (60 s) and try to rejoin for 30 s.
+3. **Session ban list.** `Rules/SessionBans` in `JoinAuthenticator`: `Kick` bans the connection's transport address (FishySteamworks
+   gives the SteamID64: key `steam:id`; Tugboat the IP without port: `address:ip`, IPv4-mapped IPv6 folded), never the host's own
+   player or an empty address; a banned join request is refused first (`JoinRules.Decide(..., kickedBefore)`) with the new reason
+   "Kicked by the host" (no Try again: `ConnectionMessages.CanRetry`); the list is cleared when the server stops. The log names only
+   the key's kind. Limits: players behind one public IP who join by address share a ban; the host's loopback client is exempt only
+   because it joins first (FishNet marks it local after authentication) and the list is empty then.
+4. **Friends-list text.** `SteamFriendsLink` sets `steam_display` = `#Status_Hosting` with `players` (and still `status`) while hosting,
+   `#Status_Playing` as a guest. The tokens are in `game/Steam/rich_presence_localization.vdf` (Steamworks' multi-language format,
+   `"lang" > "english" > "tokens"`, LF); a test checks it holds every token the code sets. **Human:** upload that file in Steamworks
+   (App Admin, Community, Rich Presence) for the real app id; with 480 Steam cannot use it and shows only "Spacewar".
+5. **Labels at session start.** `WorldLabelFade` scans every frame for `SettleSeconds` (1 s) after the own player spawns, then every
+   0.5 s as before (`ScanDelay`), so scene objects FishNet activates around the spawn get their panels at once. Cheap; not visible in a
+   shot (the tour shoots seconds later).
+
+Checks: `verify.sh` PASS (EditMode 1370, was 1353; sim 403; gateway 175); BuildAll OK (Windows and Linux server). Visual check
+`bash scripts/visual-check.sh --tours menu,cook --out .verify/visual-fu2`: PASS, 0 Exception lines. The menu tour gained
+`menu/19-rejoin-refused` ("Kicked by the host", Back to the menu only; the host logs "refused: KickedBefore") and
+`menu-observer/02-leave-question` (Leave / Stay over the shop; Stay kept it open).
+
 **045 review follow-ups.**
 1. `SpamGuard` is now a sliding window: kick when the TooFast replies of the last 10 s reach 300 (30/s sustained); a ring of 10
    per-second counts, allocation-free; requests that pass no longer reset anything. Doc comment rewritten with the configured

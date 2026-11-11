@@ -59,6 +59,13 @@ namespace Worktown.Game.Net.Rules
 
         public bool IsValid => Error.Length == 0;
 
+        /// <summary>
+        /// Follow-up 047: a scripted run (a tour or its observer, a bot, metrics, the crash, perf or stall test). Such runs quit with
+        /// their own exit code, so a host's quit is never held for the HostClosed notice there (Rules.HostQuitRules).
+        /// </summary>
+        public bool IsScripted => Tour.Length > 0 || Observe.Length > 0 || IsBot || MetricsPath.Length > 0 || CrashTest
+            || PerfTourPath.Length > 0 || StallTestSeconds > 0;
+
         public static LaunchArgs Parse(IReadOnlyList<string> args)
         {
             var result = new LaunchArgs();

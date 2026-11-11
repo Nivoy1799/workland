@@ -12,6 +12,8 @@ namespace Worktown.Game.Tests
     /// Spec 047 AC1: only connection messages were added to the network surface: three broadcasts with exactly these fields (no game
     /// data: no positions, money, items), and no RPC carries them. AC2: the build hash (Rules.BuildHash over ProtocolSurface) is stable
     /// and follows the surface. Found by reflection and type names, so this test assembly needs no FishNet reference.
+    /// Follow-up 047 (2026-11-11): the session ban's refusal is a new reason byte (KickedBefore = 10) inside the existing
+    /// ConnectionNotice; no broadcast, RPC or synced field changed (the reason bytes are pinned in Followup047Tests).
     /// </summary>
     public class ConnectionSurfaceTests
     {
@@ -30,6 +32,16 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("System.String Build;System.String Name", Fields(typeof(JoinRequest)));
             Assert.AreEqual("System.Byte Reason;System.String Detail", Fields(typeof(ConnectionNotice)));
             Assert.AreEqual("System.Int32[] Ids;System.String[] Names;System.Int32 HostId;System.Int32 MaxPlayers", Fields(typeof(LobbyRoster)));
+        }
+
+        [Test]
+        public void ANewReason_RidesInTheNotice_AndChangesNoSurfaceLine()
+        {
+            List<string> lines = ProtocolSurface.Lines(Game);
+            Assert.Contains("broadcast Worktown.Game.Net.ConnectionNotice{System.Byte Reason;System.String Detail;}", lines);
+            Assert.IsFalse(lines.Any(l => l.Contains("KickedBefore") || l.Contains("DisconnectReason")),
+                "reason values are not part of the surface: an older client shows an unknown reason by its byte");
+            Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
         }
 
         [Test]
