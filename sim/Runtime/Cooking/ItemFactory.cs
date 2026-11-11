@@ -177,7 +177,8 @@ namespace Worktown.Sim.Cooking
                 ItemCanonical.OpHash(op.Id, buckets, flat), ItemCanonical.OpTree(op.Id, buckets, flat),
                 null, op.Id, new ReadOnlyDictionary<string, string>(bucketMap), Array.AsReadOnly(flat.ToArray()),
                 stats, surface, Array.AsReadOnly(components.ToArray()), DistinctSorted(tags), depth,
-                op.Kind, string.Empty, template, new ReadOnlyDictionary<string, string>(labels), factor);
+                op.Kind, string.Empty, template, new ReadOnlyDictionary<string, string>(labels), factor,
+                op.Kind == OperationKind.Heat && op.Heat != null && op.Heat.ZoneBuckets);
             return new OperationResult(item, OperationError.None);
         }
 

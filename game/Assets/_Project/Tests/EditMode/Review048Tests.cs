@@ -81,6 +81,30 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void CaptureGate_EscThatClosesTheSettingsInTheShop_LeavesTheCursorLocked_TheTitleScreenKeepsItFree()
+        {
+            // Follow-up 2026-11-11: the close in the shop locks the cursor again, and the same Esc does not free it right after.
+            Assert.IsTrue(CaptureGate.LocksOnClose(true, false), "in the shop, the last menu closed");
+            Assert.IsFalse(CaptureGate.LocksOnClose(true, true), "another menu is still open");
+            Assert.IsFalse(CaptureGate.LocksOnClose(false, false), "the title screen: the cursor stays free");
+            Assert.IsFalse(CaptureGate.FreesCursor(true, 300, 300), "the Esc that closed the settings this frame");
+            Assert.IsTrue(CaptureGate.FreesCursor(true, 300, 301), "a later Esc frees it as before");
+            Assert.IsTrue(CaptureGate.FreesCursor(true, -1, 300), "no menu closed yet");
+            Assert.IsFalse(CaptureGate.FreesCursor(false, -1, 300), "no key");
+        }
+
+        [Test]
+        public void ControlsPage_TwoBindingColumns_TheFirstTakesTheExtraOne()
+        {
+            // Follow-up 2026-11-11: two columns so the Controls page fits at 1280x720 (walking to the view switch, then Use to Players).
+            Assert.AreEqual(8, SettingsRules.BindingsPerColumn(ControlBindings.Actions.Count));
+            Assert.AreEqual(ControlAction.Use, ControlBindings.Actions[SettingsRules.BindingsPerColumn(ControlBindings.Actions.Count)]);
+            Assert.AreEqual(2, SettingsRules.BindingsPerColumn(4));
+            Assert.AreEqual(1, SettingsRules.BindingsPerColumn(1));
+            Assert.AreEqual(1, SettingsRules.BindingsPerColumn(0));
+        }
+
+        [Test]
         public void CaptureGate_GameKeys_AndTheLobbyKey_WaitWhileAMenuIsOpen()
         {
             Assert.IsTrue(CaptureGate.GameKeysLive(false, false));

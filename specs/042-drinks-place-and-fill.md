@@ -153,3 +153,18 @@ charged); surface counts 24 -> 27; the cup spot's height case in `ScaleSceneTest
 
 **Scope beyond the list:** `Scripts/Player/ItemLook.cs` (one property, follow-up 2), `Scripts/Dev/CookSequence.cs` (the tours, as the
 brief asked). `Scripts/UI/HudView` not touched: a refused press still says "Take a cup first" for NeedsCup (the prompt never offers it).
+
+**Follow-ups (2026-11-11)** (branch `spec/followups-042-043-048`):
+5. Third person: E with empty hands now takes a cup back off a tray spot, the same way a first-person aim takes it. Before, it took
+   a new cup from the stack. The new pure rule is `DrinkRules.TakeableTap(spotOf, busy, distanceSqr)`. A lidded cup comes first
+   (as before), then any other cup, the nearest one first. A cup another player pours into is skipped (the first-person busy
+   cup). The order in `PickupInteractor` is unchanged: first lid a filled open cup, else take a cup off a spot, else take a new
+   cup from the stack. Test: `CupTrayReviewTests.TakeableTap_ThirdPersonETakesTheCupOnASpot_LiddedFirst_ThenTheNearest`.
+   The cook tour (and so the tutorial tour) shows it with the new tours-only hook `PickupInteractor.DevStationKey`:
+   - after the empty cup is on the lemonade tray, it switches to third person and presses E;
+   - it checks that the cup in the hands is the cup from the tray;
+   - it puts the cup back by left click.
+   New cells: `cup-tray-third` and `cup-e-take-third`.
+   Visual check `.verify/visual-fu1`: the cook and tutorial tours are ok with 0 exceptions, and both log "third person E acted; the
+   hands hold 'empty cup' (the cup from the tray)". Cells: cook 454/455, tutorial 324/325. The third-person shot looks at the
+   cook's face, not at the tray; the HUD shows "empty cup" in the hands. A better camera angle is left for later.

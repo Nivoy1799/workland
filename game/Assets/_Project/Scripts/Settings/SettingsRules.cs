@@ -120,6 +120,12 @@ namespace Worktown.Game.Settings
             return cap == 0 ? FrameCaps.Length - 1 : best;
         }
 
+        /// <summary>
+        /// Follow-up 2026-11-11: the Controls page lists its bindings in two columns so it fits at 1280x720 without scrolling; the first
+        /// column takes the extra one (15 actions: 8 and 7, walking to the view switch left, Use to Players right).
+        /// </summary>
+        public static int BindingsPerColumn(int actions) => actions <= 0 ? 1 : (actions + 1) / 2;
+
         // ---- Words ----
 
         public static string PageTitle(SettingsPage page) => page.ToString();

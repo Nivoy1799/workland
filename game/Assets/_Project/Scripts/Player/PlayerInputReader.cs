@@ -23,6 +23,7 @@ namespace Worktown.Game.Player
         private bool _jumpPressed;
         private bool _togglePressed;
         private int _uiOpenCount;
+        private int _lastUiClosedFrame = -1;
 
         /// <summary>Spec 011: a menu or banner is open, so the cursor stays free and clicks go to the UI.</summary>
         public bool IsUiOpen => _uiOpenCount > 0;
@@ -73,8 +74,9 @@ namespace Worktown.Game.Player
         public void SetUiOpen(bool open)
         {
             _uiOpenCount = Mathf.Max(0, _uiOpenCount + (open ? 1 : -1));
+            if (!open && !IsUiOpen) _lastUiClosedFrame = Time.frameCount;
             if (IsUiOpen) LockCursor(false);
-            else if (_active) LockCursor(true);
+            else if (CaptureGate.LocksOnClose(_active, IsUiOpen)) LockCursor(true); // the title screen keeps its free cursor
         }
 
         /// <summary>Called by the owner's player when it spawns.</summary>
@@ -122,7 +124,9 @@ namespace Worktown.Game.Player
 
             Keyboard keyboard = Keyboard.current;
 
-            if (keyboard != null && (keyboard.escapeKey.wasPressedThisFrame || keyboard.leftAltKey.wasPressedThisFrame))
+            bool escOrAlt = keyboard != null && (keyboard.escapeKey.wasPressedThisFrame || keyboard.leftAltKey.wasPressedThisFrame);
+            // Follow-up 2026-11-11 (spec 048): not the Esc that just closed the settings over the shop (that close locked it again).
+            if (CaptureGate.FreesCursor(escOrAlt, _lastUiClosedFrame, Time.frameCount))
                 LockCursor(false);
             else if (!IsUiOpen && Cursor.lockState != CursorLockMode.Locked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 LockCursor(true);

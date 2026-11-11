@@ -52,6 +52,25 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void TakeableTap_ThirdPersonETakesTheCupOnASpot_LiddedFirst_ThenTheNearest()
+        {
+            // Follow-up 2026-11-11: E with empty hands takes an empty cup back off the tray (it took a new cup from the stack before).
+            byte empty = DrinkRules.SpotByte(true, false, -1, DrinkRules.LevelEmpty);
+            byte lidded = DrinkRules.SpotByte(true, true, 1, DrinkRules.LevelRight);
+            byte[] oneEmpty = { DrinkRules.NoSpotCup, empty, DrinkRules.NoSpotCup };
+            Assert.AreEqual(1, DrinkRules.TakeableTap(t => oneEmpty[t], t => false), "the empty cup put back");
+            Assert.AreEqual(-1, DrinkRules.TakeableTap(t => oneEmpty[t], t => t == 1), "another player pours into it: busy, as in first person");
+            Assert.AreEqual(-1, DrinkRules.TakeableTap(t => DrinkRules.NoSpotCup, null), "no cup on any spot: the stack");
+            Assert.AreEqual(-1, DrinkRules.TakeableTap(null, null));
+
+            byte[] mixed = { empty, empty, lidded };
+            float[] far = { 9f, 1f, 4f };
+            Assert.AreEqual(2, DrinkRules.TakeableTap(t => mixed[t], null, t => far[t]), "a lidded cup first, even when further away");
+            Assert.AreEqual(1, DrinkRules.TakeableTap(t => mixed[t], t => t == 2, t => far[t]), "then the nearest other cup");
+            Assert.AreEqual(0, DrinkRules.TakeableTap(t => mixed[t], t => t == 2), "no distances: the tap order");
+        }
+
+        [Test]
         public void BusyCup_CarriesTheNamedOption()
         {
             AimTarget busy = AimTarget.BusyCup("cup of lemonade");

@@ -25,5 +25,18 @@ namespace Worktown.Game.Settings
         /// </summary>
         public static bool CaptureReads(int beganFrame, int frame, bool pad, bool padReleasedSince) =>
             frame > beganFrame && (!pad || padReleasedSince);
+
+        /// <summary>
+        /// Follow-up 2026-11-11: the cursor locks again when the last open menu closes (<paramref name="anyMenuOpen"/> false), but only
+        /// while playing (<paramref name="playing"/>: the player's input is active). On the title screen it stays free.
+        /// </summary>
+        public static bool LocksOnClose(bool playing, bool anyMenuOpen) => playing && !anyMenuOpen;
+
+        /// <summary>
+        /// Follow-up 2026-11-11: Esc or Alt (<paramref name="escOrAlt"/>) frees the cursor while playing, except on the frame the last
+        /// menu closed (<paramref name="lastMenuClosedFrame"/> equals <paramref name="frame"/>): that Esc closed the settings over the
+        /// shop and locked the cursor again, so the same press must not free it at once (it needed one more click before).
+        /// </summary>
+        public static bool FreesCursor(bool escOrAlt, int lastMenuClosedFrame, int frame) => escOrAlt && lastMenuClosedFrame != frame;
     }
 }

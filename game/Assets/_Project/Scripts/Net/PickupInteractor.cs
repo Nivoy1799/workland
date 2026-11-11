@@ -2848,8 +2848,9 @@ namespace Worktown.Game.Net
                 case StationKind.DrinkDispenser:
                 {
                     // Spec 033/042, third person (holding E pours into the cup on the nearest tap's spot): a tap of E with a cup puts it
-                    // under the nearest free tap it fits, else lids it; with empty hands it lids a filled cup on a spot, takes a lidded one
-                    // off, else takes a cup from the stack.
+                    // under the nearest free tap it fits, else lids it; with empty hands it lids a filled cup on a spot, else takes a cup off
+                    // a spot (DrinkRules.TakeableTap: a lidded one first, then any other, such as an empty cup put back), else takes a cup
+                    // from the stack.
                     Pickup heldItem = FindHeldPickup();
                     Held hands = Hands(heldItem);
                     if (holding)
@@ -2876,11 +2877,13 @@ namespace Worktown.Game.Net
                         LidWithLook(station);
                         return true;
                     }
-                    for (int t = 0; t < DrinkRules.TapCount; t++)
+                    // Follow-up 2026-11-11: the same cups a first-person aim takes (not one that another player pours into).
+                    int take = DrinkRules.TakeableTap(t => SpotByteOf(SpotCup(station, t)),
+                        t => DrinkRules.IsPouring(flags, t) && !OwnSqueeze(station.Index, t),
+                        t => CupSpotOf(station, t) is PlaceSurface spot ? (spot.SpotWorldPosition(0) - transform.position).sqrMagnitude : float.MaxValue);
+                    if (take >= 0 && SpotCup(station, take) is Food onSpot && onSpot.TryGetComponent(out Pickup cupOnSpot))
                     {
-                        Food done = SpotCup(station, t);
-                        if (done == null || !DrinkRules.SpotLidded(SpotByteOf(done)) || !done.TryGetComponent(out Pickup lidded)) continue;
-                        PickUpWithLook(lidded);
+                        PickUpWithLook(cupOnSpot);
                         return true;
                     }
                     if (station.TryGetSlot(DrinkRules.CupTool, out StockSlot cups)) TakeWithLook(cups, DrinkRules.CupOption, "empty cup");
@@ -3242,6 +3245,8 @@ namespace Worktown.Game.Net
         {
             if (dispenser != null && dispenser.TryGetSlot(DrinkRules.CupTool, out StockSlot cups)) TakeWithLook(cups, DrinkRules.CupOption, "empty cup");
         }
+        /// <summary>Follow-up 2026-11-11 (spec 042), tours: a third-person tap of E at <paramref name="station"/>; true when it acted.</summary>
+        public bool DevStationKey(Station station) => station != null && TryHandleStationKey(station, FindHeldPickup() != null);
         /// <summary>Spec 031, tours: the squeeze still has a request to send.</summary>
         public bool DevSqueezeBusy => !_squeeze.Idle;
 #endif

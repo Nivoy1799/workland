@@ -238,6 +238,32 @@ namespace Worktown.Game.Cooking
             return -1;
         }
 
+        /// <summary>
+        /// Follow-up 2026-11-11 (spec 042), third person with empty hands when there is nothing to lid: the tap whose cup E takes off its
+        /// spot, the way a first-person aim at that cup takes it. A lidded cup (a finished drink) comes first, then any other cup (an
+        /// empty one put back, say); within each the nearest (<paramref name="distanceSqr"/>; null keeps the tap order). A cup someone
+        /// else pours into is skipped (<paramref name="busy"/>, the first-person "busy" cup). -1 when no spot holds a cup to take.
+        /// </summary>
+        public static int TakeableTap(Func<int, byte> spotOf, Func<int, bool> busy, Func<int, float> distanceSqr = null)
+        {
+            if (spotOf == null) return -1;
+            int best = -1;
+            bool bestLidded = false;
+            float bestSqr = float.MaxValue;
+            for (int t = 0; t < TapCount; t++)
+            {
+                byte spot = spotOf(t);
+                if (!HasSpotCup(spot) || (busy != null && busy(t))) continue;
+                bool lidded = SpotLidded(spot);
+                float sqr = distanceSqr != null ? distanceSqr(t) : t;
+                if (best >= 0 && ((bestLidded && !lidded) || (bestLidded == lidded && sqr >= bestSqr))) continue;
+                best = t;
+                bestLidded = lidded;
+                bestSqr = sqr;
+            }
+            return best;
+        }
+
         /// <summary>Whether a lid fits what the hands hold: an open cup with a drink in it.</summary>
         public static CookOutcome CanLid(bool holdsCup, bool lidded, byte level)
         {

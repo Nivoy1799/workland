@@ -321,6 +321,17 @@ namespace Worktown.Sim.Tests.Cooking
         /// <summary>
         /// Pinned at commit 1710193 (spec 030, before 031): crispy fried potato sticks, grilled seitan strips (13 kitchen s a side) and a
         /// sauteed potato. Spec 031 and 031b changed the op catalog, the factory and the rater; these must not move.
+        /// <para>
+        /// Spec 043 re-pinned them on purpose (the reasons, written 2026-11-11):
+        /// <list type="bullet">
+        /// <item>The saute: 50 s at the 2x pan is the old dose, so its quality stays 0.121. But the dish is undercooked now, so its
+        /// time bucket is "short" (zone buckets), its name "lightly sauteed potato" and its hash new.</item>
+        /// <item>The fries are now pinned at 80 s at the 2x pan (<see cref="TestItems.Fries"/>): that is Perfect, with the same
+        /// hash and name.</item>
+        /// <item>The seitan at 13 kitchen s a side is Good, so its rating carries the 0.9 Good factor
+        /// (<see cref="DonenessZones.GoodFactor"/>).</item>
+        /// </list>
+        /// </para>
         /// </summary>
         [Fact]
         public void Pre031Items_KeepTheirHashesAndRatings()
