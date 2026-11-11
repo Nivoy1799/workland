@@ -1765,8 +1765,8 @@ namespace Worktown.Game.Dev
             yield return capture.Shot("grilled-veggies-on-held-plate");
 
             yield return actor.LevelView();
-            // Spec 037 AC3: the grilled veggies go up to $9.50 on the menu board (from $8.00); their scripted guest pays cash with a $10
-            // note and does not tip (TourOrders), so the register asks for 50 cents of change, one coin.
+            // Spec 037: the grilled veggies go up to $9.50 on the menu board (from $8.00). 037 review: their scripted guest joined at $8.00
+            // and keeps that price (times its dish's stars); it pays cash with a $10 note and does not tip (TourOrders), change in coins.
             yield return SetBoardPrice(actor, capture, laneZ, Worktown.Game.Npc.MenuPrices.LineOfDish(Worktown.Game.Npc.Menu.GrilledVeggies), 950, "veggies");
             yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
             LogOrders();

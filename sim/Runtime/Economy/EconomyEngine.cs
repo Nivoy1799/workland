@@ -338,7 +338,7 @@ namespace Worktown.Sim.Economy
                     long w = 0;
                     foreach (var x in m.Demand.HourWeights) w += x;
                     long total = ms.DemandCarry + (long)input.Population * m.Demand.UnitsPerNpcPerDayCenti * m.Demand.HourWeights[hour]
-                        * DemandPermilleOf(input, m.Id) / 1000; // spec 037: the menu board's prices (1000 = unchanged)
+                        * DemandPermilleOf(input, m.Id) / 1000; // spec 037: the board's prices (1000 = unchanged; rounds down less than one carry step)
                     long baseUnits = total / (100 * w);
                     carry = total % (100 * w);
                     long j = baseUnits * m.Demand.JitterPercent / 100;

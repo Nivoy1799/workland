@@ -82,6 +82,13 @@ namespace Worktown.Game.Shop
             return line >= 0 ? _prices[line] : fallback;
         }
 
+        /// <summary>
+        /// 037 review: what a guest joining now will pay: the board's price of its dish and of its drink (-1: no such line, or no drink)
+        /// and its tip share. The guest keeps this quote; a later click on the board does not change it.
+        /// </summary>
+        public BoardQuote Quote(byte dish, string drinkId) => new BoardQuote(BillOf(dish, false, null, -1),
+            drinkId != null ? BillOf(Menu.None, true, drinkId, -1) : -1, TipPermilleOf(dish));
+
         /// <summary>The tip's share (permille) for an order of <paramref name="dish"/> at its board price (1000 at or below the reference).</summary>
         public int TipPermilleOf(byte dish)
         {
@@ -133,5 +140,23 @@ namespace Worktown.Game.Shop
                 }
             Changed?.Invoke();
         }
+    }
+
+    /// <summary>037 review: a guest's prices (cents; -1 none) and tip share (permille) from the menu board as it joined.</summary>
+    public readonly struct BoardQuote
+    {
+        public BoardQuote(long dishPrice, long drinkPrice, int tipPermille)
+        {
+            DishPrice = dishPrice;
+            DrinkPrice = drinkPrice;
+            TipPermille = tipPermille;
+        }
+
+        public long DishPrice { get; }
+        public long DrinkPrice { get; }
+        public int TipPermille { get; }
+
+        /// <summary>The quote's price of an order line: the drink's for a drink line, else the dish's.</summary>
+        public long PriceOf(bool drink) => drink ? DrinkPrice : DishPrice;
     }
 }

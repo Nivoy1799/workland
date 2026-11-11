@@ -74,6 +74,19 @@ namespace Worktown.Game.Npc
         /// <summary>The reference price (cents) of line <paramref name="line"/>, or 0 for no line.</summary>
         public static long Reference(int line) => line >= 0 && line < Lines.Count ? Lines[line].Reference : 0;
 
+        /// <summary>
+        /// 037 review: the reference of line <paramref name="line"/> as <paramref name="climb"/> prices it (a dish spec 052's climb knows takes
+        /// that catalog's price, the rest their defaults), so callers that hold a climb catalog read the same source as the board.
+        /// </summary>
+        public static long ReferenceOf(int line, ClimbCatalog climb)
+        {
+            if (line < 0 || line >= Lines.Count) return 0;
+            if (climb == null) return Lines[line].Reference;
+            foreach (DishDef d in climb.Dishes)
+                if (d.Id == Lines[line].Id) return d.ReferencePrice;
+            return Lines[line].Reference;
+        }
+
         /// <summary>The climb's reference price of a spec 052 dish (cents), or <paramref name="fallback"/> when the climb has no such dish.</summary>
         private static long ClimbReference(string climbDish, long fallback)
         {

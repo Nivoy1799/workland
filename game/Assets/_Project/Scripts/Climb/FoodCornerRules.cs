@@ -50,7 +50,7 @@ namespace Worktown.Game.Climb
             if (economy == null) throw new ArgumentNullException(nameof(economy));
             if (climb == null) throw new ArgumentNullException(nameof(climb));
             if (!economy.TryGetMarket(Market, out MarketDef _)) throw new ArgumentException("no " + Market + " market", nameof(economy));
-            return MenuPrices.Reference(MenuPrices.LineOfDish(GameDish));
+            return MenuPrices.ReferenceOf(MenuPrices.LineOfDish(GameDish), climb); // 037 review: the same source as SimDishPrice
         }
 
         /// <summary>The 052 price of the dish (its reference price).</summary>

@@ -75,7 +75,10 @@ namespace Worktown.Game.Npc
         /// </summary>
         public bool Serve(GuestPick line, int payee, long lineBill, out GuestPick whole, out long wholeBill)
         {
-            whole = line;
+            // 037 review: the line's bill already holds its share, so the whole pick bills 100 % of it (it was the line itself, and the
+            // register applied the share a second time: a close dish without a drink paid 36 %, not 60 %).
+            whole = new GuestPick(line.CustomerId, line.Dish, line.Fit, OrderRules.ExactPermille, line.WaitedTenths, line.PatienceTenths,
+                line.IsDrink);
             wholeBill = Math.Max(0L, lineBill);
             if (!_entries.TryGetValue(line.CustomerId, out Entry e)) return true;
             // 033 review: a line already served (or a drink nobody ordered) is refused: false, nothing changes.

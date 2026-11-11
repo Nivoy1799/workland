@@ -177,7 +177,7 @@ namespace Worktown.Game.Save
             {
                 if (part == null) continue;
                 int line = Worktown.Game.Npc.MenuPrices.LineOfId(part.id);
-                if (line < 0) continue; // unknown: ignored, kept for the next save
+                if (line < 0) continue; // unknown: the board ignores it; SaveService keeps it for the next save (037 review)
                 long normal = MenuPricing.Normalize(Worktown.Game.Npc.MenuPrices.Reference(line), part.cents);
                 if (normal != part.cents) notes.Add("menu " + part.id + " " + part.cents + " -> " + normal);
                 part.cents = normal;

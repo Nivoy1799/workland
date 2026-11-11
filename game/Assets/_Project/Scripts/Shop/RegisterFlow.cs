@@ -58,12 +58,14 @@ namespace Worktown.Game.Shop
         /// the menu board's price, at the pick's share), the tip (speed, accuracy, quality), the way of paying from its <paramref name="order"/>; it joins the register's
         /// line (the commit point), then the stage shows it. Returns the payment (never null).
         /// </summary>
-        public RegisterPayment HandOver(GuestPick pick, int payee, long simPayout, GuestOrder order, IGuestStage stage, float now)
+        public RegisterPayment HandOver(GuestPick pick, int payee, long simPayout, GuestOrder order, IGuestStage stage, float now,
+            int tipPermille = -1)
         {
             // Spec 037: cents; the bill and the tip are whole coins ($0.10), so the change is always exact; the tip falls when the board's
             // price is above the reference (TipShare).
             long bill = CashRules.ToCoins(EconomyRules.ApplyPermille(simPayout, pick.BillPermille));
-            int share = TipShare != null ? TipShare(pick) : EconomyRules.FullPayPermille;
+            // 037 review: the tip share stored when the guest joined (<paramref name="tipPermille"/>), else the board's now.
+            int share = tipPermille >= 0 ? tipPermille : TipShare != null ? TipShare(pick) : EconomyRules.FullPayPermille;
             long tip = CashRules.ToCoins(EconomyRules.ApplyPermille(TipRules.Tip(bill, pick.WaitedTenths, pick.PatienceTenths, pick.Fit.Misses,
                 pick.Fit.Stars), share));
             order ??= new GuestOrder(Array.Empty<OrderModifier>(), GuestPatience.BaseSeconds, true, CashRules.GuestNotes[0]);

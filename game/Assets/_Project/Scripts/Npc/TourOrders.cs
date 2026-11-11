@@ -9,8 +9,9 @@ namespace Worktown.Game.Npc
     /// <summary>
     /// Spec 032, development builds only: the cook tour's host (<c>-tour-orders</c>) scripts its first guests per market, so the
     /// visual check always takes the same orders: a snack guest wants fries (card); the meal guests want a falafel wrap with extra
-    /// garlic and (spec 033) a lemonade (cash, a $20 note: change), grilled veggies (spec 037 AC3: cash with a $10 note, and it does not
-    /// tip, so the $9.50 the tour sets on the menu board is what it owes: 50 cents of change in one coin) and a seitan wrap without
+    /// garlic and (spec 033) a lemonade (cash, a $20 note: change), grilled veggies (spec 037: cash with a $10 note, and it does not
+    /// tip; 037 review: it pays the board's price from when it joined, times its dish's stars, so the tour's later raise to $9.50 does
+    /// not reach it; the change is counted in coins) and a seitan wrap without
     /// lettuce (cash, a $20 note; its ticket shows the struck line; its patience runs out during the tour, so the sheets show the ring
     /// turn Terracotta and the guest leave). Spec 037: notes in cents ($5, $10, $20; there is no $50 note any more).
     /// Later guests draw as usual. Patience is scaled by <see cref="PatienceScale"/> (the tour is long), the seitan wrap guest's by
@@ -28,7 +29,7 @@ namespace Worktown.Game.Npc
         {
             ("snack", Menu.Fries, new string[0], true, 1000, PatienceScale, null, true, true), // spec 035: eats in (its plate comes back dirty)
             ("meal", Menu.FalafelWrap, new[] { "extra garlic" }, false, 2000, PatienceScale, "lemonade", false, true), // spec 033: the tour's drink
-            ("meal", Menu.GrilledVeggies, new string[0], false, 1000, PatienceScale, null, true, false), // spec 037 AC3: $9.50 with a $10 note
+            ("meal", Menu.GrilledVeggies, new string[0], false, 1000, PatienceScale, null, true, false), // spec 037: cash, a $10 note, no tip
             ("meal", Menu.SeitanWrap, new[] { "no lettuce" }, false, 2000, ShortPatienceScale, null, false, true),
         };
 

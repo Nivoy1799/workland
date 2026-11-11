@@ -85,3 +85,31 @@ fields on the `MenuBoard` scene object, `Prices` (SyncList<int>, cents) and `Sel
   not tip. The tour raises the dish to $9.50 on the board, so the guest owes exactly $9.50 and the change is one 50c coin.
   Tips depend on play, so no real guest owes an exact amount.
 - Old `Graybox_Cash1/2/5.mat` are now unused (not deleted).
+
+### 037 review fixes (2026-11-11, after 572cae0)
+1. **Price at join** (must-fix). A guest keeps a `BoardQuote` from when it joins: the dish price, the drink price and the tip
+   share (`MenuBoardDesk.Quote`, stored on the guest in CustomerService). Its bill and tip use that quote, never the board at
+   hand-over (`RegisterFlow.HandOver` takes the stored tip share). Test: `Review1_...`.
+2. **A bill never exceeds the board** (must-fix). On board prices the share is `BoardBill.Permille`: the match share times the
+   stars factor, capped at 1000. 032's order-over-item quality ratio stays only on the no-board path.
+   - While re-measuring I found a 033 bug: a guest without a drink passed its line on as the whole pick, so the register applied
+     the share twice. `GuestTab.Serve` now hands on a 100 % pick.
+   - Tests: `Review2_...` (real items through `OrderRules.Fit`) and `Review2b_...`. The AC3 test now goes through Quote,
+     BoardBill and LineBill. Its guest is served exactly as its patience ends, so no tip.
+3. **Wrong dish** (must-fix). Billed on what was served: min(stored price, its own sim payout) × the wrong share
+   (`BoardBill.Base`). Test: `Review3_...` (fries to a wrap guest).
+4. **Quality** (should-fix, the orchestrator's call; the human gets an FYI). The bill is the stored price times the share times
+   the stars factor: 1★ 500, 2★ 625, 3★ 750, 4★ 875, 5★ 1000. Tips are unchanged. Re-measured in the corner tour, one cook:
+   4★ fries pay $3.50 + $0.70 tip, $4.20 a guest. Before the review it was $4.00 + about $0.90; before 037, $5.03 + $1.12 of
+   the old scale.
+5. **Unknown menu lines** survive a save. SaveService keeps them like the stock's unknown slots. Test: `Review5_...`.
+
+Nits:
+- `Graybox_Cash1/2/5.mat` are deleted.
+- The demand permille's rounding is documented: less than one carry step per market and hour.
+- `FoodCornerRules.GameDishPrice` reads the given climb catalog (`MenuPrices.ReferenceOf`).
+- Left for 052b (sim/Runtime/Climb is not touched): `ClimbReport.Format` moneyScale, and a catalog check that money % MoneyScale == 0.
+
+**AC3 in the tour.** Under fixes 1 and 4, an exact $9.50 needs a 5★ dish at a $9.50 join price. The tour raises the veggies
+after their guest joined, so that guest pays $8.00 × its stars, with change in coins. The exact $9.50 with a $10 note is pinned
+in EditMode.

@@ -162,9 +162,20 @@ namespace Worktown.Game.Tests
         public void AC3_AGuestPays950WithATenDollarNote_AndTheChangeIsCountedInCoins()
         {
             var flow = new RegisterFlow(new Shift());
-            // A one-star dish tips nothing (TipRules: quality 0), so the guest owes the board's $9.50 and hands a $10 note.
-            var pick = new GuestPick(7, Menu.GrilledVeggies, new OrderFit(OrderMatch.Exact, 0, 0.1f, 1), OrderRules.ExactPermille, 100, 1200);
-            RegisterPayment p = flow.HandOver(pick, 1, 950, new GuestOrder(new OrderModifier[0], 60, false, 1000), null, 0f);
+            // 037 review: through the real path. The guest joined with the board at $9.50 (its quote), got an exact five-star dish (the
+            // full price, BoardBill) at the very end of its patience (TipRules: no speed, no tip), so it owes $9.50 and hands a $10 note.
+            var desk = new MenuBoardDesk(Weights);
+            for (int i = 0; i < 7; i++) desk.Use(MenuBoardRules.NextOption, ShopStageRules.OpenKitchen);
+            Assert.AreEqual(MenuPrices.LineOfDish(Menu.GrilledVeggies), desk.Selected);
+            for (int i = 0; i < 3; i++) desk.Use(MenuBoardRules.DearerOption, ShopStageRules.OpenKitchen);
+            BoardQuote quote = desk.Quote(Menu.GrilledVeggies, null);
+            Assert.AreEqual(950, quote.DishPrice);
+            var fit = new OrderFit(OrderMatch.Exact, 0, 0.95f, 5);
+            var pick = new GuestPick(7, Menu.GrilledVeggies, fit, BoardBill.Permille(fit), 1200, 1200);
+            long line = GuestTab.LineBill(pick, BoardBill.Base(quote.DishPrice, 4000, fit.Match));
+            Assert.AreEqual(950, line);
+            RegisterPayment p = flow.HandOver(pick, 1, line, new GuestOrder(new OrderModifier[0], 60, false, 1000), null, 0f, quote.TipPermille);
+            Assert.AreEqual(0, p.Tip, "served as its patience ran out: no tip");
             Assert.AreEqual(950, p.Due);
             Assert.AreEqual(1000, p.Handed);
             Assert.AreEqual(50, p.ChangeDue);
@@ -180,6 +191,130 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("$10", RegisterRules.TrayLabel(1000));
             CollectionAssert.AreEqual(new[] { "10c", "20c", "50c", "$1", "$2", "$5", "$10", "$20" }, CashRules.Tray.Select(RegisterRules.TrayLabel));
             Assert.AreEqual(CashRules.Tray.Count + 3, RegisterRules.SlotCount, "the tray, take back, hand over, the card");
+        }
+
+        // ---- 037 review fixes ----
+
+        [Test]
+        public void Review1_TheBillAndTheTip_UseThePriceWhenTheGuestJoined_NotTheBoardAtTheHandOver()
+        {
+            var desk = new MenuBoardDesk(Weights);
+            byte corner = ShopStageRules.FoodCorner;
+            BoardQuote joined = desk.Quote(Menu.Fries, null);
+            for (int i = 0; i < 8; i++) desk.Use(MenuBoardRules.DearerOption, corner); // + pressed right before the hand-over
+            Assert.AreEqual(800, desk.PriceOf(Fries), "the board says $8.00 now");
+            var fit = new OrderFit(OrderMatch.Exact, 0, 0.9f, 5);
+            var pick = new GuestPick(1, Menu.Fries, fit, BoardBill.Permille(fit), 100, 1200);
+            Assert.AreEqual(400, GuestTab.LineBill(pick, BoardBill.Base(joined.DishPrice, 460, fit.Match)), "billed at the $4.00 it joined at");
+            Assert.AreEqual(1000, joined.TipPermille, "and tipped as at $4.00");
+            RegisterPayment p = new RegisterFlow(new Shift()) { TipShare = x => desk.TipPermilleOf(x.Dish) }
+                .HandOver(pick, 1, 400, new GuestOrder(new OrderModifier[0], 60, true, 1000), null, 0f, joined.TipPermille);
+            Assert.AreEqual(120, p.Tip, "the stored share wins over the board's now");
+            BoardQuote later = desk.Quote(Menu.Fries, "lemonade");
+            Assert.AreEqual(800, later.DishPrice, "a guest joining now pays $8.00");
+            Assert.AreEqual(300, later.DrinkPrice);
+            Assert.AreEqual(-1, desk.Quote(Menu.Fries, null).DrinkPrice, "no drink ordered");
+            Assert.Less(later.TipPermille, 1000);
+        }
+
+        [Test]
+        public void Review2_ABill_NeverExceedsTheBoardsPrice_ThroughTheRealOrderFit()
+        {
+            // The old share (order quality over item quality) could reach 1.5 x; on board prices it is the match times the stars, at most 1.
+            Assert.Greater(OrderRules.BillPermille(OrderMatch.Exact, 0.2f, 1f), 1000, "032's share overpays a fixed price");
+            foreach (OrderMatch match in new[] { OrderMatch.Exact, OrderMatch.Close, OrderMatch.Wrong })
+                for (int stars = 0; stars <= 6; stars++)
+                    for (float q = 0f; q <= 1f; q += 0.1f)
+                    {
+                        var fit = new OrderFit(match, match == OrderMatch.Exact ? 0 : match == OrderMatch.Close ? 1 : 2, q, stars);
+                        Assert.LessOrEqual(BoardBill.Permille(fit), 1000);
+                        Assert.LessOrEqual(BoardBill.LineBill(fit, 900, 99999), 900, match + " " + stars + " stars");
+                    }
+            // Real items through OrderRules.Fit, the share TryPick uses: plated fries of every doneness for a fries guest.
+            var kitchen = KitchenState.CreateDemo();
+            foreach (int pan in new[] { 1, 2, 3 })
+            {
+                kitchen.TryCreateIngredient("potato", out Item potato);
+                kitchen.Register(10 + pan, potato);
+                HeatTestKit.Cut(kitchen, 10 + pan, 3);
+                HeatTestKit.PanPreset(kitchen, 10 + pan, pan);
+                Assert.AreEqual(CookOutcome.Ok, kitchen.TryPlate(10 + pan, out Item plated));
+                OrderFit fit = OrderRules.Fit(plated, Menu.ById(Menu.Fries), 0);
+                var pick = new GuestPick(1, Menu.Fries, fit, BoardBill.Permille(fit), 100, 1200);
+                long bill = GuestTab.LineBill(pick, BoardBill.Base(400, 9999, fit.Match));
+                Assert.LessOrEqual(bill, 400, "pan " + pan + ": " + fit.Match + ", " + fit.Stars + " stars");
+                Assert.AreEqual(BoardBill.LineBill(fit, 400, 9999), bill);
+            }
+        }
+
+        [Test]
+        public void Review2b_AGuestWithoutADrink_PaysItsShareOnce()
+        {
+            // Found re-measuring the corner: a guest without a tab (no drink) handed its line on as the whole pick, so the register applied
+            // the share again (fries at 875 permille paid $3.00, not $3.50).
+            var tab = new GuestTab();
+            var fit = new OrderFit(OrderMatch.Exact, 0, 0.7f, 4);
+            var line = new GuestPick(5, Menu.Fries, fit, BoardBill.Permille(fit), 100, 1200);
+            long lineBill = GuestTab.LineBill(line, 400);
+            Assert.AreEqual(350, lineBill);
+            Assert.IsTrue(tab.Serve(line, 1, lineBill, out GuestPick whole, out long bill));
+            Assert.AreEqual(OrderRules.ExactPermille, whole.BillPermille, "the share is in the line's bill already");
+            RegisterPayment p = new RegisterFlow(new Shift()).HandOver(whole, 1, bill, new GuestOrder(new OrderModifier[0], 60, true, 1000), null, 0f);
+            Assert.AreEqual(350, p.Bill, "4 stars: $3.50, once");
+        }
+
+        [Test]
+        public void Review3_AWrongDish_IsBilledOnWhatWasServed_AShareOfItsOwnValue()
+        {
+            // Fries (a potato) handed to a falafel wrap guest: a wrong dish. It pays a share of the fries' own sim payout, not of the $9.00 wrap.
+            var kitchen = KitchenState.CreateDemo();
+            kitchen.TryCreateIngredient("potato", out Item potato);
+            kitchen.Register(1, potato);
+            HeatTestKit.Cut(kitchen, 1, 3);
+            HeatTestKit.PanPreset(kitchen, 1, 2);
+            Assert.AreEqual(CookOutcome.Ok, kitchen.TryPlate(1, out Item plated));
+            OrderFit fit = OrderRules.Fit(plated, Menu.ById(Menu.FalafelWrap), 0);
+            Assert.AreEqual(OrderMatch.Wrong, fit.Match);
+            TownEconomy economy = TownEconomy.CreateDemo();
+            Assert.IsTrue(economy.TryOpenAccount("p", 0));
+            SaleResult sale = economy.TrySellForGuest("p", plated);
+            Assert.IsTrue(sale.Ok, sale.Error.ToString());
+            long payout = sale.Payout;
+            Assert.Less(payout, 900, "the fries are worth less than the wrap");
+            Assert.AreEqual(payout, BoardBill.Base(900, payout, fit.Match), "the served item's own value");
+            long bill = BoardBill.LineBill(fit, 900, payout);
+            Assert.LessOrEqual(bill, payout * OrderRules.WrongPermille / 1000, "only a share of the fries");
+            Assert.AreEqual(900, BoardBill.Base(900, 99999, OrderMatch.Wrong), "never above the board's price");
+            Assert.AreEqual(900, BoardBill.Base(900, 10, OrderMatch.Close), "a close dish is the ordered one");
+        }
+
+        [Test]
+        public void Review4_QualityScalesTheBill_FiveStarsPayTheFullPrice_NothingPaysMore()
+        {
+            CollectionAssert.AreEqual(new[] { 500, 625, 750, 875, 1000 }, Enumerable.Range(1, 5).Select(BoardBill.QualityPermille));
+            Assert.AreEqual(500, BoardBill.QualityPermille(0));
+            Assert.AreEqual(1000, BoardBill.QualityPermille(9));
+            Assert.AreEqual(400, BoardBill.LineBill(new OrderFit(OrderMatch.Exact, 0, 0.9f, 5), 400, 0), "5 stars: $4.00");
+            Assert.AreEqual(350, BoardBill.LineBill(new OrderFit(OrderMatch.Exact, 0, 0.7f, 4), 400, 0), "4 stars: $3.50");
+            Assert.AreEqual(200, BoardBill.LineBill(new OrderFit(OrderMatch.Exact, 0, 0f, 1), 400, 0), "burnt: half");
+            Assert.AreEqual(210, BoardBill.LineBill(new OrderFit(OrderMatch.Close, 1, 0.7f, 4), 400, 0), "close, 4 stars: 525 permille, $2.10");
+            Assert.AreEqual(OrderRules.ClosePermille * 875 / 1000, BoardBill.Permille(new OrderFit(OrderMatch.Close, 1, 0.7f, 4)));
+        }
+
+        [Test]
+        public void Review5_UnknownMenuLines_SurviveASave()
+        {
+            ShopSave loaded = ShopSaveCodecTests.Full();
+            loaded.menu = new[] { new ShopSave.MenuPart { id = "fries", cents = 450 }, new ShopSave.MenuPart { id = "space_soup", cents = 700 } };
+            List<ShopSave.MenuPart> unknown = SaveService.UnknownMenu(loaded);
+            Assert.AreEqual(1, unknown.Count);
+            var desk = new MenuBoardDesk(Weights);
+            desk.Restore(SaveService.MenuOf(loaded));
+            ShopSave.MenuPart[] next = SaveService.MenuParts(desk.Capture(), unknown);
+            CollectionAssert.AreEquivalent(new[] { "fries", "space_soup" }, next.Select(m => m.id));
+            Assert.AreEqual(700, next.Single(m => m.id == "space_soup").cents, "as it came");
+            Assert.AreEqual(1, SaveService.MenuParts(desk.Capture(), new[] { new ShopSave.MenuPart { id = "fries", cents = 999 } }).Length,
+                "a known line is never doubled");
         }
 
         [Test]

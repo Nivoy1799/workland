@@ -36,6 +36,8 @@ namespace Worktown.Game.Save
         private NetBootstrap _bootstrap;
         private ShopSave _current;
         private readonly List<ShopSave.StockPart> _unknownStock = new List<ShopSave.StockPart>();
+        /// <summary>037 review: menu lines of a loaded save this build does not know, kept for the next save (like the stock's).</summary>
+        private readonly List<ShopSave.MenuPart> _unknownMenu = new List<ShopSave.MenuPart>();
         private bool _begun;
         private float _lastSaveAt;
         private float _playStartedAt;
@@ -90,6 +92,7 @@ namespace Worktown.Game.Save
             _begun = false;
             _current = null; // "Close the shop" saved before the stop (NetBootstrap.Leave)
             _unknownStock.Clear();
+            _unknownMenu.Clear();
         }
 
         // ---- beginning a game ----
@@ -100,6 +103,7 @@ namespace Worktown.Game.Save
             ShopStart start = _bootstrap != null ? _bootstrap.HostStart : ShopStart.OpenKitchen;
             _current = null;
             _unknownStock.Clear();
+            _unknownMenu.Clear();
             try
             {
                 switch (start)
@@ -176,12 +180,15 @@ namespace Worktown.Game.Save
         {
             _current = save;
             _unknownStock.Clear();
+            _unknownMenu.Clear();
             foreach (ShopSave.StockPart part in save.stock)
                 if (part != null && ShopSaveCodec.LineOfSlot(part.slot) < 0) _unknownStock.Add(part);
             if (_economy != null)
             {
                 _economy.StartGame(SeedOf(save), save.clock.day, save.money.balance, save.money.earnedTotal, save.money.spentTotal);
                 _economy.Menu.Restore(MenuOf(save)); // spec 037: a new shop has none (every price at its reference)
+                _unknownMenu.Clear();
+                _unknownMenu.AddRange(UnknownMenu(save)); // 037 review: kept for the next save
             }
             if (_supply != null)
             {
@@ -279,16 +286,31 @@ namespace Worktown.Game.Save
             Fill(save, balance + pending, _economy != null ? _economy.Earned : save.money.earnedTotal, _economy != null ? _economy.Spent : save.money.spentTotal,
                 day, play, counts, _unknownStock, _cleaning != null ? _cleaning.HygienePercent : save.hygienePercent,
                 _stage != null ? _stage.ServerStage : (byte)save.climb.stage, _stage != null && _stage.ServerReached);
-            if (_economy != null) save.menu = MenuParts(_economy.Menu.Capture()); // spec 037: the board's prices
+            if (_economy != null) save.menu = MenuParts(_economy.Menu.Capture(), _unknownMenu); // spec 037: the board's prices
         }
 
         /// <summary>Spec 037: the menu board's changed prices as the save's parts (line id, cents).</summary>
-        public static ShopSave.MenuPart[] MenuParts(IReadOnlyList<(string Id, long Cents)> prices)
+        public static ShopSave.MenuPart[] MenuParts(IReadOnlyList<(string Id, long Cents)> prices,
+            IReadOnlyList<ShopSave.MenuPart> unknown = null)
         {
             var parts = new List<ShopSave.MenuPart>();
             if (prices != null)
                 foreach ((string id, long cents) in prices) parts.Add(new ShopSave.MenuPart { id = id, cents = cents });
+            // 037 review: lines this build does not know (a newer build's dish) are kept for the next save, as they came.
+            if (unknown != null)
+                foreach (ShopSave.MenuPart part in unknown)
+                    if (part != null && MenuPrices.LineOfId(part.id) < 0) parts.Add(new ShopSave.MenuPart { id = part.id, cents = part.cents });
             return parts.ToArray();
+        }
+
+        /// <summary>037 review: the save's menu lines this build does not know.</summary>
+        public static List<ShopSave.MenuPart> UnknownMenu(ShopSave save)
+        {
+            var list = new List<ShopSave.MenuPart>();
+            if (save?.menu != null)
+                foreach (ShopSave.MenuPart part in save.menu)
+                    if (part != null && MenuPrices.LineOfId(part.id) < 0) list.Add(part);
+            return list;
         }
 
         /// <summary>Spec 037: the save's menu prices for the board (unknown ids are ignored by the board).</summary>
