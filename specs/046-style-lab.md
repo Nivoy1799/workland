@@ -191,6 +191,14 @@ look (ink outlines, warmer grade) so nobody mistakes them for final art. Six fra
 6. **The town from above:** restaurants, rooftop gardens, a greenhouse dome, a monorail, at sunset.
 Animals live in the town as neighbours (D27). Output `docs/art/stylelab/round-4/` and a vibe page.
 
+## Round 5: the town in 2222 (human, 2026-11-11: "include gardens, city skylines ... it is a town in 2222 ...
+delivery drones, things flying")
+Same style and kit, more future: a skyline of streamline towers with ribbon windows, vertical gardens, terrace
+gardens, glass garden domes on top and sky bridges; hover cars in traffic lanes; delivery drones with parcels; an
+airship; a car-free garden promenade with beds, trees, a fountain and café tables. Our small restaurant street stays
+at the foot of the towers. Frames: the street with the skyline (sunset and night), the garden promenade (morning),
+the restaurant's rooftop drone pad (day), the town from above (sunset). Output `docs/art/stylelab/round-5/`.
+
 ## Open questions
 0. **Real-world cultures in the town?** So far the world has only its own fictional history (D27, D28). Can a
    business be "Mexican-inspired" or "Japanese-inspired", or do we invent fictional regional cuisines that echo real
@@ -269,6 +277,20 @@ Round 4 (2026-11-10, Opus):
 - People can sit (`Look.sit`): the body drops onto a 0.45 m seat, thighs forward, hands on the table.
 - `lab/scene4.py`: the six frames and the illustration look (Freestyle ink outlines; the haze box is excluded).
   New lights: morning and interior.
+
+Round 5 (2026-11-11, Opus):
+- Page: https://claude.ai/artifact/TBDiURuRKPgjt8JJoP3Rnj (source `docs/art/stylelab/round-5/compare.html`), five
+  frames by `tools/blender/stylelab/render_round5.py` (one Blender process per frame).
+- `lab/future.py`: towers (round with ribbon windows, ribbed Art Deco, slab, needle with a saucer sky-deck), garden
+  belts, vertical gardens, terrace trees, crowns (spire, glass garden dome, drone pad), sky bridges, hover cars with
+  lift jets and night light trails, delivery drones with parcels, an airship, garden beds, trees, benches, a
+  fountain, café tables.
+- `lab/scene5.py`: street with skyline (sunset, night), garden promenade (morning), rooftop drone pad (clear day with
+  light haze), town from above (sunset). Far towers ("far_") stay out of the ink outlines; the haze box and camera
+  reach are widened for the skyline.
+- Fix: in round 4 the dining chairs faced away from the tables (a chair's yaw must equal its guest's yaw);
+  `vibe_guest.jpg` re-rendered.
+- The aerial frame is the weakest: the kit reads like a model railway from above.
 
 ## Blockers
 (none)

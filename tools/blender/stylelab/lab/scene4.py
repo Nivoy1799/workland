@@ -213,8 +213,9 @@ def frame_guest(time_id):
         concept.plated(p, (tx - 0.2, ty, 0.76), "salad", seed=100 + k)
         concept.plated(p, (tx + 0.2, ty, 0.76), "hash", seed=103 + k)
         concept.drink(p, (tx, ty + 0.25, 0.76), "#E58436")
-        concept.chair(p, (tx - 0.72, ty, 0.0), -90, "#2F6E5E")
-        concept.chair(p, (tx + 0.72, ty, 0.0), 90, "#2F6E5E")
+        # A chair's back is at its local +Y, like a person's back: chair yaw equals the guest's yaw.
+        concept.chair(p, (tx - 0.72, ty, 0.0), 90, "#2F6E5E")
+        concept.chair(p, (tx + 0.72, ty, 0.0), -90, "#2F6E5E")
         concept.crowd([(tx - 0.62, ty, 90), (tx + 0.62, ty, -90)], seed=110 + k * 5, sit=True)
     # Something on the walls: framed town pictures and plants.
     for k, (x, title, cols) in enumerate(((-3.6, "TOWN FAIR", ["#F2D9B8", "#E58436", "#4F9A85", "#C9734F"]),
