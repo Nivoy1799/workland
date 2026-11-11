@@ -144,6 +144,7 @@ namespace Worktown.Game.Tests
             int frontPieces = Worktown.Game.Layout.LayoutQuery.Pieces(PieceCatalog.FrontCounter).Count;
             foreach (string module in new[] { PieceCatalog.RegisterModule, PieceCatalog.DispenserModule, PieceCatalog.SpitModule, PieceCatalog.DishReturnModule })
                 frontPieces += Worktown.Game.Layout.LayoutQuery.Pieces(module).Count;
+            Assert.AreEqual(9, frontPieces, "five front counter runs and four counter-line modules");
             Assert.AreEqual(frontPieces, plan.FrontRuns.Count, "the plain front counter either side of the serving counter");
             Assert.AreEqual(4, plan.Walls.Count, "the back wall, two side wall pieces at the staff gap end, one at the other end");
 

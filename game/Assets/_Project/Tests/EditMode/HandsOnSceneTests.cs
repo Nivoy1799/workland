@@ -13,7 +13,7 @@ namespace Worktown.Game.Tests
     /// <summary>
     /// Spec 019/021: the generated scene has a knife next to the cutting board (normal pickups; the knife with the Knife marker and its
     /// model), a knob and a button per burner on the stoves, and the Food Kit models in the catalog. Network types
-    /// are looked up with typeof, so this test assembly needs no FishNet reference.
+    /// are looked up with typeof, so it does not depend on FishNet's types.
     /// </summary>
     public class HandsOnSceneTests
     {

@@ -9,7 +9,7 @@ namespace Worktown.Game.Tests
     /// <summary>
     /// Spec 018 AC6: first person adds exactly one input to the predicted movement, a bool view hint named
     /// FirstPerson, and no request gained an argument (the client still sends only intents). Found by
-    /// name and attribute name, so this test assembly needs no FishNet reference (like RpcSurfaceTests).
+    /// name and attribute name, so it does not depend on FishNet's types (like RpcSurfaceTests).
     /// Spec 020 AC6 (changed on purpose): one new request, RequestPlace(int surface, int spot); MoveData unchanged.
     /// Spec 021 AC7 (changed on purpose): one more request, RequestUse(NetworkObject target, int action).
     /// </summary>

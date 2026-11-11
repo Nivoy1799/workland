@@ -98,6 +98,10 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(0, layout.Piece(3).LengthMm, "a fixed piece has no length");
             Assert.IsEmpty(layout.Homes, "a home on local 99 is dropped");
             Assert.AreEqual(4, layout.NextId, "above every id in use");
+            part.nextId = int.MaxValue;
+            Assert.AreEqual(ShopLayout.MaxPieceId, LayoutCodec.ToLayout(part, PieceCatalog.CreateDefault()).NextId, "062a review: clamped to the largest id");
+            part.nextId = -7;
+            Assert.AreEqual(4, LayoutCodec.ToLayout(part, PieceCatalog.CreateDefault()).NextId);
             Assert.GreaterOrEqual(notes.Count, 5, string.Join(", ", notes));
         }
 
@@ -125,6 +129,22 @@ namespace Worktown.Game.Tests
             ShopLayout taken = LayoutSpawner.Choose(noSink.WithPieces(blocked), standard, catalog, null, out reset, out notes);
             Assert.IsTrue(reset, string.Join(", ", notes));
             Assert.AreSame(standard, taken);
+        }
+
+        /// <summary>062a review: with no piece id left, a missing required piece is not added (the layout then falls back).</summary>
+        [Test]
+        public void Backfill_RefusesAnIdPastTheLimit()
+        {
+            PieceCatalog catalog = PieceCatalog.CreateDefault();
+            ShopLayout standard = DefaultLayout.Load();
+            ShopLayout noSink = new ShopLayout(1, standard.Pieces.Where(p => p.TypeId != PieceCatalog.Sink), null, standard.Homes, ShopLayout.MaxPieceId + 1);
+            Assert.Greater(noSink.NextId, ShopLayout.MaxPieceId);
+            var notes = new List<string>();
+            ShopLayout filled = DefaultLayout.Backfill(noSink, standard, catalog, null, notes);
+            Assert.AreEqual(0, filled.CountOf(PieceCatalog.Sink));
+            StringAssert.Contains("no piece id left for sink", string.Join(", ", notes));
+            LayoutSpawner.Choose(noSink, standard, catalog, null, out bool reset, out _);
+            Assert.IsTrue(reset, "a layout without a sink falls back to the standard one");
         }
 
         [Test]

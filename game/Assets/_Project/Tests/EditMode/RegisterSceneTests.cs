@@ -49,9 +49,11 @@ namespace Worktown.Game.Tests
 
                 List<Component> services = VesselTestKit.AllOf(scene, typeof(CustomerService));
                 var so = new SerializedObject(services[0]);
-                // Spec 062a: the guests' service finds the register (and its station) in the LayoutRegistry.
-                Assert.AreSame(station, Worktown.Game.Layout.LayoutRegistry.First(StationKind.Register));
-                Assert.AreSame(registers[0], station.GetComponent(registers[0].GetType()));
+                // Spec 062a: the guests' service finds the register (and its station) in the LayoutRegistry, not in a scene field.
+                const System.Reflection.BindingFlags statics = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+                Assert.AreSame(station, typeof(CustomerService).GetProperty("RegisterStation", statics).GetValue(null), "the register's station");
+                Assert.AreSame(registers[0], typeof(CustomerService).GetProperty("RegisterNow", statics).GetValue(null), "the register's synced state");
+                Assert.IsNull(so.FindProperty("_register"), "no scene reference to a spawned piece");
                 Assert.IsNotNull(so.FindProperty("_feed").objectReferenceValue);
                 var pay = (Transform)so.FindProperty("_payHead").objectReferenceValue;
                 var head = (Transform)so.FindProperty("_queueHead").objectReferenceValue;

@@ -53,6 +53,12 @@ namespace Worktown.Game.Layout
                 LayoutPiece model = null;
                 foreach (LayoutPiece p in standard.Pieces) if (p.TypeId == type) { model = p; break; }
                 if (model == null) continue;
+                if (next > ShopLayout.MaxPieceId)
+                {
+                    // 062a review: no id is left (ids are never reused); the piece is not added and the layout may then fall back.
+                    notes?.Add("no piece id left for " + type);
+                    continue;
+                }
                 LayoutPiece added = model with { Id = next++ };
                 if (IsFree(added, def, pieces, catalog))
                 {

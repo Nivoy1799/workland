@@ -15,7 +15,8 @@ namespace Worktown.Game.Tests
     /// parity snapshot (the builder's kitchen on main 075c101) is there by its piece and local number, with the same name and kind, its
     /// position within 1 mm, its yaw within 0.1 degrees, the same size, top height and spot count; the items lie on their old homes; the
     /// guests' and players' anchors did not move. A worktop's name carried its old surface index ("Worktop 5"); it is now numbered like
-    /// any piece placed more than once ("Worktop 3"), so only its form is compared.
+    /// any piece placed more than once ("Worktop 3"): NewWorktopNames pins each. 062a review: also the stock slots' and buttons'
+    /// anchors, the nested objects (baskets, griddle spots, build spot, spit parts) and the counters' body colliders.
     /// </summary>
     public class DefaultLayoutParityTests
     {
@@ -36,9 +37,22 @@ namespace Worktown.Game.Tests
         private static void Yaw(float expected, float actual, string what) =>
             Assert.LessOrEqual(Mathf.Abs(Mathf.DeltaAngle(expected, actual)), Degrees, what + " yaw " + expected + " vs " + actual);
 
+        /// <summary>062a review: each worktop's old name (its old surface index) and its new one (its rank among the worktops by id).</summary>
+        private static readonly Dictionary<string, string> NewWorktopNames = new Dictionary<string, string>
+        {
+            { "Worktop 0", "Worktop 1" }, // piece 19, the landing by the staff gap
+            { "Worktop 1", "Worktop 2" }, // piece 20, prep
+            { "Worktop 5", "Worktop 3" }, // piece 21, the pass at the right end
+            { "Worktop 9", "Worktop 4" }, // piece 22, plating
+        };
+
         private static void Name(string expected, string actual, string what)
         {
-            if (WorktopName.IsMatch(expected)) StringAssert.IsMatch(WorktopName.ToString(), actual, what);
+            if (WorktopName.IsMatch(expected))
+            {
+                Assert.IsTrue(NewWorktopNames.TryGetValue(expected, out string renamed), what + ": an unknown worktop");
+                Assert.AreEqual(renamed, actual, what);
+            }
             else Assert.AreEqual(expected, actual, what);
         }
 
@@ -50,7 +64,15 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(18, snapshot.stations.Length);
             Assert.AreEqual(27, snapshot.surfaces.Length);
             Assert.AreEqual(9, snapshot.items.Length);
-            for (int i = 0; i < snapshot.stations.Length; i++) Assert.AreEqual(i, snapshot.stations[i].oldIndex);
+            for (int i = 0; i < snapshot.stations.Length; i++)
+            {
+                Assert.AreEqual(i, snapshot.stations[i].oldIndex);
+                Assert.AreEqual(snapshot.stations[i].oldIndex + 1, snapshot.stations[i].piece, "a station's piece id is its old index + 1");
+            }
+            Assert.AreEqual(56, snapshot.slots.Length);
+            Assert.AreEqual(13, snapshot.buttons.Length);
+            Assert.AreEqual(11, snapshot.nested.Length, "2 baskets, 6 griddle spots, the build spot, the spit's cone and tray");
+            Assert.AreEqual(6, snapshot.bodies.Length, "4 worktops and the 2 front counter runs");
             for (int i = 0; i < snapshot.surfaces.Length; i++) Assert.AreEqual(i, snapshot.surfaces[i].oldIndex);
         }
 
@@ -131,6 +153,103 @@ namespace Worktown.Game.Tests
                     Assert.IsNotNull(item, e.name);
                     Near(e.position, item.transform.position, Mm, e.name);
                     Yaw(e.yaw, item.transform.eulerAngles.y, e.name);
+                }
+            }
+            finally { LayoutScene.Close(scene); }
+        }
+
+        [Test]
+        public void EverySlotAndButton_IsWhereItWas()
+        {
+            KitchenSnapshot snapshot = KitchenSnapshot.Load();
+            Scene scene = LayoutScene.Open();
+            try
+            {
+                List<StockSlot> slots = All<StockSlot>(scene);
+                Assert.AreEqual(snapshot.slots.Length, slots.Count, "as many slots");
+                foreach (KitchenSnapshot.PointEntry e in snapshot.slots)
+                {
+                    StockSlot slot = slots.Find(x => x.Station != null && x.Station.Id == e.piece && x.Option == e.option && x.name == e.name);
+                    Assert.IsNotNull(slot, e.name + " of piece " + e.piece);
+                    Near(e.position, slot.Anchor, Mm, e.name + " of " + slot.Station.name);
+                }
+                List<StationButton> buttons = All<StationButton>(scene);
+                Assert.AreEqual(snapshot.buttons.Length, buttons.Count, "as many buttons");
+                foreach (KitchenSnapshot.PointEntry e in snapshot.buttons)
+                {
+                    StationButton button = buttons.Find(b => b.Station != null && b.Station.Id == e.piece && b.Option == e.option);
+                    Assert.IsNotNull(button, e.name + " of piece " + e.piece);
+                    Near(e.position, button.transform.position, Mm, e.name + " of " + button.Station.name);
+                }
+            }
+            finally { LayoutScene.Close(scene); }
+        }
+
+        [Test]
+        public void TheNestedObjects_AreWhereTheyWere_InsideTheirPiece()
+        {
+            KitchenSnapshot snapshot = KitchenSnapshot.Load();
+            Scene scene = LayoutScene.Open();
+            try
+            {
+                var found = new List<(string Kind, Component C, Station Owner)>();
+                foreach (FryerBasket x in All<FryerBasket>(scene)) found.Add(("FryerBasket", x, x.Fryer));
+                foreach (GriddleSpot x in All<GriddleSpot>(scene)) found.Add(("GriddleSpot", x, x.Griddle));
+                foreach (AssemblySpot x in All<AssemblySpot>(scene)) found.Add(("AssemblySpot", x, x.Board));
+                foreach (SpitPart x in All<SpitPart>(scene)) found.Add(("SpitPart", x, x.Spit));
+                Assert.AreEqual(snapshot.nested.Length, found.Count);
+                foreach (KitchenSnapshot.NestedEntry e in snapshot.nested)
+                {
+                    Component c = found.Find(f => f.Kind == e.kind && f.C.name == e.name && f.Owner != null && f.Owner.Id == e.piece).C;
+                    Assert.IsNotNull(c, e.kind + " " + e.name + " of piece " + e.piece);
+                    Assert.AreSame(LayoutRegistry.Piece(e.piece), c.GetComponentInParent<PieceBehaviour>(), e.name + " is nested in its station's piece");
+                    Near(e.position, c.transform.position, Mm, e.name);
+                    Yaw(e.yaw, c.transform.eulerAngles.y, e.name);
+                }
+            }
+            finally { LayoutScene.Close(scene); }
+        }
+
+        [Test]
+        public void TheCountersBodies_CoverWhatTheyCovered()
+        {
+            KitchenSnapshot snapshot = KitchenSnapshot.Load();
+            Scene scene = LayoutScene.Open();
+            try
+            {
+                foreach (KitchenSnapshot.BodyEntry e in snapshot.bodies.Where(b => b.piece > 0))
+                {
+                    PieceBehaviour worktop = LayoutRegistry.Piece(e.piece);
+                    Assert.IsNotNull(worktop, e.name);
+                    Bounds b = worktop.Surfaces[0].GetComponent<BoxCollider>().bounds;
+                    Near(e.center, b.center, Mm, e.name + " body centre");
+                    Near(e.size, b.size, Mm, e.name + " body size");
+                }
+                // The builder's two front counter runs are now front counter pieces and the modules' counter bodies: the same height and
+                // depth, and along the run nothing uncovered but the gaps under 20 mm the layout leaves (spec 062a notes).
+                List<BoxCollider> front = All<BoxCollider>(scene).FindAll(c => c.name.StartsWith("Front counter"));
+                Assert.AreEqual(9, front.Count);
+                foreach (KitchenSnapshot.BodyEntry e in snapshot.bodies.Where(b => b.piece < 0))
+                {
+                    var run = new Bounds(e.center, e.size);
+                    var covered = new List<(float Min, float Max)>();
+                    foreach (BoxCollider c in front)
+                    {
+                        Bounds b = c.bounds;
+                        if (b.max.x <= run.min.x + 0.0005f || b.min.x >= run.max.x - 0.0005f) continue;
+                        Assert.AreEqual(run.min.z, b.min.z, Mm, c.name + " depth");
+                        Assert.AreEqual(run.max.z, b.max.z, Mm, c.name + " depth");
+                        Assert.AreEqual(run.max.y, b.max.y, Mm, c.name + " height");
+                        covered.Add((Mathf.Max(b.min.x, run.min.x), Mathf.Min(b.max.x, run.max.x)));
+                    }
+                    covered.Sort((x, y) => x.Min.CompareTo(y.Min));
+                    float at = run.min.x;
+                    foreach ((float min, float max) in covered)
+                    {
+                        Assert.Less(min - at, 0.021f, e.name + ": a gap at x " + at.ToString("F3"));
+                        at = Mathf.Max(at, max);
+                    }
+                    Assert.Less(run.max.x - at, 0.021f, e.name + ": a gap at its end");
                 }
             }
             finally { LayoutScene.Close(scene); }

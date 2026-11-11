@@ -73,11 +73,20 @@ namespace Worktown.Game.Economy
             return string.Join(", ", parts);
         }
 
+        /// <summary>Spec 062a: the menu board the prices go to: the first menu board station's in the LayoutRegistry, or null.</summary>
+        private static Worktown.Game.Shop.MenuBoard MenuBoardNow
+        {
+            get
+            {
+                Worktown.Game.Cooking.Station station = Worktown.Game.Layout.LayoutRegistry.First(Worktown.Game.Cooking.StationKind.MenuBoard);
+                return station != null ? station.GetComponent<Worktown.Game.Shop.MenuBoard>() : null;
+            }
+        }
+
         private void PublishMenu()
         {
             _menuLayoutVersion = Worktown.Game.Layout.LayoutRegistry.Version;
-            Worktown.Game.Cooking.Station station = Worktown.Game.Layout.LayoutRegistry.First(Worktown.Game.Cooking.StationKind.MenuBoard);
-            Worktown.Game.Shop.MenuBoard board = station != null ? station.GetComponent<Worktown.Game.Shop.MenuBoard>() : null;
+            Worktown.Game.Shop.MenuBoard board = MenuBoardNow;
             if (board != null && board.IsSpawned) board.ServerSet(_menu.Prices, _menu.Selected);
         }
 

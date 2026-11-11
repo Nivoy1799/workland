@@ -110,7 +110,7 @@ namespace Worktown.Game.Tests
             // 053 review: the shapes the helper relies on.
             Assert.IsTrue(typeof(System.Collections.ICollection).IsAssignableFrom(TransformGoals.QueueType), "the queue is a collection");
             Assert.IsFalse(TransformGoals.CurrentType.IsValueType, "the current goal is a reference (it is set to null)");
-            // A real NetworkTransform (by reflection: this test assembly has no FishNet reference).
+            // A real NetworkTransform (by reflection, as the other wire tests).
             Type ntType = Type.GetType("FishNet.Component.Transforming.NetworkTransform, FishNet.Runtime");
             Assert.IsNotNull(ntType);
             var go = new GameObject("TransformGoalsTest");

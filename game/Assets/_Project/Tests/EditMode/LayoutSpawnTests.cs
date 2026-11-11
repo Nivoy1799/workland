@@ -128,6 +128,32 @@ namespace Worktown.Game.Tests
                 }
         }
 
+        /// <summary>062a review: the services that held a scene reference to a station find the spawned one through the registry.</summary>
+        [Test]
+        public void TheServices_FindTheirStations_ThroughTheRegistry()
+        {
+            Scene scene = LayoutScene.Open();
+            try
+            {
+                const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
+                object Lookup(Type service, string property) => service.GetProperty(property, statics).GetValue(null);
+                Station board = LayoutQuery.Station(StationKind.MenuBoard);
+                Assert.IsNotNull(board);
+                Assert.AreSame(board.GetComponent<Worktown.Game.Shop.MenuBoard>(), Lookup(typeof(Worktown.Game.Economy.EconomyService), "MenuBoardNow"), "the economy's board");
+                Station register = LayoutQuery.Station(StationKind.Register);
+                Assert.AreSame(register, Lookup(typeof(Worktown.Game.Npc.CustomerService), "RegisterStation"));
+                Assert.AreSame(register.GetComponent<Worktown.Game.Shop.Register>(), Lookup(typeof(Worktown.Game.Npc.CustomerService), "RegisterNow"), "the guests' register");
+                Type cleaning = typeof(Worktown.Game.Shop.CleaningService);
+                Assert.AreSame(LayoutQuery.Station(StationKind.PlateShelf), Lookup(cleaning, "PlateShelf"));
+                Assert.AreSame(LayoutQuery.Station(StationKind.DishReturn), Lookup(cleaning, "DishReturn"));
+                Assert.AreSame(LayoutQuery.Station(StationKind.Sink), Lookup(cleaning, "SinkStation"));
+                Assert.AreSame(LayoutQuery.Station(StationKind.TrashCan), Lookup(cleaning, "TrashCan"));
+            }
+            finally { LayoutScene.Close(scene); }
+            Assert.IsNull(typeof(Worktown.Game.Economy.EconomyService).GetProperty("MenuBoardNow", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null),
+                "no board once the layout is gone");
+        }
+
         [Test]
         public void Numbered_WritesTheNumber_OrDropsTheMark()
         {

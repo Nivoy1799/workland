@@ -36,17 +36,24 @@ namespace Worktown.Game.Layout
 
         /// <summary>
         /// Server: spawns <paramref name="layout"/> (null: the default) and its items. Returns the layout in the world. Any pieces this
-        /// spawner put there before are despawned first.
+        /// spawner put there before are despawned first; the items it spawned are not tracked yet (the KitchenService owns them once
+        /// spawned; spec 062b, which moves pieces while a game runs, has to decide what happens to them).
         /// </summary>
         public ShopLayout ServerBegin(ShopLayout layout)
         {
-            if (_networkManager == null || !_networkManager.IsServerStarted) return null;
+            if (_networkManager == null || !_networkManager.IsServerStarted)
+            {
+                Debug.LogWarning("[Layout] no layout spawned: " + (_networkManager == null ? "no NetworkManager" : "the server is not started"));
+                return null;
+            }
             ShopLayout standard = DefaultLayout.Load(_catalog);
             ShopLayout chosen = Choose(layout, standard, _catalog, _prefabs, out bool reset, out List<string> notes);
             foreach (string note in notes) Debug.Log("[Layout] " + note);
             if (reset)
             {
-                Debug.LogWarning("[Layout] the saved layout could not be used; the standard layout is spawned");
+                // The bad layout is logged, not kept (the next save writes the standard one).
+                Debug.LogWarning("[Layout] the saved layout could not be used (" + string.Join("; ", notes) + "); the standard layout is spawned. "
+                    + "The rejected layout: " + JsonUtility.ToJson(LayoutCodec.ToPart(layout)));
                 if (_feed != null) _feed.ServerAdd(ResetLine);
             }
             DespawnPieces();

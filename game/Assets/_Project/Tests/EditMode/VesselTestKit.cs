@@ -8,8 +8,8 @@ using Worktown.Game.Cooking;
 namespace Worktown.Game.Tests
 {
     /// <summary>
-    /// Spec 021 test helper: finds network components (Vessel, StationContents, Pickup) without a FishNet reference in
-    /// this test assembly: by Type and through SerializedObject, never through generic GetComponent or a cast.
+    /// Spec 021 test helper: finds network components (Vessel, StationContents, Pickup) by Type, as written before
+    /// spec 062a gave this test assembly its FishNet reference: through SerializedObject, never through generic GetComponent or a cast.
     /// </summary>
     internal static class VesselTestKit
     {

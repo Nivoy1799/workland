@@ -35,6 +35,26 @@ namespace Worktown.Game.Editor
             public SurfaceEntry[] surfaces;
             public ItemEntry[] items;
             public AnchorEntry[] anchors;
+            // 062a review: what else must not move: the stations' slots and buttons, their nested objects, the counters' bodies.
+            public PointEntry[] slots;
+            public PointEntry[] buttons;
+            public NestedEntry[] nested;
+            public BodyEntry[] bodies;
+        }
+
+        [Serializable] private sealed class PointEntry
+        {
+            public string name; public int piece; public int option; public Vector3 position;
+        }
+
+        [Serializable] private sealed class NestedEntry
+        {
+            public string name; public string kind; public int piece; public Vector3 position; public float yaw;
+        }
+
+        [Serializable] private sealed class BodyEntry
+        {
+            public string name; public int piece; public Vector3 center; public Vector3 size;
         }
 
         [Serializable] private sealed class StationEntry
@@ -100,6 +120,7 @@ namespace Worktown.Game.Editor
                     }).ToArray(),
                     anchors = Anchors(scene),
                 };
+                Extras(snapshot, scene, s => s.Id, t => t.GetComponentInParent<PieceBehaviour>() is PieceBehaviour p ? p.PieceId : -1);
                 Write(SnapshotPath, JsonUtility.ToJson(snapshot, true));
                 Debug.Log("[Layout] snapshot: " + snapshot.stations.Length + " stations, " + snapshot.surfaces.Length + " surfaces");
             }
@@ -108,6 +129,61 @@ namespace Worktown.Game.Editor
                 foreach (GameObject go in made) if (go != null) UnityEngine.Object.DestroyImmediate(go);
                 LayoutRegistry.Clear();
             }
+        }
+
+        /// <summary>
+        /// 062a review, run once: adds the slots, buttons, nested objects and bodies of main 075c101's built scene (copied to
+        /// <paramref name="mainScenePath"/> with git show; its stations are matched to the snapshot's by name) to the snapshot, keeping
+        /// everything it already holds. Command line: -executeMethod Worktown.Game.Editor.LayoutExporter.ExtendFromMainScene.
+        /// </summary>
+        public static void ExtendFromMainScene() => ExtendFromMainScene(GrayboxSceneBuilder.Root + "/Scenes/Main075c101.unity");
+
+        public static void ExtendFromMainScene(string mainScenePath)
+        {
+            Snapshot snapshot = JsonUtility.FromJson<Snapshot>(File.ReadAllText(Full(SnapshotPath)));
+            Scene scene = EditorSceneManager.OpenScene(mainScenePath, OpenSceneMode.Single);
+            int StationPiece(Station st)
+            {
+                StationEntry e = snapshot.stations.FirstOrDefault(x => x.name == st.name);
+                if (e == null) throw new InvalidOperationException("station " + st.name + " is not in the snapshot");
+                return e.piece;
+            }
+            int BodyPiece(Transform t) => snapshot.surfaces.FirstOrDefault(x => x.name == t.name && x.name.StartsWith("Worktop "))?.piece ?? -1;
+            Extras(snapshot, scene, StationPiece, BodyPiece);
+            Write(SnapshotPath, JsonUtility.ToJson(snapshot, true));
+            Debug.Log("[Layout] snapshot extended from " + mainScenePath + ": " + snapshot.slots.Length + " slots, " + snapshot.buttons.Length
+                + " buttons, " + snapshot.nested.Length + " nested, " + snapshot.bodies.Length + " bodies");
+        }
+
+        /// <summary>
+        /// 062a review: the stock slots' and buttons' anchors, the nested objects (fryer baskets, griddle spots, the build spot, the spit's
+        /// cone and tray) and the worktops' and front counter's body colliders, by piece (<paramref name="stationPiece"/>,
+        /// <paramref name="bodyPiece"/>; -1: no piece, the builder's two front counter runs).
+        /// </summary>
+        private static void Extras(Snapshot snapshot, Scene scene, Func<Station, int> stationPiece, Func<Transform, int> bodyPiece)
+        {
+            var roots = scene.GetRootGameObjects();
+            List<T> All<T>() where T : Component => roots.SelectMany(r => r.GetComponentsInChildren<T>(true)).ToList();
+            snapshot.slots = All<StockSlot>().Where(x => x.Station != null)
+                .Select(x => new PointEntry { name = x.name, piece = stationPiece(x.Station), option = x.Option, position = x.Anchor })
+                .OrderBy(e => e.piece).ThenBy(e => e.option).ToArray();
+            snapshot.buttons = All<StationButton>().Where(x => x.Station != null)
+                .Select(x => new PointEntry { name = x.name, piece = stationPiece(x.Station), option = x.Option, position = x.transform.position })
+                .OrderBy(e => e.piece).ThenBy(e => e.option).ToArray();
+            var nested = new List<NestedEntry>();
+            void Add(Component c, string kind, Station owner)
+            {
+                if (owner != null) nested.Add(new NestedEntry { name = c.name, kind = kind, piece = stationPiece(owner), position = c.transform.position, yaw = Yaw(c.transform) });
+            }
+            foreach (FryerBasket x in All<FryerBasket>()) Add(x, "FryerBasket", x.Fryer);
+            foreach (GriddleSpot x in All<GriddleSpot>()) Add(x, "GriddleSpot", x.Griddle);
+            foreach (AssemblySpot x in All<AssemblySpot>()) Add(x, "AssemblySpot", x.Board);
+            foreach (SpitPart x in All<SpitPart>()) Add(x, "SpitPart", x.Spit);
+            snapshot.nested = nested.OrderBy(e => e.piece).ThenBy(e => e.name, StringComparer.Ordinal).ToArray();
+            snapshot.bodies = All<BoxCollider>()
+                .Where(b => (b.name.StartsWith("Worktop ") && b.GetComponent<PlaceSurface>() != null) || b.name.StartsWith(GrayboxSceneBuilder.FrontCounterName))
+                .Select(b => new BodyEntry { name = b.name, piece = bodyPiece(b.transform), center = b.bounds.center, size = b.bounds.size })
+                .OrderBy(e => e.center.x).ToArray();
         }
 
         private static string Full(string assetPath) => Path.GetFullPath(Path.Combine(Application.dataPath, "..", assetPath));

@@ -11,7 +11,7 @@ namespace Worktown.Game.Tests
 {
     /// <summary>
     /// Spec 022: the generated scene has the ticket rail above the counter (six cards, no colliders), wired to the
-    /// customer service, and the UI has the shift summary panel. Network types are found by name (no FishNet reference).
+    /// customer service, and the UI has the shift summary panel. Network types are found by name.
     /// </summary>
     public class TicketRailSceneTests
     {

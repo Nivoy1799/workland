@@ -23,6 +23,27 @@ namespace Worktown.Game.Tests
         public SurfaceEntry[] surfaces = new SurfaceEntry[0];
         public ItemEntry[] items = new ItemEntry[0];
         public AnchorEntry[] anchors = new AnchorEntry[0];
+        /// <summary>062a review: the stations' stock slots and buttons (piece, option, anchor), their nested objects, the counters' bodies.</summary>
+        public PointEntry[] slots = new PointEntry[0];
+        public PointEntry[] buttons = new PointEntry[0];
+        public NestedEntry[] nested = new NestedEntry[0];
+        public BodyEntry[] bodies = new BodyEntry[0];
+
+        [Serializable] public sealed class PointEntry
+        {
+            public string name; public int piece; public int option; public Vector3 position;
+        }
+
+        [Serializable] public sealed class NestedEntry
+        {
+            public string name; public string kind; public int piece; public Vector3 position; public float yaw;
+        }
+
+        /// <summary>A worktop's (piece) or one of the builder's two front counter runs' (piece -1) body collider bounds.</summary>
+        [Serializable] public sealed class BodyEntry
+        {
+            public string name; public int piece; public Vector3 center; public Vector3 size;
+        }
 
         [Serializable] public sealed class StationEntry
         {

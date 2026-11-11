@@ -8,7 +8,7 @@ namespace Worktown.Game.Layout
     /// Spec 062a, pure: a save's (or default.json's) layout part and the sim's <see cref="ShopLayout"/>. Reading clamps what is out of
     /// range and notes it: an id outside 1 to ShopLayout.MaxPieceId or used twice drops that piece; turns wrap to 0-3; a counter's length
     /// clamps to its catalog row, a fixed piece's is 0; x and z clamp to PosePacking's range; the tier is at least 1 and the paid cents at
-    /// least 0; a home's local surface 0-63 and spot 0 or more, else it is dropped. A piece of an unknown type is kept (the save keeps
+    /// least 0; a home's local surface 0-63 and spot 0 or more, else it is dropped; the next id 1 to ShopLayout.MaxPieceId. A piece of an unknown type is kept (the save keeps
     /// it for a later build), but LayoutSpawner does not spawn it.
     /// </summary>
     public static class LayoutCodec
@@ -47,7 +47,10 @@ namespace Worktown.Game.Layout
                     }
                     homes.Add(new ItemHome(h.item, h.piece, h.local, h.spot));
                 }
-            return new ShopLayout(part.version, pieces, stored, homes, part.nextId);
+            // 062a review: the next id stays in 1 to ShopLayout.MaxPieceId (an id past it could not be a surface id's piece).
+            int nextId = part.nextId < 1 ? 1 : part.nextId > ShopLayout.MaxPieceId ? ShopLayout.MaxPieceId : part.nextId;
+            if (nextId != part.nextId) notes?.Add("nextId " + part.nextId + " -> " + nextId);
+            return new ShopLayout(part.version, pieces, stored, homes, nextId);
         }
 
         private static LayoutPiece Read(ShopSave.PiecePart p, PieceCatalog catalog, List<string> notes)

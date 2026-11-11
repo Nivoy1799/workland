@@ -91,8 +91,6 @@ namespace Worktown.Game.Cooking
         private readonly Dictionary<int, PickupInteractor> _shavers = new Dictionary<int, PickupInteractor>();
         private readonly List<int> _spitScratch = new List<int>();
         private readonly List<int> _keptCones = new List<int>(); // spec 045
-        // Spec 045: the scene plates' spots at the first server start; a restart puts them back there.
-        private readonly SceneStartSpots<Vessel> _plateStarts = new SceneStartSpots<Vessel>();
         private System.Func<int, bool> _shaverPresent;
 
         private sealed class HomeSlot
@@ -129,10 +127,8 @@ namespace Worktown.Game.Cooking
                 && !_networkManager.ServerManager.IsAnyServerStarted())
             {
                 _kitchen.Clear();
-                // Spec 045: the scene plates start the next session at their start spots, not where they were left (FishNet keeps a
-                // scene object's last transform over a stop).
-                int plates = _plateStarts.ResetAll(v => v != null, (v, position, rotation) => v.transform.SetPositionAndRotation(position, rotation));
-                if (plates > 0) Debug.Log("[Kitchen] the server stopped: " + plates + " scene plate(s) back at their start spots");
+                // Spec 045: the plates start the next session at their homes. Spec 062a: they are spawned objects now (LayoutSpawner), so a
+                // stop despawns them and the next start spawns them at their homes again.
                 _labelsDirty = true;
                 _vessels = null; // spec 021: rebuilt from the scene on the next start
                 _homes = null;
@@ -1255,8 +1251,6 @@ namespace Worktown.Game.Cooking
                 if (!vessel.IsSpawned) continue;
                 _vessels.Add(vessel);
                 if (VesselRules.RespawnsAtHome(vessel.Kind)) _homes.Add(Home(vessel.NetworkObject, VesselPrefab(vessel.Kind)));
-                if (vessel.Kind == VesselKind.Plate && vessel.NetworkObject.IsSceneObject) // spec 045: the scene plates' start spots
-                    _plateStarts.Record(vessel, vessel.transform.position, vessel.transform.rotation);
                 PlaceOnBurnerIfThere(vessel);
                 RefreshVessel(vessel);
             }
@@ -1321,7 +1315,6 @@ namespace Worktown.Game.Cooking
                 else if (station != null && station.Kind == StationKind.DrinkDispenser) RefreshDrinks(station); // spec 033
             }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
-            if (_initialized) _plateStarts.Seal(); // spec 045: only the first start records
         }
 
         private static HomeSlot Home(NetworkObject item, NetworkObject prefab)

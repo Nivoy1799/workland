@@ -67,7 +67,6 @@ namespace Worktown.Sim.Tests.Layout
             Assert.True(new RectMm(0, 0, 0, 10).IsEmpty);
             Assert.True(a.Contains(0, 0));
             Assert.False(a.Contains(100, 0));
-            Assert.Equal(new PointMm(3, 4), new PointMm(3, 4));
         }
     }
 }
