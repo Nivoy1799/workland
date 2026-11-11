@@ -53,7 +53,8 @@ namespace Worktown.Game.Tests
                     StationKind.DrinkDispenser, // spec 033
                     StationKind.Terminal, // spec 034
                     StationKind.DishReturn, StationKind.Sink, StationKind.TrashCan, StationKind.Bin, // spec 035
-                    StationKind.Spit }, // spec 036
+                    StationKind.Spit, // spec 036
+                    StationKind.MenuBoard }, // spec 037
                 System.Enum.GetValues(typeof(StationKind)));
         }
 

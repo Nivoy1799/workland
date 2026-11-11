@@ -38,6 +38,12 @@ namespace Worktown.Game.Shop
 
         public RegisterDesk Desk => _desk;
 
+        /// <summary>
+        /// Spec 037: the tip's share (permille) for a guest's order at the menu board's price (MenuBoardDesk.TipPermilleOf: dearer than
+        /// the reference, a smaller tip); null is 1000.
+        /// </summary>
+        public Func<GuestPick, int> TipShare { get; set; }
+
         /// <summary>Spec 035: the shop's hygiene score when a guest reviews (below 50 % the review loses a star; Sim.Economy.HygieneRules).</summary>
         public int HygienePercent { get; set; } = HygieneRules.StartPercent;
 
@@ -48,14 +54,18 @@ namespace Worktown.Game.Shop
         public static bool FallbackPays(bool handedOver, bool waitingInLine) => !handedOver && !waitingInLine;
 
         /// <summary>
-        /// The guest of <paramref name="pick"/> takes its dish from <paramref name="payee"/>: the bill (<paramref name="simPayout"/> at the
-        /// pick's share), the tip (speed, accuracy, quality), the way of paying from its <paramref name="order"/>; it joins the register's
+        /// The guest of <paramref name="pick"/> takes its dish from <paramref name="payee"/>: the bill (<paramref name="simPayout"/>, spec 037:
+        /// the menu board's price, at the pick's share), the tip (speed, accuracy, quality), the way of paying from its <paramref name="order"/>; it joins the register's
         /// line (the commit point), then the stage shows it. Returns the payment (never null).
         /// </summary>
         public RegisterPayment HandOver(GuestPick pick, int payee, long simPayout, GuestOrder order, IGuestStage stage, float now)
         {
-            long bill = EconomyRules.ApplyPermille(simPayout, pick.BillPermille);
-            long tip = TipRules.Tip(bill, pick.WaitedTenths, pick.PatienceTenths, pick.Fit.Misses, pick.Fit.Stars);
+            // Spec 037: cents; the bill and the tip are whole coins ($0.10), so the change is always exact; the tip falls when the board's
+            // price is above the reference (TipShare).
+            long bill = CashRules.ToCoins(EconomyRules.ApplyPermille(simPayout, pick.BillPermille));
+            int share = TipShare != null ? TipShare(pick) : EconomyRules.FullPayPermille;
+            long tip = CashRules.ToCoins(EconomyRules.ApplyPermille(TipRules.Tip(bill, pick.WaitedTenths, pick.PatienceTenths, pick.Fit.Misses,
+                pick.Fit.Stars), share));
             order ??= new GuestOrder(Array.Empty<OrderModifier>(), GuestPatience.BaseSeconds, true, CashRules.GuestNotes[0]);
             var payment = new RegisterPayment
             {

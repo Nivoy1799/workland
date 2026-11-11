@@ -24,6 +24,13 @@ namespace Worktown.Game.Economy
         [SerializeField] private MarketBoard _board;
         [Tooltip("Spec 053 review: the one synced shop balance (a global scene object).")]
         [SerializeField] private ShopLedger _ledger;
+        [Tooltip("Spec 037: the menu board's synced prices (a scene object above the counter).")]
+        [SerializeField] private Worktown.Game.Shop.MenuBoard _menuBoard;
+
+        /// <summary>Spec 037: spec 052's guest-choice weights (the climb catalog's), for the menu board's demand and tips.</summary>
+        private static readonly Worktown.Sim.Climb.ChoiceWeights Weights = Worktown.Sim.Climb.ClimbCatalog.CreateDefault().Weights;
+        private readonly Worktown.Game.Shop.MenuBoardDesk _menu = new Worktown.Game.Shop.MenuBoardDesk(Weights);
+        private byte _menuStage = Worktown.Game.Climb.ShopStageRules.OpenKitchen;
 
         private TownEconomy _economy = TownEconomy.CreateDemo();
         private float _secondsIntoHour;
@@ -32,6 +39,50 @@ namespace Worktown.Game.Economy
         private long _tickOffset;
         private long _earned;
         private long _spent;
+
+        /// <summary>Spec 037, server: the menu board's prices (what guests pay, how many come, how much they tip).</summary>
+        public Worktown.Game.Shop.MenuBoardDesk Menu => _menu;
+
+        /// <summary>Spec 037, server: the stage whose lines the board sells (ShopStage sets it when a game begins).</summary>
+        public void SetMenuStage(byte stage)
+        {
+            _menuStage = stage;
+            PublishMenu();
+        }
+
+        /// <summary>Spec 037, server: one click on the menu board's buttons (RequestStation; reach and the stage were checked).</summary>
+        public Worktown.Game.Cooking.CookOutcome UseMenuBoard(int option)
+        {
+            Worktown.Game.Cooking.CookOutcome outcome = _menu.Use(option, _menuStage);
+            if (outcome == Worktown.Game.Cooking.CookOutcome.Ok)
+            {
+                int line = _menu.Selected;
+                Debug.Log("[Menu] " + Worktown.Game.Shop.MenuBoardRules.ButtonWords(option) + ": " + Worktown.Game.Npc.MenuPrices.Lines[line].Name
+                    + " " + EconomyRules.Money(_menu.PriceOf(line)) + " (reference " + EconomyRules.Money(Worktown.Game.Npc.MenuPrices.Reference(line))
+                    + "); demand " + DemandText());
+            }
+            return outcome;
+        }
+
+        /// <summary>Spec 037: the board's demand per market now ("snack 834 permille").</summary>
+        private string DemandText()
+        {
+            var parts = new List<string>();
+            foreach (KeyValuePair<string, int> kv in _menu.DemandPermille(_menuStage)) parts.Add(kv.Key + " " + kv.Value + " permille");
+            parts.Sort(System.StringComparer.Ordinal);
+            return string.Join(", ", parts);
+        }
+
+        private void PublishMenu()
+        {
+            if (_menuBoard == null) _menuBoard = FindFirstObjectByType<Worktown.Game.Shop.MenuBoard>();
+            if (_menuBoard != null) _menuBoard.ServerSet(_menu.Prices, _menu.Selected);
+        }
+
+        private void Awake()
+        {
+            _menu.Changed += PublishMenu;
+        }
 
         /// <summary>Spec 014: raised on the server after every in-game hour (demand changed).</summary>
         public event System.Action HourTicked;
@@ -69,6 +120,7 @@ namespace Worktown.Game.Economy
             Debug.Log("[Economy] a new game: day " + System.Math.Max(1L, day) + ", the shop opens with " + EconomyRules.Money(ShopBalance));
             PublishWallets();
             PublishBoard();
+            PublishMenu(); // spec 037
         }
 
         /// <summary>Spec 053, server: the shop pays a fee (the food corner's pitch fee), up to its balance. Returns what was paid.</summary>
@@ -101,7 +153,7 @@ namespace Worktown.Game.Economy
         public void SkipHours(int hours)
         {
             if (!_networkManager.IsServerStarted || hours <= 0) return;
-            for (int i = 0; i < hours; i++) _economy.TickHour();
+            for (int i = 0; i < hours; i++) _economy.TickHour(_menu.DemandPermille(_menuStage));
             _secondsIntoHour = 0f;
             PublishBoard();
             Debug.Log("[Economy] skipped " + hours + " h to " + EconomyRules.ClockText(Tick) + " " + PriceText());
@@ -132,7 +184,7 @@ namespace Worktown.Game.Economy
                 return;
             }
             _secondsIntoHour -= EconomyRules.SecondsPerHour;
-            _economy.TickHour();
+            _economy.TickHour(_menu.DemandPermille(_menuStage)); // spec 037: the menu board's prices draw more or fewer guests
             PublishBoard();
             Debug.Log("[Economy] " + EconomyRules.ClockText(Tick) + " " + PriceText());
             // Last, and isolated: listeners (spec 014 customers) must not break the clock.
@@ -148,6 +200,7 @@ namespace Worktown.Game.Economy
                 Debug.Log("[Economy] the shop opened with " + EconomyRules.Money(EconomyRules.StartingGrant) + " (the open kitchen)");
             if (player != null) Debug.Log("[Economy] player " + player.OwnerId + " joined; the shop has " + EconomyRules.Money(ShopBalance));
             PublishWallets();
+            PublishMenu(); // spec 037
         }
 
         /// <summary>Spec 053: a change of the shop balance since <paramref name="before"/> counts as earned or spent (a refund counts back).</summary>

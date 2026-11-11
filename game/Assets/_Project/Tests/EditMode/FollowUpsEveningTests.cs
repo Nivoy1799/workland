@@ -132,16 +132,17 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(0, economy.BalanceOf(EconomyRules.ShopAccount), "never below 0, so the display needs no clamp");
             Assert.AreEqual(-1, economy.BalanceOf("nobody"), "-1 is only 'no account' (never published)");
 
-            Assert.AreEqual("-$120", EconomyRules.Money(-120));
-            Assert.AreEqual("Save for the rent: -$120 / $400", FoodCornerRules.GoalLine(-120, 400), "no clamp to $0");
-            Assert.AreEqual("Day 2 · -$120", MenuRules.ContinueLine(2, -120), "the saved balance as it is");
-            Assert.AreEqual("Day 2 · $3,243", MenuRules.ContinueLine(2, 3243));
+            Assert.AreEqual("-$1.20", EconomyRules.Money(-120)); // spec 037 re-pin: money is cents (D39)
+            Assert.AreEqual("Save for the rent: -$1.20 / $4.00", FoodCornerRules.GoalLine(-120, 400), "no clamp to $0");
+            Assert.AreEqual("Day 2 · -$1.20", MenuRules.ContinueLine(2, -120), "the saved balance as it is");
+            Assert.AreEqual("Day 2 · $32.43", MenuRules.ContinueLine(2, 3243));
+            Assert.AreEqual("Day 2 · $3,243.00", MenuRules.ContinueLine(2, 324300), "the thousands separator stays");
         }
 
         [Test]
         public void TheDelivery_ShowsOnTheHudAsMoneyLeaving_AndPassesTheD27WordCheck()
         {
-            Assert.AreEqual("Potatoes delivered -$96 (2 on the shelf)", FoodCornerRules.DeliveryText(2, 96));
+            Assert.AreEqual("Potatoes delivered -$0.96 (2 on the shelf)", FoodCornerRules.DeliveryText(2, 96));
             Assert.AreEqual("Potatoes delivered (2 on the shelf)", FoodCornerRules.DeliveryText(2, 0), "no '-$0'");
             string none = FoodCornerRules.DeliveryText(0, 0);
             StringAssert.StartsWith("No potatoes delivered", none);

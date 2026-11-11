@@ -593,8 +593,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(3, packs1);
             TerminalView.Apply(TerminalRules.PacksSlot, ref page, ref packs1);
             Assert.AreEqual(1, packs1);
-            Assert.AreEqual("order 1 pack of tomato ($336, 1 h)", TerminalRules.OrderWords(Line("tomato"), 1, 336, 60));
-            Assert.AreEqual("order a keg of lemonade ($960, 1 h)", TerminalRules.OrderWords(Line("lemonade"), 1, 960, 60));
+            Assert.AreEqual("order 1 pack of tomato ($3.36, 1 h)", TerminalRules.OrderWords(Line("tomato"), 1, 336, 60));
+            Assert.AreEqual("order a keg of lemonade ($9.60, 1 h)", TerminalRules.OrderWords(Line("lemonade"), 1, 960, 60));
             StringAssert.Contains("0/12 !", TerminalRules.RowText(Line("tomato"), 0, 1, 336), "an empty line is marked");
             Assert.AreEqual("14:05", TerminalRules.ClockOf(14 * 60 + 5));
         }
@@ -615,7 +615,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(InteractionAction.Buy, InteractionRules.ActionFor(Held.Nothing, some));
             Assert.AreEqual("Left click · take tomato (4 left)", InteractionRules.PromptFor(Held.Nothing, some));
             AimTarget crate = AimTarget.Crate("potato", 60);
-            Assert.AreEqual("Left click · take potato ($60)", InteractionRules.PromptFor(Held.Nothing, crate), "a crate keeps its price");
+            Assert.AreEqual("Left click · take potato ($0.60)", InteractionRules.PromptFor(Held.Nothing, crate), "a crate keeps its price");
             AimTarget noCups = AimTarget.DrinkTool(DrinkRules.CupTool, 0, "a cup", -1).WithStock(Line(Drinks.CupId), 0);
             Assert.AreEqual(InteractionAction.None, InteractionRules.ActionFor(Held.Nothing, noCups));
             Assert.AreEqual(InteractionRules.OutOfStockText, InteractionRules.PromptFor(Held.Nothing, noCups));
@@ -651,9 +651,9 @@ namespace Worktown.Game.Tests
         [Test]
         public void TheTerminal_RowsOrder_ButtonsPage()
         {
-            AimTarget row = AimTarget.TerminalSlot(2, "order 1 pack of tomato ($336, 1 h)", 336);
+            AimTarget row = AimTarget.TerminalSlot(2, "order 1 pack of tomato ($3.36, 1 h)", 336);
             Assert.AreEqual(InteractionAction.Order, InteractionRules.ActionFor(Held.Nothing, row));
-            Assert.AreEqual("Left click · order 1 pack of tomato ($336, 1 h)", InteractionRules.PromptFor(Held.Nothing, row));
+            Assert.AreEqual("Left click · order 1 pack of tomato ($3.36, 1 h)", InteractionRules.PromptFor(Held.Nothing, row));
             Assert.AreEqual(InteractionAction.Order, InteractionRules.ActionFor(Held.Knife, row), "any hands order");
             AimTarget next = AimTarget.TerminalSlot(TerminalRules.NextSlot, "next page (2/4)", -1);
             Assert.AreEqual(InteractionAction.Page, InteractionRules.ActionFor(Held.Nothing, next));

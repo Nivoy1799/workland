@@ -86,7 +86,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void Money_Zero()
         {
-            Assert.AreEqual("$0", EconomyRules.Money(0));
+            Assert.AreEqual("$0.00", EconomyRules.Money(0)); // spec 037 re-pin: money is cents (D39)
         }
     }
 }

@@ -181,10 +181,13 @@ namespace Worktown.Game.Economy
             return made;
         }
 
-        /// <summary>One in-game hour: demand refills, prices move (spec 008 tick).</summary>
-        public void TickHour()
+        /// <summary>
+        /// One in-game hour: demand refills, prices move (spec 008 tick). Spec 037: <paramref name="demandPermille"/> (market id to
+        /// permille; null or a missing market is 1000) scales the new demand by the menu board's prices; the draws stay the same.
+        /// </summary>
+        public void TickHour(IReadOnlyDictionary<string, int> demandPermille = null)
         {
-            _state = _engine.Tick(_state, new TickInput(_random, EconomyRules.Population));
+            _state = _engine.Tick(_state, new TickInput(_random, EconomyRules.Population, demandPermille));
         }
 
         public bool TryGetMarket(string marketId, out MarketState market)

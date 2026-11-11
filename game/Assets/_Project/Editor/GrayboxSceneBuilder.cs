@@ -1542,7 +1542,7 @@ namespace Worktown.Game.Editor
                     TextMesh lip = CreateLabel(root.transform, new Vector3(at.x, 0.006f, RegisterArtRules.DrawerCentre.z
                         - RegisterArtRules.DrawerSize.z * 0.5f - 0.002f) + down, 48, 0.0075f);
                     lip.name = "TrayLabel " + value;
-                    lip.text = "$" + value;
+                    lip.text = RegisterRules.TrayLabel(value); // spec 037: "10c" to "$20"
                     texts.Add(lip);
                     continue;
                 }
@@ -1589,6 +1589,97 @@ namespace Worktown.Game.Editor
             SetField(view, "_pieces", pieces);
             SetField(view, "_mat", changeMat.transform);
             SetField(view, "_texts", texts);
+            return station;
+        }
+
+        // ---- Spec 037: the menu board ----
+
+        public const string MenuBoardName = "Menu board";
+        public const string MenuBoardButtonName = "Menu button";
+        /// <summary>Spec 037: between the serving counter and the register, so neither the queue head nor the pay line is behind it.</summary>
+        public const float MenuBoardX = (CounterX + RegisterX) * 0.5f;
+        /// <summary>Spec 037: over the counter's cook half (the buttons in reach from the aisle).</summary>
+        public const float MenuBoardZ = FrontCounterZ + 0.25f;
+
+        /// <summary>
+        /// Spec 037: the menu board hanging above the front counter (MenuBoardArtRules), its face and buttons towards the cook. Built like
+        /// the terminal: the root at the board's middle with a "Body" box collider of its size (no renderer), the catalog's graybox
+        /// (Art_StationMenuBoard), the sign over it. The scene adds what changes: the lines' text and the four buttons (the station's slots,
+        /// options MenuBoardRules: previous, next, cheaper, dearer) with their labels. A scene NetworkObject with the synced
+        /// <see cref="MenuBoard"/> (the prices) and the client's <see cref="MenuBoardView"/>.
+        /// </summary>
+        private static Station CreateMenuBoard(ArtCatalog catalog, Transform parent, int index)
+        {
+            var root = new GameObject(MenuBoardName);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(new Vector3(MenuBoardX, MenuBoardArtRules.CentreHeight, MenuBoardZ), Quaternion.Euler(0f, 180f, 0f));
+            var station = root.AddComponent<Station>();
+            SetField(station, "_index", index);
+            SetField(station, "_kind", (int)StationKind.MenuBoard);
+            SetField(station, "_displayName", MenuBoardName);
+            SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(root.transform, false);
+            body.transform.localScale = new Vector3(MenuBoardArtRules.Width, MenuBoardArtRules.Height, MenuBoardArtRules.Depth);
+            body.AddComponent<BoxCollider>(); // size one: the body's scale is the board (aim)
+            float h = MenuBoardArtRules.Height;
+            if (catalog != null && catalog.TryGet(ArtCatalogRules.StationKey(StationKind.MenuBoard), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, root.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = ArtFrontRotation; // the model's front (+Z) towards the cook
+            }
+            else Debug.LogError("[Graybox] no menu board model in the catalog");
+            TextMesh sign = CreateLabel(root.transform, new Vector3(0f, h * 0.5f + 0.02f, -MenuBoardArtRules.Depth * 0.5f - StationSign.Standoff), 60, 0.05f);
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = MenuBoardName + " · set your prices";
+
+            TextMesh lines = CreateLabel(root.transform, MenuBoardArtRules.TextCorner, 44, 0.0085f);
+            lines.name = "Menu lines";
+            lines.anchor = TextAnchor.UpperLeft;
+            lines.alignment = TextAlignment.Left;
+            lines.text = MenuBoardRules.DisplayText(ShopStageRules.OpenKitchen, null, 0);
+
+            // The buttons are the station's slots (like the terminal's; option = MenuBoardRules option): a Mustard back without a collider
+            // (the board's body takes the ray; a ray near a button's anchor means it, AimHitSort.SlotFollowsTheRay) and its label.
+            Material buttonMat = CreateMaterial(Root + "/Settings/MenuBoardButton.mat", Palette.Mustard);
+            var slots = new List<StockSlot>(MenuBoardRules.OptionCount);
+            for (int option = 0; option < MenuBoardRules.OptionCount; option++)
+            {
+                var slotObject = new GameObject(MenuBoardButtonName + " " + option);
+                slotObject.transform.SetParent(root.transform, false);
+                slotObject.transform.localPosition = MenuBoardArtRules.ButtonCentre(option);
+                var slot = slotObject.AddComponent<StockSlot>();
+                SetField(slot, "_station", station);
+                SetField(slot, "_option", option);
+                SetField(slot, "_ingredientIndex", -1);
+                slots.Add(slot);
+                GameObject back = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                back.name = "Back";
+                UnityEngine.Object.DestroyImmediate(back.GetComponent<Collider>());
+                back.transform.SetParent(slotObject.transform, false);
+                back.transform.localScale = MenuBoardArtRules.ButtonSize;
+                back.GetComponent<MeshRenderer>().sharedMaterial = buttonMat;
+                TextMesh label = CreateLabel(root.transform, MenuBoardArtRules.ButtonCentre(option)
+                    + new Vector3(0f, 0f, -MenuBoardArtRules.ButtonSize.z * 0.5f - 0.003f), 60, 0.012f);
+                label.name = "Menu label " + option;
+                label.anchor = TextAnchor.MiddleCenter;
+                label.color = Palette.Ink;
+                label.text = MenuBoardRules.ButtonLabel(option);
+            }
+            SetField(station, "_slots", slots);
+
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t != root.transform && t.GetComponent<TextMesh>() == null)
+                    t.gameObject.isStatic = true; // only the text changes
+
+            NetworkObject nob = root.AddComponent<NetworkObject>();
+            SetField(nob, "_preventDespawnOnDisconnect", true);
+            var board = root.AddComponent<MenuBoard>();
+            var view = root.AddComponent<MenuBoardView>();
+            SetField(view, "_board", board);
+            SetField(view, "_text", lines);
             return station;
         }
 
@@ -2259,6 +2350,8 @@ namespace Worktown.Game.Editor
             stations.Add(bin);
             // Spec 036: the seitan spit on the front counter opposite the heat block (appended last, so the earlier indices stay).
             stations.Add(CreateSpit(catalog, parent.transform, stations.Count));
+            // Spec 037: the menu board above the front counter (appended last, so the earlier indices stay).
+            stations.Add(CreateMenuBoard(catalog, parent.transform, stations.Count));
             NetworkObject shelfNob = shelf.gameObject.AddComponent<NetworkObject>(); // spec 035: the clean plates' byte
             SetField(shelfNob, "_preventDespawnOnDisconnect", true);
             shelf.gameObject.AddComponent<StationContents>();
@@ -2355,6 +2448,7 @@ namespace Worktown.Game.Editor
             var economy = networkManager.gameObject.AddComponent<EconomyService>();
             SetField(economy, "_networkManager", networkManager);
             SetField(economy, "_board", board);
+            SetField(economy, "_menuBoard", UnityEngine.Object.FindFirstObjectByType<MenuBoard>()); // spec 037
             SetField(kitchen, "_economy", economy);
 
             // Spec 034: the shop's stock counts (global, like the feed: one byte per stock line) and the supply service (orders,

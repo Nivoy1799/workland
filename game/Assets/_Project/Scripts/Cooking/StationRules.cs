@@ -94,6 +94,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Sink: return stationName + ": " + useKey + " put a dish in, hold " + useKey + " to scrub";
                 case StationKind.TrashCan: return stationName + ": " + useKey + " throw away, " + useKey + " with empty hands takes the bag";
                 case StationKind.Bin: return stationName + ": " + useKey + " throw the bag in";
+                // Spec 037: the menu board's buttons are aimed at.
+                case StationKind.MenuBoard: return stationName + ": set prices in first person (" + viewKey + ")";
                 default: return stationName;
             }
         }

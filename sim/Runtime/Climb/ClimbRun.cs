@@ -14,8 +14,9 @@ namespace Worktown.Sim.Climb
     /// </summary>
     public sealed class ClimbRun
     {
-        public ClimbRun(CrewSetup setup, long horizonSeconds, IReadOnlyList<ServiceResult> services, ClimbState final)
+        public ClimbRun(CrewSetup setup, long horizonSeconds, IReadOnlyList<ServiceResult> services, ClimbState final, long moneyScale = 1)
         {
+            MoneyScale = Math.Max(1L, moneyScale);
             Setup = setup ?? throw new ArgumentNullException(nameof(setup));
             HorizonSeconds = horizonSeconds;
             Services = new List<ServiceResult>(services ?? throw new ArgumentNullException(nameof(services))).AsReadOnly();
@@ -25,6 +26,8 @@ namespace Worktown.Sim.Climb
         }
 
         public CrewSetup Setup { get; }
+        /// <summary>Spec 037: the catalog's money per whole unit (100: cents, D39); idle-money means are taken in whole units.</summary>
+        public long MoneyScale { get; }
         public long HorizonSeconds { get; }
         public IReadOnlyList<ServiceResult> Services { get; }
         public ClimbState Final { get; }
@@ -134,7 +137,7 @@ namespace Worktown.Sim.Climb
                 int from = Math.Max(0, i - Math.Max(1, window) + 1);
                 long sum = 0;
                 for (int k = from; k <= i; k++) sum += Services[k].Net;
-                long mean = sum / (i - from + 1);
+                long mean = sum / ((i - from + 1) * MoneyScale) * MoneyScale; // spec 037: in whole units, as in the whole-dollar model
                 if (mean <= 0) continue;
                 bool goal = false;
                 foreach (long cost in Services[i].GoalCosts)

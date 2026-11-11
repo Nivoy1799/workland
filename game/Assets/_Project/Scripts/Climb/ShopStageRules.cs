@@ -6,7 +6,7 @@ namespace Worktown.Game.Climb
     /// <summary>
     /// Spec 053, pure: what is open at each stage of the D34 climb. <see cref="OpenKitchen"/> (0) is the dev and test kitchen (every
     /// station: <c>-host</c>, <c>-server</c>, the tours); <see cref="FoodCorner"/> (1) is stage 1: the dry shelf's potato slot, the fryer,
-    /// the plate shelf, the serving counter, the register's cash tray and the trash (the can and the bin outside: the hygiene score needs
+    /// the plate shelf, the serving counter, the register's cash tray, the menu board (spec 037: the fries' price) and the trash (the can and the bin outside: the hygiene score needs
     /// them). The cutting board is carried cookware, not a station, and stays open. Everything else is closed: the stoves, the griddle,
     /// the spit, the assembly board, the drink dispenser, the fridge, the ordering terminal, the dish return, the sink, the card terminal
     /// and every other shelf slot. The server refuses a closed station or slot with <see cref="CookOutcome.NotOpenYet"/>.
@@ -34,6 +34,7 @@ namespace Worktown.Game.Climb
                 }
                 case StationKind.Register: return slot != RegisterRules.CardOption;
                 case StationKind.Fryer:
+                case StationKind.MenuBoard: // spec 037: the fries' price
                 case StationKind.PlateShelf:
                 case StationKind.Counter:
                 case StationKind.TrashCan:

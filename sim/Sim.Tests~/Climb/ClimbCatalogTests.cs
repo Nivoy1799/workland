@@ -22,11 +22,16 @@ namespace Worktown.Sim.Tests.Climb
         }
 
         [Fact]
-        public void MoneyScaleMultipliesEveryMoneyValue() // question 17
+        public void MoneyScaleMultipliesEveryMoneyValue() // question 17; spec 037: the default is cents (D39)
         {
-            ClimbCatalog one = ClimbCatalog.CreateDefault();
-            ClimbCatalog cents = ClimbCatalog.CreateDefault(100);
+            ClimbCatalog one = ClimbCatalog.CreateDefault(1);
+            ClimbCatalog cents = ClimbCatalog.CreateDefault();
             Assert.Equal(100, cents.MoneyScale);
+            Assert.Equal(ClimbCatalog.CentsPerDollar, cents.MoneyScale);
+            Assert.Equal(400, cents.Dish("fries").ReferencePrice); // $4.00, the street-food price of spec 037
+            Assert.Equal(900, cents.Dish("falafel_wrap").ReferencePrice); // $9.00
+            Assert.Equal(300, cents.Dish("lemonade").ReferencePrice); // $3.00
+            Assert.Equal(2500, cents.StartingMoney); // $25.00, the food corner's start (053 scales it by the board price)
             Assert.Equal(one.Dish("fries").ReferencePrice * 100, cents.Dish("fries").ReferencePrice);
             Assert.Equal(one.Purchase("rent_restaurant").Cost * 100, cents.Purchase("rent_restaurant").Cost);
             Assert.Equal(one.StartingMoney * 100, cents.StartingMoney);

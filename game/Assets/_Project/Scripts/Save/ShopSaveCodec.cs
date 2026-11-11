@@ -26,8 +26,8 @@ namespace Worktown.Game.Save
         public const string FridgePrefix = "fridge:";
         public const string StockPrefix = "stock:";
 
-        /// <summary>This build's codec (no migrations: format version 1).</summary>
-        public static readonly ShopSaveCodec Default = new ShopSaveCodec(SaveMigrations.None);
+        /// <summary>This build's codec (spec 037: format version 2, the v1 to v2 money step).</summary>
+        public static readonly ShopSaveCodec Default = new ShopSaveCodec(SaveMigrations.Current);
 
         private readonly SaveMigrations _migrations;
 
@@ -144,6 +144,7 @@ namespace Worktown.Game.Save
             s.clock ??= new ShopSave.ClockPart();
             s.stats ??= new ShopSave.StatsPart();
             s.stock ??= new ShopSave.StockPart[0];
+            s.menu ??= new ShopSave.MenuPart[0];
             s.climb.unlocks ??= new string[0];
             s.shopName = string.IsNullOrEmpty(s.shopName) ? FoodCornerRules.ShopName : s.shopName;
             s.gameVersion ??= string.Empty;
@@ -170,6 +171,17 @@ namespace Worktown.Game.Save
             s.stats.guestsMissed = (int)Range("guestsMissed", s.stats.guestsMissed, 0L, int.MaxValue, notes);
             s.stats.starSum = (int)Range("starSum", s.stats.starSum, 0L, int.MaxValue, notes);
             s.stats.bestServiceEarned = Range("bestServiceEarned", s.stats.bestServiceEarned, 0L, long.MaxValue, notes);
+
+            // Spec 037: a menu price outside its board's bounds or off its step grid is put back on it (MenuPricing.Normalize).
+            foreach (ShopSave.MenuPart part in s.menu)
+            {
+                if (part == null) continue;
+                int line = Worktown.Game.Npc.MenuPrices.LineOfId(part.id);
+                if (line < 0) continue; // unknown: ignored, kept for the next save
+                long normal = MenuPricing.Normalize(Worktown.Game.Npc.MenuPrices.Reference(line), part.cents);
+                if (normal != part.cents) notes.Add("menu " + part.id + " " + part.cents + " -> " + normal);
+                part.cents = normal;
+            }
 
             foreach (ShopSave.StockPart part in s.stock)
             {

@@ -5,9 +5,9 @@ namespace Worktown.Game.Art
     /// <summary>
     /// Spec 032, pure: the register's graybox layout, shared by the art catalog (its model) and the scene builder (its slots, labels
     /// and change mat). Station-local metres with the base on the counter top: x along the counter (+x the cook's right), y up,
-    /// -z towards the cook. A Charcoal body with a display leaning towards the cook; in front of it the change drawer with six
-    /// compartments (coins $1 and $2, notes $5 to $50); the BACK and GIVE buttons either side of the drawer; the card terminal on the
-    /// right; the change mat on the left, where the change for the guest lies.
+    /// -z towards the cook. A Charcoal body with a display leaning towards the cook; in front of it the change drawer with eight
+    /// compartments (spec 037: coins $0.10, $0.20, $0.50, $1 and $2, notes $5, $10 and $20); the BACK and GIVE buttons either side of
+    /// the drawer; the card terminal on the right; the change mat on the left, where the change for the guest lies.
     /// </summary>
     public static class RegisterArtRules
     {
@@ -31,13 +31,24 @@ namespace Worktown.Game.Art
         public static readonly Vector3 GiveCentre = new Vector3(0.29f, 0.0125f, -0.15f);
         public static readonly Vector3 TerminalCentre = new Vector3(0.43f, 0.03f, -0.05f);
         public static readonly Vector3 TerminalSize = new Vector3(0.12f, 0.06f, 0.13f);
-        public const float TraySpacing = 0.075f;
+        /// <summary>Spec 037: eight compartments (was six at 0.075 m), so the drawer keeps its width and the buttons their place.</summary>
+        public const float TraySpacing = 0.058f;
+        public const int TrayCompartments = 8;
 
-        /// <summary>The middle of tray compartment <paramref name="slot"/> (0-5), on the drawer's top.</summary>
-        public static Vector3 TrayCentre(int slot) => new Vector3(-0.1875f + slot * TraySpacing, DrawerCentre.y + DrawerSize.y * 0.5f + 0.004f, DrawerCentre.z);
+        /// <summary>The middle of tray compartment <paramref name="slot"/> (0-7), on the drawer's top.</summary>
+        public static Vector3 TrayCentre(int slot) =>
+            new Vector3((slot - (TrayCompartments - 1) * 0.5f) * TraySpacing, DrawerCentre.y + DrawerSize.y * 0.5f + 0.004f, DrawerCentre.z);
 
-        /// <summary>The size of the money shown in compartment <paramref name="slot"/>: a coin for $1 and $2, a folded note else.</summary>
-        public static Vector3 TrayMoneySize(int value) => value < 5 ? new Vector3(0.03f, 0.008f, 0.03f) : new Vector3(0.062f, 0.012f, 0.085f);
+        /// <summary>
+        /// The size of the money shown in a compartment for <paramref name="cents"/>: a coin below $5 (by its size, RegisterView.CoinSize),
+        /// a folded note else (spec 037: 0.05 m wide, so eight fit the drawer).
+        /// </summary>
+        public static Vector3 TrayMoneySize(int cents)
+        {
+            if (!Worktown.Game.Shop.RegisterView.IsCoin(cents)) return new Vector3(0.05f, 0.012f, 0.085f);
+            float d = Worktown.Game.Shop.RegisterView.CoinSize(cents);
+            return new Vector3(d, 0.008f, d);
+        }
 
         /// <summary>Where the display's text sits (just in front of its screen).</summary>
         public static Vector3 DisplayTextPosition => DisplayCentre + DisplayLean * new Vector3(0f, -0.006f, -0.016f);

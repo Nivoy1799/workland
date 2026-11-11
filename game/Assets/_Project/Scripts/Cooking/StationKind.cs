@@ -49,6 +49,9 @@ namespace Worktown.Game.Cooking
         Bin,
         /// <summary>Spec 036: the seitan spit on the front counter opposite the heat block: a heat knob, the turning cone (the knife is
         /// held on it to shave; empty hands load a new cone from stock) and the catch tray (<see cref="SpitRules"/>).</summary>
-        Spit
+        Spit,
+        /// <summary>Spec 037: the menu board above the counter: four buttons pick a line and move its price $0.50 down or up
+        /// (Shop.MenuBoardRules; the buttons are its options).</summary>
+        MenuBoard
     }
 }

@@ -108,7 +108,25 @@ namespace Worktown.Game.Npc
         private readonly List<KeyValuePair<int, byte>> _patienceBytes = new List<KeyValuePair<int, byte>>();
         private System.Func<int, bool> _atSlot;
         private RegisterFlow _flowField;
-        private RegisterFlow Flow => _flowField ??= new RegisterFlow(_shift); // 032 review: the register's flow (pure, tested)
+        private RegisterFlow Flow => _flowField ??= NewFlow(); // 032 review: the register's flow (pure, tested)
+
+        /// <summary>Spec 037: the register's flow with the menu board's tip share (dearer than the reference, a smaller tip).</summary>
+        private RegisterFlow NewFlow() => new RegisterFlow(_shift) { TipShare = TipShareOf };
+
+        private int TipShareOf(GuestPick pick)
+        {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (_tourNoTip.Contains(pick.CustomerId)) return 0; // the tour's scripted guest that does not tip (spec 037 AC3)
+#endif
+            return _economy != null ? _economy.Menu.TipPermilleOf(pick.Dish) : EconomyRules.FullPayPermille;
+        }
+
+        /// <summary>
+        /// Spec 037, server: what guest <paramref name="pick"/>'s order line costs (the base of its bill): the menu board's price of its dish,
+        /// or of the drink it ordered; <paramref name="simPayout"/> without a board.
+        /// </summary>
+        public long BillBase(GuestPick pick, long simPayout) =>
+            _economy != null ? _economy.Menu.BillOf(pick.Dish, pick.IsDrink, _tab.DrinkOf(pick.CustomerId), simPayout) : simPayout;
         private System.Func<int, IRegisterWallet> _walletFor;
         private readonly Dictionary<int, PickupInteractor> _payees = new Dictionary<int, PickupInteractor>();
         private readonly List<int> _outOfPatience = new List<int>();
@@ -116,6 +134,8 @@ namespace Worktown.Game.Npc
         private float _patienceScale = 1f;
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         private TourOrders _tourOrders;
+        /// <summary>Spec 037, development builds: the tour's scripted guests that do not tip (TourOrders: the AC3 guest).</summary>
+        private readonly HashSet<int> _tourNoTip = new HashSet<int>();
 #endif
 #if UNITY_SERVER
         private static readonly bool ServerBuild = true;
@@ -595,6 +615,7 @@ namespace Worktown.Game.Npc
                 bool eatIn = GuestOrders.DrawEatIn(_eatInOrders); // spec 035: its own RNG, one draw per guest
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
                 if (_tourOrders != null && _tourOrders.LastScripted) eatIn = _tourOrders.LastEatIn; // the tour's scripted guests
+                bool tourNoTip = _tourOrders != null && _tourOrders.LastScripted && !_tourOrders.LastTips; // spec 037 AC3
 #endif
                 if (_lastTutorialScripted) eatIn = _tutorial.Orders.LastEatIn; // spec 038
                 // Spec 053: the draws above stay the same (same seed, same count); stage 1 overrides the results: fries, to go, cash.
@@ -614,6 +635,10 @@ namespace Worktown.Game.Npc
                 _guests[nob.ObjectId] = new Guest { Order = order, Modifiers = modifiers };
                 if (eatIn) _eatIn.Add(nob.ObjectId);
                 else _eatIn.Remove(nob.ObjectId);
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                if (tourNoTip) _tourNoTip.Add(nob.ObjectId);
+                else _tourNoTip.Remove(nob.ObjectId); // pooled objects come back with the same id
+#endif
                 // Spec 033: a drink is one more layer of work for the patience. Spec 035: a dirty shop (below 30 %) makes it 20 % shorter.
                 _patience.Add(nob.ObjectId, CustomerRules.PatienceFor(order, CustomerRules.LayersOf(dish, modifiers), drink != null, patienceScale,
                     Hygiene));

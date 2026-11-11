@@ -581,6 +581,11 @@ namespace Worktown.Game.Net
                         else
                             SendStation(button.Station.Index, button.Option);
                     }
+                    else if (Target is StockSlot boardButton && boardButton.Station != null && boardButton.Station.Kind == StationKind.MenuBoard)
+                    {
+                        PlaySound(SoundKey.Button, boardButton.Anchor); // spec 037: a menu board button (the server moves the price)
+                        SendStation(boardButton.Station.Index, boardButton.Option);
+                    }
                     break;
                 case InteractionAction.Shake:
                     if (Target is Vessel shaken)
@@ -1163,6 +1168,7 @@ namespace Worktown.Game.Net
                     if (slot.Station != null && slot.Station.Kind == StationKind.DrinkDispenser) return WithStock(DescribeDrinkTool(slot), slot); // spec 033
                     if (slot.Station != null && slot.Station.Kind == StationKind.Terminal) return DescribeTerminal(slot); // spec 034
                     if (slot.Station != null && slot.Station.Kind == StationKind.Spit) return WithStock(DescribeSpit(slot), slot); // spec 036
+                    if (slot.Station != null && slot.Station.Kind == StationKind.MenuBoard) return AimTarget.Button(StationKind.MenuBoard, slot.Option, 0); // spec 037
                     return WithStock(DescribeStock(slot.IngredientIndex), slot); // spec 028b: a slot takes like a crate (034: from its count)
                 case Station station:
                     // Spec 032: the register's body (between its slots) is no slot: nothing to click, no prompt.

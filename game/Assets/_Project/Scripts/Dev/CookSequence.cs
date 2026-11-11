@@ -257,7 +257,7 @@ namespace Worktown.Game.Dev
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(till.transform.position.x, 0f, laneZ), false, false);
             Debug.Log("[Demo] " + prefix + ": at the register (" + Time.time.ToString("0.0") + " s): "
-                + (Worktown.Game.Shop.RegisterRules.IsCard(payment) ? "card" : "cash, change " + Worktown.Game.Shop.RegisterRules.ChangeDue(payment)));
+                + (Worktown.Game.Shop.RegisterRules.IsCard(payment) ? "card" : "cash, change " + Worktown.Game.Economy.EconomyRules.Money(Worktown.Game.Shop.RegisterRules.ChangeDue(payment))));
             yield return actor.AimAt(till.transform.position + Vector3.up * 0.15f, 0.8f);
             yield return capture.Shot(prefix + "-register");
             if (Worktown.Game.Shop.RegisterRules.IsCard(payment))
@@ -275,11 +275,11 @@ namespace Worktown.Game.Dev
                 {
                     int option = IndexOfCoin(coin);
                     till.TryGetSlot(option, out StockSlot slot);
-                    yield return actor.Use("give $" + coin, slot.Anchor, InteractionAction.Pay, () => me.DevSendStation(till.Index, option),
+                    yield return actor.Use("give " + Worktown.Game.Economy.EconomyRules.Money(coin), slot.Anchor, InteractionAction.Pay, () => me.DevSendStation(till.Index, option),
                         capture.Before(prefix + "-give-" + coin + "-aim", first ? prefix + "-coin-" + coin : null, frames));
                     first = false;
                 }
-                Debug.Log("[Demo] " + prefix + ": the tray holds $" + register.Tray.Value + ", the display says '"
+                Debug.Log("[Demo] " + prefix + ": the tray holds " + Worktown.Game.Economy.EconomyRules.Money(register.Tray.Value) + ", the display says '"
                     + (view != null ? view.DisplayText : "?") + "'");
                 till.TryGetSlot(Worktown.Game.Shop.RegisterRules.GiveChangeOption, out StockSlot give);
                 yield return actor.Use("hand over the change", give.Anchor, InteractionAction.Pay,
@@ -296,6 +296,63 @@ namespace Worktown.Game.Dev
             yield return actor.AimAt(new Vector3(till.transform.position.x + 0.8f, 1.7f, till.transform.position.z - 1.4f), 0.8f);
             yield return capture.Shot(prefix + "-review-bubble");
             yield return actor.LevelView();
+        }
+
+        /// <summary>
+        /// Spec 037: at the menu board, selects MenuPrices line <paramref name="line"/> (next, next, ...) and moves its price to
+        /// <paramref name="cents"/> ($0.50 a click), a shot of the board before and after. Any hands (a plate may be held).
+        /// </summary>
+        public static IEnumerator SetBoardPrice(TourActor actor, CookCapture capture, float laneZ, int line, long cents, string prefix)
+        {
+            Worktown.Game.Shop.MenuBoard board = UnityEngine.Object.FindFirstObjectByType<Worktown.Game.Shop.MenuBoard>();
+            Station station = board != null ? board.GetComponent<Station>() : null;
+            if (station == null || line < 0)
+            {
+                actor.CountTimeout("cook: no menu board");
+                yield break;
+            }
+            var view = station.GetComponent<Worktown.Game.Shop.MenuBoardView>();
+            yield return actor.LevelView();
+            yield return actor.WalkTo(new Vector3(station.transform.position.x, 0f, laneZ), false, false);
+            yield return actor.AimAt(station.transform.position + Vector3.up * 0.05f, 0.8f);
+            yield return capture.Shot(prefix + "-board");
+            Debug.Log("[Demo] " + prefix + ": the menu board says '" + BoardText(view) + "'");
+            for (int guard = 0; guard <= Worktown.Game.Npc.MenuPrices.Lines.Count && board.Selected.Value != line; guard++)
+                yield return PressBoard(actor, board, station, Worktown.Game.Shop.MenuBoardRules.NextOption);
+            if (board.Selected.Value != line)
+            {
+                actor.CountTimeout("cook: the menu board did not select line " + line);
+                yield break;
+            }
+            for (int guard = 0; guard <= 2 * Worktown.Sim.Economy.MenuPricing.MaxSteps; guard++)
+            {
+                long now = line < board.Prices.Count ? board.Prices[line] : -1;
+                if (now == cents || now < 0) break;
+                yield return PressBoard(actor, board, station,
+                    now < cents ? Worktown.Game.Shop.MenuBoardRules.DearerOption : Worktown.Game.Shop.MenuBoardRules.CheaperOption);
+            }
+            long set = line < board.Prices.Count ? board.Prices[line] : -1;
+            if (set != cents) actor.CountTimeout("cook: the menu board did not reach " + Worktown.Game.Economy.EconomyRules.Money(cents));
+            yield return actor.AimAt(station.transform.position + Vector3.up * 0.05f, 0.5f);
+            yield return new WaitForSecondsRealtime(0.3f);
+            yield return capture.Shot(prefix + "-board-" + set);
+            Debug.Log("[Demo] " + prefix + ": the menu board says '" + BoardText(view) + "'");
+        }
+
+        /// <summary>Spec 037: the board's text on one line for the log.</summary>
+        private static string BoardText(Worktown.Game.Shop.MenuBoardView view) =>
+            view != null ? view.DisplayText.Replace("\n", " | ") : "?";
+
+        /// <summary>Spec 037: one click on a menu board button; waits until the synced board moved (at most 2 s).</summary>
+        private static IEnumerator PressBoard(TourActor actor, Worktown.Game.Shop.MenuBoard board, Station station, int option)
+        {
+            if (!station.TryGetSlot(option, out StockSlot slot)) yield break;
+            int version = board.Version;
+            PickupInteractor me = actor.Interactor;
+            yield return actor.Use(Worktown.Game.Shop.MenuBoardRules.ButtonWords(option), slot.Anchor, InteractionAction.Press,
+                () => me.DevSendStation(station.Index, option));
+            float until = Time.unscaledTime + 2f;
+            while (board.Version == version && Time.unscaledTime < until) yield return null;
         }
 
         private static int IndexOfCoin(int value)
@@ -1708,6 +1765,9 @@ namespace Worktown.Game.Dev
             yield return capture.Shot("grilled-veggies-on-held-plate");
 
             yield return actor.LevelView();
+            // Spec 037 AC3: the grilled veggies go up to $9.50 on the menu board (from $8.00); their scripted guest pays cash with a $10
+            // note and does not tip (TourOrders), so the register asks for 50 cents of change, one coin.
+            yield return SetBoardPrice(actor, capture, laneZ, Worktown.Game.Npc.MenuPrices.LineOfDish(Worktown.Game.Npc.Menu.GrilledVeggies), 950, "veggies");
             yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
             LogOrders();
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);

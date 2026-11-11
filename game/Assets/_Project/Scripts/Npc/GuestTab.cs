@@ -163,6 +163,7 @@ namespace Worktown.Game.Npc
         private static int Rank(OrderMatch m) => m == OrderMatch.Exact ? 0 : m == OrderMatch.Close ? 1 : 2;
 
         /// <summary>A line's bill: the sim's payout at the pick's share (as the register would bill it).</summary>
-        public static long LineBill(GuestPick line, long simPayout) => EconomyRules.ApplyPermille(simPayout, line.BillPermille);
+        public static long LineBill(GuestPick line, long simPayout) =>
+            Worktown.Sim.Economy.CashRules.ToCoins(EconomyRules.ApplyPermille(simPayout, line.BillPermille)); // spec 037: whole coins
     }
 }

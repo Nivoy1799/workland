@@ -72,16 +72,50 @@ namespace Worktown.Sim.Tests.Economy
         [Fact]
         public void Cash_RoundsUpToTheGuestsNote_AndWrongChangeCostsTheDifference()
         {
-            Assert.Equal(400, CashRules.Handed(382, 50));
-            Assert.Equal(390, CashRules.Handed(382, 10));
-            Assert.Equal(400, CashRules.Handed(400, 20)); // exact: no change
-            Assert.Equal(18, CashRules.ChangeDue(400, 382));
-            Assert.Equal(new[] { 10, 5, 2, 1 }, CashRules.Coins(18));
-            Assert.Equal(new[] { 1, 2, 5, 10, 20, 50 }, CashRules.Tray);
-            Assert.Equal(382, CashRules.CashPayout(382, 18, 18));
-            Assert.Equal(377, CashRules.CashPayout(382, 18, 23)); // five too many: lost
-            Assert.Equal(377, CashRules.CashPayout(382, 18, 13)); // five too few: the guest gets it back, and it costs the same
-            Assert.Equal(0, CashRules.CashPayout(5, 0, 50));
+            // Spec 037 re-pin (D39, cents): the old $382 bill with $50/$10/$20 notes is now $38.20 with $20/$10 notes; the
+            // coins are $0.10 to $2, the notes $5 to $20, so the old 18 dollars of change are 180 cents.
+            Assert.Equal(4000, CashRules.Handed(3820, 2000));
+            Assert.Equal(3500, CashRules.Handed(3420, 500));
+            Assert.Equal(4000, CashRules.Handed(3420, 1000));
+            Assert.Equal(4000, CashRules.Handed(4000, 2000)); // exact: no change
+            Assert.Equal(180, CashRules.ChangeDue(4000, 3820));
+            Assert.Equal(new[] { 100, 50, 20, 10 }, CashRules.Coins(180));
+            Assert.Equal(new[] { 10, 20, 50, 100, 200, 500, 1000, 2000 }, CashRules.Tray);
+            Assert.Equal(new[] { 500, 1000, 2000 }, CashRules.GuestNotes);
+            Assert.Equal(3820, CashRules.CashPayout(3820, 180, 180));
+            Assert.Equal(3770, CashRules.CashPayout(3820, 180, 230)); // fifty cents too many: lost
+            Assert.Equal(3770, CashRules.CashPayout(3820, 180, 130)); // fifty too few: the guest gets it back, and it costs the same
+            Assert.Equal(0, CashRules.CashPayout(500, 0, 5000));
+        }
+
+        [Fact]
+        public void Cash_AGuestPays950WithATenDollarNote_TheChangeIsOneFiftyCentCoin() // spec 037 AC3
+        {
+            long due = 950; // $9.50
+            long handed = CashRules.Handed(due, 1000);
+            Assert.Equal(1000, handed);
+            Assert.Equal(50, CashRules.ChangeDue(handed, due));
+            Assert.Equal(new[] { 50 }, CashRules.Coins(CashRules.ChangeDue(handed, due)));
+            Assert.Equal(new[] { 1000, 500, 200, 50, 20, 20 }, CashRules.Coins(1790)); // $17.90: largest first, coins after notes
+            Assert.Equal(2000, CashRules.Handed(1050, 1000)); // $10.50 with $10 notes: two of them
+        }
+
+        [Fact]
+        public void Cash_EveryAmountAGuestOwes_IsWholeCoins_SoTheChangeIsAlwaysExact() // spec 037: exact change in cents
+        {
+            Assert.Equal(0, CashRules.ToCoins(-5));
+            Assert.Equal(0, CashRules.ToCoins(9));
+            Assert.Equal(10, CashRules.ToCoins(19));
+            Assert.Equal(950, CashRules.ToCoins(950));
+            Assert.Equal(1230, CashRules.ToCoins(1237));
+            foreach (int note in CashRules.GuestNotes)
+                for (long due = CashRules.CoinUnit; due <= 6000; due += CashRules.CoinUnit)
+                {
+                    long change = CashRules.ChangeDue(CashRules.Handed(due, note), due);
+                    Assert.True(change < note, "the change is below one note");
+                    Assert.Equal(change, CashRules.Coins(change).Sum(c => (long)c));
+                    Assert.True(change <= CashRules.MaxTray);
+                }
         }
 
         [Fact]

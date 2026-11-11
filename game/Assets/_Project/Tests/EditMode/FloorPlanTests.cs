@@ -45,9 +45,12 @@ namespace Worktown.Game.Tests
             public Station Return, Trash, Bin;
             /// <summary>Spec 036: the seitan spit on the front counter opposite the heat block.</summary>
             public Station Spit;
+            /// <summary>Spec 037: the menu board hanging above the front counter.</summary>
+            public Station Board;
 
             /// <summary>Spec 032-036: the stations standing on (or in line with) the front counter: their fronts face back across it.</summary>
-            public bool OnFront(Station s) => s != null && (s == Serving || s == Register || s == Drinks || s == Return || s == Trash || s == Spit);
+            public bool OnFront(Station s) => s != null && (s == Serving || s == Register || s == Drinks || s == Return || s == Trash || s == Spit
+                || s == Board); // spec 037: the menu board hangs above it
             public List<Station> BackStations = new List<Station>();
             public List<PlaceSurface> Worktops = new List<PlaceSurface>();
             public List<BoxCollider> FrontRuns = new List<BoxCollider>();
@@ -108,6 +111,7 @@ namespace Worktown.Game.Tests
                 else if (s.Kind == StationKind.TrashCan) plan.Trash = s; // spec 035: in line with the front counter, by the staff gap
                 else if (s.Kind == StationKind.Bin) plan.Bin = s; // spec 035: outside the staff gap
                 else if (s.Kind == StationKind.Spit) plan.Spit = s; // spec 036: on the front counter
+                else if (s.Kind == StationKind.MenuBoard) plan.Board = s; // spec 037: above the front counter
                 else plan.BackStations.Add(s);
                 if (s.Kind == StationKind.PlateShelf) plan.Shelf = s;
             }
@@ -963,7 +967,8 @@ namespace Worktown.Game.Tests
             {
                 var boxes = new List<(string Name, Bounds Bounds)>();
                 foreach (Station s in plan.Stations)
-                    if (s != plan.Register && s != plan.Drinks && s != plan.Return && s != plan.Spit) boxes.Add((s.name, BodyOf(s))); // spec 032/033/035/036: on a front run (checked below)
+                    if (s != plan.Register && s != plan.Drinks && s != plan.Return && s != plan.Spit && s != plan.Board)
+                        boxes.Add((s.name, BodyOf(s))); // spec 032/033/035/036: on a front run (checked below); spec 037: the board above it
                 Assert.IsNotNull(plan.Register, "spec 032: the register");
                 Assert.IsNotNull(plan.Drinks, "spec 033: the drink dispenser");
                 bool OnARun(Bounds b)
@@ -990,6 +995,18 @@ namespace Worktown.Game.Tests
                 Assert.IsTrue(OnARun(spit), "spec 036: the spit stands within a front counter run, on its top");
                 foreach (Bounds other in new[] { till, drinks, dishes, BodyOf(plan.Serving) })
                     Assert.IsFalse(spit.min.x < other.max.x && spit.max.x > other.min.x, "the spit beside the other counter stations");
+                // Spec 037: the menu board hangs over the front counter, clear above everything that stands on it (and a guest's head),
+                // between the serving counter's middle (the queue head) and the register's (the pay line), within the counter's depth.
+                Assert.IsNotNull(plan.Board, "spec 037: the menu board");
+                Bounds board = BodyOf(plan.Board);
+                foreach (Bounds below in new[] { till, drinks, dishes, spit, BodyOf(plan.Serving) })
+                    if (below.min.x < board.max.x && below.max.x > board.min.x)
+                        Assert.Greater(board.min.y, below.max.y + 0.5f, "the board hangs well above the counter's stations under it");
+                Assert.Greater(board.min.y, 1.8f, "above a guest's head");
+                Assert.Greater(board.min.x, plan.Serving.transform.position.x, "east of the queue head");
+                Assert.Less(board.max.x, plan.Register.transform.position.x, "west of the pay line");
+                Assert.IsTrue(plan.FrontRuns.Exists(r => board.min.z >= r.bounds.min.z - 0.001f && board.max.z <= r.bounds.max.z + 0.001f)
+                    || (board.min.z >= BodyOf(plan.Serving).min.z && board.max.z <= BodyOf(plan.Serving).max.z), "over the counter's depth");
                 foreach (PlaceSurface w in plan.Worktops) boxes.Add((w.name, w.GetComponent<BoxCollider>().bounds));
                 foreach (BoxCollider b in plan.FrontRuns) boxes.Add((b.name, b.bounds));
                 foreach (BoxCollider b in plan.Walls) boxes.Add((b.name, b.bounds));

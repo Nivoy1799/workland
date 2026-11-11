@@ -246,7 +246,7 @@ namespace Worktown.Game.Tests
         public void EmptyHands_AndCrate_IsBuy_WithThePrice()
         {
             Assert.AreEqual(InteractionAction.Buy, Act(Nothing, AimTarget.Crate("potato", 60)));
-            Assert.AreEqual("Left click · take potato ($60)", InteractionRules.PromptFor(Nothing, AimTarget.Crate("potato", 60)));
+            Assert.AreEqual("Left click · take potato ($0.60)", InteractionRules.PromptFor(Nothing, AimTarget.Crate("potato", 60))); // spec 037 re-pin: money is cents (D39)
             Assert.AreEqual("Left click · take potato", InteractionRules.PromptFor(Nothing, AimTarget.Crate("potato", -1)));
             Assert.AreEqual(InteractionAction.None, Act(Potato, AimTarget.Crate("potato", 60)), "hands full");
         }

@@ -40,7 +40,7 @@ namespace Worktown.Game.UI
         private const float HeldTextSeconds = 0.1f;
         private Label _clock;
         private Label _orders;
-        // Spec 053: the food corner's goal line under the wallet ("Save for the rent: $230 / $400"), rebuilt only when it changed.
+        // Spec 053: the food corner's goal line under the wallet ("Save for the rent: $230.00 / $300.00"), rebuilt only when it changed.
         private Label _goal;
         private Worktown.Game.Climb.ShopStage _shopStage;
         private float _nextStageLookup;

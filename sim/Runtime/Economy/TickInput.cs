@@ -1,6 +1,12 @@
+using System.Collections.Generic;
 using Worktown.Sim.Core;
 
 namespace Worktown.Sim.Economy
 {
-    public sealed record TickInput(IRandom Random, int Population);
+    /// <summary>
+    /// One economy tick's input. Spec 037: <paramref name="DemandPermille"/> scales each market's new NPC demand (market id to
+    /// permille, 1000 = unchanged; a missing market or a null map is 1000): the menu board's prices (<see cref="MenuPricing"/>). It
+    /// scales the demand before the hour's division, so a fraction carries over to the next hour, and the draws stay the same.
+    /// </summary>
+    public sealed record TickInput(IRandom Random, int Population, IReadOnlyDictionary<string, int>? DemandPermille = null);
 }

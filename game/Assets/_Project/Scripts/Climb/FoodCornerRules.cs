@@ -11,7 +11,7 @@ namespace Worktown.Game.Climb
     /// Spec 053, pure: stage 1, the food corner. One dish (the 052 stage 1 dish, fries), walk-up guests who take it to go and pay cash,
     /// stock without ordering (a fixed drop fills the potato slot at each service start, paid at the bulk price), a pitch fee at each
     /// service end, and one goal: save for the rent. Every amount comes from spec 052's <see cref="ClimbCatalog"/>, scaled to the game's
-    /// own price level by the dish price (<see cref="Scale"/>), so it holds before and after spec 037.
+    /// own price level by the dish price (<see cref="Scale"/>), so it holds before and after spec 037 (which made the scale 1: cents).
     /// </summary>
     public static class FoodCornerRules
     {
@@ -40,13 +40,17 @@ namespace Worktown.Game.Climb
             return (simMoney * gameDishPrice + simDishPrice - 1) / simDishPrice;
         }
 
-        /// <summary>The game's price of the dish: the market's ceiling payout at the dish's base quality (PriceRules.DemandPayout).</summary>
+        /// <summary>
+        /// The game's price of the dish. Spec 037: the menu board's reference (start) price, which guests pay (MenuPrices: the climb's own
+        /// $4.00 in cents), so the scale is 1 and the corner's amounts are the climb's in cents. It was the snack market's ceiling payout at
+        /// the dish's base quality ($460 of the old scale, x 115). The economy catalog must still have the dish's market.
+        /// </summary>
         public static long GameDishPrice(EconomyCatalog economy, ClimbCatalog climb)
         {
             if (economy == null) throw new ArgumentNullException(nameof(economy));
             if (climb == null) throw new ArgumentNullException(nameof(climb));
-            if (!economy.TryGetMarket(Market, out MarketDef market)) throw new ArgumentException("no " + Market + " market", nameof(economy));
-            return PriceRules.DemandPayout(market.Ceiling, climb.Dish(climb.Stage1DishId).BaseQualityPermille);
+            if (!economy.TryGetMarket(Market, out MarketDef _)) throw new ArgumentException("no " + Market + " market", nameof(economy));
+            return MenuPrices.Reference(MenuPrices.LineOfDish(GameDish));
         }
 
         /// <summary>The 052 price of the dish (its reference price).</summary>
@@ -69,7 +73,7 @@ namespace Worktown.Game.Climb
 
         /// <summary>
         /// Follow-up 2026-11-11 evening: the HUD's line at the service start, when the supplier's drop is paid from the shop wallet:
-        /// "Potatoes delivered -$96 (2 on the shelf)", so the money that leaves at the day's start is seen leaving (a Continue opens the
+        /// "Potatoes delivered -$0.96 (2 on the shelf)", so the money that leaves at the day's start is seen leaving (a Continue opens the
         /// next service at once, so the wallet soon reads less than the title's saved balance). Nothing came: says why.
         /// </summary>
         public static string DeliveryText(int units, long cost) =>
@@ -78,12 +82,12 @@ namespace Worktown.Game.Climb
                 : "No potatoes delivered: the potato slot is full, or the money is short";
 
         /// <summary>
-        /// The HUD's goal line: "Save for the rent: $230 / $400". Follow-up 2026-11-11 evening: no clamp at 0 (the shop balance never goes
-        /// below 0, see ShopLedger; if it ever did, it would read "-$120", not $0).
+        /// The HUD's goal line: "Save for the rent: $230.00 / $300.00". Follow-up 2026-11-11 evening: no clamp at 0 (the shop balance never goes
+        /// below 0, see ShopLedger; if it ever did, it would read "-$1.20", not $0.00).
         /// </summary>
         public static string GoalLine(long balance, long goal) => "Save for the rent: " + EconomyRules.Money(balance) + " / " + EconomyRules.Money(goal);
 
-        /// <summary>The shift summary's goal line with its percent (0 to 100): "Save for the rent: $230 / $400 (57 %)".</summary>
+        /// <summary>The shift summary's goal line with its percent (0 to 100): "Save for the rent: $230.00 / $300.00 (76 %)".</summary>
         public static string GoalProgressLine(long balance, long goal) => GoalLine(balance, goal) + " (" + GoalPercent(balance, goal) + " %)";
 
         /// <summary>The balance against the goal, 0 to 100 (rounded down).</summary>

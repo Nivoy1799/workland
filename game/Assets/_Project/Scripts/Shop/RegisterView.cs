@@ -8,7 +8,7 @@ namespace Worktown.Game.Shop
     /// <summary>
     /// Spec 032, client only: the register's look. The display (facing the cook) shows "CHANGE $8 / $18", "CARD" or "PAID"; the
     /// change lies as coins and notes on the change mat in front of it. The clicking player sees its own coin at the click
-    /// (<see cref="TrayPrediction"/>: feel.md 1), everyone else when the synced tray byte rises (with the clink); a card payment
+    /// (<see cref="TrayPrediction"/>: feel.md 1), everyone else when the synced tray (cents) rises (with the clink); a card payment
     /// beeps. Display only: the server builds the change and decides (RegisterDesk). Pieces are a fixed pool, positioned only when
     /// the shown sum changes; no allocations per frame.
     /// </summary>
@@ -203,14 +203,15 @@ namespace Worktown.Game.Shop
                 if (!on) continue;
                 drawn++;
                 int value = _layout[i];
-                bool coin = value < 5;
+                bool coin = IsCoin(value);
                 Transform t = r.transform;
-                Vector3 local = coin ? new Vector3(-0.11f + coins * 0.034f, 0.004f + 0.0f, -0.035f)
-                    : new Vector3(-0.07f + notes * 0.03f, 0.002f + notes * 0.002f, 0.025f);
+                // Spec 037: up to six coins a row (two rows), the notes fanned behind them.
+                Vector3 local = coin ? new Vector3(-0.085f + (coins % 6) * 0.034f, 0.004f, -0.05f + (coins / 6) * 0.034f)
+                    : new Vector3(-0.07f + notes * 0.03f, 0.002f + notes * 0.002f, 0.035f);
                 t.localPosition = (_mat != null ? _mat.localPosition : Vector3.zero) + local;
                 t.localRotation = Quaternion.Euler(0f, coin ? 0f : -8f + notes * 6f, 0f);
-                t.localScale = coin ? new Vector3(value == 2 ? 0.03f : 0.026f, 0.006f, value == 2 ? 0.03f : 0.026f)
-                    : new Vector3(0.08f, 0.003f, 0.04f);
+                float size = CoinSize(value);
+                t.localScale = coin ? new Vector3(size, 0.006f, size) : new Vector3(0.08f, 0.003f, 0.04f);
                 if (coin) coins++;
                 else notes++;
                 r.GetPropertyBlock(_block);
@@ -220,16 +221,38 @@ namespace Worktown.Game.Shop
             ShownPieces = drawn;
         }
 
-        /// <summary>The colour of a coin or note (palette only): coins Steel and Mustard, notes Sage, SoftBlue, Terracotta, DeepBlue.</summary>
-        public static Color ColorOf(int value)
+        /// <summary>Spec 037: coins are $0.10 to $2 (below $5, in cents), notes $5 to $20.</summary>
+        public static bool IsCoin(int cents) => cents < 500;
+
+        /// <summary>Spec 037: a coin's diameter (m): $0.10 the smallest, then $0.20, $0.50, $1 and $2.</summary>
+        public static float CoinSize(int cents)
         {
-            switch (value)
+            switch (cents)
             {
-                case 1: return Palette.Steel;
-                case 2: return Palette.Mustard;
-                case 5: return Palette.Sage;
-                case 10: return Palette.SoftBlue;
-                case 20: return Palette.Terracotta;
+                case 10: return 0.020f;
+                case 20: return 0.023f;
+                case 50: return 0.026f;
+                case 100: return 0.028f;
+                default: return 0.031f;
+            }
+        }
+
+        /// <summary>
+        /// The colour of a coin or note (palette only), by its value in cents (spec 037): the small coins ($0.10 to $0.50) Steel, $1 and
+        /// $2 Mustard, the notes $5 Sage, $10 SoftBlue, $20 Terracotta.
+        /// </summary>
+        public static Color ColorOf(int cents)
+        {
+            switch (cents)
+            {
+                case 10:
+                case 20:
+                case 50: return Palette.Steel;
+                case 100:
+                case 200: return Palette.Mustard;
+                case 500: return Palette.Sage;
+                case 1000: return Palette.SoftBlue;
+                case 2000: return Palette.Terracotta;
                 default: return Palette.DeepBlue;
             }
         }

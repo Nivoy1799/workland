@@ -50,7 +50,7 @@ namespace Worktown.Sim.Climb
                 state = step.State;
                 results.Add(step.Result);
             }
-            return new ClimbRun(setup, horizonSeconds, results, state);
+            return new ClimbRun(setup, horizonSeconds, results, state, Catalog.MoneyScale);
         }
 
         /// <summary>One service (or a stage 5 big job instead of it).</summary>
@@ -74,8 +74,10 @@ namespace Worktown.Sim.Climb
             ChoiceWeights w = Catalog.Weights;
             long sumRef = 0, sumOffset = 0;
             foreach (DishDef d in menu) { sumRef += d.ReferencePrice; sumOffset += s.Prices[d.Id] - d.ReferencePrice; }
-            long avgRef = sumRef / menu.Count;
-            long offset = GuestChoice.FloorDiv(sumOffset, menu.Count);
+            // Spec 037: averaged in whole units (MoneyScale), so the model is the same at any money scale (cents, D39).
+            long unit = Catalog.MoneyScale;
+            long avgRef = sumRef / (menu.Count * unit) * unit;
+            long offset = GuestChoice.FloorDiv(sumOffset, menu.Count * unit) * unit;
             int rep = Math.Min(1000, s.Reputation + Catalog.ReputationBonus(s.Owned));
             int you = GuestChoice.Attraction(w, s.LastQuality, rep, offset, avgRef, s.LastWait, menu.Count);
             var guests = new List<(ChannelDef Channel, DishDef Dish)>();
@@ -285,8 +287,10 @@ namespace Worktown.Sim.Climb
                 sv.Served++;
                 revenueRaw += s.Prices[dish.Id] * pricePermille;
             }
-            sv.Revenue = revenueRaw / 1000;
-            sv.IngredientCost = ingredientRaw * (1000 - Catalog.CostSavedPermille(s.Owned)) / 1000;
+            // Spec 037: rounded down to whole units (MoneyScale) as in the whole-dollar model, so cents give the same climb.
+            long unit = Catalog.MoneyScale;
+            sv.Revenue = revenueRaw / (1000 * unit) * unit;
+            sv.IngredientCost = ingredientRaw * (1000 - Catalog.CostSavedPermille(s.Owned)) / (1000 * unit) * unit;
             return sv;
         }
 

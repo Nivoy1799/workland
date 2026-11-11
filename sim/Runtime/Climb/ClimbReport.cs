@@ -13,8 +13,10 @@ namespace Worktown.Sim.Climb
     /// </summary>
     public static class ClimbReport
     {
-        public static string Format(IReadOnlyList<ClimbRun> runs, IReadOnlyList<TargetCheck> checks)
+        /// <summary>The report; net $/h is printed in whole dollars (<paramref name="moneyScale"/> money per dollar: 100 for cents, D39).</summary>
+        public static string Format(IReadOnlyList<ClimbRun> runs, IReadOnlyList<TargetCheck> checks, long moneyScale = 1)
         {
+            long unit = Math.Max(1L, moneyScale);
             var sb = new StringBuilder();
             sb.Append("Climb report (spec 052): ").Append(runs.Count).Append(" runs\n");
             List<string> profiles = runs.Select(r => r.Setup.ProfileId).Distinct().ToList();
@@ -51,7 +53,7 @@ namespace Worktown.Sim.Climb
                         long M(Func<ClimbRun, long> f) => ClimbEvaluation.Median(played.Select(f).ToList());
                         sb.Append(Pad(profile, 9)).Append(Pad("S" + (int)st, 7))
                             .Append(Pad(M(r => r.ServicesIn(st)).ToString(), 10))
-                            .Append(Pad(M(r => r.NetPerHour(st)).ToString(), 9))
+                            .Append(Pad(GuestChoice.FloorDiv(M(r => r.NetPerHour(st)), unit).ToString(), 9))
                             .Append(Pad(Pct(M(r => r.UpkeepPermille(st))), 8))
                             .Append(Pad(Pct(M(r => ShareOfRivals(r, st))), 7))
                             .Append(Pad(Pct(M(r => r.MissedPermille(st))), 8))

@@ -81,7 +81,7 @@ namespace Worktown.Game.Tests
         {
             CollectionAssert.AreEqual(new[] { "New shop" }, MenuRules.HostChoices(false));
             CollectionAssert.AreEqual(new[] { "Continue", "New shop" }, MenuRules.HostChoices(true));
-            Assert.AreEqual("Day 4 \u00b7 $230", MenuRules.ContinueLine(4, 230));
+            Assert.AreEqual("Day 4 \u00b7 $2.30", MenuRules.ContinueLine(4, 230)); // spec 037 re-pin: cents (D39)
             Assert.AreEqual("This save could not be loaded. Your file is kept.", MenuRules.SaveErrorText(SaveError.NotJson));
             Assert.AreEqual("This save could not be loaded. Your file is kept.", MenuRules.SaveErrorText(SaveError.Invalid));
             Assert.AreEqual("This shop was saved by a newer version of Worktown.", MenuRules.SaveErrorText(SaveError.NewerVersion));

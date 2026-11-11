@@ -790,6 +790,24 @@
         "Is the rent goal too near, too far, or about right?",
         "Does the corner feel like enough to do for one or two cooks?"
       ]
+    },
+    {
+      "id": "2026-11-11-spec-037",
+      "date": "2026-11-11",
+      "title": "Street-food prices and a menu board",
+      "items": [
+        "Money has cents now: fries $4.00, a wrap about $9.00, a drink $3.00; ingredients cost $0.35 to $1.50",
+        "The register's tray has coins of $0.10, $0.20, $0.50, $1 and $2 and notes of $5, $10 and $20; guests pay with $5, $10 or $20 notes",
+        "A menu board hangs above the counter: pick a dish and set its price in $0.50 steps",
+        "Too dear and fewer guests come and they tip less; cheap brings more guests but less money for each",
+        "The food corner's rent goal is $300.00, the pitch fee $5.00 and a new shop starts with $25.00; an older save keeps its progress"
+      ],
+      "test": [
+        "Do the prices feel like a street-food shop?",
+        "Pay a guest in cash: is the change easy to count with the new coins?",
+        "Raise the fries by $0.50 for a service, then lower them: do you notice fewer or more guests?",
+        "Continue an older save: is your money where you expect it on the way to the rent?"
+      ]
     }
   ]
 }

@@ -3,7 +3,7 @@ using System;
 namespace Worktown.Sim.Economy
 {
     /// <summary>
-    /// Spec 032: the guest's tip, speed × accuracy × quality, at most <see cref="MaxTipPercent"/> % of the price. Whole dollars,
+    /// Spec 032: the guest's tip, speed × accuracy × quality, at most <see cref="MaxTipPercent"/> % of the price. Cents (spec 037, D39),
     /// integer math only (permille factors, rounded down), so it is the same on every machine.
     /// <para>Speed: full while the order came within half the patience, then falls linearly to 0 at the end of it. Accuracy: 1 for
     /// the order as asked, 0.5 for one step short (a missing or wrong layer, a modifier not kept), 0 for more. Quality: from the
@@ -31,7 +31,7 @@ namespace Worktown.Sim.Economy
         /// <summary>From the stars (1-5): 0, 250, 500, 750, 1000.</summary>
         public static int QualityPermille(int stars) => Math.Max(0, Math.Min(4, stars - 1)) * 250;
 
-        /// <summary>The tip in whole dollars, rounded down; 0 for a price of 0 or less.</summary>
+        /// <summary>The tip in cents, rounded down (the register rounds what a guest pays to whole coins, CashRules.ToCoins); 0 for a price of 0 or less.</summary>
         public static long Tip(long price, int speedPermille, int accuracyPermille, int qualityPermille)
         {
             if (price <= 0) return 0;

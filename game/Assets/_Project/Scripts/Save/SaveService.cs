@@ -179,7 +179,10 @@ namespace Worktown.Game.Save
             foreach (ShopSave.StockPart part in save.stock)
                 if (part != null && ShopSaveCodec.LineOfSlot(part.slot) < 0) _unknownStock.Add(part);
             if (_economy != null)
+            {
                 _economy.StartGame(SeedOf(save), save.clock.day, save.money.balance, save.money.earnedTotal, save.money.spentTotal);
+                _economy.Menu.Restore(MenuOf(save)); // spec 037: a new shop has none (every price at its reference)
+            }
             if (_supply != null)
             {
                 _supply.EnsureGame();
@@ -276,6 +279,26 @@ namespace Worktown.Game.Save
             Fill(save, balance + pending, _economy != null ? _economy.Earned : save.money.earnedTotal, _economy != null ? _economy.Spent : save.money.spentTotal,
                 day, play, counts, _unknownStock, _cleaning != null ? _cleaning.HygienePercent : save.hygienePercent,
                 _stage != null ? _stage.ServerStage : (byte)save.climb.stage, _stage != null && _stage.ServerReached);
+            if (_economy != null) save.menu = MenuParts(_economy.Menu.Capture()); // spec 037: the board's prices
+        }
+
+        /// <summary>Spec 037: the menu board's changed prices as the save's parts (line id, cents).</summary>
+        public static ShopSave.MenuPart[] MenuParts(IReadOnlyList<(string Id, long Cents)> prices)
+        {
+            var parts = new List<ShopSave.MenuPart>();
+            if (prices != null)
+                foreach ((string id, long cents) in prices) parts.Add(new ShopSave.MenuPart { id = id, cents = cents });
+            return parts.ToArray();
+        }
+
+        /// <summary>Spec 037: the save's menu prices for the board (unknown ids are ignored by the board).</summary>
+        public static IReadOnlyList<(string Id, long Cents)> MenuOf(ShopSave save)
+        {
+            var list = new List<(string, long)>();
+            if (save?.menu != null)
+                foreach (ShopSave.MenuPart part in save.menu)
+                    if (part != null) list.Add((part.id, part.cents));
+            return list;
         }
 
         // ---- pure parts (tested) ----

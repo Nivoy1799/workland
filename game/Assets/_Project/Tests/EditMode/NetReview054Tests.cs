@@ -37,14 +37,16 @@ namespace Worktown.Game.Tests
         [Test]
         public void TheWireRevision_IsInTheSurface_AndChangesTheHash()
         {
-            Assert.AreEqual(3, ProtocolSurface.Revision, "054, then the 053 review changed the wire (bump on every wire change)");
+            // Spec 037 re-pin: 4, money on the wire is cents (D39), which no reflected line shows.
+            Assert.AreEqual(4, ProtocolSurface.Revision, "054, the 053 review, then spec 037 changed the wire (bump on every wire change)");
             List<string> lines = ProtocolSurface.Lines(Game);
-            Assert.AreEqual(1, lines.Count(l => l == "revision 3"));
+            Assert.AreEqual(1, lines.Count(l => l == "revision 4"));
             Assert.AreEqual(1, lines.Count(l => l.StartsWith("revision ", StringComparison.Ordinal)));
             List<string> before = lines.Where(l => !l.StartsWith("revision ", StringComparison.Ordinal)).ToList();
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before), BuildHash.Compute("0.1.0", lines), "a build without the revision is refused");
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 1")), BuildHash.Compute("0.1.0", lines));
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 2")), BuildHash.Compute("0.1.0", lines), "a 054 build is refused");
+            Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 3")), BuildHash.Compute("0.1.0", lines), "a whole-dollar build is refused");
         }
 
         [Test]

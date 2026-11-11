@@ -118,6 +118,8 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationBin, Mode = Fit.Graybox },
             // Spec 036: no doner spit in the packs: a graybox (a Steel base, a Charcoal heat panel frame, the skewer, the motor housing).
             new Def { Key = ArtKey.StationSpit, Mode = Fit.Graybox },
+            // Spec 037: no menu board in the packs: a graybox (a WoodDark frame round a Charcoal board).
+            new Def { Key = ArtKey.StationMenuBoard, Mode = Fit.Graybox },
             // Spec 034: the delivery box is the Furniture Kit's cardboard box (the crate's model), 0.40 m.
             Fitted(ArtKey.PropDeliveryBox, Furniture + "cardboardBoxOpen.fbx", Fit.Max),
 
@@ -916,6 +918,7 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationTrash) return BuildTrash(parent);
             if (key == ArtKey.StationBin) return BuildBin(parent);
             if (key == ArtKey.StationSpit) return BuildSpit(parent); // spec 036
+            if (key == ArtKey.StationMenuBoard) return BuildMenuBoard(parent); // spec 037
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -1111,6 +1114,22 @@ namespace Worktown.Game.Editor
             float w = TerminalArtRules.Width, h = TerminalArtRules.Height, d = TerminalArtRules.Depth;
             Box(model, "Frame", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
             Box(model, "Screen", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.05f, h - 0.05f, 0.002f), screen);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 037: the graybox menu board as the wrapper's "Model" (MenuBoardArtRules, its bottom at the origin): a WoodDark frame round a
+        /// Charcoal board. The text and the buttons are the scene's (they change). Front on +Z like the kit (the scene turns it to the cook).
+        /// </summary>
+        private static GameObject BuildMenuBoard(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material frame = GrayboxMaterial("MenuBoardFrame", Palette.WoodDark);
+            Material board = GrayboxMaterial("MenuBoardFace", Palette.Charcoal);
+            float w = MenuBoardArtRules.Width, h = MenuBoardArtRules.Height, d = MenuBoardArtRules.Depth;
+            Box(model, "Frame", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
+            Box(model, "Board", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.04f, h - 0.04f, 0.002f), board);
             return model;
         }
 

@@ -23,7 +23,8 @@ namespace Worktown.Game.Tests
         private const byte Corner = ShopStageRules.FoodCorner;
 
         private static readonly StationKind[] OpenWhole =
-            { StationKind.Fryer, StationKind.PlateShelf, StationKind.Counter, StationKind.TrashCan, StationKind.Bin };
+            { StationKind.Fryer, StationKind.PlateShelf, StationKind.Counter, StationKind.TrashCan, StationKind.Bin,
+                StationKind.MenuBoard }; // spec 037: the fries' price is set at the food corner too
 
         private static readonly StationKind[] Closed =
         {

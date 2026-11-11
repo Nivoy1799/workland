@@ -50,6 +50,7 @@ namespace Worktown.Game.Climb
             _pitchFee = pitchFee;
             _reached = reached;
             Push();
+            if (_economy != null) _economy.SetMenuStage(stage); // spec 037: the board sells this stage's lines
             Debug.Log("[Stage] " + (stage == ShopStageRules.OpenKitchen ? "the open kitchen (every station)"
                 : "stage " + stage + ", the food corner: goal " + EconomyRules.Money(goal) + (reached ? " (reached)" : string.Empty)
                   + ", pitch fee " + EconomyRules.Money(pitchFee)));

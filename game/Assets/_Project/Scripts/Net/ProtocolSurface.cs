@@ -26,10 +26,12 @@ namespace Worktown.Game.Net
         /// state forwarding flags, or a NetworkTransform's settings that change what it sends. Every such wire change bumps this number,
         /// so an older and a newer build refuse each other cleanly. 1: up to spec 047 (no line). 2: spec 054 (the player root's
         /// NetworkTransform, no state forwarding, items silent while held, no scale sync; 054 review: item teleports). 3: the 053 review
-        /// (one ShopLedger balance instead of a Wallet SyncVar per player; players pass through each other by default).
+        /// (one ShopLedger balance instead of a Wallet SyncVar per player; players pass through each other by default). 4: spec 037 (D39:
+        /// every money value on the wire is cents, not whole dollars: the ShopLedger balance, the goal, the register's change due and its
+        /// tray (now a ushort), the reward's and the shift's money, the menu board's prices; the reflection sees the new types, not the unit).
         /// Every wire change bumps it (docs/architecture.md).
         /// </summary>
-        public const int Revision = 3;
+        public const int Revision = 4;
 
         /// <summary>The line that carries <see cref="Revision"/>.</summary>
         public static string RevisionLine => "revision " + Revision;

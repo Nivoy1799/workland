@@ -176,10 +176,15 @@ namespace Worktown.Game.Dev
                 yield return _capture.Shot("covers-right");
                 yield return actor.LevelView();
             }
+            var capture = new CookCapture(shot => _capture.Shot(shot), (name, seconds) => Frames(name, seconds), _ => { }, () => _framesRunning > 0);
+            // Spec 037: the menu board above the counter: the fries at $4.00, a click up to $4.50 and back (the corner's plan stays).
+            int fries = Worktown.Game.Npc.MenuPrices.LineOfDish(Worktown.Game.Npc.Menu.Fries);
+            yield return CookSequence.SetBoardPrice(actor, capture, laneZ, fries, 450, "corner-up");
+            yield return CookSequence.SetBoardPrice(actor, capture, laneZ, fries, 400, "corner-back");
+            if (actor.Timeouts > 0) Fail("the menu board did not take the fries' price");
             long startBalance = Balance(me);
 
             // Two fries guests, cooked and paid in cash (the cook tour's fries part).
-            var capture = new CookCapture(shot => _capture.Shot(shot), (name, seconds) => Frames(name, seconds), _ => { }, () => _framesRunning > 0);
             for (int guest = 1; guest <= 2; guest++)
             {
                 if (guest == 2 && fryer != null && fryer.TryGetComponent(out StationContents contents) && FryerRules.IsOn(contents.StoveFlags.Value))
