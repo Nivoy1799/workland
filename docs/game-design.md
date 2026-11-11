@@ -1,6 +1,6 @@
 # Worktown game design (v1, 2026-11-10)
 
-Status: v1 after the human's decision (D33–D36), based on the brainstorm and docs/game-design-critique.md. Binding for
+Status: **approved by the human on 2026-11-11 (D37).** v1 after the human's decision (D33–D36), based on the brainstorm and docs/game-design-critique.md. Binding for
 every spec once the human approves this text. v0 (persistent town, professions, crews on official servers) is dropped.
 
 ## The game in one sentence

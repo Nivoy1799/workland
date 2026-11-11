@@ -1,6 +1,6 @@
 # Worktown setting (DRAFT, 2026-11-10, not decided)
 
-Status: draft for the human to think about. Not binding. When decided it becomes D37, and the palette (D32) and spec 040
+Status: draft for the human to think about. Not binding. When decided it gets its own D number, and the palette (D32) and spec 040
 follow it.
 
 ## The world in one sentence

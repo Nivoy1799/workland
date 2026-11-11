@@ -1,10 +1,12 @@
 ---
 id: 052
 title: Climb simulation (stages 1-5 for 1, 4 and 16 players against NPC rivals) in /sim
-status: draft
+status: approved
 owner: architect
 builder: sonnet
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 13 and 21) with the recommended defaults of its Open questions.
 
 # 052: Climb simulation
 
@@ -191,32 +193,32 @@ capacity (mistakes at their mean rate) serves at least 900‰ of the guests who 
   1 bad arguments.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes (sim tests, no UnityEngine); `git diff --stat main -- sim/Runtime/Cooking
+- [x] AC1: `bash scripts/verify.sh` passes (sim tests, no UnityEngine); `git diff --stat main -- sim/Runtime/Cooking
       sim/Runtime/Core sim/Runtime/Economy` is empty.
-- [ ] AC2: Determinism: the same `CrewSetup` twice gives equal `ClimbRun` digests and an identical report string;
+- [x] AC2: Determinism: the same `CrewSetup` twice gives equal `ClimbRun` digests and an identical report string;
       seeds 1 and 2 give different digests. `grep -rnE "DateTime|Stopwatch|TickCount|System.Random" sim/Runtime/Climb`
       finds nothing.
-- [ ] AC3: Guest choice: two equal shops and no outside option split 10,000 guests within 50 % +- 3 %; higher quality,
+- [x] AC3: Guest choice: two equal shops and no outside option split 10,000 guests within 50 % +- 3 %; higher quality,
       higher reputation, lower price or shorter wait each raise the share; attraction is never below `Min`; guests
       per channel never exceed the ceiling with all bonuses.
-- [ ] AC4: Demand ceiling: at stage 1, 16 average players earn at most 1.15 x the median net income per service of 4.
-- [ ] AC5: Capacity: players beyond the work spots add exactly `OverflowPermille`; a solo novice serves fewer guests
+- [x] AC4: Demand ceiling: at stage 1, 16 average players earn at most 1.15 x the median net income per service of 4.
+- [x] AC5: Capacity: players beyond the work spots add exactly `OverflowPermille`; a solo novice serves fewer guests
       than a solo expert; a mistake costs actions and ingredients twice.
-- [ ] AC6: Floors: a state forced to -$100 buys nothing until its balance is >= 0; the stage never decreases;
+- [x] AC6: Floors: a state forced to -$100 buys nothing until its balance is >= 0; the stage never decreases;
       reputation never goes below the stage floor.
-- [ ] AC7: Rivals: three services ahead trigger exactly one reaction; cuts and quality steps never exceed their
+- [x] AC7: Rivals: three services ahead trigger exactly one reaction; cuts and quality steps never exceed their
       maximums; the undo rule works.
-- [ ] AC8: Each `PricePolicy` and `SpendPolicy` decision is tested on a hand-built state; Builder buys the gate only
+- [x] AC8: Each `PricePolicy` and `SpendPolicy` decision is tested on a hand-built state; Builder buys the gate only
       when no Productive item of the stage is unowned.
-- [ ] AC9: Catalog validation: duplicate id, bad id, missing reference, stage 1 with 2 dishes, a name with a D27
+- [x] AC9: Catalog validation: duplicate id, bad id, missing reference, stage 1 with 2 dishes, a name with a D27
       forbidden word, and `ReferencePrice <= IngredientCost` each throw; `CreateDefault()` does not.
-- [ ] AC10: Each target T1-T8 has a passing and a failing test on hand-built `ClimbRun` data.
-- [ ] AC11: `bash scripts/climb-report.sh --players 1,4,16 --seeds 5` prints one section per player count, all target
+- [x] AC10: Each target T1-T8 has a passing and a failing test on hand-built `ClimbRun` data.
+- [x] AC11: `bash scripts/climb-report.sh --players 1,4,16 --seeds 5` prints one section per player count, all target
       lines and the RESULT line, in under 60 s, exit 0 or 2.
-- [ ] AC12 (tuning): the default catalog passes T1-T8 for 1, 4 and 16 players (exit 0). Tuning only changes numbers
+- [ ] AC12 (tuning) **FAILED after 3 rounds, see Blockers (allowed outcome):** the default catalog passes T1-T8 for 1, 4 and 16 players (exit 0). Tuning only changes numbers
       in `ClimbCatalog.CreateDefault()`, each change logged in Implementation notes. If a target still fails after 3
       tuning rounds, stop: that is a design finding. Write the failing lines and your best guess under Blockers.
-- [ ] AC13: Every public method in `sim/Runtime/Climb` has at least one test; the Climb tests add < 15 s to
+- [x] AC13: Every public method in `sim/Runtime/Climb` has at least one test; the Climb tests add < 15 s to
       `dotnet test`.
 
 ## Test plan
@@ -248,7 +250,70 @@ Answer the open questions (or accept the defaults), then read the report and say
     specs read the rest after tuning]
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-11 (builder). Sim tests 403 -> 483 (80 new Climb tests, about 0.5 s). `scripts/verify.sh` green.
+`bash scripts/climb-report.sh --players 1,4,16 --seeds 5`: 675 runs in about 2 s, exit 2, `RESULT: FAIL (53/78)` (see Blockers).
+
+Interpretations for the reviewer:
+- Money in the data is whole units; the `ClimbCatalog` constructor multiplies every money field by `MoneyScale`.
+- Channels: a channel no purchase unlocks is a base counter; the open one is the highest base channel of the stage
+  (the street counter replaces the corner from S2). Purchase-unlocked channels open from their stage on.
+- Menu = stage 1 dish + unlocked dishes in buying order, capped at `MaxDishes`. A dish purchase is no candidate when
+  the menu is full, so Builder is not stuck on a dish it cannot use.
+- Policy: one pass loops "gate if allowed, else one Productive item, else a stage 5 Status item" until nothing is
+  bought. Rush's reserve is the current gate purchase cost (0 in S3-S5, so there Rush buys whatever it can afford).
+  Builder's "none left" means no Productive candidate of any stage up to the current one.
+- Rivals see your average menu reference price; a rival counts as one dish (no variety). Undercut follows the
+  counter rival's price per dish. Share for T5 = yours / (yours + rivals') on that channel.
+- A guest whose remake does not fit is missed (actions and first ingredients spent). Missed guests get no draws.
+- Big jobs: the deposit is paid every time (a stake), upkeep is still paid; events use counter actions. Big jobs do
+  not change reputation, stars, wait or rivals. T7 counts the deposits of every job the crew can take (stage 5,
+  requirement owned), ignoring cooldowns ("ready" read as "available"; with cooldowns T7 would fail by construction).
+- Evaluation: medians over seeds (a DNF counts as never); T1 on the reference profile; T3, T5-T8 on the reference strategy
+  per profile; T2 on every run; T4 on per-strategy medians. Missing runs (e.g. `--profiles average`) give no line.
+- CLI extra: `--trace players,profile,strategy,seed` prints one run's canonical text (tuning aid). The CLI prints its
+  run time to stderr only. `sim/Tools~/ClimbReport` is in `Sim.sln`, in no Unity assembly.
+
+Tuning log (only numbers in `CreateDefault()`; 3 rounds):
+- R1: dish actions -25..30% (fries 8->6, falafel 14->10, seitan 16->11, veggies 12->9, lemonade 4->3), because 4
+  players were overloaded in S3 (51% missed). Dish base quality +50 (fries 650, falafel 700, seitan 730, veggies
+  670, lemonade 650) and S3/S4 star gates 4.0->3.8, because novices could never reach 4.0 stars. Price weight
+  1500->2300 (Plus2 was a shortcut). Cook-off rival score 800->700 and event deposits 1500->600, 2500->1000,
+  because big jobs lost money for average crews.
+- R2: price weight 2300->3000 (Plus1 still a shortcut); rent 400->300, licence 1500->1200 (S2, S3 at the band
+  edge); street 90->75, delivery 50->30, custom 20->10, tables 45->25, buffet 40->30, novice APM 18->20 (novice
+  overload in S3); S3/S4 stars 3.8->3.6; S4 items dearer (runner 1500, cooks 2500, drinks filler 2500, dishwasher
+  3000, fry dump 2000) and staff APM 22/26->18/20, S4/S5 upkeep 120/160->160/200 (S4 was 8 services, T5 snowball);
+  status items dearer (decor 4000/8000/15000/25000, show car 20000) for T7.
+- R3: price weight 3000->2600 (3000 overshot: Plus1 became slow); street 75->90 (S2/S3 income too low); staff
+  APM back to 22/26 (Rush and Builder could not pass the few-players check with every channel); S4 star window
+  5->20 services (keeps S4 at least half of S3).
+
+Report after R3 (median hours, average, Balanced+Match): 4p S2 1.2 / S3 4.6 / S4 8.8 / S5 20.0; 16p 1.2 / 4.6 /
+8.8 / 18.8; 1p S2 1.2, S3 DNF. Pass per crew size: 1p 12/26, 4p 20/26, 16p 21/26. 4p and 16p pass T1, T2, T3, T5,
+T6, T8; they fail T4 (Plus1 about 23% faster than the median) and T7 (idle money).
 
 ## Blockers
-(Builder fills this in after 3 failed attempts.)
+Tuning stopped after 3 rounds (AC12). Design findings, for the human:
+1. **Solo (question 3).** `FAIL T1 1p average S3 DNF`, plus T3, T4, T6, T7, T8 for 1p. Without solo scaling a solo is
+   capacity-bound from S2: about 156 actions a service against about 40 guests who choose it. It misses about 47%, and
+   missed guests pull stars to 2.8, below the 3.5 gate. No single demand ceiling fits both 1 player and 4-16 players
+   inside the T1 bands. Review (2026-11-11): the menu model makes it worse. With fries only a solo holds 3.5-3.9
+   stars and would pa2. **Price shortcut (T4): a symptom of finding 4, not of price units.** `FAIL T4 4p average fastest balanced+plus1
+   15.4 h >= 0.85 x median 20.0 h`. Review (2026-11-11): Plus1 is not faster in S2-S4 (16p average reaches S4 at 8.8 h
+   with Match, 8.3 h with Plus1); the whole gain is inside S4 (10.0 h with Match, 2.4 h with Plus1). A higher price
+   turns guests away, lowers `LastDemandActions` and passes the few-players check of the S4 gate sooner. For experts
+   Plus1 is only 12 % faster. T4 also compares with the median of all finishing strategies, which the weak Minus1,
+   Plus2 and Undercut strategies pull up. Best guess: fix the S4 gate (finding 4); then re-check T4, maybe against
+   Match instead of the median.
+e term scales with the offset as a share of the menu's
+   average reference price. +$1 is 25% on fries ($4) in S1-S2 but about 11% on the S3+ menu, so no one weight keeps
+   Match best in every stage. Best guess: price units relative to each dish (e.g. Plus1 = +10%), or a weight per
+   stage.
+3. **Money has no use late (T7).** `FAIL T7 4p expert 880 idle-money services (in S5)` (16p expert 891). Rich S5 crews
+   buy every finite item by about 25 h, and the big-job deposits ($600-1000) stay under 3x their income. 4p novices
+   are also idle in S4 (833): everything is bought while the few-players check still fails. Best guess: repeatable
+   sinks that scale with income (a bigger place to rent, stakes that grow) and an S4 gate with a money part.
+4. **The S4 gate punishes channels (and causes finding 2).** The few-players check grows with every channel bought in S3, while staff
+   capacity is fixed. Builder and Rush (more channels) finish S4 later or not at all, and Balanced gets S4 almost
+   free. R3 fixed the length only with a 20-service star window. Best guess: a gate purchase for S4 (data
+   structure, not a number, so out of tuning scope).

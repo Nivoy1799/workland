@@ -9,6 +9,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Sim.Tests~", "Sim.Tests~", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sim.Tests", "Sim.Tests~\Sim.Tests.csproj", "{EC4A6BAD-1678-420A-B059-DE66F9AAB65E}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools~", "Tools~", "{D7CDA2B5-FF37-6781-DEE3-AB86BD4E7ECD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClimbReport", "Tools~\ClimbReport\ClimbReport.csproj", "{A444E207-7A7C-47F2-8158-99750CEFD433}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,11 +47,24 @@ Global
 		{EC4A6BAD-1678-420A-B059-DE66F9AAB65E}.Release|x64.Build.0 = Release|Any CPU
 		{EC4A6BAD-1678-420A-B059-DE66F9AAB65E}.Release|x86.ActiveCfg = Release|Any CPU
 		{EC4A6BAD-1678-420A-B059-DE66F9AAB65E}.Release|x86.Build.0 = Release|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Debug|x64.Build.0 = Debug|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Debug|x86.Build.0 = Debug|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Release|x64.ActiveCfg = Release|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Release|x64.Build.0 = Release|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Release|x86.ActiveCfg = Release|Any CPU
+		{A444E207-7A7C-47F2-8158-99750CEFD433}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{EC4A6BAD-1678-420A-B059-DE66F9AAB65E} = {3A7A8FAC-07C4-9CEC-743B-107B2FEAAD60}
+		{A444E207-7A7C-47F2-8158-99750CEFD433} = {D7CDA2B5-FF37-6781-DEE3-AB86BD4E7ECD}
 	EndGlobalSection
 EndGlobal
