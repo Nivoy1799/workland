@@ -94,10 +94,12 @@ namespace Worktown.Game.Art
         {
             bool wasCup = _cupShown;
             byte wasKind = _cupKind;
+            float wasFill = wasCup ? _shownFill : -1f; // 042 follow-up: the drawn level eases on from here
             ReleaseAll();
             bool shown;
             if (FoodLookRules.IsCup(look))
             {
+                _shownFill = wasFill;
                 // Spec 033: a cup (the Kenney cup) with its liquid at the level, the fill line and (lidded) its lid. The lid's click
                 // plays for everyone but the player who predicted it (it heard it at its click).
                 shown = AddCup(look);
@@ -204,6 +206,12 @@ namespace Worktown.Game.Art
             // Spec 033: an unconfirmed level of the owner's last pour does not stay for ever.
             if (_predictedMl >= 0f && !_pouring && Time.unscaledTime > _predictionUntil && DrinkRules.LevelOfMl(_predictedMl) != _cupLevel)
                 EndPrediction();
+            // 042 follow-up: the drawn level eases towards the level to show (no snap to a late bucket).
+            if (_cupShown && _shownFill >= 0f && _shownFill != DrawnFill)
+            {
+                _shownFill = DrinkArtRules.EaseFill(_shownFill, DrawnFill, Time.unscaledDeltaTime);
+                DrawLiquid(_shownFill);
+            }
             if (_dropping.Count == 0) return;
             FeelSettings feel = FeelSettings.Current;
             float t = feel.DropSeconds > 0f ? (Time.unscaledTime - _dropStart) / feel.DropSeconds : 1f;
@@ -393,6 +401,19 @@ namespace Worktown.Game.Art
             if (!_cupShown) return;
             float fill = _predictedMl >= 0f ? DrinkRules.DrawnFill(_predictedMl) : DrinkRules.DrawnFill(_cupLevel);
             DrawnFill = fill;
+            // 042 follow-up: a new cup shows its level at once; after that the drawn level eases towards it (DrinkArtRules.EaseFill in
+            // Update), so another player's cup glides to the server's bucket instead of snapping to it.
+            if (_shownFill < 0f) _shownFill = fill;
+            DrawLiquid(_shownFill);
+        }
+
+        /// <summary>042 follow-up: the level drawn now (fraction of the cup; it eases towards <see cref="DrawnFill"/>); -1 without a cup.</summary>
+        public float ShownFill => _cupShown ? _shownFill : -1f;
+
+        private float _shownFill = -1f;
+
+        private void DrawLiquid(float fill)
+        {
             if (_liquid == null) return;
             bool on = fill > 0.001f;
             if (_liquid.gameObject.activeSelf != on) _liquid.gameObject.SetActive(on);
@@ -595,6 +616,7 @@ namespace Worktown.Game.Art
         {
             StopDrop();
             _cupShown = false; // spec 033
+            _shownFill = -1f; // 042 follow-up
             _liquid = null;
             _lid = null;
             for (int i = 0; i < _active.Count; i++)

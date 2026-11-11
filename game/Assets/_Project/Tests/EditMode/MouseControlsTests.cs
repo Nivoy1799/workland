@@ -95,7 +95,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(HandIntent.Act, Third(HandInput.KeyE));
             Assert.AreEqual(HandIntent.Act, Third(HandInput.LeftClick, holding: false));
             Assert.AreEqual(Third(HandInput.KeyE), Third(HandInput.LeftClick), "the same meaning");
-            Assert.AreEqual(HandIntent.Hold, Third(HandInput.HoldLeft), "holding E or the left button: the board's squeeze gate decides");
+            // 041 review (dead path removed): a third-person hold goes through the interactor's SqueezeHoldGate, not the router.
+            Assert.AreEqual(HandIntent.None, Third(HandInput.HoldLeft), "holding E or the left button: the board's squeeze gate decides, not the router");
             foreach (InteractionAction action in AllActions)
                 Assert.AreEqual(HandIntent.None, First(HandInput.KeyE, action), "spec 020 AC7: no E in first person");
         }

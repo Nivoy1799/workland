@@ -78,5 +78,28 @@ namespace Worktown.Game.Net.Rules
             outOfReach = best;
             return None;
         }
+
+        /// <summary>
+        /// 041 review: whether a hit of kind <paramref name="kind"/> at <paramref name="distance"/> on the ray stops the right click's
+        /// ray put-down (the free spot where the ray meets a surface, at <paramref name="putDownDistance"/>). Only what lies in front of
+        /// it counts. A wall (<see cref="AimKind.Other"/>) stops it, and so does a station's body or button, as they stop the left click.
+        /// Items and cookware do not (spec 041 Q2: aiming at the pot puts it down next to the pot), nor the station the surface belongs to
+        /// (<paramref name="ownsTheSurface"/>: its own top, a tap's cup spot inside the drink dispenser's aim box). The interactor passes
+        /// only walls as <see cref="AimKind.Other"/> (another player's held item is no wall).
+        /// </summary>
+        public static bool BlocksRayPutDown(AimKind kind, float distance, float putDownDistance, bool ownsTheSurface)
+        {
+            if (float.IsNaN(distance) || !(distance < putDownDistance)) return false;
+            switch (kind)
+            {
+                case AimKind.Other:
+                    return true;
+                case AimKind.Station:
+                case AimKind.Button:
+                    return !ownsTheSurface;
+                default:
+                    return false;
+            }
+        }
     }
 }

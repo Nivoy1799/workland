@@ -117,6 +117,12 @@ namespace Worktown.Game.Cooking
             _visualDirty = true;
         }
 
+        /// <summary>044 follow-up: the server refused the predicted tip or scoop: the synced contents show again now.</summary>
+        internal void EndPredictedContents()
+        {
+            if (_prediction.Refused()) _visualDirty = true;
+        }
+
         /// <summary>Spec 044: the contents as this client draws them (a predicted tip or scoop first).</summary>
         public IReadOnlyList<FoodLook> SeenLooks => _prediction.Shown(Looks);
 

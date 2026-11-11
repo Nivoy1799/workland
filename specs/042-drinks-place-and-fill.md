@@ -168,3 +168,17 @@ brief asked). `Scripts/UI/HudView` not touched: a refused press still says "Take
    Visual check `.verify/visual-fu1`: the cook and tutorial tours are ok with 0 exceptions, and both log "third person E acted; the
    hands hold 'empty cup' (the cup from the tray)". Cells: cook 454/455, tutorial 324/325. The third-person shot looks at the
    cook's face, not at the tray; the HUD shows "empty cup" in the hands. A better camera angle is left for later.
+
+**Follow-ups (2026-11-11, branch `spec/followups-041-042-044`).**
+6. **The cup's rest height.** Measured first, in the built scene. A cup at rest on a tap's spot stands on the drip tray: the tray
+   top is 1.0740 m and the cup's drawn bottom is 1.0739 m under all three taps. The chain is the server's `PlanPlace` rest (spot +
+   the Food collider's bottom offset, 0.20 m), the Food's Visual child (-0.20 m) and the cup model's lowest point (0.0 m). The rest
+   already includes the collider's bottom offset. Lifting the spot by it again would float the cup 20 cm, so nothing was changed.
+   The "2 cm into the grid" was probably the thin spot aim collider or the camera angle. New test that pins the height (3 mm):
+   `CupTrayFollowUpTests.BuiltScene_ACupAtRestOnItsSpot_StandsOnTheDripTray`. It logs the numbers.
+7. **Remote level eases instead of snapping.** `FoodVisual` draws the liquid at `ShownFill`, which moves towards the level to show
+   (`DrawnFill`, unchanged meaning) at `DrinkArtRules.FillEaseSpeed` (2 cup heights/s, four times a pour; `EaseFill`). A new cup
+   shows its level at once. A look rebuild keeps the drawn level, so another player's cup glides to the server's bucket in about
+   0.1-0.25 s. A refused pour glides back too. The owner's own pour is drawn as it runs (the ease is faster than the pour). The
+   late start (about one round trip) stays: fixing it needs the pour's start time, which is a synced value. Test:
+   `CupTrayFollowUpTests.EaseFill_GlidesToTheBucket_AndKeepsUpWithAPour`.

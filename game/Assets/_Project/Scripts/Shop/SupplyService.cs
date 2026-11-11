@@ -260,9 +260,11 @@ namespace Worktown.Game.Shop
 
         /// <summary>
         /// Spec 034: the carried box goes into slot line <paramref name="line"/>: up to the capacity fills it; what does not fit stays in
-        /// the box (still in the hands); an empty box is gone. WrongBox, StockFull; nothing changes then.
+        /// the box (still in the hands); an empty box is gone. WrongBox, StockFull; nothing changes then. 044 follow-up: the emptied box
+        /// leaves for <paramref name="exitTo"/> (the slot's anchor): everyone who did not unpack it sees it fly into the slot and hears
+        /// the unpack there (Pickup.ServerExitTo, the 044 exit flight; no new RPC or SyncVar).
         /// </summary>
-        public CookOutcome Unpack(PickupInteractor player, NetworkObject box, int line, string where)
+        public CookOutcome Unpack(PickupInteractor player, NetworkObject box, int line, string where, Vector3 exitTo)
         {
             if (box == null) return CookOutcome.NothingHeld;
             CookOutcome done = _room.Unpack(box.ObjectId, line, out int accepted, out int left);
@@ -270,7 +272,7 @@ namespace Worktown.Game.Shop
             if (left <= 0)
             {
                 _boxObjects.Remove(box.ObjectId); // 034 review: unpacked, not lost
-                _pickups.TakeAway(player, out _);
+                _pickups.TakeAway(player, out _, exitTo, Worktown.Game.Audio.SoundKey.Unpack);
                 _networkManager.ServerManager.Despawn(box);
             }
             else if (box.TryGetComponent(out SupplyBox supplyBox))

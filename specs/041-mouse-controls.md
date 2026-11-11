@@ -176,5 +176,27 @@ movement keys, gamepad. Q is not listed.
 - The gamepad bumper conflict (above).
 - docs/feel.md 8 still says "right click ... rotate"; that doc is out of this spec's scope.
 
+### Follow-ups (2026-11-11)
+Branch `spec/followups-041-042-044` (builder, opus). From the 041 review and the roadmap line.
+- **Shared hit sorting.** New `Net/AimHitSort` (`Classify(collider, out source)` gives `AimHitClass` Button, Surface,
+  FixedVessel, Station, Item or Other; `SlotAt`, `SlotFollowsTheRay`). `FindExactTarget` and `EmptyHandsAimTests` both use it,
+  so the test no longer copies the order. It only looks up components (no state); the interactor's spot, tool and drink logic
+  stays in the interactor.
+- **Right click stops at a station's body.** Pure `AimRules.BlocksRayPutDown(kind, distance, putDownDistance, ownsTheSurface)`:
+  a wall, a station body or a button in front of the ray put-down clears it, as for the left click. Cookware and items still
+  do not (Q2), and neither does the station the surface is a child of (its own tops, the cup spots inside the dispenser's aim
+  box). The cone fallback is unchanged.
+- **Dead code removed.** The `ControlRules.IntentFor(HandInput.KeyE, ...)` check in the third-person branch (always Act). The
+  third-person `HoldLeft -> Hold` route (no caller; holds go through `SqueezeHoldGate`). `MouseControlsTests` now expects None
+  for it (a change of meaning the orchestrator asked for). The mapping table above still says "Hold through SqueezeHoldGate",
+  which is what the interactor does.
+- **Turned item over a neighbour.** `PickupService.PlanPlace` has an overload with the item's collider half extents
+  (`Pickup.ColliderHalfExtents`; `TryPlace` passes them). A wheel step other than 0 is refused (Taken) when the turned
+  footprint reaches an occupied neighbour spot (spot table or probe) that the unturned rest does not reach
+  (`PlaceTurn.Footprint`, `Reaches`, `TurnOverlaps`; 1 cm slack past the half-way line). A half turn is never refused. The old
+  overload (no footprint) is unchanged. Limit: only the server checks. The ghost still shows the turn, and the client's
+  prediction comes back with "nope" on the refusal.
+- Tests: new `MouseControlsFollowUpTests` (4). Run results are under 044's follow-ups (one verify for the round).
+
 ## Blockers
 (None.)

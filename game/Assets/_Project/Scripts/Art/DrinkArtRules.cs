@@ -118,5 +118,20 @@ namespace Worktown.Game.Art
 
         /// <summary>The seconds the held cup takes to move under the tap and back (the pick-up arc's time, feel.md 2).</summary>
         public const float UnderTapSeconds = 0.14f;
+
+        /// <summary>
+        /// 042 follow-up: how fast (cup heights per second) a drawn level may move towards the level to show. Four times a tap's pour
+        /// (200 ml/s into a 400 ml cup is 0.5 per second), so a pour is drawn as it runs, and a jump to the server's bucket (another
+        /// player's cup a round trip late, a refused pour) glides in about 0.1 to 0.25 s instead of snapping.
+        /// </summary>
+        public const float FillEaseSpeed = 2f;
+
+        /// <summary>042 follow-up: the drawn level <paramref name="dt"/> s later, moved from <paramref name="shown"/> towards <paramref name="target"/>.</summary>
+        public static float EaseFill(float shown, float target, float dt)
+        {
+            if (float.IsNaN(shown) || float.IsNaN(target)) return target;
+            if (!(dt > 0f)) return shown;
+            return Mathf.MoveTowards(shown, target, FillEaseSpeed * dt);
+        }
     }
 }

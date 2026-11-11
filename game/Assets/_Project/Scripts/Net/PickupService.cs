@@ -135,6 +135,7 @@ namespace Worktown.Game.Net
             bool found = holding && _networkManager.ServerManager.Objects.Spawned.TryGetValue(itemId, out item) && item.TryGetComponent(out pickup);
             PickupOutcome planned = PlanPlace(_spots, holding, surfaceIndex, surface, packedSpot, player.transform.position,
                 found && pickup.IsHandleTool, found ? pickup.RestTilt : Quaternion.identity, found ? pickup.BottomOffset : 0f,
+                found ? pickup.ColliderHalfExtents : Vector3.zero, // 041 review: a turn may not lay it over a neighbour
                 _isOccupied ??= spot => IsSpotOccupied(spot, _probe), out int spotIndex, out Pose rest);
             if (planned != PickupOutcome.Ok) return planned;
             if (!found) return PickupOutcome.NotFound;
@@ -165,6 +166,19 @@ namespace Worktown.Game.Net
             Vector3 playerPosition, bool handleTool, Quaternion restTilt, float bottomOffset, System.Func<Vector3, bool> occupied,
             out int spotIndex, out Pose rest)
         {
+            return PlanPlace(spots, holding, surfaceIndex, surface, packedSpot, playerPosition, handleTool, restTilt, bottomOffset,
+                Vector3.zero, occupied, out spotIndex, out rest);
+        }
+
+        /// <summary>
+        /// 041 review: as above, with the item's local half extents (<paramref name="halfExtents"/>; zero: no footprint check). A wheel
+        /// turn (a step other than 0) is refused (Taken) when the turned item would reach an occupied neighbour spot that it does not
+        /// reach unturned (PlaceTurn.TurnOverlaps; occupied: in the spot table or found by <paramref name="occupied"/>).
+        /// </summary>
+        public static PickupOutcome PlanPlace(PlaceSpots spots, bool holding, int surfaceIndex, PlaceSurface surface, int packedSpot,
+            Vector3 playerPosition, bool handleTool, Quaternion restTilt, float bottomOffset, Vector3 halfExtents,
+            System.Func<Vector3, bool> occupied, out int spotIndex, out Pose rest)
+        {
             rest = default;
             if (!PlaceTurn.TryUnpack(packedSpot, out spotIndex, out int turn)) spotIndex = -1;
             int spotCount = surface != null ? surface.SpotCount : 0;
@@ -177,8 +191,18 @@ namespace Worktown.Game.Net
             if (check != PickupOutcome.Ok) return check;
             if (occupied != null && occupied(spot)) return PickupOutcome.Taken;
             // Spec 039: a tool lies with its handle towards where the server has the player (ToolRest); anything else as before.
-            Quaternion rotation = PlaceTurn.Apply(ToolRest.RestRotation(handleTool, restTilt, surface.transform.rotation, playerPosition, spot),
-                turn); // spec 041: the player's wheel turn on top of the server's rest
+            Quaternion unturned = ToolRest.RestRotation(handleTool, restTilt, surface.transform.rotation, playerPosition, spot);
+            Quaternion rotation = PlaceTurn.Apply(unturned, turn); // spec 041: the player's wheel turn on top of the server's rest
+            // 041 review: the wheel's turn may not lay the item over an occupied neighbour spot.
+            if (PlaceTurn.Add(turn, 0) != 0 && halfExtents != Vector3.zero)
+            {
+                Quaternion surfaceRotation = surface.transform.rotation;
+                int index = surfaceIndex;
+                bool overlaps = PlaceTurn.TurnOverlaps(surface.Size, spotIndex, PlaceTurn.Footprint(halfExtents, unturned, surfaceRotation),
+                    PlaceTurn.Footprint(halfExtents, rotation, surfaceRotation),
+                    n => spots.IsTaken(index, n) || (occupied != null && occupied(surface.SpotWorldPosition(n))));
+                if (overlaps) return PickupOutcome.Taken;
+            }
             rest = new Pose(spot + surface.transform.up * bottomOffset, rotation);
             return PickupOutcome.Ok;
         }

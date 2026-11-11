@@ -14,7 +14,7 @@ namespace Worktown.Game.Tests
     /// 039 review (must-fix): the spec 039 strips (the plate shelf's front, the sink's front, ...) have a thin aim collider 5 mm above
     /// their station. With empty hands a spot does nothing, so it must not block the ray: AimRules.Pick with spotsTransparent finds
     /// the station underneath, which then gives its action (take a plate, scrub). The rays are cast in the built scene from where a
-    /// cook stands, and the hits are sorted as PickupInteractor.FindExactTarget sorts them (surface, station or its slot, item, other).
+    /// cook stands, and the hits are sorted by AimHitSort, the helper PickupInteractor.FindExactTarget uses (041 review: no copy).
     /// </summary>
     public class EmptyHandsAimTests
     {
@@ -97,24 +97,39 @@ namespace Worktown.Game.Tests
             var sources = new List<Component>();
             foreach (RaycastHit h in raw)
             {
-                if (h.collider.TryGetComponent(out PlaceSurface surface))
+                // 041 review: the interactor's own sorting (AimHitSort), not a copy of it.
+                switch (AimHitSort.Classify(h.collider, out Component source))
                 {
-                    hits.Add(AimHit.Spot(h.distance, surface.SpotWorldPosition(0), surface.Index, 0));
-                    sources.Add(surface);
-                    continue;
+                    case AimHitClass.Surface:
+                        var surface = (PlaceSurface)source;
+                        hits.Add(AimHit.Spot(h.distance, surface.SpotWorldPosition(0), surface.Index, 0));
+                        sources.Add(surface);
+                        break;
+                    case AimHitClass.Button:
+                        var button = (StationButton)source;
+                        hits.Add(AimHit.Button(h.distance, button.Station.transform.position, button.Station.Index, button.Option));
+                        sources.Add(button.Station);
+                        break;
+                    case AimHitClass.Station:
+                        var station = (Station)source;
+                        StockSlot slot = AimHitSort.SlotAt(station, h.point);
+                        Component aimed = slot != null ? slot : (Component)station;
+                        hits.Add(new AimHit(h.distance, AimKind.Station, aimed.transform.position));
+                        sources.Add(aimed);
+                        break;
+                    case AimHitClass.FixedVessel:
+                        hits.Add(new AimHit(h.distance, AimKind.Vessel, source.transform.position));
+                        sources.Add(source);
+                        break;
+                    case AimHitClass.Item:
+                        hits.Add(new AimHit(h.distance, AimKind.Pickup, source.transform.position));
+                        sources.Add(null);
+                        break;
+                    default:
+                        hits.Add(new AimHit(h.distance, AimKind.Other, h.collider.transform.position));
+                        sources.Add(null);
+                        break;
                 }
-                Station station = h.collider.GetComponentInParent<Station>();
-                if (station != null)
-                {
-                    StockSlot slot = station.SlotCount > 0 ? station.NearestSlot(h.point) : null;
-                    Component source = slot != null ? slot : (Component)station;
-                    hits.Add(new AimHit(h.distance, AimKind.Station, source.transform.position));
-                    sources.Add(source);
-                    continue;
-                }
-                bool item = h.collider.GetComponentInParent(typeof(Pickup)) != null;
-                hits.Add(new AimHit(h.distance, item ? AimKind.Pickup : AimKind.Other, h.collider.transform.position));
-                sources.Add(null);
             }
             Assert.Greater(hits.Count, 0, "the ray at " + stripName + " hits something");
             int full = AimRules.Pick(hits, feet, true, false, out _);

@@ -33,6 +33,24 @@ namespace Worktown.Game.Cooking
             return true;
         }
 
+        /// <summary>
+        /// 044 follow-up: the server refused the request this look belongs to: the real contents show again at once (not after the
+        /// confirm timeout). True if a prediction ended.
+        /// </summary>
+        public bool Refused()
+        {
+            if (!_active) return false;
+            _active = false;
+            return true;
+        }
+
+        /// <summary>
+        /// 044 follow-up (spec 045 request ids): whether the answer to request <paramref name="answered"/> (0: not one of ours) ends the
+        /// tip or scoop look sent as request <paramref name="request"/> at once: only a refusal of that very request does. A yes leaves
+        /// it to the synced contents (they change with the answer).
+        /// </summary>
+        public static bool RefusalEnds(int answered, int request, bool ok) => answered != 0 && answered == request && !ok;
+
         /// <summary>True if the prediction ran out at <paramref name="now"/> (it ends then).</summary>
         public bool Expired(float now)
         {

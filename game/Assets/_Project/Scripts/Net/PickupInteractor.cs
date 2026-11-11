@@ -63,6 +63,9 @@ namespace Worktown.Game.Net
         private readonly List<AimHit> _aimHits = new List<AimHit>(16);
         private readonly List<Component> _aimSources = new List<Component>(16);
         private readonly List<Vector3> _aimPoints = new List<Vector3>(16);
+        // 041 review: what stops the right click's ray put-down on this frame's ray (a wall: no station).
+        private readonly List<float> _rayBlockDistances = new List<float>(8);
+        private readonly List<Station> _rayBlockStations = new List<Station>(8);
         // Spec 019: the knife gesture (owner only).
         private readonly CutGesture _gesture = new CutGesture();
         private HeldItemView _heldView;
@@ -344,8 +347,8 @@ namespace Worktown.Game.Net
                 bool act = GameInput.Pressed(ControlAction.Use) || leftPressed || _scriptedLeft
                     || (gamepad != null && gamepad.rightTrigger.wasPressedThisFrame);
                 // Spec 020 AC7: E acts in third person only. Spec 027b review: through the click buffer as well.
-                if (InteractionRules.KeysActInView(firstPerson) && (tapped || (!squeezing && act))
-                    && ControlRules.IntentFor(HandInput.KeyE, false, InteractionAction.None, held != null, false) == HandIntent.Act)
+                // 041 review: E (and the left click) always act in third person (ControlRules), so no router check here.
+                if (InteractionRules.KeysActInView(firstPerson) && (tapped || (!squeezing && act)))
                     Queue(QueuedKind.Key, false);
                 // Spec 041: the right click (left trigger, Q, X) drops what you hold; it never does anything else.
                 bool right = RightPressed(mouse, gamepad, locked) || _scriptedRight;
@@ -692,6 +695,7 @@ namespace Worktown.Game.Net
                 if (target.ContentCount == 0) return;
                 Transform part = target.LastPartModel;
                 target.PredictContents(ContentsPrediction.Scooped(target.SeenLooks), timeout);
+                NoteContentsRequest(target, null);
                 if (part != null)
                     Worktown.Game.Art.ExitFlightLook.Begin(part, new Pose(part.position, part.rotation), HandPose().position, null, Time.unscaledTime);
                 return;
@@ -702,6 +706,33 @@ namespace Worktown.Game.Net
             if (!tips || target.ContentCount == 0) return;
             plate.PredictContents(ContentsPrediction.Tipped(plate.SeenLooks, target.SeenLooks), timeout);
             target.PredictContents(System.Array.Empty<FoodLook>(), timeout);
+            NoteContentsRequest(target, plate);
+        }
+
+        // 044 follow-up: the request of the last predicted tip or scoop and its vessels, so a refusal ends their look at once.
+        private int _contentsRequest;
+        private Vessel _contentsSource;
+        private Vessel _contentsPlate;
+
+        private void NoteContentsRequest(Vessel source, Vessel plate)
+        {
+            _contentsRequest = _lastRequest;
+            _contentsSource = source;
+            _contentsPlate = plate;
+        }
+
+        /// <summary>044 follow-up: the answer to request <paramref name="answered"/>: a refused tip or scoop shows the real contents now.</summary>
+        private void AnswerContents(int answered, bool ok)
+        {
+            if (answered == 0 || answered != _contentsRequest) return;
+            if (ContentsPrediction.RefusalEnds(answered, _contentsRequest, ok))
+            {
+                if (_contentsSource != null) _contentsSource.EndPredictedContents();
+                if (_contentsPlate != null) _contentsPlate.EndPredictedContents();
+            }
+            _contentsRequest = 0;
+            _contentsSource = null;
+            _contentsPlate = null;
         }
 
         /// <summary>Spec 027b: a pick-up request with its predicted arc into the hands and the pick sound.</summary>
@@ -2270,6 +2301,29 @@ namespace Worktown.Game.Net
             _rayPutDownPosition = default;
         }
 
+        /// <summary>041 review: a wall (<paramref name="station"/> null) or a station's body or button on this frame's ray.</summary>
+        private void AddRayBlocker(float distance, Station station)
+        {
+            _rayBlockDistances.Add(distance);
+            _rayBlockStations.Add(station);
+        }
+
+        /// <summary>
+        /// 041 review: something solid lies on the ray in front of the ray put-down's surface (AimRules.BlocksRayPutDown): a wall, or a
+        /// station the surface does not belong to. The right click then does not put down through it, as the left click does not.
+        /// </summary>
+        private bool RayPutDownBlocked(float putDownDistance)
+        {
+            for (int i = 0; i < _rayBlockDistances.Count; i++)
+            {
+                Station station = _rayBlockStations[i];
+                bool owns = station != null && _rayPutDownSurface.transform.IsChildOf(station.transform);
+                if (AimRules.BlocksRayPutDown(station != null ? AimKind.Station : AimKind.Other, _rayBlockDistances[i], putDownDistance, owns))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Spec 041, first person with something in the hands: the click's own spot when the click places; else the free spot nearest
         /// where the aim ray meets a surface (behind cookware or a station on it, never through a wall); else the free spot nearest
@@ -2356,23 +2410,30 @@ namespace Worktown.Game.Net
             _aimHits.Clear();
             _aimSources.Clear();
             _aimPoints.Clear();
-            float putDownDistance = float.PositiveInfinity, wallDistance = float.PositiveInfinity;
+            _rayBlockDistances.Clear();
+            _rayBlockStations.Clear();
+            float putDownDistance = float.PositiveInfinity;
             for (int i = 0; i < count; i++)
             {
                 Collider hitCollider = _rayHits[i].collider;
                 if (hitCollider == null || hitCollider.transform.IsChildOf(transform)) continue;
                 float distance = _rayHits[i].distance;
+                // 041 review: sorted by the shared AimHitSort (the built-scene aim tests use the same).
+                AimHitClass hitClass = AimHitSort.Classify(hitCollider, out Component hitSource);
                 // Spec 019: a knob or button on a stove front; reach is measured to its station, like the server does.
-                if (hitCollider.TryGetComponent(out StationButton button) && button.Station != null)
+                if (hitClass == AimHitClass.Button)
                 {
+                    var button = (StationButton)hitSource;
+                    AddRayBlocker(distance, button.Station); // 041 review: the right click does not put down through a station
                     _aimHits.Add(AimHit.Button(distance, button.Station.transform.position, button.Station.Index, button.Option));
                     _aimSources.Add(button);
                     _aimPoints.Add(_rayHits[i].point);
                     continue;
                 }
                 // Spec 020: a worktop top, the stove top or a burner (checked before its station).
-                if (hitCollider.TryGetComponent(out PlaceSurface surface))
+                if (hitClass == AimHitClass.Surface)
                 {
+                    var surface = (PlaceSurface)hitSource;
                     Vector3 point = _rayHits[i].point;
                     int spot = NearestFreeSpot(surface, point, out Vector3 spotPosition);
                     // Spec 041: the nearest surface on the ray with a free spot in reach is where a right click puts things down,
@@ -2400,23 +2461,23 @@ namespace Worktown.Game.Net
                     continue;
                 }
                 // Spec 029: a fryer basket (a fixed vessel, no Pickup); its collider moves with its arc.
-                Vessel fixedVessel = hitCollider.GetComponentInParent<Vessel>();
-                if (fixedVessel != null && VesselRules.IsFixed(fixedVessel.Kind)) // spec 030: a griddle spot too
+                if (hitClass == AimHitClass.FixedVessel) // spec 030: a griddle spot too
                 {
+                    var fixedVessel = (Vessel)hitSource;
                     if (fixedVessel.IsSpawned) AddAimHit(distance, AimKind.Vessel, fixedVessel);
                     else AddAimHit(distance, AimKind.Other, null);
                     _aimPoints.Add(_rayHits[i].point);
                     continue;
                 }
-                Station station = hitCollider.GetComponentInParent<Station>();
+                Station station = hitClass == AimHitClass.Station ? (Station)hitSource : null;
                 // Spec 042: the drink dispenser's aim box holds its drip tray: a cup on a spot, or the free spot for the cup in the hands.
                 if (station != null && station.Kind == StationKind.DrinkDispenser && AddDrinkSpotHit(station, ray, held, distance, _rayHits[i].point))
                     continue;
-                Pickup pickup = station == null ? hitCollider.GetComponentInParent<Pickup>() : null;
-                StockSlot slot = station != null && station.SlotCount > 0 ? station.NearestSlot(_rayHits[i].point) : null;
+                if (station != null) AddRayBlocker(distance, station); // 041 review: the right click does not put down through a station
+                Pickup pickup = hitClass == AimHitClass.Item ? (Pickup)hitSource : null;
+                StockSlot slot = AimHitSort.SlotAt(station, _rayHits[i].point);
                 // Spec 031: on the assembly board a ray means a tool only near it (elsewhere it is the board itself).
-                if (station != null && (station.Kind == StationKind.Assembly || station.Kind == StationKind.Register
-                    || station.Kind == StationKind.DrinkDispenser)) slot = ToolOnRay(station, ray); // spec 032: the register; spec 033: the drinks
+                if (station != null && AimHitSort.SlotFollowsTheRay(station.Kind)) slot = ToolOnRay(station, ray); // spec 032: the register; spec 033: the drinks
                 if (slot != null)
                     AddAimHit(distance, AimKind.Station, slot); // spec 028b: the fridge or shelf means its slot nearest the hit; reach to its anchor
                 else if (station != null)
@@ -2430,11 +2491,11 @@ namespace Worktown.Game.Net
                 else
                 {
                     AddAimHit(distance, AimKind.Other, null);
-                    if (pickup == null) wallDistance = Mathf.Min(wallDistance, distance); // spec 041: no putting down through a wall
+                    if (pickup == null) AddRayBlocker(distance, null); // spec 041: no putting down through a wall
                 }
                 _aimPoints.Add(_rayHits[i].point);
             }
-            if (_rayPutDownSurface != null && wallDistance < putDownDistance) ClearRayPutDown();
+            if (_rayPutDownSurface != null && RayPutDownBlocked(putDownDistance)) ClearRayPutDown();
             // 039 review (must-fix): with empty hands the place surfaces' thin aim colliders are transparent (nothing to put down).
             int picked = AimRules.Pick(_aimHits, transform.position, holding, !holding, out int outOfReach);
             // Spec 020: a target the ray sees but the hands cannot reach is shown grey with "Too far".
@@ -3085,6 +3146,7 @@ namespace Worktown.Game.Net
         {
             int answered = NoteAnswer(request, AnswerKind.Cook, outcome == CookOutcome.Ok);
             if (answered != 0) AnswerStockLooks(answered, outcome); // spec 034
+            AnswerContents(answered, outcome == CookOutcome.Ok); // 044 follow-up: a refused tip or scoop goes back at once
             if (answered != 0 && answered == _squeezeStartRequest)
             {
                 // 031b (review of 031): a refused squeeze start ends the predicted ribbon at once (not after its 8 s hold).
