@@ -47,11 +47,11 @@ namespace Worktown.Sim.Tests.Climb
 
         public static IReadOnlyList<StageDef> Stages => new[]
         {
-            new StageDef(ClimbStage.FoodCorner, 1, 500, 1, 0, 1, 1, "lease", 0, 0, 0, false, 300),
-            new StageDef(ClimbStage.FirstRestaurant, 2, 500, 1, 1, 2, 2, null, 30, 2, 1, false, 400),
-            new StageDef(ClimbStage.ServiceMix, 2, 500, 1, 1, 2, 2, null, 30, 1, 0, true, 400),
-            new StageDef(ClimbStage.Automation, 2, 500, 1, 1, 2, 2, null, 30, 1, 0, false, 400),
-            new StageDef(ClimbStage.BeyondKitchen, 2, 500, 1, 1, 2, 2, null, 0, 0, 0, false, 400),
+            new StageDef(ClimbStage.FoodCorner, 1, 500, 1, 0, 1, 1, "lease", 0, 0, 0, 0, 0, 300),
+            new StageDef(ClimbStage.FirstRestaurant, 2, 500, 1, 1, 2, 2, null, 30, 2, 1, 0, 0, 400),
+            new StageDef(ClimbStage.ServiceMix, 2, 500, 1, 1, 2, 2, null, 30, 1, 0, 0, 0, 400),
+            new StageDef(ClimbStage.Automation, 2, 500, 1, 1, 2, 2, null, 30, 1, 0, 0, 0, 400),
+            new StageDef(ClimbStage.BeyondKitchen, 2, 500, 1, 1, 2, 2, null, 0, 0, 0, 0, 0, 400),
         };
 
         public static IReadOnlyList<BigJobDef> BigJobs => new[]
@@ -103,7 +103,7 @@ namespace Worktown.Sim.Tests.Climb
         /// service (index, stage, default).
         /// </summary>
         public static ClimbRun Run(int players, string profile, ClimbStrategy strategy, ulong seed, int[] perStage,
-            Func<int, ClimbStage, ServiceResult, ServiceResult>? custom = null, long horizon = 40 * 3600)
+            Func<int, ClimbStage, ServiceResult, ServiceResult>? custom = null, long horizon = 40 * 3600, CrewFactors? crew = null)
         {
             var list = new List<ServiceResult>();
             int index = 0;
@@ -115,7 +115,7 @@ namespace Worktown.Sim.Tests.Climb
                     list.Add(custom != null ? custom(index, stage, r) : r);
                 }
             var setup = new CrewSetup(players, profile, strategy, seed);
-            return new ClimbRun(setup, horizon, list, Engine.Start(Setup()));
+            return new ClimbRun(setup, horizon, list, Engine.Start(Setup()), 1, crew);
         }
 
         /// <summary>Default pacing (600 s services): S2 at 1 h, S3 at 4 h, S4 at 9 h, S5 at 15 h.</summary>
