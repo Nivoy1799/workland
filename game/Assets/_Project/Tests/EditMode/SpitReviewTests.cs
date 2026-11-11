@@ -99,25 +99,53 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void AServerStop_PutsAnUntouchedCone_BackIntoStock_APartlyShavedOneIsLost()
+        public void AServerStop_PutsAnUntouchedCone_BackIntoStock_APartlyShavedOneStaysOnItsSpit()
         {
             SpitDesk untouched = Loaded(out _);
-            Assert.AreEqual(1, untouched.ClearReturningUntouched(), "all 30 portions, never shaved: back to stock");
+            Assert.AreEqual(1, untouched.ClearReturningUntouched(At(10), Rate), "all 30 portions, never shaved: back to stock");
             Assert.IsFalse(untouched.HasCone(SpitIndex), "and the spit is bare");
-            Assert.AreEqual(0, untouched.ClearReturningUntouched(), "once");
+            Assert.AreEqual(0, untouched.ClearReturningUntouched(At(11), Rate), "once");
 
             var stock = new StockRoom();
             int line = StockCatalog.ConeLine;
             int before = stock.LineOf(line).Count;
             SpitDesk again = Loaded(out _);
-            Assert.AreEqual(0, stock.ReturnUpToCapacity(line, again.ClearReturningUntouched()), "it fits"); // what KitchenService does on the stop
+            Assert.AreEqual(0, stock.ReturnUpToCapacity(line, again.ClearReturningUntouched(At(10), Rate)), "it fits"); // what KitchenService does on the stop
             Assert.AreEqual(before + 1, stock.LineOf(line).Count);
 
+            // Spec 045 (was "a partly shaved cone is lost"): it stays on its spit with what it has left, the knob off, the tray empty.
             SpitDesk shaved = Loaded(out _);
             Assert.AreEqual(CookOutcome.Ok, shaved.Press(SpitIndex, Cook, true, At(55)));
-            shaved.Release(SpitIndex, Cook, true, At(57), Rate, out _);
-            Assert.AreEqual(0, shaved.ClearReturningUntouched(), "a shaved cone is lost, like food in a pan");
-            Assert.IsFalse(shaved.HasCone(SpitIndex));
+            shaved.Release(SpitIndex, Cook, true, At(57), Rate, out int portions);
+            Assert.Greater(portions, 0);
+            Assert.AreEqual(0, shaved.ClearReturningUntouched(At(60), Rate), "not untouched: nothing goes back to stock");
+            Assert.IsTrue(shaved.HasCone(SpitIndex), "the paid cone is not lost");
+            Assert.AreEqual(Spit.PortionsPerCone - portions, shaved.ConeAt(SpitIndex, At(60), Rate).Portions);
+            Assert.AreEqual(Spit.Off, shaved.LevelOf(SpitIndex), "the knob is off");
+            Assert.AreEqual(0, shaved.TrayCount(SpitIndex), "the tray's food is gone, like food in a pan");
+            Assert.IsFalse(shaved.IsHeld(SpitIndex, out _, out _));
+            var kept = new List<int>();
+            shaved.KeptCones(kept);
+            CollectionAssert.AreEqual(new[] { SpitIndex }, kept);
+        }
+
+        [Test]
+        public void APartlyUsedCone_KeepsItsBrowningOverTheStop_AndOnlyHeatsAgainOnceTheKnobTurns()
+        {
+            SpitDesk desk = Loaded(out _);
+            Assert.AreEqual(CookOutcome.Ok, desk.Press(SpitIndex, Cook, true, At(55)));
+            desk.Release(SpitIndex, Cook, true, At(57), Rate, out _);
+            float atStop = desk.ConeAt(SpitIndex, At(70), Rate).OuterSeconds;
+            desk.ClearReturningUntouched(At(70), Rate);
+            Assert.AreEqual(atStop, desk.ConeAt(SpitIndex, At(70), Rate).OuterSeconds, 1e-4f, "folded to the stop");
+            // The next session's ticks start anywhere (here: earlier than the stop); an off cone does not change.
+            desk.Register(SpitIndex); // what the next start's scan does: the record is kept
+            Assert.AreEqual(atStop, desk.ConeAt(SpitIndex, 5, Rate).OuterSeconds, 1e-4f);
+            Assert.AreEqual(atStop, desk.ConeAt(SpitIndex, At(5000), Rate).OuterSeconds, 1e-4f);
+            Assert.IsTrue(desk.HasCone(SpitIndex));
+            // The knob on in the new session: it browns from where it was.
+            desk.TurnKnob(SpitIndex, 100, Rate);
+            Assert.Greater(desk.ConeAt(SpitIndex, 100 + (uint)(10 * Rate), Rate).OuterSeconds, atStop);
         }
 
         [Test]
@@ -132,7 +160,7 @@ namespace Worktown.Game.Tests
             int version = stock.Version;
 
             SpitDesk loaded = Loaded(out _);
-            int boxed = stock.ReturnUpToCapacity(line, loaded.ClearReturningUntouched()); // the server stops with an untouched cone loaded
+            int boxed = stock.ReturnUpToCapacity(line, loaded.ClearReturningUntouched(At(10), Rate)); // the server stops with an untouched cone loaded
             Assert.AreEqual(1, boxed, "no room: the cone goes into a box");
             Assert.AreEqual(start.Capacity, stock.LineOf(line).Count, "never more than the capacity");
             Assert.Greater(stock.Version, version, "the counts are published again");

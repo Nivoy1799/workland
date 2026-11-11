@@ -18,6 +18,12 @@ namespace Worktown.Game.Art
         /// <summary>s: after our own press, a flags change of the same button within this time is that press (no second sink).</summary>
         public const float OwnPressWindow = 1f;
 
+        /// <summary>
+        /// 044 review: a flags change at <paramref name="now"/> that presses this button is our own press (made at <paramref name="ownPressAt"/>,
+        /// already sunk) when it comes within <see cref="OwnPressWindow"/>; else someone else pressed it and the button sinks now.
+        /// </summary>
+        public static bool IsOwnConfirm(float now, float ownPressAt) => now - ownPressAt <= OwnPressWindow;
+
         /// <summary>Depth in metres <paramref name="t"/> s after the press: 0 before and after, <see cref="SinkDepth"/> while held.</summary>
         public static float Depth(float t)
         {

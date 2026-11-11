@@ -109,6 +109,17 @@ namespace Worktown.Game.Net.Rules
             return _occupant.TryGetValue(Key(surface, spot), out objectId);
         }
 
+        /// <summary>Spec 047: the surface and spot the object lies on; false (and -1, -1) when it lies on none.</summary>
+        public bool TryGetSpotOf(int objectId, out int surface, out int spot)
+        {
+            surface = None;
+            spot = None;
+            if (!_spotOf.TryGetValue(objectId, out long key)) return false;
+            surface = (int)(key >> 32);
+            spot = (int)(uint)(key & 0xFFFFFFFFL);
+            return true;
+        }
+
         /// <summary>Marks the spot as taken by the object. False if the spot is taken; an object moves off its old spot.</summary>
         public bool TryTake(int surface, int spot, int objectId)
         {

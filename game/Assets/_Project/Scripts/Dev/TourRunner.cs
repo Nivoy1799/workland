@@ -51,6 +51,9 @@ namespace Worktown.Game.Dev
             bool observe = Array.IndexOf(args, "-observe") >= 0;
             bool demo = Array.IndexOf(args, DemoCookwareArg) >= 0;
             if (!tour && !observe && !demo) return;
+            // Spec 047: the menu tour has its own runner (MenuTourRunner): it starts on the title screen, not in the shop.
+            LaunchArgs parsed = LaunchArgs.Parse(args);
+            if (parsed.Tour == LaunchArgs.MenuTour || parsed.Observe == LaunchArgs.MenuTour) return;
             // Scripted runs must keep going while another window has focus (the player setting pauses them otherwise).
             Application.runInBackground = true;
             var go = new GameObject("TourRunner");
@@ -115,6 +118,8 @@ namespace Worktown.Game.Dev
             var intents = new ScriptedIntentSource();
             me.IntentSource = intents;
             _actor = new TourActor(me, intents);
+            // Spec 045: scripted roles listen to no devices (the Input System NREs in a 043 observer window).
+            if (_role != Role.CookDemo) FindFirstObjectByType<PlayerInputReader>()?.DisableForScript();
             switch (_role)
             {
                 case Role.CookDemo:

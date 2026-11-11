@@ -31,8 +31,8 @@ namespace Worktown.Game.Net
     {
         /// <summary>Client id of the holder, or <see cref="PickupRegistry.NoHolder"/>. Server writes, everyone reads.</summary>
         public readonly SyncVar<int> HolderClientId = new SyncVar<int>(PickupRegistry.NoHolder);
-        /// <summary>Spec 044: where the item goes when the server takes it out of the world (into a pot, the trash, the bin, the sink, a
-        /// slot), set just before its despawn (FishNet sends pending SyncVars before the despawn). Every viewer that did not predict it
+        /// <summary>Spec 044: where the item goes when the server takes it out of the world (into cookware, the trash, the bin, the sink),
+        /// set just before its despawn (FishNet sends pending SyncVars before the despawn). Every viewer that did not predict it
         /// draws it flying there (<see cref="ExitFlightLook"/>).</summary>
         public readonly SyncVar<Vector3> ExitPoint = new SyncVar<Vector3>(Vector3.zero);
         /// <summary>Spec 044: 0 = no exit; else the landing sound + 1 (<see cref="Worktown.Game.Audio.SoundKey"/>).</summary>
@@ -174,6 +174,14 @@ namespace Worktown.Game.Net
 
         /// <summary>Spec 027b, client: the resting tilt as this client last saw the item lying (for a predicted place).</summary>
         internal Quaternion ClientRestTilt => _clientRestTilt;
+
+        public override void OnStopServer()
+        {
+            base.OnStopServer();
+            // Spec 045: a scene item held when the server stops is nobody's in the next session (its SyncVars reset; this does not), so
+            // it never follows an old hold point after a restart.
+            _serverHoldPoint = null;
+        }
 
         public override void OnStopNetwork()
         {

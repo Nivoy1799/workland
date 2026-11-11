@@ -87,6 +87,9 @@ namespace Worktown.Game.Cooking
         private readonly Dictionary<Vessel, int> _spitOf = new Dictionary<Vessel, int>();
         private readonly Dictionary<int, PickupInteractor> _shavers = new Dictionary<int, PickupInteractor>();
         private readonly List<int> _spitScratch = new List<int>();
+        private readonly List<int> _keptCones = new List<int>(); // spec 045
+        // Spec 045: the scene plates' spots at the first server start; a restart puts them back there.
+        private readonly SceneStartSpots<Vessel> _plateStarts = new SceneStartSpots<Vessel>();
         private System.Func<int, bool> _shaverPresent;
 
         private sealed class HomeSlot
@@ -123,6 +126,10 @@ namespace Worktown.Game.Cooking
                 && !_networkManager.ServerManager.IsAnyServerStarted())
             {
                 _kitchen.Clear();
+                // Spec 045: the scene plates start the next session at their start spots, not where they were left (FishNet keeps a
+                // scene object's last transform over a stop).
+                int plates = _plateStarts.ResetAll(v => v != null, (v, position, rotation) => v.transform.SetPositionAndRotation(position, rotation));
+                if (plates > 0) Debug.Log("[Kitchen] the server stopped: " + plates + " scene plate(s) back at their start spots");
                 _labelsDirty = true;
                 _vessels = null; // spec 021: rebuilt from the scene on the next start
                 _homes = null;
@@ -139,9 +146,12 @@ namespace Worktown.Game.Cooking
                 _assemblySpots.Clear(); // spec 031
                 _squeezers.Clear();
                 _pourers.Clear(); // spec 033
-                // 036 review: an untouched loaded cone goes back to the cone stock line (a partly shaved one is lost, like food in a pan).
-                // 038b: up to the line's capacity; the rest waits in a delivery box.
-                int untouched = Spits.ClearReturningUntouched();
+                // 036 review: an untouched loaded cone goes back to the cone stock line. 038b: up to the line's capacity; the rest waits in
+                // a delivery box. Spec 045: a partly shaved cone stays on its spit (knob off, tray empty) for the next session.
+                int untouched = Spits.ClearReturningUntouched(Tick, TickRate);
+                Spits.KeptCones(_keptCones);
+                if (_keptCones.Count > 0)
+                    Debug.Log("[Kitchen] the server stopped: " + _keptCones.Count + " partly used seitan cone(s) stay on their spit");
                 if (untouched > 0 && _supply != null)
                 {
                     int boxed = _supply.Room.ReturnUpToCapacity(Worktown.Game.Shop.StockCatalog.ConeLine, untouched);
@@ -794,12 +804,9 @@ namespace Worktown.Game.Cooking
 
         /// <summary>
         /// Spec 035: the discard: the held food is removed and despawned, or the held cookware's food is cleared. No money and no stock
-        /// move (the anti-faucet rule: a discard refunds nothing and creates nothing).
+        /// move (the anti-faucet rule: a discard refunds nothing and creates nothing). Spec 044: held food flies into
+        /// <paramref name="opening"/> for the onlookers (the lid's thump when it lands); null for no flight.
         /// </summary>
-        public CookOutcome DiscardHeld(PickupInteractor player, out string what) => DiscardHeld(player, out what, null);
-
-        /// <summary>Spec 044: as <see cref="DiscardHeld(PickupInteractor, out string)"/>; held food flies into <paramref name="opening"/>
-        /// for the onlookers (the lid's thump when it lands).</summary>
         public CookOutcome DiscardHeld(PickupInteractor player, out string what, Vector3? opening)
         {
             what = "nothing";
@@ -1232,6 +1239,8 @@ namespace Worktown.Game.Cooking
                 if (!vessel.IsSpawned) continue;
                 _vessels.Add(vessel);
                 if (VesselRules.RespawnsAtHome(vessel.Kind)) _homes.Add(Home(vessel.NetworkObject, VesselPrefab(vessel.Kind)));
+                if (vessel.Kind == VesselKind.Plate && vessel.NetworkObject.IsSceneObject) // spec 045: the scene plates' start spots
+                    _plateStarts.Record(vessel, vessel.transform.position, vessel.transform.rotation);
                 PlaceOnBurnerIfThere(vessel);
                 RefreshVessel(vessel);
             }
@@ -1296,6 +1305,7 @@ namespace Worktown.Game.Cooking
                 else if (station != null && station.Kind == StationKind.DrinkDispenser) RefreshDrinks(station); // spec 033
             }
             _initialized = _vessels.Count > 0 || _initAttempts >= MaxInitAttempts;
+            if (_initialized) _plateStarts.Seal(); // spec 045: only the first start records
         }
 
         private static HomeSlot Home(NetworkObject item, NetworkObject prefab)

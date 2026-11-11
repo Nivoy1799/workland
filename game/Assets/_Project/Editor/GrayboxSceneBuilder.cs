@@ -3507,6 +3507,8 @@ namespace Worktown.Game.Editor
 
             var pickups = go.AddComponent<PickupService>();
             SetField(pickups, "_networkManager", networkManager);
+            // Spec 047: the version check, the places, the roster and the kick (FishNet's ServerManager finds it on this object).
+            go.AddComponent<JoinAuthenticator>();
             return networkManager;
         }
 
@@ -3591,6 +3593,12 @@ namespace Worktown.Game.Editor
             SetField(summary, "_style", style);
             var wheel = go.AddComponent<EmoteWheelView>(); // spec 012
             SetField(wheel, "_style", style);
+            var menu = go.AddComponent<MainMenuView>(); // spec 047: the title screen, loading and error screens
+            SetField(menu, "_bootstrap", bootstrap);
+            SetField(menu, "_style", style);
+            var lobby = go.AddComponent<LobbyView>(); // spec 047: Tab, who is in the shop
+            SetField(lobby, "_bootstrap", bootstrap);
+            SetField(lobby, "_style", style);
         }
 
         /// <summary>

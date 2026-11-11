@@ -57,8 +57,8 @@ namespace Worktown.Game.Art
                 {
                     if (ButtonPressRules.Pressed(_button.Station.Kind, _button.Option, _seen, flags))
                     {
-                        if (now - _ownPressAt > ButtonPressRules.OwnPressWindow) _pressedAt = now; // someone else pressed it
-                        else _ownPressAt = float.NegativeInfinity; // our press, confirmed
+                        if (ButtonPressRules.IsOwnConfirm(now, _ownPressAt)) _ownPressAt = float.NegativeInfinity; // our press, confirmed
+                        else _pressedAt = now; // someone else pressed it
                     }
                     _seen = flags;
                 }

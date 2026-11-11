@@ -54,6 +54,11 @@ namespace Worktown.Game.Tests
         [TestCase("-connect", "host:70000")]
         [TestCase("-connect", ":7770")]
         [TestCase("-steam")]
+        [TestCase("-steam", "abc")]
+        [TestCase("-steam", "0")]
+        [TestCase("-steam", "+5")]
+        [TestCase("-steam", "10.0.0.2")]
+        [TestCase("-steam", "99999999999999999999999")]
         public void InvalidValues_FallBackToMenuWithError(params string[] args)
         {
             var a = LaunchArgs.Parse(args);
@@ -67,6 +72,19 @@ namespace Worktown.Game.Tests
             var a = Parse("-steam", "76561197960287930");
             Assert.AreEqual(LaunchMode.ClientSteam, a.Mode);
             Assert.AreEqual("76561197960287930", a.SteamTarget);
+        }
+
+        [Test]
+        public void Steam_RefusesANonSteamId_NamingSteamId64()
+        {
+            var a = Parse("-steam", "abc");
+            Assert.AreEqual(LaunchMode.Menu, a.Mode);
+            StringAssert.Contains("SteamID64", a.Error);
+            StringAssert.Contains("SteamID64", Parse("-steam").Error);
+            Assert.IsTrue(RichPresenceRules.TryParseSteamId("18446744073709551615", out ulong max), "ulong max");
+            Assert.AreEqual(ulong.MaxValue, max);
+            Assert.IsFalse(RichPresenceRules.TryParseSteamId(" 5", out _), "no spaces");
+            Assert.IsFalse(RichPresenceRules.TryParseSteamId(null, out _));
         }
 
         [Test]
@@ -190,6 +208,67 @@ namespace Worktown.Game.Tests
         public void TourAndObserve_ExcludeEachOther()
         {
             Assert.IsFalse(Parse("-connect", "127.0.0.1", "-tour", "walk", "-observe", "walk").IsValid);
+        }
+
+        // ---- spec 045: the load test (spec 004 tooling) ----
+
+        [Test]
+        public void Bot_WithSeedAndMetrics()
+        {
+            var a = Parse("-batchmode", "-connect", "127.0.0.1:7770", "-bot", "-seed", "7", "-metrics", "out/bot7.jsonl");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.IsTrue(a.IsBot);
+            Assert.AreEqual(7, a.Seed);
+            Assert.AreEqual("out/bot7.jsonl", a.MetricsPath);
+            Assert.AreEqual(LaunchMode.ClientTugboat, a.Mode);
+        }
+
+        [Test]
+        public void Metrics_OnAHostOrServer()
+        {
+            Assert.IsTrue(Parse("-host", "-metrics", "host.jsonl").IsValid);
+            Assert.IsTrue(Parse("-server", "-metrics", "server.jsonl").IsValid);
+            Assert.AreEqual("host.jsonl", Parse("-host", "-metrics", "host.jsonl").MetricsPath);
+            Assert.IsFalse(Parse("-host").IsBot);
+            Assert.AreEqual(string.Empty, Parse("-host").MetricsPath);
+        }
+
+        [Test]
+        public void Bot_NeedsConnect_AndNoTour_MetricsNeedARole_SeedNeedsAnInteger()
+        {
+            Assert.IsFalse(Parse("-host", "-bot").IsValid, "bots join over Tugboat");
+            Assert.IsFalse(Parse("-bot").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-bot", "-tour", "look").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-metrics", "x.jsonl").IsValid, "a plain client writes no metrics");
+            Assert.IsFalse(Parse("-host", "-metrics").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-bot", "-seed", "seven").IsValid);
+            Assert.AreEqual(-3, Parse("-connect", "127.0.0.1", "-bot", "-seed", "-3").Seed);
+        }
+
+        // ---- Spec 047 ----
+
+        [Test]
+        public void MaxPlayers_OnAHostOrServer_OneTo64()
+        {
+            Assert.AreEqual(0, Parse("-host").MaxPlayers, "not given: D36");
+            Assert.AreEqual(17, Parse("-host", "-max-players", "17").MaxPlayers);
+            Assert.AreEqual(4, Parse("-server", "-max-players", "4").MaxPlayers);
+            Assert.IsFalse(Parse("-host", "-max-players", "0").IsValid);
+            Assert.IsFalse(Parse("-host", "-max-players", "65").IsValid);
+            Assert.IsFalse(Parse("-host", "-max-players").IsValid);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-max-players", "4").IsValid, "a client has no places");
+        }
+
+        [Test]
+        public void TheMenuTour_StartsOnTheTitleScreen_WithoutAMode()
+        {
+            var a = Parse("Worktown.exe", "-tour", "menu", "-tour-out", "C:/out");
+            Assert.IsTrue(a.IsValid, a.Error);
+            Assert.AreEqual(LaunchMode.Menu, a.Mode);
+            Assert.AreEqual(LaunchArgs.MenuTour, a.Tour);
+            Assert.IsFalse(Parse("-connect", "127.0.0.1", "-tour", "menu").IsValid);
+            Assert.IsTrue(Parse("-host", "-observe", "menu").IsValid, "its host");
+            Assert.IsFalse(Parse("-tour", "look").IsValid, "other tours still need -connect");
         }
     }
 }

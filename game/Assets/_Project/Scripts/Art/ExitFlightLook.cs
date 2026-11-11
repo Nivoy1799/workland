@@ -6,10 +6,11 @@ namespace Worktown.Game.Art
 {
     /// <summary>
     /// Spec 044 (027b and 035 feels off): another player's item that leaves the world into something (food into a pot, scraps into the
-    /// trash can, the bag into the bin, a plate into the sink, a box into its slot) no longer vanishes from their hand. When such an item
+    /// trash can, the bag into the bin, a plate into the sink) no longer vanishes from their hand. When such an item
     /// is despawned, every viewer that did not predict it (<see cref="ExitFlightRules.ShowsFlight"/>) draws a copy of its model (renderers
     /// only, no colliders, no scripts) that flies on an arc from where it was drawn last into the destination the server named, shrinks a
-    /// little as it goes in, plays the landing sound there and is gone. Look only; client side.
+    /// little as it goes in, plays the landing sound there and is gone. A delivery box unpacked into its slot has no exit (the slot fills).
+    /// Look only; client side.
     /// </summary>
     public sealed class ExitFlightLook : MonoBehaviour
     {

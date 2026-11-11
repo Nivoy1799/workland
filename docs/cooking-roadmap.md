@@ -185,3 +185,7 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
 - 043 review (approved; must-fix comment and nits 3-7 in the 044 round): barely overdone food (up to Max + 0.02) still
   rates about 0.95; griddle stars use the mean of both sides; sauteed apple Perfect window 2.5-4.9 s at the 2x pan;
   onion and tomato placeholder window 0..1; seitan Perfect is only 2 s a side. Human question 16.
+- 044 review (approved; 1-6 go into the 045 round where in scope): sprint turns and reversals also got twice as sharp
+  (0.25 s, 25 m/s2); a vessel look change mid-prediction blinks predicted-away food back for one round trip; a button
+  sinks on any flag change, also server-driven ones. Still open from 043: sim follow-ups 1, 2, 4, 5 (comment, IsUndercooked
+  check, pot name sweep, unequal griddle sides) need a sim round.

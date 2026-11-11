@@ -17,6 +17,7 @@ namespace Worktown.Game.UI
             "Mouse wheel: turn the food on the board, or what you hold before you put it down",
             "E (third person): the same as left click on the nearest thing",
             "V: first / third person   WASD: walk   Shift: run   C: sneak   Space: jump",
+            "Tab: who is in the shop (invite friends, kick, leave the shop)", // spec 047
             "Gamepad: RT = left click, LT = right click, Y = turn",
         };
 

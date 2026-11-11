@@ -47,8 +47,8 @@ namespace Worktown.Game.Shop
 
         /// <summary>
         /// 035 review: the server restarted. FishNet despawned every plate it spawned (those from the shelf, for good) and spawned the scene's
-        /// <see cref="CleaningRules.ScenePlates"/> plates again (036 review: where they last were, not back on the plating worktop; a scene
-        /// plate is never lost by a restart, it may only stand somewhere else). So after the restart exactly those are in use; the carried dirty dishes are back at the return already (<see cref="CarriedLost"/>). The shelf gets
+        /// <see cref="CleaningRules.ScenePlates"/> plates again (spec 045: back at their start spots, KitchenService puts them there on the stop; a scene
+        /// plate is never lost by a restart). So after the restart exactly those are in use; the carried dirty dishes are back at the return already (<see cref="CarriedLost"/>). The shelf gets
         /// the rest: <c>Clean = TotalPlates - ScenePlates - Eating - AtReturn - InBasin</c>. Should more be dirty or eaten than that leaves
         /// room for, the newest go (eating first, then the return, then the basin), so the shop still owns exactly
         /// <see cref="CleaningRules.TotalPlates"/>.

@@ -93,6 +93,17 @@ namespace Worktown.Game.Player
             LockCursor(false);
         }
 
+        /// <summary>
+        /// Spec 045: a scripted run (a tour, its observer, a load-test bot) drives the player through intents only. The reader stops and
+        /// the Player action map is disabled, so the Input System keeps no action monitors on the mouse and keyboard of a window nobody
+        /// uses (a 043 cook run's observer logged 22 NullReferenceExceptions inside the Input System's mouse state monitors).
+        /// </summary>
+        public void DisableForScript()
+        {
+            Deactivate();
+            if (_actions != null) _actions.FindActionMap("Player", true).Disable();
+        }
+
         private void Update()
         {
             if (!_active) return;

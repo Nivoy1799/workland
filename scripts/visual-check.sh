@@ -5,11 +5,16 @@
 # numbers to names). The tour client starts first and the observer second, so another window has focus while
 # the tour runs: the tour moves through its intents, not simulated keys.
 #
-#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial] [--out .verify/visual] [--server local|wsl]
+#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
+#
+#   menu (spec 047): the tour window starts on the title screen (-tour menu, no -connect) and joins the observer window (-host -observe
+#                  menu) through Join by address; the host kicks it; it then opens its own shop and closes it. Local server only.
 #
 #   --server local (default): the observer is a windowed -host (server plus observer), because the WSL link
 #                  has MTU 1280 while Tailscale runs and nothing spawns there (spec 003).
 #   --server wsl:  the Linux dedicated server build runs in WSL (Ubuntu); both windows -connect to it.
+#   --gfx d3d11 (default): both windows forced to Direct3D 11 (spec 045: D3D12 crashed on quit after tours, see
+#                  docs/human-inbox.md); d3d12 forces Direct3D 12 (to re-check that crash); default uses the build's own setting.
 #
 # Needs Git Bash on Windows and the development builds (game/Builds/Windows, game/Builds/LinuxServer for wsl):
 #   Unity -batchmode -quit -projectPath game -executeMethod Worktown.Game.Editor.Build.WorktownBuild.BuildAll
@@ -22,16 +27,19 @@ cd "$ROOT"
 TOURS="look,walk,cook"
 OUT=".verify/visual"
 SERVER="local"
+GFX="d3d11"
 while [ $# -gt 0 ]; do
   case "$1" in
     --tours) TOURS="${2:?--tours needs a list}"; shift 2 ;;
     --out) OUT="${2:?--out needs a directory}"; shift 2 ;;
     --server) SERVER="${2:?--server needs local or wsl}"; shift 2 ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    --gfx) GFX="${2:?--gfx needs d3d11, d3d12 or default}"; shift 2 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 case "$SERVER" in local|wsl) ;; *) echo "--server must be local or wsl" >&2; exit 2 ;; esac
+case "$GFX" in d3d11|d3d12|default) ;; *) echo "--gfx must be d3d11, d3d12 or default" >&2; exit 2 ;; esac
 
 GAME="$ROOT/game/Builds/Windows/Worktown.exe"
 SERVER_DIR_WSL="/mnt/c/Users/jovin/git/workland/game/Builds/LinuxServer"
@@ -41,7 +49,8 @@ if [ ! -f "$GAME" ]; then echo "no client build at $GAME (run WorktownBuild.Buil
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 OUT_WIN="$(cygpath -w "$OUT")"
-WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew -force-d3d11)  # D3D11: D3D12 crashes on exit after tours (2026-11-09, see human-inbox)
+WINDOW=(-screen-fullscreen 0 -screen-width 1280 -screen-height 720 -skip-whatsnew)
+if [ "$GFX" != "default" ]; then WINDOW+=("-force-$GFX"); fi  # D3D11 by default: D3D12 crashed on exit after tours (spec 045)
 
 timeout_for() {
   case "$1" in
@@ -49,6 +58,7 @@ timeout_for() {
     walk) echo 420 ;;
     cook) echo 1860 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register; spec 033: the lemonade; spec 034: the stock run; spec 035: the cleaning loop; spec 036: the spit
     tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)
+    menu) echo 360 ;; # spec 047: title, join by address, lobby, kick, own shop
     *) echo 420 ;;
   esac
 }
@@ -106,7 +116,8 @@ failed=0
 report=()
 IFS=',' read -r -a tour_list <<< "$TOURS"
 for tour in "${tour_list[@]}"; do
-  case "$tour" in look|walk|cook|tutorial) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  case "$tour" in look|walk|cook|tutorial|menu) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  if [ "$tour" = "menu" ] && [ "$SERVER" != "local" ]; then echo "the menu tour needs --server local (its host is the observer window)" >&2; failed=1; continue; fi
   rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer"
   tour_log="$OUT/$tour-tour.log"
   observer_log="$OUT/$tour-observer.log"
@@ -116,7 +127,10 @@ for tour in "${tour_list[@]}"; do
   # Spec 038: the tutorial tour's client runs the tutorial (-tutorial overrides -skip-whatsnew).
   tour_extra=()
   if [ "$tour" = "tutorial" ]; then tour_extra=(-tutorial); fi
-  "$GAME" -connect "$ADDRESS" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$tour_log")" &
+  # Spec 047: the menu tour starts on the title screen and joins through it (no -connect).
+  tour_connect=(-connect "$ADDRESS")
+  if [ "$tour" = "menu" ]; then tour_connect=(); fi
+  "$GAME" "${tour_connect[@]}" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -logFile "$(cygpath -w "$tour_log")" &
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
   sleep 3

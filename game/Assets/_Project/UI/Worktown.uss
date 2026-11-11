@@ -226,3 +226,194 @@
     bottom: 110px;
     width: 260px;
 }
+
+/* Spec 047: the title screen, the loading and error cards, the lobby panel (Tab). */
+.menu-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.menu-side {
+    position: absolute;
+    left: 48px;
+    top: 64px;
+    width: 380px;
+    padding-left: 28px;
+    padding-right: 28px;
+    padding-top: 24px;
+    padding-bottom: 24px;
+}
+
+.panel .menu-title {
+    font-size: 50px;
+    color: var(--wt-mustard);
+    -unity-font-style: bold;
+}
+
+.panel .menu-subtitle {
+    font-size: 16px;
+    color: var(--wt-plaster);
+    margin-bottom: 22px;
+}
+
+.panel .menu-heading {
+    font-size: 24px;
+    color: var(--wt-mustard);
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+}
+
+.panel .menu-text {
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.panel .menu-error {
+    font-size: 14px;
+    color: var(--wt-terracotta);
+}
+
+.menu-field {
+    margin-left: 0;
+    margin-right: 0;
+    margin-bottom: 4px;
+    font-size: 17px;
+}
+
+.menu-button {
+    height: 42px;
+    font-size: 18px;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    padding-left: 16px;
+    padding-right: 16px;
+    -unity-text-align: middle-left;
+    color: var(--wt-cream);
+    background-color: var(--wt-charcoal);
+    border-left-color: var(--wt-wood-dark);
+    border-right-color: var(--wt-wood-dark);
+    border-top-color: var(--wt-wood-dark);
+    border-bottom-color: var(--wt-wood-dark);
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+.menu-button:hover {
+    background-color: var(--wt-wood-dark);
+}
+
+.menu-button:disabled {
+    opacity: 0.5;
+}
+
+.menu-card {
+    position: absolute;
+    left: 30%;
+    right: 30%;
+    top: 34%;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+}
+
+.panel .card-title {
+    font-size: 28px;
+    color: var(--wt-mustard);
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+}
+
+.panel .card-text {
+    font-size: 17px;
+}
+
+.progress-track {
+    height: 12px;
+    margin-top: 14px;
+    margin-bottom: 6px;
+    background-color: var(--wt-charcoal);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: var(--wt-mustard);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+.menu-row {
+    flex-direction: row;
+    margin-top: 10px;
+}
+
+.menu-row .menu-button {
+    margin-right: 8px;
+    -unity-text-align: middle-center;
+}
+
+.menu-build {
+    position: absolute;
+    right: 16px;
+    bottom: 28px;
+}
+
+.menu-build-text {
+    font-size: 12px;
+    color: var(--wt-plaster);
+}
+
+.lobby-box {
+    position: absolute;
+    right: 16px;
+    top: 110px;
+    width: 330px;
+}
+
+.panel .lobby-heading {
+    font-size: 20px;
+    color: var(--wt-mustard);
+    -unity-font-style: bold;
+    margin-bottom: 6px;
+}
+
+.lobby-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.panel .lobby-name {
+    font-size: 16px;
+}
+
+.lobby-kick {
+    font-size: 13px;
+    color: var(--wt-cream);
+    background-color: var(--wt-brick);
+}
+
+.panel .lobby-note,
+.panel .lobby-hint {
+    font-size: 12px;
+    color: var(--wt-plaster);
+}

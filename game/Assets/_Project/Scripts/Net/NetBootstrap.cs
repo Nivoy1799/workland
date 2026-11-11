@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using FishNet.Component.Spawning;
 using FishNet.Connection;
 using FishNet.Managing;
@@ -12,8 +13,12 @@ using Worktown.Game.Net.Rules;
 namespace Worktown.Game.Net
 {
     /// <summary>
-    /// Starts server, host or client from the command line (see <see cref="LaunchArgs"/>).
+    /// Starts server, host or client from the command line (see <see cref="LaunchArgs"/>), or from the title screen (spec 047:
+    /// MainMenuView calls <see cref="StartHost"/>, <see cref="ConnectTugboat"/>, <see cref="ConnectSteam"/>, <see cref="Leave"/>).
     /// Logs "Server started" as soon as the first transport is listening (spec 003 AC1).
+    /// Spec 047: feeds the connection's events into <see cref="Flow"/> (the loading, error and rejoin screens) and makes its rejoin
+    /// attempts; the version check, the places and the kick belong to the JoinAuthenticator; Steam invites and rich presence to
+    /// <see cref="Friends"/>.
     /// </summary>
     public sealed class NetBootstrap : MonoBehaviour
     {
@@ -25,6 +30,16 @@ namespace Worktown.Game.Net
         [SerializeField] private SteamBootstrap _steam;
 
         private bool _serverStartLogged;
+        private JoinAuthenticator _join;
+        private JoinTarget _queuedJoin;
+        private bool _closing;
+
+        /// <summary>Spec 047: the client's connection as the menus show it.</summary>
+        public JoinFlow Flow { get; } = new JoinFlow();
+        /// <summary>Spec 047: the version check, the roster, the kick (on the NetworkManager object).</summary>
+        public JoinAuthenticator Join => _join;
+        /// <summary>Spec 047: Steam friends, invites and rich presence (does nothing without Steam).</summary>
+        public SteamFriendsLink Friends { get; private set; }
 
         public LaunchArgs Args { get; private set; } = new LaunchArgs();
         public NetworkManager NetworkManager => _networkManager;
@@ -43,6 +58,7 @@ namespace Worktown.Game.Net
 
         private void Start()
         {
+            SetUpJoin();
             _networkManager.ServerManager.OnServerConnectionState += OnServerConnectionState;
             _networkManager.ServerManager.OnRemoteConnectionState += OnRemoteConnectionState;
             _networkManager.ServerManager.OnAuthenticationResult += OnAuthenticationResult;
@@ -55,6 +71,11 @@ namespace Worktown.Game.Net
             Args =LaunchArgs.Parse(Environment.GetCommandLineArgs());
             if (!Args.IsValid)
                 Debug.LogError("[Net] bad command line: " + Args.Error);
+            if (_join != null && Args.MaxPlayers > 0)
+            {
+                _join.MaxPlayers = Args.MaxPlayers;
+                Debug.Log("[Net] places: " + Args.MaxPlayers);
+            }
             if (Args.LatencyMs > 0)
             {
                 // Testing only: FishNet's latency simulator delays this process's traffic.
@@ -82,7 +103,7 @@ namespace Worktown.Game.Net
                     // A dedicated server build has nobody to click the menu.
                     StartServer();
 #else
-                    Status = "menu: pick Host, Server or Join";
+                    Status = "title screen";
 #endif
                     break;
             }
@@ -90,7 +111,10 @@ namespace Worktown.Game.Net
 
         private void OnDestroy()
         {
+            Friends?.Shutdown();
             if (_networkManager == null) return;
+            _networkManager.ClientManager.OnAuthenticated -= OnClientAuthenticated;
+            if (_join != null) _join.NoticeReceived -= OnNotice;
             _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
             _networkManager.ServerManager.OnRemoteConnectionState -= OnRemoteConnectionState;
             _networkManager.ServerManager.OnAuthenticationResult -= OnAuthenticationResult;
@@ -114,11 +138,20 @@ namespace Worktown.Game.Net
         /// remote players join over Steam with this machine's SteamID.</summary>
         public void StartHost()
         {
+            if (IsRunning) return;
+            Flow.BeginHost();
             StartServer();
-            ConnectTugboat("127.0.0.1", LaunchArgs.DefaultTugboatPort);
+            ClientTugboat("127.0.0.1", LaunchArgs.DefaultTugboatPort);
         }
 
+        /// <summary>Joins a host by address over Tugboat (spec 047: "Join by address"; the tours and bots use <c>-connect</c>).</summary>
         public void ConnectTugboat(string address, ushort port)
+        {
+            Flow.BeginJoin(JoinTarget.ByAddress(address, port));
+            ClientTugboat(address, port);
+        }
+
+        private void ClientTugboat(string address, ushort port)
         {
             Tugboat tugboat = Multipass.GetTransport<Tugboat>();
             tugboat.SetPort(port);
@@ -130,22 +163,148 @@ namespace Worktown.Game.Net
         /// <summary>Joins a host or the dedicated server over Steam P2P by SteamID64.</summary>
         public void ConnectSteam(string steamId)
         {
+            Flow.BeginJoin(JoinTarget.BySteam(steamId));
+            if (!ClientSteam(steamId)) Flow.Fail(DisconnectReason.Unreachable, Status);
+        }
+
+        /// <summary>
+        /// Spec 047: a join from Steam (a friend's Join Game or an invite while the game runs): leaves the current session first,
+        /// then joins.
+        /// </summary>
+        public void JoinSteam(string steamId)
+        {
+            if (!IsRunning)
+            {
+                ConnectSteam(steamId);
+                return;
+            }
+            _queuedJoin = JoinTarget.BySteam(steamId);
+            Leave();
+        }
+
+        private bool ClientSteam(string steamId)
+        {
             Transport steamTransport = FindSteamTransport();
             if (steamTransport == null)
             {
                 Status = "no Steam transport in Multipass";
                 Debug.LogError("[Net] " + Status);
-                return;
+                return false;
             }
             if (!_steam.IsReady)
             {
-                Status = "Steam not ready: " + _steam.Status;
-                Debug.LogError("[Net] " + Status);
-                return;
+                Status = "Steam is not running (" + _steam.Status + ")";
+                Debug.LogWarning("[Net] " + Status);
+                return false;
             }
             Multipass.SetClientTransport(steamTransport);
             Status = "connecting via Steam to " + steamId;
             _networkManager.ClientManager.StartConnection(steamId);
+            return true;
+        }
+
+        /// <summary>The client or the server runs in this process.</summary>
+        public bool IsRunning => _networkManager != null && (_networkManager.IsClientStarted || _networkManager.IsServerStarted);
+
+        /// <summary>
+        /// Spec 047: back to the title screen. A host closes its shop (every other player gets a HostClosed notice, then the server
+        /// stops a moment later so the notice goes out); a client leaves; a loading or rejoining client cancels.
+        /// </summary>
+        public void Leave()
+        {
+            bool running = IsRunning;
+            Flow.Leave(running);
+            if (!running || _closing) return;
+            if (_networkManager.IsServerStarted)
+            {
+                _join?.NotifyClosing();
+                StartCoroutine(CloseSoon());
+            }
+            else
+            {
+                _networkManager.ClientManager.StopConnection();
+            }
+        }
+
+        private IEnumerator CloseSoon()
+        {
+            _closing = true;
+            Debug.Log("[Net] the host closes the shop");
+            // 1 s, not less: the HostClosed notice must survive a resend over the Steam relay before the server stops.
+            yield return new WaitForSecondsRealtime(1f);
+            if (_networkManager.IsClientStarted) _networkManager.ClientManager.StopConnection();
+            if (_networkManager.IsServerStarted) _networkManager.ServerManager.StopConnection(true);
+            _closing = false;
+        }
+
+        /// <summary>Spec 047, the host: removes a player from the shop (JoinAuthenticator.Kick).</summary>
+        public bool Kick(int clientId) => _join != null && _join.Kick(clientId);
+
+        /// <summary>Spec 047: the authenticator (from the scene, or added here if the scene predates it), Steam, the flow events.</summary>
+        private void SetUpJoin()
+        {
+            _join = _networkManager.GetComponent<JoinAuthenticator>();
+            if (_join == null)
+            {
+                Debug.LogWarning("[Net] the NetworkManager has no JoinAuthenticator (scene not rebuilt?); adding one");
+                _join = _networkManager.gameObject.AddComponent<JoinAuthenticator>();
+                _networkManager.ServerManager.SetAuthenticator(_join);
+            }
+            Friends = new SteamFriendsLink(_steam);
+            Friends.JoinRequested += host => JoinSteam(host.ToString());
+            _join.LocalName = Friends.PersonaName();
+            _join.NoticeReceived += OnNotice;
+            _networkManager.ClientManager.OnAuthenticated += OnClientAuthenticated;
+        }
+
+        private void OnNotice(DisconnectReason reason, string detail)
+        {
+            if (reason == DisconnectReason.VersionMismatch)
+                detail = (detail.Length > 0 ? detail + ", " : string.Empty) + "yours " + BuildHash.Short(_join.BuildHash);
+            Flow.Notice(reason, detail);
+        }
+
+        private void OnClientAuthenticated() => Flow.Authenticated();
+
+        private void Update()
+        {
+            if (_networkManager == null) return;
+            Friends?.Update(_networkManager.IsServerStarted && _networkManager.IsClientStarted, _join != null ? _join.PlayerCount : 0,
+                _join != null ? _join.MaxPlayers : JoinRules.MaxPlayers);
+            if ((Flow.State == JoinState.Loading || Flow.State == JoinState.Rejoining) && OwnPlayerSpawned()) Flow.PlayerSpawned();
+
+            double now = Time.unscaledTimeAsDouble;
+            if (Flow.Tick(now))
+            {
+                JoinTarget target = Flow.Target;
+                Debug.Log("[Net] rejoin attempt to " + target.Describe() + ", " + Flow.RejoinSecondsLeft(now).ToString("0") + " s left");
+                if (target.Kind == JoinTargetKind.Steam)
+                {
+                    if (!ClientSteam(target.Address)) Flow.TransportStopped(now);
+                }
+                else
+                {
+                    ClientTugboat(target.Address, target.Port);
+                }
+            }
+            // A rejoin attempt still hanging when the flow gave up: stop it.
+            if (Flow.State == JoinState.Message && _networkManager.IsClientStarted && !_networkManager.IsServerStarted)
+                _networkManager.ClientManager.StopConnection();
+
+            if (_queuedJoin != null && !IsRunning && !_closing)
+            {
+                JoinTarget queued = _queuedJoin;
+                _queuedJoin = null;
+                ConnectSteam(queued.Address);
+            }
+        }
+
+        private bool OwnPlayerSpawned()
+        {
+            if (!_networkManager.IsClientStarted) return false;
+            foreach (NetworkObject obj in _networkManager.ClientManager.Connection.Objects)
+                if (obj != null && obj.GetComponent<PlayerController>() != null) return true;
+            return false;
         }
 
         private void ConfigureServerPorts()
@@ -221,6 +380,8 @@ namespace Worktown.Game.Net
         {
             Status = "client " + args.ConnectionState;
             Debug.Log("[Net] " + Status);
+            if (args.ConnectionState == LocalConnectionState.Started) Flow.TransportStarted();
+            else if (args.ConnectionState == LocalConnectionState.Stopped) Flow.TransportStopped(Time.unscaledTimeAsDouble);
         }
 
         private string TransportName(int index)

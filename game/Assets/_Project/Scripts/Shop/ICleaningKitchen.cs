@@ -18,11 +18,8 @@ namespace Worktown.Game.Shop
         /// <summary>Whether what <paramref name="player"/> holds may go into the trash (food, an empty cup, cookware with food). No change.</summary>
         bool CanDiscardHeld(PickupInteractor player);
 
-        /// <summary>The held food goes (despawned), or the held cookware's contents go (the cookware stays in the hands). Never moves money or stock.</summary>
-        CookOutcome DiscardHeld(PickupInteractor player, out string what);
-
-        /// <summary>Spec 044: as <see cref="DiscardHeld(PickupInteractor, out string)"/>; held food flies into <paramref name="opening"/> for
-        /// the other players.</summary>
+        /// <summary>The held food goes (despawned), or the held cookware's contents go (the cookware stays in the hands). Never moves money or
+        /// stock. Spec 044: held food flies into <paramref name="opening"/> for the other players (null: no flight).</summary>
         CookOutcome DiscardHeld(PickupInteractor player, out string what, UnityEngine.Vector3? opening);
 
         bool HoldsCloth(PickupInteractor player);
