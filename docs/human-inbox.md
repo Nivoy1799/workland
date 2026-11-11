@@ -3,7 +3,7 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-11 01:00)
+## Status (updated 2026-11-11 11:00)
 - **Merged in run 2:** 039 (every counter accepts items, items are not stairs, tools handle towards you) and 041
   (left click does, right click puts down, the wheel turns), 042 (put the cup on the drip tray, then hold to fill;
   play-test: can you fill a drink while doing something else?), 043 (perfect means best, names like "golden fries"
@@ -12,9 +12,11 @@ every question has a default, and work continues on other items until you answer
   tilted ticket rail), 045 (spam guard, late answers fixed, restart paths, D3D11 default, 16-player load test passed),
   047 (title screen: open your shop, join a friend through Steam or by address, lobby with kick on Tab, auto-rejoin).
   006 (AI gateway skeleton: item names via an OpenAI-compatible API, strict JSON, vegan check, cache; stays off, see 20).
+  048 (settings: graphics, audio, rebinding, FOV, colour-blind rings), 049 (crash log, freeze watchdog,
+  `scripts/perf-check.sh`; 2-hour soak with 16 players passed). Digest: docs/digest-2026-11-11.md.
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
-- **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 048 (settings) and 049 (stability for release) merge after the 2-hour soak. 037 waits for question 17.
+- **Autonomous run 2 is finished.** The approved queue is done except 037 (question 17); 040 is with your second
+  session. Next is the climb, after question 13 (docs/early-access.md).
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
