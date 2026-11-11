@@ -121,7 +121,7 @@ last to come back.
 ## 5. The Low Ring (the dark side)
 - **Where:** the shaded ground floors of Tower Rise and a band along the inside of the Dome's foot. It is dim even at
   noon.
-- **Look:** soot black and rust, orange sodium lamps, signs with dead letters, pipes and steam, broken robots, the
+- **Look:** soot black and rust, orange sodium lamps, signs with dead letters, plain concrete service ducts and vent haze (industrial wear, never steampunk brass or gears; docs/setting.md), broken robots, the
   scrap pile, overflowing bins.
 - **What is there:** betting halls (drone races, credit slots), dream booths, cheap printer bars, and a few warm
   corners where someone cooks by hand. It is a place you can rent cheaply and deliver to.
