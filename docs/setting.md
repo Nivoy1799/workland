@@ -23,15 +23,18 @@ suppliers exist.
   - chrome trim, terrazzo floors;
   - pastels (mint, salmon pink, cream, sky blue) with neon accents (cherry red, electric teal);
   - big sign typography, flying cars and delivery capsules, pneumatic tubes.
-- **Seasoning: a little steampunk in the kitchen.** The old, hand-built machines (the spit, a coffee machine, the
-  first robots) have brass and copper, valves and gauges, and visible steam. The kitchen feels crafted and warm; the
-  street feels clean and futuristic.
+- **Warmth from wood, not steampunk** (the human, 2026-11-11: "steampunk is not the point"). The hand-made side shows
+  in warm wood, worn surfaces and hand-built, lived-in kitchens. The street is retro-future chrome and pastel.
+- **Still open: how it avoids looking like a too-clean "heaven".** A world where everything is free can look sterile.
+  The human is working this out in the Blender session. Ideas to test there, none decided: wear and patina on
+  well-loved places, clutter and handwritten signs at the hobby kitchens, and contrast between the spotless printer
+  booths and the messy, warm corners where people cook.
 - **Low-poly, flat-shaded** (D12, art-direction.md), the same rules for every model (spec 040 Part C).
-- **Palette update** (D32): add mint, salmon, sky, chrome, neon cherry, neon teal and copper. Keep cream, wood and
+- **Palette update** (D32): add mint, salmon, sky, chrome, neon cherry and neon teal. Keep cream, wood and
   charcoal for warmth.
 
 ## Robots
-- Clunky, friendly, 1950s style: dome heads, antennas, single wheel or tripod legs, tube arms, a little steam.
+- Clunky, friendly, 1950s style: dome heads, antennas, single wheel or tripod legs, tube arms.
 - They do the boring work perfectly: sweeping, carrying, washing up.
 - In the game they are the stage 4 "automation" (D34): you buy robot helpers. The hand-made touch (the last fold of a
   wrap, the shave of the spit) stays human; robots never reach the top quality.
@@ -48,6 +51,6 @@ suppliers exist.
 
 ## Open questions
 1. Is money option C right, or should credits be invisible (A) or absent (B)?
-2. How much steampunk: only the kitchen machines (default), or the whole town?
+2. How the look avoids a too-clean "heaven" (being worked out in the Blender session; steampunk is dropped).
 3. The name of the town and of the currency (credits, "joycoins", ...)?
 4. Robots as helpers you buy (default) or also as rivals (robot diners competing)?

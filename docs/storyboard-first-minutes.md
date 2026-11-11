@@ -22,7 +22,7 @@ A wide shot of a retro-future street in 2222:
 
 ## Shot 3: Your food corner (0:30–1:00)
 - Across the street: an **old, slightly dusty food cart** with a hand-painted sign ("Joe's Corner"), a small griddle,
-  copper pipes, a steaming pot.
+  worn wooden shelves, a steaming pot.
 - A clunky robot helper stands next to it and holds out a knife to you; you take it.
 - Ingredient crate: "hand-grown by Mira, field 7".
 - The player's first view (first person): the cart, the knife, one potato.
