@@ -18,19 +18,32 @@ namespace Worktown.Game.Tests
         [Test]
         public void AJoinWhileHosting_AsksFirst_AGuestLeaves_ADedicatedServerIgnores()
         {
-            Assert.AreEqual(JoinChoice.JoinNow, LeaveShopRules.Decide(false, false), "not in a session");
-            Assert.AreEqual(JoinChoice.LeaveThenJoin, LeaveShopRules.Decide(false, true), "a guest (or a rejoin attempt)");
-            Assert.AreEqual(JoinChoice.AskFirst, LeaveShopRules.Decide(true, true), "the host with its own player");
-            Assert.AreEqual(JoinChoice.Ignore, LeaveShopRules.Decide(true, false), "a dedicated server");
+            // Decide(dedicated, closing, serverStarted, clientStarted)
+            Assert.AreEqual(JoinChoice.JoinNow, LeaveShopRules.Decide(false, false, false, false), "not in a session");
+            Assert.AreEqual(JoinChoice.LeaveThenJoin, LeaveShopRules.Decide(false, false, false, true), "a guest (or a rejoin attempt)");
+            Assert.AreEqual(JoinChoice.AskFirst, LeaveShopRules.Decide(false, false, true, true), "the host with its own player");
+            Assert.AreEqual(JoinChoice.AskFirst, LeaveShopRules.Decide(false, false, true, false),
+                "a host whose own client is between states: still a host, still asked");
+            Assert.AreEqual(JoinChoice.Ignore, LeaveShopRules.Decide(true, false, true, false), "a dedicated server (the real flag)");
+            Assert.AreEqual(JoinChoice.Ignore, LeaveShopRules.Decide(true, true, false, false), "a dedicated server, even while closing");
+        }
+
+        [Test]
+        public void AJoinWhileTheShopIsAlreadyClosing_IsQueued_NotAsked()
+        {
+            Assert.AreEqual(JoinChoice.JoinWhenClosed, LeaveShopRules.Decide(false, true, true, true), "the host closes its shop");
+            Assert.AreEqual(JoinChoice.JoinWhenClosed, LeaveShopRules.Decide(false, true, true, false), "the client already stopped");
+            Assert.AreEqual(JoinChoice.JoinWhenClosed, LeaveShopRules.Decide(false, true, false, false), "the server already stopped");
         }
 
         [Test]
         public void TheQuestion_StandsOnlyWhileHosting()
         {
-            Assert.IsTrue(LeaveShopRules.StillAsking(true, true, true));
-            Assert.IsFalse(LeaveShopRules.StillAsking(false, true, true), "no question");
-            Assert.IsFalse(LeaveShopRules.StillAsking(true, false, false), "the shop closed (or stalled) before the answer");
-            Assert.IsFalse(LeaveShopRules.StillAsking(true, true, false), "only the server is left");
+            // StillAsking(hasQuestion, dedicated, closing, serverStarted, clientStarted)
+            Assert.IsTrue(LeaveShopRules.StillAsking(true, false, false, true, true));
+            Assert.IsFalse(LeaveShopRules.StillAsking(false, false, false, true, true), "no question");
+            Assert.IsFalse(LeaveShopRules.StillAsking(true, false, false, false, false), "the shop closed before the answer");
+            Assert.IsFalse(LeaveShopRules.StillAsking(true, false, true, true, true), "the shop is closing (closed, quit or stalled)");
         }
 
         [Test]
@@ -47,13 +60,32 @@ namespace Worktown.Game.Tests
         [Test]
         public void QuittingWhileHosting_WithGuests_IsHeldForTheNotice()
         {
-            Assert.IsTrue(HostQuitRules.HoldsQuit(true, 1, false, false, false), "a host with a guest");
-            Assert.IsTrue(HostQuitRules.HoldsQuit(true, 15, false, false, false));
-            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 0, false, false, false), "nobody to tell");
-            Assert.IsFalse(HostQuitRules.HoldsQuit(false, 3, false, false, false), "not the server (a guest quits at once)");
-            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 3, true, false, false), "the held quit itself goes through");
-            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 3, false, true, false), "never in the Editor (leaving Play mode)");
-            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 3, false, false, true), "never in a scripted run (its exit code)");
+            // HoldsQuit(serverStarted, remoteGuests, quitLetThrough, editor, scripted, dedicated)
+            Assert.IsTrue(HostQuitRules.HoldsQuit(true, 1, false, false, false, false), "a host with a guest");
+            Assert.IsTrue(HostQuitRules.HoldsQuit(true, 15, false, false, false, false));
+            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 0, false, false, false, false), "nobody to tell");
+            Assert.IsFalse(HostQuitRules.HoldsQuit(false, 3, false, false, false, false), "not the server (a guest quits at once)");
+            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 3, true, false, false, false), "the held quit itself goes through");
+            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 3, false, true, false, false), "never in the Editor (leaving Play mode)");
+            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 3, false, false, true, false), "never in a scripted run (its exit code)");
+        }
+
+        [Test]
+        public void ADedicatedServersQuit_IsNeverHeld_SoItsStallExitCodeSurvives()
+        {
+            // The stall close ends with Application.Quit(TickStallRules.DedicatedExitCode); a held quit would quit again with 0.
+            Assert.IsFalse(HostQuitRules.HoldsQuit(true, 5, false, false, false, true), "a dedicated server with players");
+            Assert.IsFalse(HostQuitRules.HoldsQuit(false, 0, false, false, false, true), "after the stall close (server stopped)");
+            Assert.AreNotEqual(0, TickStallRules.DedicatedExitCode);
+        }
+
+        [Test]
+        public void ASecondQuit_GoesThrough_OnceTheHoldOutlivesItsLimit()
+        {
+            Assert.IsTrue(HostQuitRules.StillHeld(0f));
+            Assert.IsTrue(HostQuitRules.StillHeld(HostQuitRules.LimitSeconds - 0.01f));
+            Assert.IsFalse(HostQuitRules.StillHeld(HostQuitRules.LimitSeconds), "the coroutine that ends the hold may have died");
+            Assert.IsFalse(HostQuitRules.StillHeld(60f));
         }
 
         [Test]
@@ -223,10 +255,11 @@ namespace Worktown.Game.Tests
         // ---- 5. The labels at the start of a session ----
 
         [Test]
-        public void TheLabels_ScanEveryFrame_WhileTheSessionSettles()
+        public void TheLabels_ScanOftener_WhileTheSessionSettles()
         {
-            Assert.AreEqual(0f, WorldLabelFade.ScanDelay(0f), "on the own player's spawn");
-            Assert.AreEqual(0f, WorldLabelFade.ScanDelay(WorldLabelFade.SettleSeconds - 0.01f));
+            // The first scan is on the own player's spawn (Activate); then every 0.1 s for a second, then every 0.5 s.
+            Assert.AreEqual(0.1f, WorldLabelFade.ScanDelay(0f), 1e-6f, "right after the spawn");
+            Assert.AreEqual(0.1f, WorldLabelFade.ScanDelay(WorldLabelFade.SettleSeconds - 0.01f), 1e-6f);
             Assert.AreEqual(0.5f, WorldLabelFade.ScanDelay(WorldLabelFade.SettleSeconds), 1e-6f, "then every 0.5 s as before");
             Assert.AreEqual(0.5f, WorldLabelFade.ScanDelay(600f), 1e-6f);
         }

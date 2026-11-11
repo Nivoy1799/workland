@@ -39,6 +39,7 @@ namespace Worktown.Game.Net
         /// <summary>Follow-up 047: the held quit may now go through (the close is done, or its limit passed).</summary>
         private bool _quitLetThrough;
         private bool _quitHeld;
+        private float _quitHeldAt;
         /// <summary>A dedicated server (<c>-server</c>, or a server build's default): nobody plays on it, so a stall ends the process.</summary>
         private bool _dedicated;
 
@@ -203,11 +204,13 @@ namespace Worktown.Game.Net
         public void RequestJoin(JoinTarget target)
         {
             if (target == null || target.Kind == JoinTargetKind.Host) return;
-            switch (LeaveShopRules.Decide(_networkManager.IsServerStarted, _networkManager.IsClientStarted))
+            switch (LeaveShopRules.Decide(_dedicated, _closing, _networkManager.IsServerStarted, _networkManager.IsClientStarted))
             {
                 case JoinChoice.JoinNow:
-                    if (_closing) _queuedJoin = target; // the own shop is still closing: join once it is shut
-                    else Connect(target);
+                    Connect(target);
+                    break;
+                case JoinChoice.JoinWhenClosed:
+                    _queuedJoin = target; // the own shop is already closing: join once it is shut (Update)
                     break;
                 case JoinChoice.LeaveThenJoin:
                     _queuedJoin = target;
@@ -364,6 +367,7 @@ namespace Worktown.Game.Net
             {
                 // 049 review: a dedicated server has no player to read the screen; a non-zero exit tells its supervisor.
                 Debug.LogError("[Net] stall: the dedicated server quits (exit " + TickStallRules.DedicatedExitCode + ")");
+                _quitLetThrough = true; // follow-up 047 review: never held, so the exit code survives (HostQuitRules also skips dedicated)
                 Application.Quit(TickStallRules.DedicatedExitCode);
             }
         }
@@ -378,15 +382,25 @@ namespace Worktown.Game.Net
         {
             int guests = RemoteGuests();
             if (!HostQuitRules.HoldsQuit(_networkManager != null && _networkManager.IsServerStarted, guests, _quitLetThrough,
-                    Application.isEditor, Args.IsScripted))
+                    Application.isEditor, Args.IsScripted, _dedicated))
                 return true;
-            if (_quitHeld) return false; // a second quit while the first is held: the first one goes through soon
+            if (_quitHeld)
+            {
+                // A second quit while the first is held: the first one goes through soon. Review: unless the hold outlived its limit
+                // (the coroutine that ends it died), then this one goes through.
+                if (HostQuitRules.StillHeld(Time.unscaledTime - _quitHeldAt)) return false;
+                Debug.LogWarning("[Net] the held quit outlived " + HostQuitRules.LimitSeconds + " s: quitting now");
+                _quitLetThrough = true;
+                return true;
+            }
             _quitHeld = true;
+            _quitHeldAt = Time.unscaledTime;
             Debug.Log("[Net] quitting while hosting: telling " + guests + " guests the shop closed first");
             Flow.Leave(true);
             if (!_closing)
             {
-                _join?.NotifyClosing();
+                // Review: a throw from the notice must not skip the close and the quit below.
+                GuardedCall.Run(() => _join?.NotifyClosing(), "[Net] quit: the HostClosed notice", Debug.LogWarning);
                 StartCoroutine(CloseSoon());
             }
             StartCoroutine(QuitWhenClosed());
@@ -404,13 +418,23 @@ namespace Worktown.Game.Net
             Application.Quit();
         }
 
+        /// <summary>Active connections other than the host's own; 0 when not the server, or when FishNet throws (then the quit is not
+        /// held: better to quit than to hang).</summary>
         private int RemoteGuests()
         {
-            if (_networkManager == null || !_networkManager.IsServerStarted) return 0;
-            int count = 0;
-            foreach (NetworkConnection connection in _networkManager.ServerManager.Clients.Values)
-                if (connection != null && connection.IsActive && !connection.IsLocalClient) count++;
-            return count;
+            try
+            {
+                if (_networkManager == null || !_networkManager.IsServerStarted) return 0;
+                int count = 0;
+                foreach (NetworkConnection connection in _networkManager.ServerManager.Clients.Values)
+                    if (connection != null && connection.IsActive && !connection.IsLocalClient) count++;
+                return count;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Net] quit: the guests could not be counted (" + e.Message + "), quitting without the notice");
+                return 0;
+            }
         }
 
         /// <summary>Spec 047, the host: removes a player from the shop (JoinAuthenticator.Kick).</summary>
@@ -474,7 +498,8 @@ namespace Worktown.Game.Net
                 _queuedJoin = null;
                 Connect(queued);
             }
-            if (LeaveQuestion != null && !LeaveShopRules.StillAsking(true, _networkManager.IsServerStarted, _networkManager.IsClientStarted))
+            if (LeaveQuestion != null
+                && !LeaveShopRules.StillAsking(true, _dedicated, _closing, _networkManager.IsServerStarted, _networkManager.IsClientStarted))
             {
                 Debug.Log("[Net] the shop closed before the answer: the join to " + LeaveQuestion.Describe() + " is dropped");
                 LeaveQuestion = null;

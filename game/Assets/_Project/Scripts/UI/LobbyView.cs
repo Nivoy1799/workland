@@ -156,7 +156,8 @@ namespace Worktown.Game.UI
                 _hint.text = KeyPrompts.KeyName(GameSettings.CurrentBindings, ControlAction.Players) + " closes";
             }
             if (!inGame && _open) SetOpen(false);
-            bool asking = inGame && _bootstrap.LeaveQuestion != null;
+            // Review: shown whenever a question waits (a host is asked even while its own client is between states).
+            bool asking = _bootstrap.LeaveQuestion != null;
             bool visible = _open && inGame && !asking;
             _box.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             if (_ask != null) _ask.style.display = asking ? DisplayStyle.Flex : DisplayStyle.None;

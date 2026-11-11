@@ -16,12 +16,17 @@ namespace Worktown.Game.Net.Rules
         public const float LimitSeconds = 2f;
 
         /// <summary>
-        /// True: hold this quit (send the notice first). Only a server with guests that has not already let the quit through; never in
-        /// the Editor (leaving Play mode must not wait), never in a scripted run (tours, bots, the stall and crash tests quit with their
-        /// own exit code, which a second Application.Quit would lose).
+        /// True: hold this quit (send the notice first). Only a host (not a dedicated server) with guests that has not already let the
+        /// quit through; never in the Editor (leaving Play mode must not wait), never in a scripted run, never on a dedicated server
+        /// (tours, bots, the stall and crash tests and the dedicated server's stall exit quit with their own exit code, which a second
+        /// Application.Quit would lose).
         /// </summary>
-        public static bool HoldsQuit(bool serverStarted, int remoteGuests, bool quitLetThrough, bool editor, bool scripted) =>
-            serverStarted && remoteGuests > 0 && !quitLetThrough && !editor && !scripted;
+        public static bool HoldsQuit(bool serverStarted, int remoteGuests, bool quitLetThrough, bool editor, bool scripted, bool dedicated) =>
+            serverStarted && remoteGuests > 0 && !quitLetThrough && !editor && !scripted && !dedicated;
+
+        /// <summary>A quit asked again while one is held: still held, unless the hold has lasted <see cref="LimitSeconds"/> (the
+        /// coroutine that ends it may have died).</summary>
+        public static bool StillHeld(float heldSeconds) => heldSeconds < LimitSeconds;
 
         /// <summary>The held quit goes through: the close finished (the server stopped), or the limit passed.</summary>
         public static bool QuitNow(bool closing, bool serverStarted, float heldSeconds) =>

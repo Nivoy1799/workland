@@ -101,6 +101,8 @@ namespace Worktown.Game.Net
         {
             // Once per connection: a second request (or one after the answer) is ignored.
             if (connection.IsAuthenticated || !_pending.Remove(connection.ClientId)) return;
+            // IsLocalClient has no effect here: FishNet marks the host's own connection as local only after it is authenticated
+            // (OnLocalAuthenticated). The host is safe anyway: its own client joins first, when the session's ban list is empty.
             bool kickedBefore = _bans.IsBanned(BanKey(connection), connection.IsLocalClient);
             DisconnectReason reason = JoinRules.Decide(request.Build, BuildHash, _names.Count, MaxPlayers, kickedBefore);
             if (reason != DisconnectReason.None)

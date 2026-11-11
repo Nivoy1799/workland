@@ -7,9 +7,11 @@ namespace Worktown.Game.Net.Rules
         JoinNow = 0,
         /// <summary>A guest in someone's shop: leave it, then join (nobody else is affected).</summary>
         LeaveThenJoin = 1,
-        /// <summary>The host of a shop with its own player: ask "Leave your shop?" first (the guests would be disconnected).</summary>
+        /// <summary>The host of a shop: ask "Leave your shop?" first (the guests would be disconnected).</summary>
         AskFirst = 2,
         /// <summary>A dedicated server (no player here): never joins anything.</summary>
-        Ignore = 3
+        Ignore = 3,
+        /// <summary>The own shop is already closing: join once it is shut (no question).</summary>
+        JoinWhenClosed = 4
     }
 }
