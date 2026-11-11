@@ -33,7 +33,7 @@ namespace Worktown.Sim.Revival
             if (stars < 1 || stars > 5) throw new ArgumentOutOfRangeException(nameof(stars), "stars must be 1..5.");
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count), "count must be >= 0.");
             DistrictRevivalDef home = c.District(districtId);
-            long milli = c.PointsByStars[stars - 1] * 1000L * count;
+            long milli = checked(c.PointsByStars[stars - 1] * 1000L * count); // 065 review: overflow throws, never wraps
             var ups = new List<LevelUp>();
             if (milli == 0) return (s, ups.AsReadOnly());
 
@@ -63,10 +63,11 @@ namespace Worktown.Sim.Revival
                 if (d.Level == RevivalLevel.Thriving) continue;
                 long ppm = (long)d.ProgressPpm + c.StageBonusPpm;
                 RevivalLevel level = d.Level;
+                // At most one level per call: the bonus is below a full step (validated) and the goals rise, so the rescaled rest
+                // stays below a full step of the next level.
                 if (ppm >= RevivalCatalog.Ppm)
                 {
                     (level, ppm) = Up(c, level, ppm);
-                    if (level != RevivalLevel.Thriving) ppm = Math.Min(ppm, RevivalCatalog.Ppm - 1); // one level per call
                     ups.Add(new LevelUp(d.DistrictId, level));
                 }
                 districts[i] = d with { Level = level, ProgressPpm = (int)ppm };
@@ -80,7 +81,7 @@ namespace Worktown.Sim.Revival
             int i = c.IndexOf(id);
             DistrictRevival d = districts[i];
             if (d.Level == RevivalLevel.Thriving) return;
-            long ppm = d.ProgressPpm + milli * RevivalCatalog.Ppm / c.GoalMilli(id, d.Level, players);
+            long ppm = checked(d.ProgressPpm + milli * RevivalCatalog.Ppm / c.GoalMilli(id, d.Level, players));
             RevivalLevel level = d.Level;
             while (ppm >= RevivalCatalog.Ppm && level < RevivalLevel.Thriving)
             {

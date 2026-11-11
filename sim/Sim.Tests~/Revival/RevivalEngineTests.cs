@@ -119,6 +119,14 @@ namespace Worktown.Sim.Tests.Revival
             Assert.Throws<ArgumentException>(() => RevivalEngine.AddMeals(s, c, "moon_base", 3, 1, 4));
         }
 
+        [Fact]
+        public void HugeCountsOverflowLoudly() // 065 review: checked arithmetic, never a wrapped ppm
+        {
+            var p = new R.Parts { Points = new List<int> { 0, 1, 2, 4, 1000 } };
+            RevivalCatalog c = p.Build();
+            Assert.Throws<OverflowException>(() => RevivalEngine.AddMeals(RevivalEngine.Start(c), c, "main_street", 5, int.MaxValue, 4));
+        }
+
         // ---------- AC5 ----------
 
         [Fact]

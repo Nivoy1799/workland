@@ -47,17 +47,20 @@ namespace Worktown.Sim.Revival
                 bool v2b = thriving != ClimbEvaluation.Dnf && s4 != ClimbEvaluation.Dnf && thriving >= s4 && thriving <= thrivingTo;
                 checks.Add(new TargetCheck("V2", v2b, $"{p}p {shop} Thriving {Hh(thriving)} in S4 {Hh(s4)} .. S5 {Hh(s5)} {Signed(targets.ThrivingAfterS5Seconds)} h"));
 
-                // V3: fair crews against the reference crew.
+                // V3: fair crews against the reference crew. 065 review: like T1 (D40), the lower edge is times the crew's h(n),
+                // so a crew whose climb is h times faster may revive h times faster; the upper edge stays.
+                int h = Math.Max(0, Math.Min(1000, runs[0].DifficultyPermille));
+                int fairMin = (int)((long)targets.FairMinPermille * h / 1000);
                 if (p != targets.ReferencePlayers && reference.Count > 0)
                     foreach (RevivalLevel l in new[] { RevivalLevel.Patched, RevivalLevel.Lively })
                     {
                         long mine = Level(shop, l);
                         long baseline = Median(reference.Select(t => Dnf(t.LevelSeconds(shop, l))));
                         bool ok = mine != ClimbEvaluation.Dnf && baseline != ClimbEvaluation.Dnf && baseline > 0
-                            && mine * 1000 >= baseline * targets.FairMinPermille && mine * 1000 <= baseline * targets.FairMaxPermille;
+                            && mine * 1000 >= baseline * fairMin && mine * 1000 <= baseline * targets.FairMaxPermille;
                         string ratio = mine == ClimbEvaluation.Dnf || baseline == ClimbEvaluation.Dnf || baseline == 0 ? "-" : Ratio((int)Math.Min(99999, mine * 1000 / baseline));
                         checks.Add(new TargetCheck("V3", ok,
-                            $"{p}p {shop} {l} {Hh(mine)} = {ratio}x of {targets.ReferencePlayers}p {Hh(baseline)} in {Ratio(targets.FairMinPermille)}-{Ratio(targets.FairMaxPermille)}x"));
+                            $"{p}p {shop} {l} {Hh(mine)} = {ratio}x of {targets.ReferencePlayers}p {Hh(baseline)} in {Ratio(fairMin)}-{Ratio(targets.FairMaxPermille)}x"));
                     }
 
                 // V4: every district comes back to Patched (reference crew).

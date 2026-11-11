@@ -21,6 +21,8 @@ namespace Worktown.Sim.Revival
         public const int MaxGoalPermille = 5000;
         public const int MinCrewCoverage = 16;
         public const int MaxFootfallPermille = 5000;
+        /// <summary>065 review: the most points one meal may give (keeps milli-points far from overflow).</summary>
+        public const int MaxPointsPerMeal = 1000;
 
         private static readonly Regex IdPattern = new Regex("^[a-z0-9_]{1,32}$", RegexOptions.CultureInvariant);
 
@@ -115,7 +117,7 @@ namespace Worktown.Sim.Revival
             if (PointsByStars.Count != 5) throw new ArgumentException("pointsByStars needs 5 values (stars 1..5).");
             for (int i = 0; i < PointsByStars.Count; i++)
             {
-                if (PointsByStars[i] < 0) throw new ArgumentException("pointsByStars must be >= 0.");
+                if (PointsByStars[i] < 0 || PointsByStars[i] > MaxPointsPerMeal) throw new ArgumentException("pointsByStars must be 0.." + MaxPointsPerMeal + ".");
                 if (i > 0 && PointsByStars[i] < PointsByStars[i - 1]) throw new ArgumentException("pointsByStars must be non-decreasing.");
             }
             if (SpillPermille < 0 || SpillPermille > MaxSpillPermille) throw new ArgumentException("spillPermille must be 0.." + MaxSpillPermille + ".");
@@ -186,7 +188,8 @@ namespace Worktown.Sim.Revival
         /// <summary>
         /// The default revival of Haven Nine (spec 065 "Default numbers"; provisional): one row per town district in town
         /// order, neighbours copied from the town. Tuning round 1 (see the spec's tuning log): level goals 400 / 3,100 /
-        /// 15,000; crew rows 290 / 540 / 800 for 1-3 players and 250 x players from 4 (052b's guest demand D = n / 4 has no
+        /// 15,000; crew rows (065 review: D40 literally, n x h(n) / 4 with 052b's h = 0.55 / 0.75 / 0.9) 137 / 375 / 675 for
+        /// 1-3 players and 250 x players from 4 (052b's guest demand D = n / 4 has no
         /// plateau, so a 16-player crew serves 4x the meals of 4); footfall 1000 / 1040 / 1070 / 1100 (V6).
         /// </summary>
         public static RevivalCatalog CreateDefault(TownCatalog town)
@@ -198,9 +201,9 @@ namespace Worktown.Sim.Revival
                 d.Neighbours)).ToList();
             var crew = new List<RevivalCrewRow>
             {
-                new RevivalCrewRow(1, 290),
-                new RevivalCrewRow(2, 540),
-                new RevivalCrewRow(3, 800),
+                new RevivalCrewRow(1, 137),
+                new RevivalCrewRow(2, 375),
+                new RevivalCrewRow(3, 675),
             };
             for (int n = 4; n <= MinCrewCoverage; n++) crew.Add(new RevivalCrewRow(n, n * 250));
             var unlocks = new[]

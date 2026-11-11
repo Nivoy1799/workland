@@ -8,7 +8,7 @@ namespace Worktown.Sim.Revival
     /// Spec 065: what one climb replay did to the town. Per district (catalog order) the play seconds (service end) at which it
     /// reached Patched, Lively and Thriving (-1: never), the meals eaten there (not counting spill); the climb's stage entry
     /// seconds (stages 1..5, -1: never), how many stage bonuses were given, whether any level ever dropped and the final
-    /// state's digest. Built by <see cref="RevivalReplay.Replay"/>, or by hand for the evaluation tests. Immutable.
+    /// state's digest and the crew's difficulty h(n). Built by <see cref="RevivalReplay.Replay"/>, or by hand for the evaluation tests. Immutable.
     /// </summary>
     public sealed class RevivalTrace
     {
@@ -16,7 +16,7 @@ namespace Worktown.Sim.Revival
 
         public RevivalTrace(int players, ulong seed, long horizonSeconds, IReadOnlyList<string> districtIds,
             IReadOnlyList<IReadOnlyList<long>> levelSeconds, IReadOnlyList<long> stageEnteredSeconds, IReadOnlyList<int> meals,
-            int stageEntries, bool levelDropped, string finalDigest)
+            int stageEntries, bool levelDropped, string finalDigest, int difficultyPermille = 1000)
         {
             if (districtIds == null || levelSeconds == null || stageEnteredSeconds == null || meals == null)
                 throw new ArgumentException("Trace lists are required.");
@@ -39,6 +39,7 @@ namespace Worktown.Sim.Revival
             StageEntries = stageEntries;
             LevelDropped = levelDropped;
             FinalDigest = finalDigest ?? "";
+            DifficultyPermille = difficultyPermille;
         }
 
         public int Players { get; }
@@ -53,6 +54,8 @@ namespace Worktown.Sim.Revival
         public int StageEntries { get; }
         public bool LevelDropped { get; }
         public string FinalDigest { get; }
+        /// <summary>065 review: the climb crew's difficulty h(n) (permille, D40; 1000 for 4 players and above), for V3.</summary>
+        public int DifficultyPermille { get; }
 
         /// <summary>Seconds at which the district reached <paramref name="level"/> (0 for Grey, -1: never; throws for an unknown id).</summary>
         public long LevelSeconds(string districtId, RevivalLevel level) =>

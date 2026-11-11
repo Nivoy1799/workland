@@ -43,6 +43,12 @@ namespace Worktown.Sim.Revival
             return parts;
         }
 
+        /// <summary>
+        /// Replays <paramref name="run"/> into a fresh revival (<see cref="RevivalEngine.Start"/>) with the rules of the class
+        /// summary and returns the trace: level-up hours per district (service end), meals per district, the climb's stage entry
+        /// seconds, its difficulty h(n), the number of stage bonuses, whether a level dropped and the final digest. Throws
+        /// <see cref="ArgumentException"/> for a missing input or a plan district the catalog does not know.
+        /// </summary>
         public static RevivalTrace Replay(ClimbRun run, RevivalCatalog c, RevivalPlan plan)
         {
             if (run == null) throw new ArgumentException("A run is required.", nameof(run));
@@ -108,7 +114,7 @@ namespace Worktown.Sim.Revival
             var stages = new long[5];
             for (int st = 1; st <= 5; st++) stages[st - 1] = run.EnteredSeconds((ClimbStage)st);
             return new RevivalTrace(players, run.Setup.Seed, run.HorizonSeconds, c.Districts.Select(d => d.DistrictId).ToList(),
-                levels.Select(l => (IReadOnlyList<long>)l).ToList(), stages, meals, entries, dropped, s.Digest);
+                levels.Select(l => (IReadOnlyList<long>)l).ToList(), stages, meals, entries, dropped, s.Digest, run.Crew.DifficultyPermille);
         }
     }
 }

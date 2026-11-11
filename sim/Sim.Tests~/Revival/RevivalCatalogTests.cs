@@ -49,8 +49,9 @@ namespace Worktown.Sim.Tests.Revival
         [Fact] public void ZeroLevelGoalThrows() => Throws(With(p => p.Goals = new List<int> { 0, 4000, 20000 }), "must be > 0");
         [Fact] public void FallingLevelGoalsThrow() => Throws(With(p => p.Goals = new List<int> { 300, 300, 20000 }), "must be rising");
         [Fact] public void FourStarValuesThrow() => Throws(With(p => p.Points = new List<int> { 0, 1, 2, 4 }), "needs 5 values");
-        [Fact] public void NegativePointsThrow() => Throws(With(p => p.Points = new List<int> { -1, 1, 2, 4, 8 }), "must be >= 0");
+        [Fact] public void NegativePointsThrow() => Throws(With(p => p.Points = new List<int> { -1, 1, 2, 4, 8 }), "pointsByStars must be 0..1000");
         [Fact] public void DecreasingPointsThrow() => Throws(With(p => p.Points = new List<int> { 0, 2, 1, 4, 8 }), "non-decreasing");
+        [Fact] public void PointsAbove1000Throw() => Throws(With(p => p.Points = new List<int> { 0, 1, 2, 4, 1001 }), "pointsByStars must be 0..1000");
         [Fact] public void SpillAbove500Throws() => Throws(With(p => p.Spill = 501), "spillPermille must be 0..500");
         [Fact] public void NegativeSpillThrows() => Throws(With(p => p.Spill = -1), "spillPermille must be 0..500");
         [Fact] public void NoCrewRowThrows() => Throws(With(p => p.Crew.Clear()), "at least one row");
@@ -129,7 +130,7 @@ namespace Worktown.Sim.Tests.Revival
         public void DefaultCrewFollowsTheGuestDemandFromFourPlayers() // tuning round 1: 052b's demand D = n / 4 has no plateau
         {
             RevivalCatalog c = RevivalCatalog.CreateDefault(R.Town);
-            Assert.Equal(new[] { 290, 540, 800 }, new[] { 1, 2, 3 }.Select(c.CrewPermille));
+            Assert.Equal(new[] { 137, 375, 675 }, new[] { 1, 2, 3 }.Select(c.CrewPermille)); // 065 review: n x h(n) / 4 (D40)
             for (int n = 4; n <= 16; n++) Assert.Equal(n * 250, c.CrewPermille(n));
             Assert.Equal(new[] { 400, 3100, 15000 }, c.LevelGoals);
         }

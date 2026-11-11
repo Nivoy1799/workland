@@ -32,6 +32,7 @@ namespace Worktown.Sim.Tests.Revival
             Assert.Equal(1, t.StageEntries);
             Assert.False(t.LevelDropped);
             Assert.Equal(4, t.Players);
+            Assert.Equal(1000, t.DifficultyPermille); // the run's crew factors (neutral in a hand-built run)
             Assert.Equal(new long[] { 0, 420, -1, -1, -1 }, t.StageEntered);
 
             // The same calls by hand give the same state.

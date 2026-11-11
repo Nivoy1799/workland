@@ -235,5 +235,32 @@ Lively 4.2 h against its S4 at 4.4 h, 4p Lively 4.1 h against S3 at 3.9 h. Other
 
 Climb report: identical before and after (`RESULT: FAIL (135/143)`, exit 2, as on main); revival feeds nothing back.
 
+## 065 review fixes
+Review: APPROVE WITH NITS. The coordinator decided Open question 1 as option (b), D40 literally. Not committed. Sim
+tests 820 -> 823; `env -u UNITY_PATH bash scripts/verify.sh` green.
+- **Crew factors:** 1-3 players now use n x h(n) / 4 with 052b's h = 0.55 / 0.75 / 0.9, which gives 137 / 375 / 675. From 4
+  players the factor stays 250 x n.
+- **V3 rule:** the lower edge is `FairMinPermille` x h(n) / 1000, as T1's lower edge (0.36x solo, 0.50x for 2, 0.60x for 3).
+  The upper edge stays at 1.5x. So a crew whose climb is h times faster may revive h times faster, never slower than 1.5x
+  of 4 players. V1 and V2 tie Patched to the crew's own S2 and Lively to its own S3..S4. `RevivalTrace.DifficultyPermille`
+  carries h(n) from the run's `CrewFactors`.
+- **Nits:**
+  - `EnterStage`: the dead `Math.Min(ppm, Ppm - 1)` guard is removed; a comment says why one level per call holds.
+  - `pointsByStars` is bounded at 1000 per meal, and `AddMeals` uses `checked` arithmetic (overflow throws).
+  - `RevivalReplay.Replay` has an XML doc.
+- **Report** (`--players 1,2,3,4,8,16 --seeds 5`): **PASS (37/37)**, exit 0. No other number changed. Main Street median
+  hours (Patched / Lively / Thriving; own S2 / S3 / S4 / S5 entry; Low Ring Patched):
+
+| crew | Main Street | stages | Low Ring |
+|---|---|---|---|
+| 1 | 0.8 / 2.2 / 7.9 | 0.7 / 2.1 / 4.4 / 9.2 | 25.8 |
+| 2 | 1.1 / 3.2 / 11.1 | 0.9 / 2.8 / 6.4 / 12.6 | 20.3 |
+| 3 | 1.2 / 3.6 / 12.5 | 1.1 / 3.3 / 7.0 / 13.9 | 20.3 |
+| 4 | 1.4 / 4.1 / 13.9 | 1.2 / 3.9 / 7.9 / 15.3 | 22.5 |
+| 8 | 1.3 / 4.1 / 13.9 | 1.2 / 3.9 / 7.9 / 15.2 | 24.6 |
+| 16 | 1.3 / 4.1 / 13.8 | 1.2 / 3.9 / 7.9 / 15.1 | 24.2 |
+
+  Thin margin: solo Lively is at 2.2 h against its S3 at 2.1 h.
+
 ## Blockers
 None. Tuning passed in round 1.

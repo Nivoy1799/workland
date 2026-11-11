@@ -66,6 +66,19 @@ namespace Worktown.Sim.Tests.Revival
         }
 
         [Fact]
+        public void V3LowerEdgeScalesWithTheCrewDifficulty() // 065 review: as T1, a crew with h(n) below 1000 may be faster
+        {
+            var fast = T.Good();
+            fast["main_street"] = new[] { 0.6, 2.5, 16.0 }; // 0.40x and 0.50x of 4 players
+            RevivalTrace Solo(int h) { RevivalTrace t = T.Trace(1, T.Stages, fast); return new RevivalTrace(1, 1, t.HorizonSeconds, t.DistrictIds, t.Levels, t.StageEntered, t.Meals, 0, false, "", h); }
+            Passes(Eval(Four(), Solo(550)), "V3");                       // lower edge 0.67 x 0.55 = 0.36x
+            Assert.Contains(Eval(Four(), Solo(550)), c => c.Line == "PASS V3 1p main_street Patched 0.6 h = 0.40x of 4p 1.5 h in 0.36-1.50x");
+            Assert.Equal(2, Eval(Four(), Solo(1000)).Count(c => c.Id == "V3" && !c.Passed)); // without h both fail
+            fast["main_street"] = new[] { 0.5, 2.5, 16.0 };              // 0.33x is below even the scaled edge
+            Failing(Eval(Four(), Solo(550)), "V3");
+        }
+
+        [Fact]
         public void V4FailsADistrictThatNeverComesBack()
         {
             TargetCheck f = Failing(Eval(Four(l => l["workshop_lane"] = new[] { -1, -1, -1.0 })), "V4");
