@@ -39,7 +39,7 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D29 | Scale | Real-world metric (1 unit = 1 m); hand-held items get a fixed readability factor: cookware and tools x1.15, small items (under 15 cm) x1.5. Reference table in docs/art-direction.md | 2026-11-08 | Decided by the human after the spec 024 play-test: sizes were "all random" |
 | D30 | Character style | Normal human proportions, no chibi; players and customers from one pack family, animation speed from the measured stride | 2026-11-08 | Decided by the human; Mini Characters looked strange and their feet slid |
 | D31 | Movement speed | Walk 2.5 m/s, sprint 5 m/s, crouch 1.25 m/s (was 4 / 8 / 2) | 2026-11-08 | Decided by the human: calmer life-sim feel, animations can match |
-| D32 | Colour palette | One warm muted palette (16 named colours in docs/art-direction.md), defined once in code and once for UI; no other hard-coded colours | 2026-11-08 | Decided by the human |
+| D32 | Colour palette | (revised by D49) One warm muted palette (16 named colours in docs/art-direction.md), defined once in code and once for UI; no other hard-coded colours | 2026-11-08 | Decided by the human |
 
 | D33 | Game mode (replaces D15, D16 for the game) | **Co-op restaurant simulator, player-hosted:** the host starts the game (Steam), up to **16 players** join. No persistent town, no official game servers ("game B" dropped). The host's game is saved on the host's PC | 2026-11-10 | Decided by the human after the design critique: the persistent town is too big, too costly and risks empty servers |
 | D34 | Progression | Start as a **food corner: 1 dish, guests, cash only**. Then: rent a restaurant, choose the service (fast food first), add delivery or custom orders, mix as you like. Specialised content later. When the restaurant is automated: create new ingredients, compete against the best NPC teams in cooking competitions, serve at event locations, better marketing, buy cars | 2026-11-10 | Decided by the human: a restaurant simulator first |
@@ -57,6 +57,9 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D46 | Time | A 40-minute game day; night is played, never skipped; the bed ends your shift. Seasons come after v1 | 2026-11-11 | Town plan (D41) |
 | D47 | Mechanic, later (revises D35 for after Early Access) | Robot repair returns as a role after Early Access (fix your own robots, then the town's); not in v1 | 2026-11-11 | The human: "in later stage, just to make it doable, early access release" |
 | D48 | Players block each other (reverses the question 23 default) | Players do not pass through each other. Blocking must not cause visible rubber-banding (spec 054b) | 2026-11-11 | Decided by the human: "please not let player pass through each other" |
+| D49 | Look v2 | Shapes S3 (soft inside, streamline outside), palette P1 with contrast fix plus light, Low Ring and Dome colours (revises D32); docs/art-direction.md | 2026-11-11 | Confirmed by the human (inbox question 29) |
+| D50 | Wear follows the revival | Wear goes from rough at level 0 to lived-in at level 3, never spotless | 2026-11-11 | Confirmed by the human (inbox question 29) |
+| D51 | No outline shader in the game | Ink outlines are concept art only; flat shading and value steps carry the shapes | 2026-11-11 | Confirmed by the human (inbox question 29) |
 
 ## OPEN
 

@@ -6,7 +6,7 @@ can start from. When approved, it gets decision lines (section 9) and becomes bi
 is (D37). Pictures: style lab round 8, https://claude.ai/artifact/VCszDibQnpUFGyD4oKEzNm (rounds 6 and 7 for the
 districts and the seasons).
 
-How it looks (shapes, palette, wear, the four revival looks, light moods) is in `docs/art-direction-v2.md`
+How it looks (shapes, palette, wear, the four revival looks, light moods) is in `docs/art-direction.md`
 (draft), which merges into `docs/art-direction.md` once approved. W6 and W7 build from it.
 
 It does not change the game design (D33–D40): a co-op restaurant climb for up to 16 players, player-hosted. This plan
