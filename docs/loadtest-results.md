@@ -78,3 +78,62 @@ The one tick spike (20.7 ms) is in the first seconds, while the first bots joine
 a host on a weaker PC, bots cooking (they only pick up, carry and drop).
 
 **Raw data.** `.verify/loadtest16/` (host.jsonl, bot<n>.jsonl, logs) and `.verify/loadtest.json` (the summary).
+
+## 2026-11-11: network headroom (spec 054), traffic per packet type, before and after
+
+**Setup.** `bash tools/bots/run-loadtest.sh --bots 15 --ramp 120 --hold 300 --net-stats --kbps-budget 35,40`: one windowed host and
+15 headless bots (16 players, D36), Tugboat on loopback, the same PC as above. `--net-stats` turns on FishNet's per-packet
+statistics on the host (Dev/NetTrafficProbe); bytes per second **per connected client** (16), averaged over the 300 s hold. Bots
+walk, pick up, carry and drop, as in spec 045 (they move about a third of the time and do not cook). "Before" is part A (the
+measurement only, spec 045's netcode); "15 Hz" is part B as built; "30 Hz" is part B with `-remote-hz 30` (other players every tick).
+
+**Bytes per second per client, by packet type** (share of all packet types in brackets).
+
+| Packet type | Before | After, 15 Hz | After, 30 Hz |
+|---|---|---|---|
+| Replicate (other players' inputs, forwarded) | 23 678 (56.0 %) | 0 | 0 |
+| Reconcile (states; before: of every player, now: of the own player only) | 17 341 (41.0 %) | 1 140 (44.8 %) | 1 140 (35.3 %) |
+| ObserversRpc (NetworkTransform updates go here: players, customers, items) | 533 (1.3 %) | 804 (31.6 %) | 1 485 (46.0 %) |
+| Unattributed (socket minus all types: packet and SyncType fan-out headers) | 381 (0.9 %) | 273 (10.7 %) | 275 (8.5 %) |
+| StateUpdate | 300 (0.7 %) | 300 (11.8 %) | 300 (9.3 %) |
+| SyncType, BulkSpawnOrDespawn, TimingUpdate, PingPong, TargetRpc | 30 | 30 | 30 |
+| **Socket total on the host** | **42 264** | **2 546** | **3 230** |
+
+**Top objects (bytes per second per client).** Player 41 020, 1 836, 2 515; Customer 192, 102, 103; the carried items (Plate 66,
+Pot 50, Bowl 47, Wipe cloth 44, Pan 37, Knife 35, Spatula 35, Cutting board 33: about 350 together) 1 to 3 each after part B.
+
+**Payload and wire per client (what each bot received).**
+
+| | Before | After, 15 Hz | After, 30 Hz |
+|---|---|---|---|
+| FishNet payload, average | 43.9 KB/s | **2.5 KB/s** | 3.2 KB/s |
+| FishNet payload, worst second (any bot) | 47.7 KB/s | **4.0 KB/s** | 4.6 KB/s |
+| Wire (LiteNetLib bytes + 28 B IPv4/UDP per datagram), average | 45.7 KB/s | 3.6 KB/s | 4.3 KB/s |
+| Wire, worst second | 49.6 KB/s | 5.0 KB/s | 5.7 KB/s |
+| Host upload, all clients (wire) | 705 KB/s (5.6 Mbit/s) | 58 KB/s (0.5 Mbit/s) | 69 KB/s |
+| Budget 35 / 40 KB/s (`--kbps-budget 35,40`) | FAIL | PASS | PASS |
+
+**Reading.** The measured ranking agrees with spec 045's first guess but is far steeper: forwarding every player's inputs and
+states to everyone (B1) was 97 % of the traffic; carried items (B2) were under 1 % and customers (B3) under 0.5 %. The spec's
+assumption that NetworkTransform bytes would land in "Unattributed" was wrong: FishNet sends them as ObserversRpc, so they are
+counted there (times the observers). With B1 a bot receives its own reconcile (1.1 KB/s, 30 Hz), the others' NetworkTransform
+updates (about 0.7 KB/s at 15 Hz while a third of them walk; NetworkTransform sends only changed axes, 2 bytes each) and the
+fixed StateUpdate/tick traffic. Upper bound with all 15 others walking all the time: about 2 KB/s more at 15 Hz. Cooking bots,
+more NPCs and the Steam relay now have well over 10 times headroom under the 35 KB/s budget.
+
+**Feel guard (B4, bots, 30 fps, loopback).** See spec 054's implementation notes for the discussion.
+
+| | Before | After, 15 Hz | After, 30 Hz |
+|---|---|---|---|
+| remote_jitter_p95 (p95 of the per-second p95, guard 0.15) | 0.733 | 0.492 | 0.499 |
+| remote_jitter, median second | 0.463 | 0.369 | 0.394 |
+| remote_teleports (jumps over 0.5 m, outside spawns) | 3 | 0 | 0 |
+| owner_corrections per bot-minute | 43.5 | 208.3 | 164.5 |
+
+Two experiments on the corrections, both removed again (15 Hz): a client-side capsule placed where the server most likely has
+each other player (newest update extrapolated): 204.1 per minute; no player-player collision on the client: 1126.2 per minute.
+The corrections come from bumping into other players, which forwarding used to re-simulate tick by tick (spec 054 notes).
+Raw data: `.verify/loadtest054-after15b/`, `.verify/loadtest054-exp-nobody/`.
+
+**Raw data.** `.verify/loadtest054-before/`, `.verify/loadtest054-after15/`, `.verify/loadtest054-after30/` (host.jsonl with
+the pid_/obj_ fields, bot<n>.jsonl, summary.json).

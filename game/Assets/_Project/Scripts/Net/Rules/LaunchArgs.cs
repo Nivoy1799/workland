@@ -54,6 +54,19 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 049 (dev builds): <c>-stall-test s</c> (1..600), stop the server's network tick after s seconds so the tick watchdog
         /// must close the shop (scripts/perf-check.sh). 0 = off. Needs <c>-host</c> or <c>-server</c>.</summary>
         public int StallTestSeconds { get; private set; }
+        /// <summary>Spec 054 (dev builds): <c>-net-stats</c>, the host or server turns on FishNet's per-packet traffic statistics and its
+        /// metrics line gains the pid_*/obj_* fields (Dev/NetTrafficProbe). Collection allocates: such a run is never a perf baseline.
+        /// Needs <c>-host</c> or <c>-server</c>.</summary>
+        public bool NetStats { get; private set; }
+        /// <summary>Spec 054 (dev builds): <c>-remote-hz 30|15</c>, how often the host sends other players' positions (NetRateRules;
+        /// 0 = not given: <see cref="NetRateRules.DefaultRemoteHz"/>). For the human's A/B (docs/feel.md 9). Needs <c>-host</c> or <c>-server</c>.</summary>
+        public int RemoteHz { get; private set; }
+        /// <summary>Spec 054 (experiment, dev builds): <c>-player-collision on|off</c>; off: players walk through each other, on the
+        /// server and in every client's prediction alike (the host decides, PlayerController.CollidesWithPlayers). Default on.
+        /// Needs <c>-host</c> or <c>-server</c>.</summary>
+        public bool PlayerCollision { get; private set; } = true;
+        /// <summary>Spec 054: true when <c>-player-collision</c> was given.</summary>
+        public bool PlayerCollisionGiven { get; private set; }
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -158,6 +171,21 @@ namespace Worktown.Game.Net.Rules
                         result.StallTestSeconds = stall;
                         i++;
                         break;
+                    case "-net-stats":
+                        result.NetStats = true;
+                        break;
+                    case "-player-collision":
+                        if (i + 1 >= args.Count || (args[i + 1] != "on" && args[i + 1] != "off"))
+                            return Fail("-player-collision needs on or off");
+                        result.PlayerCollision = args[++i] == "on";
+                        result.PlayerCollisionGiven = true;
+                        break;
+                    case "-remote-hz":
+                        if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int hz) || !NetRateRules.IsRemoteHz(hz))
+                            return Fail("-remote-hz needs " + NetRateRules.TickRate + " or " + NetRateRules.DefaultRemoteHz);
+                        result.RemoteHz = hz;
+                        i++;
+                        break;
                     case "-metrics":
                         if (!HasValue(args, i)) return Fail("-metrics needs a file path");
                         result.MetricsPath = args[++i];
@@ -183,6 +211,12 @@ namespace Worktown.Game.Net.Rules
                 return Fail("-perf-tour excludes -tour and -observe");
             if (result.StallTestSeconds > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
                 return Fail("-stall-test needs -server or -host");
+            if (result.NetStats && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-net-stats needs -server or -host");
+            if (result.RemoteHz > 0 && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-remote-hz needs -server or -host");
+            if (result.PlayerCollisionGiven && result.Mode != LaunchMode.Server && result.Mode != LaunchMode.Host)
+                return Fail("-player-collision needs -server or -host (the host decides for everyone)");
             if (result.CrashTest && result.Mode != LaunchMode.Menu) return Fail("-crash-test takes no -server, -host, -connect or -steam");
             return result;
         }

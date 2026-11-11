@@ -16,7 +16,7 @@
 #      latest per-station table replaced there.
 #
 #   bash scripts/perf-check.sh [--quick] [--soak-minutes 120] [--bots 15] [--res 1920x1080] [--out .verify/perf]
-#                              [--no-record] [--skip-crash] [--skip-soak] [--doc docs/performance.md] [--self-test]
+#                              [--no-record] [--skip-crash] [--skip-soak] [--net-stats] [--doc docs/performance.md] [--self-test]
 #
 #   --soak-minutes   the soak's length (default 15, about 20 minutes in all; 120 is the spec's 2-hour soak, about 2 h 5 min).
 #                    Rows are only compared with rows of the same scenario (bots, minutes, resolution).
@@ -26,7 +26,9 @@
 #   --out            where each run gets a dated folder (logs, the tour's JSON lines, report.md).
 #   --no-record      measure and judge, but leave docs/performance.md alone (experiments).
 #   --skip-crash / --skip-soak   only one part; such a partial run is judged on what ran and never recorded.
-#   --self-test      checks the baseline rules on made-up rows and prints the baseline of every scenario in --doc (no game).
+#   --net-stats      spec 054: the soak's host runs with -net-stats (the per-packet table in soak/summary.json); FishNet's
+#                    statistics allocate, so the row is marked "(partial run: net-stats)" and is never a baseline.
+#   --self-test      checks the baseline rules and the bandwidth rule on made-up rows and prints the baseline of every scenario in --doc (no game).
 #
 # Needs the development builds: Unity -batchmode -quit -projectPath game -executeMethod Worktown.Game.Editor.Build.WorktownBuild.BuildAll
 # (a build older than the scripts is warned about). Nothing else may use port 7770 (a visual check or a load test): it refuses to
@@ -46,6 +48,7 @@ RECORD=1
 DO_CRASH=1
 DO_SOAK=1
 SELF_TEST=0
+NET_STATS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --quick) SOAK_MIN=10; shift ;;
@@ -58,7 +61,8 @@ while [ $# -gt 0 ]; do
     --skip-crash) DO_CRASH=0; shift ;;
     --skip-soak) DO_SOAK=0; shift ;;
     --self-test) SELF_TEST=1; shift ;;
-    -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
+    --net-stats) NET_STATS=1; shift ;;
+    -h|--help) sed -n '2,39p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -66,11 +70,18 @@ case "$BOTS$SOAK_MIN" in *[!0-9]*|"") echo "--bots and --soak-minutes take whole
 if [ "$BOTS" -lt 1 ] || [ "$SOAK_MIN" -lt 5 ]; then echo "at least 1 bot and a 5-minute soak" >&2; exit 2; fi
 case "$RES" in [1-9]*x[1-9]*) ;; *) echo "--res takes WIDTHxHEIGHT, e.g. 1920x1080" >&2; exit 2 ;; esac
 
+# Spec 054: the bandwidth budget per client (KB = 1000 bytes), the FishNet payload a bot received over the soak: the average and the
+# worst second (docs/performance.md). run-loadtest.sh exits 4 when either is over; the verdict checks the summary again.
+KBPS_AVG_BUDGET=35.0
+KBPS_WORST_BUDGET=40.0
+
 # The verdict, the row and the station table (perl). A function so that --self-test runs it before any build check.
 verdict() {
 perl - "$@" <<'PERL'
 use strict; use warnings;
-my ($run, $doc, $record, $stamp, $commit, $bots, $soakMin, $res, $crash, $stall, $loadtest, $stale) = @ARGV;
+my ($run, $doc, $record, $stamp, $commit, $bots, $soakMin, $res, $crash, $stall, $loadtest, $stale, $kbpsAvgBudget, $kbpsWorstBudget,
+  $netStats) = @ARGV;
+$kbpsAvgBudget //= 35; $kbpsWorstBudget //= 40; $netStats //= 0;
 
 # The budget (spec 049: 60 fps at 1080p with 16 players) and the bounds; the regression rule (more than 10 % worse than the best
 # run of the same scenario, beyond a small noise floor so a 0.1 ms wobble never fails a run).
@@ -94,8 +105,10 @@ sub run_rows {
     next unless /^\| (\d{4}-\d\d-\d\d [\d:]+) \|/;
     my @c = map { s/^\s+|\s+$//gr } split /\|/;
     shift @c;
+    pop @c while @c && $c[-1] eq ""; # the end of the line after the last "|"
     next unless @c >= 11;
-    my %r = (date => $c[0], commit => $c[1], scenario => $c[3], result => $c[10]);
+    # Spec 054: rows since then have the column "KB/s/client (worst s)" before Result; older rows read as "-".
+    my %r = (date => $c[0], commit => $c[1], scenario => $c[3], result => $c[-1], kbps => (@c >= 12 ? $c[10] : "-"));
     my %col = (avg => 4, p95 => 5, p99 => 6, gc => 7);
     for my $k (keys %col) { my $v = $c[$col{$k}]; $r{$k} = $v =~ /^-?[0-9]+(\.[0-9]+)?$/ ? $v + 0 : undef }
     push @rows, \%r;
@@ -134,6 +147,26 @@ sub regressions {
   return @out;
 }
 
+# Spec 054: the bandwidth rule. The payload per client in bytes per second (average, worst second) against the budget in KB/s
+# (KB = 1000 bytes); one reason per number over it, none without numbers.
+sub bandwidth {
+  my ($avgBytes, $worstBytes, $budgetAvg, $budgetWorst) = @_;
+  my @out;
+  return @out unless defined $avgBytes && defined $worstBytes;
+  push @out, sprintf("payload per client %.1f KB/s on average is over the %.1f KB/s budget", $avgBytes / 1000, $budgetAvg)
+    if $avgBytes / 1000 > $budgetAvg;
+  push @out, sprintf("payload per client %.1f KB/s in the worst second is over the %.1f KB/s budget", $worstBytes / 1000, $budgetWorst)
+    if $worstBytes / 1000 > $budgetWorst;
+  return @out;
+}
+
+# Spec 054: the cell of the column "KB/s/client (worst s)": the payload average (worst second) and the wire average, or "-".
+sub kbps_cell {
+  my ($avgBytes, $worstBytes, $wireBytes) = @_;
+  return "-" unless defined $avgBytes && defined $worstBytes;
+  return sprintf("%.1f (%.1f)", $avgBytes / 1000, $worstBytes / 1000) . (defined $wireBytes && $wireBytes > 0 ? sprintf(", wire %.1f", $wireBytes / 1000) : "");
+}
+
 # --self-test: the baseline rules on made-up rows, then the baseline each scenario of the real table would get.
 if ($run eq "--self-test") {
   my $fails = 0;
@@ -163,6 +196,21 @@ if ($run eq "--self-test") {
   my @only = (grep { !/dirty|stale|eeeeeee|fffffff|aaaaaaa|bbbbbbb/ } @t);
   my $na = baseline($s, run_rows(@only));
   $ok->(!defined $na, "a row without a p95 is no baseline");
+  # Spec 054: the bandwidth rule and the new column.
+  $ok->(!bandwidth(34900, 39900, 35, 40), "34.9 KB/s on average and 39.9 in the worst second pass a 35/40 budget");
+  my @bw = bandwidth(35100, 39000, 35, 40);
+  $ok->(@bw == 1 && $bw[0] =~ /35\.1 KB\/s on average/, "35.1 on average fails (" . join("; ", @bw) . ")");
+  @bw = bandwidth(30000, 40100, 35, 40);
+  $ok->(@bw == 1 && $bw[0] =~ /worst second/, "40.1 in the worst second fails (" . join("; ", @bw) . ")");
+  $ok->(bandwidth(50000, 60000, 35, 40) == 2, "both over: two reasons");
+  $ok->(!bandwidth(undef, undef, 35, 40), "no numbers (no soak): no bandwidth verdict");
+  $ok->(kbps_cell(33100, 38420, 41260) eq "33.1 (38.4), wire 41.3" && kbps_cell(undef, undef, undef) eq "-", "the column: average (worst), wire");
+  my @mixed = run_rows($t[0], "| 2026-01-09 10:00 | 3333333 | h | $s | 1.00 | 1.90 | 1.00 | 900 | +0.1 | +0.0 % | 33.1 (38.4), wire 41.3 | PASS (crash PASS, watchdog PASS) |\n");
+  $ok->(@mixed == 2 && $mixed[0]{kbps} eq "-" && $mixed[0]{result} =~ /^PASS/ && $mixed[1]{kbps} =~ /^33\.1/ && $mixed[1]{result} =~ /^PASS/,
+    "an older row (no column) reads as -, a new row has its cell, both keep their result");
+  $ok->(baseline($s, @mixed)->{commit} eq "3333333", "a new row can be the baseline");
+  my @ns = run_rows("| 2026-01-10 10:00 | 4444444 | h | $s | 1.00 | 1.00 | 1.00 | 900 | +0.1 | +0.0 % | 30.0 (35.0) | PASS (partial run: net-stats) (crash PASS, watchdog PASS) |\n");
+  $ok->(!defined baseline($s, @ns), "a -net-stats run is never a baseline");
 
   print "\nThe real table ($doc):\n";
   my @doclines;
@@ -211,6 +259,14 @@ if (open(my $h, "<", "$run/soak/host.jsonl")) {
   }
 }
 
+# Spec 054: the bandwidth per client over the soak (run-loadtest.sh's summary): the payload a bot received, average and worst second,
+# and the wire bytes.
+my ($kbAvg, $kbWorst, $kbWire);
+if (open(my $h, "<", "$run/soak/summary.json")) {
+  my %sum; while (<$h>) { $sum{$1} = $2 + 0 if /"(\w+)":\s*(-?[0-9.]+)/ }
+  ($kbAvg, $kbWorst, $kbWire) = ($sum{out_bytes_per_client_avg}, $sum{out_bytes_per_client_max_second}, $sum{wire_bytes_per_client_avg});
+}
+
 my $scenario = "$bots bots, $soakMin min, $res";
 my %now = (avg => $all ? $all->{avg_ms} : undef, p95 => $all ? $all->{p95_ms} : undef, p99 => $all ? $all->{p99_ms} : undef,
            gc => $all ? $all->{gc_bytes_per_frame} : undef, heap => $heapGrowth, objects => $objGrowth);
@@ -224,9 +280,14 @@ my @why;
 push @why, "the crash log check failed" if $crash eq "FAIL";
 push @why, "the tick watchdog check failed" if $stall eq "FAIL";
 push @why, "the load test failed (a process ended early, see soak/)" if $loadtest eq "FAIL";
+# Spec 054: run-loadtest.sh exited 4 (over the bandwidth budget); the reasons come from the summary below.
+push @why, "the load test was over the bandwidth budget (see soak/bandwidth.txt)" if $loadtest eq "BANDWIDTH" && !bandwidth($kbAvg, $kbWorst, $kbpsAvgBudget, $kbpsWorstBudget);
+push @why, bandwidth($kbAvg, $kbWorst, $kbpsAvgBudget, $kbpsWorstBudget) if $loadtest ne "skipped";
 # A partial run (--skip-crash, --skip-soak) is judged on what ran, and never recorded.
 my $partial = ($crash eq "skipped" || $stall eq "skipped" || $loadtest eq "skipped") ? 1 : 0;
 $record = 0 if $partial;
+# Spec 054: a -net-stats run (FishNet's statistics allocate) is recorded, but as partial: never a baseline.
+my $partialNote = $partial ? " (partial run)" : $netStats ? " (partial run: net-stats)" : "";
 push @why, "the profiling tour did not finish (no ALL line in perf-tour.jsonl)" if $loadtest ne "skipped" && !$all;
 if ($all) {
   push @why, sprintf("frame avg %.2f ms is over the %.1f ms budget", $now{avg}, $FRAME_BUDGET_MS) if $now{avg} > $FRAME_BUDGET_MS;
@@ -237,12 +298,12 @@ push @why, sprintf("Unity objects grew %.1f %% (bound %d)", $objGrowth, $OBJECTS
 push @why, "no memory numbers ($memNote)" if $loadtest ne "skipped" && !defined $heapGrowth;
 push @why, regressions(\%now, $best);
 my $baseNote = $best ? "Baseline: the run of $best->{date} ($best->{commit}, p95 $best->{p95} ms)." : "Baseline: none yet for this scenario.";
-my $result = (@why ? "FAIL" : "PASS") . ($partial ? " (partial run)" : "");
+my $result = (@why ? "FAIL" : "PASS") . $partialNote;
 
 my $checks = "crash $crash, watchdog $stall";
-my $row = sprintf("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $stamp, $commit . ($stale ? " (stale build)" : ""), $build,
+my $row = sprintf("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $stamp, $commit . ($stale ? " (stale build)" : ""), $build,
   $scenario, fmt($now{avg}, 2), fmt($now{p95}, 2), fmt($now{p99}, 2), fmt($now{gc}, 0), signed($heapGrowth, 1, ""),
-  signed($objGrowth, 1, " %"), "$result ($checks)");
+  signed($objGrowth, 1, " %"), kbps_cell($kbAvg, $kbWorst, $kbWire), "$result ($checks)");
 
 my @sorted = sort { $b->{p95_ms} <=> $a->{p95_ms} } @stations;
 my $table = "Latest run: $stamp, commit $commit, $scenario. Sorted by p95, the worst first.\n\n"
@@ -257,8 +318,8 @@ open(my $r, ">", "$run/report.md") or die "cannot write $run/report.md"; print $
 if ($record) {
   if (!@lines) {
     @lines = ("# Performance (spec 049)\n\n", "Written by `scripts/perf-check.sh`.\n\n", "## Runs\n\n", "<!-- perf-runs:start -->\n",
-      "| Date | Commit | Build | Scenario | Frame avg ms | p95 ms | p99 ms | GC B/frame | Heap growth MB | Objects growth | Result |\n",
-      "|---|---|---|---|---|---|---|---|---|---|---|\n", "<!-- perf-runs:end -->\n\n", "## Stations\n\n", "<!-- perf-stations:start -->\n",
+      "| Date | Commit | Build | Scenario | Frame avg ms | p95 ms | p99 ms | GC B/frame | Heap growth MB | Objects growth | KB/s/client (worst s) | Result |\n",
+      "|---|---|---|---|---|---|---|---|---|---|---|---|\n", "<!-- perf-runs:end -->\n\n", "## Stations\n\n", "<!-- perf-stations:start -->\n",
       "<!-- perf-stations:end -->\n");
   }
   my $text = join("", @lines);
@@ -279,7 +340,7 @@ exit(@why ? 1 : 0);
 PERL
 }
 
-if [ "$SELF_TEST" -eq 1 ]; then verdict --self-test "$DOC"; exit $?; fi
+if [ "$SELF_TEST" -eq 1 ]; then verdict --self-test "$DOC" 0 0 0 0 0 0 0 0 0 0 "$KBPS_AVG_BUDGET" "$KBPS_WORST_BUDGET" 0; exit $?; fi
 
 
 GAME="$ROOT/game/Builds/Windows/Worktown.exe"
@@ -397,10 +458,16 @@ fi
 LOADTEST="skipped"
 if [ "$DO_SOAK" -eq 1 ]; then
   echo "==> profiling tour and soak: $BOTS bots, $SOAK_MIN min (ends about $(date -d "+$(( SOAK_MIN + 3 )) min" +%H:%M 2>/dev/null || echo later))"
+  LOADTEST_EXTRA=()
+  if [ "$NET_STATS" -eq 1 ]; then LOADTEST_EXTRA+=(--net-stats); fi
   bash tools/bots/run-loadtest.sh --bots "$BOTS" --ramp "$RAMP" --hold $(( SOAK_MIN * 60 )) --out "$RUN/soak" --res "$RES" \
+    --kbps-budget "$KBPS_AVG_BUDGET,$KBPS_WORST_BUDGET" "${LOADTEST_EXTRA[@]}" \
     --host-arg -perf-tour --host-arg "$(win "$RUN/perf-tour.jsonl")" --host-arg -view --host-arg first 2>&1 | tee "$RUN/loadtest.out"
-  if [ "${PIPESTATUS[0]}" -eq 0 ]; then LOADTEST="PASS"; else LOADTEST="FAIL"; fi
+  # Spec 054: exit 4 is the bandwidth budget (every process ran to the end); 1 a process that ended early.
+  code="${PIPESTATUS[0]}"
+  if [ "$code" -eq 0 ]; then LOADTEST="PASS"; elif [ "$code" -eq 4 ]; then LOADTEST="BANDWIDTH"; else LOADTEST="FAIL"; fi
 fi
 
 # ---- 3. the verdict, the row and the station table ----
-verdict "$RUN" "$DOC" "$RECORD" "$STAMP" "$COMMIT" "$BOTS" "$SOAK_MIN" "$RES" "$CRASH" "$STALL" "$LOADTEST" "$STALE"
+verdict "$RUN" "$DOC" "$RECORD" "$STAMP" "$COMMIT" "$BOTS" "$SOAK_MIN" "$RES" "$CRASH" "$STALL" "$LOADTEST" "$STALE" \
+  "$KBPS_AVG_BUDGET" "$KBPS_WORST_BUDGET" "$NET_STATS"

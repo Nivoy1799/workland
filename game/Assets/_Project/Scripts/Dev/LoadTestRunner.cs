@@ -20,6 +20,9 @@ namespace Worktown.Game.Dev
     /// a server: connected clients, spawned objects, frame and tick work times (avg, p95, max in ms), bytes received, CPU (% of one
     /// core) and memory (Unity reserved, managed heap) of the process; a bot: the bytes it received (what the server sent it) and its round trip. A bot does
     /// everything through the owner's normal intents and requests (TourActor); the server decides as always.
+    /// Spec 054: both sides add their wire bytes and datagrams (WireBytesProbe); a host with <c>-net-stats</c> adds its bytes per packet
+    /// type and per object (NetTrafficProbe, TrafficTable); a bot adds how it draws the other players and how often its own player is
+    /// corrected (RemoteMotionProbe, the feel guard).
     /// </summary>
     public sealed class LoadTestRunner : MonoBehaviour
     {
@@ -47,6 +50,11 @@ namespace Worktown.Game.Dev
         private double _gcBytes;
         private int _gcFrames;
         private float _lastCpuAt;
+        // Spec 054: wire bytes (both sides), per-packet traffic (a host with -net-stats), remote motion and owner corrections (a bot).
+        private WireBytesProbe _wire;
+        private NetTrafficProbe _traffic;
+        private RemoteMotionProbe _motion;
+        private float _lastSampleAt;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Boot()
@@ -74,6 +82,7 @@ namespace Worktown.Game.Dev
             _nextSample = _started + 1f;
             _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
             _lastCpuAt = _started;
+            _lastSampleAt = _started;
             if (_args.MetricsPath.Length > 0)
             {
                 string dir = Path.GetDirectoryName(Path.GetFullPath(_args.MetricsPath));
@@ -81,6 +90,7 @@ namespace Worktown.Game.Dev
                 _metrics = new StreamWriter(_args.MetricsPath, false) { AutoFlush = true };
             }
             Transport transport = _net.TransportManager.Transport;
+            _wire = new WireBytesProbe(transport, _server);
             if (_server)
             {
                 transport.OnServerReceivedData += OnServerData;
@@ -88,6 +98,8 @@ namespace Worktown.Game.Dev
                 _objectCount = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "Object Count");
                 _net.TimeManager.OnPreTick += OnPreTick;
                 _net.TimeManager.OnPostTick += OnPostTick;
+                _traffic = NetTrafficProbe.TryAttach(_net); // spec 054: null without -net-stats
+                if (_traffic != null) Debug.Log("[Load] per-packet traffic statistics in the metrics (-net-stats)");
                 Debug.Log("[Load] server metrics to " + _args.MetricsPath);
             }
             else
@@ -97,6 +109,7 @@ namespace Worktown.Game.Dev
                 _net.ClientManager.SetFrameRate(BotFrameRate);
                 transport.OnClientReceivedData += OnClientData;
                 _net.ClientManager.OnClientConnectionState += OnClientState;
+                _motion = new RemoteMotionProbe(); // spec 054 (B4): the feel guard
                 StartCoroutine(RunBot());
             }
         }
@@ -114,6 +127,10 @@ namespace Worktown.Game.Dev
                 _net.TimeManager.OnPostTick -= OnPostTick;
             }
             if (_net != null && _net.ClientManager != null) _net.ClientManager.OnClientConnectionState -= OnClientState;
+            _traffic?.Detach();
+            _traffic = null;
+            _motion?.Dispose();
+            _motion = null;
             _metrics?.Dispose();
             _metrics = null;
             if (_gcAlloc.Valid) _gcAlloc.Dispose();
@@ -140,6 +157,7 @@ namespace Worktown.Game.Dev
                 _gcBytes += _gcAlloc.LastValue;
                 _gcFrames++;
             }
+            _motion?.Frame(Time.unscaledTime, Time.unscaledDeltaTime);
             float now = Time.unscaledTime;
             if (now < _nextSample) return;
             _nextSample = now + 1f;
@@ -150,6 +168,9 @@ namespace Worktown.Game.Dev
         {
             var fields = new List<KeyValuePair<string, double>>(16) { new KeyValuePair<string, double>("t", Math.Round(now - _started)) };
             fields.Add(Field("unix", DateTimeOffset.UtcNow.ToUnixTimeSeconds())); // the script cuts the ramp and the hold by wall time
+            _wire.Sample(out long wireBytes, out long datagrams);
+            float window = Math.Max(0.001f, now - _lastSampleAt);
+            _lastSampleAt = now;
             if (_server)
             {
                 Process self = Process.GetCurrentProcess();
@@ -177,6 +198,11 @@ namespace Worktown.Game.Dev
                 fields.Add(Field("gc_kb_per_frame", _gcFrames > 0 ? _gcBytes / _gcFrames / 1024d : 0d));
                 fields.Add(Field("unity_objects", _objectCount.Valid ? _objectCount.LastValue : 0));
                 fields.Add(Field("gc_collections", GC.CollectionCount(0)));
+                // Spec 054: what the host's socket really sent (payload + LiteNetLib headers + IPv4/UDP), and with -net-stats the bytes
+                // per packet type and per object, per second per connected client (TrafficTable).
+                fields.Add(Field("wire_out_bytes", TrafficTable.WireBytes(wireBytes, datagrams)));
+                fields.Add(Field("datagrams_out", datagrams));
+                if (_traffic != null) fields.AddRange(_traffic.TakeFields(up ? _net.ServerManager.Clients.Count : 0, window));
             }
             else
             {
@@ -184,6 +210,9 @@ namespace Worktown.Game.Dev
                 fields.Add(Field("in_bytes", _bytesIn));
                 fields.Add(Field("rtt_ms", _net.IsClientStarted ? _net.TimeManager.RoundTripTime : 0));
                 fields.Add(Field("frame_avg_ms", LoadStats.Average(_frames)));
+                fields.Add(Field("wire_in_bytes", TrafficTable.WireBytes(wireBytes, datagrams))); // spec 054
+                fields.Add(Field("datagrams_in", datagrams));
+                _motion?.AddFields(fields); // spec 054 (B4)
             }
             _ticks.Clear();
             _frames.Clear();

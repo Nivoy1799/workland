@@ -141,5 +141,51 @@ namespace Worktown.Game.Tests
             }
             finally { Object.DestroyImmediate(go); }
         }
+
+        /// <summary>
+        /// 054 round (041 review nits): a box off the item's pivot reaches further on one side than on the other, and the place plan
+        /// checks it where it lies; a half turn is never refused, by construction (PlaceTurn.IsHalfTurn), even when the box is off the pivot.
+        /// </summary>
+        [Test]
+        public void Footprint_OffThePivot_IsCheckedWhereTheBoxLies_AndAHalfTurnIsNeverRefused()
+        {
+            Quaternion flat = Quaternion.identity;
+            var half = new Vector3(0.05f, 0.02f, 0.05f);
+            var center = new Vector3(0.12f, 0f, 0f); // the box sits 12 cm towards +X of the pivot
+            PlaceTurn.Footprint(half, center, flat, flat, out Vector2 positive, out Vector2 negative);
+            Assert.AreEqual(0.17f, positive.x, 1e-4f, "towards +X: the centre plus the half size");
+            Assert.AreEqual(-0.07f, negative.x, 1e-4f, "towards -X it does not even reach the pivot");
+            Assert.AreEqual(0.05f, positive.y, 1e-4f);
+            Assert.AreEqual(0.05f, negative.y, 1e-4f);
+            Assert.IsTrue(PlaceTurn.Reaches(positive, negative, 1, 0), "over the right neighbour");
+            Assert.IsFalse(PlaceTurn.Reaches(positive, negative, -1, 0), "not over the left one");
+            Assert.IsTrue(PlaceTurn.IsHalfTurn(4) && PlaceTurn.IsHalfTurn(12) && !PlaceTurn.IsHalfTurn(2) && !PlaceTurn.IsHalfTurn(0));
+
+            var go = new GameObject("Worktop under test");
+            try
+            {
+                var surface = go.AddComponent<PlaceSurface>();
+                var so = new UnityEditor.SerializedObject(surface);
+                so.FindProperty("_index").intValue = Surface;
+                so.FindProperty("_size").vector2Value = new Vector2(1f, 0.6f); // 4 columns, 2 rows
+                so.FindProperty("_topY").floatValue = 0.9f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                Vector3 player = surface.SpotWorldPosition(1) + new Vector3(0f, -0.9f, -0.8f);
+                bool NothingThere(Vector3 at) => false;
+                var left = new PlaceSpots();
+                Assert.IsTrue(left.TryTake(Surface, 0, 77), "the left neighbour of spot 1 is taken");
+                var nothing = new Vector3(0.05f, 0.02f, 0.02f);
+                var offset = new Vector3(0f, 0f, 0.15f); // the box sits 15 cm in front of the pivot (its local +Z)
+                // Turned two steps (90 degrees about Y) the box's local +Z points to the surface's +X: away from the taken left spot.
+                Assert.AreEqual(PickupOutcome.Ok, PickupService.PlanPlace(left, true, Surface, surface, PlaceTurn.Pack(1, 2), player, false,
+                    Quaternion.identity, 0.02f, nothing, offset, NothingThere, out _, out _), "the box lies right of the pivot: spot 0 stays free");
+                // Six steps (270 degrees) it points to -X, over the taken spot 0.
+                Assert.AreEqual(PickupOutcome.Taken, PickupService.PlanPlace(left, true, Surface, surface, PlaceTurn.Pack(1, 6), player, false,
+                    Quaternion.identity, 0.02f, nothing, offset, NothingThere, out _, out _), "the box lies left of the pivot, over spot 0");
+                Assert.AreEqual(PickupOutcome.Ok, PickupService.PlanPlace(left, true, Surface, surface, PlaceTurn.Pack(1, 4), player, false,
+                    Quaternion.identity, 0.02f, nothing, offset, NothingThere, out _, out _), "a half turn is never refused");
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
     }
 }

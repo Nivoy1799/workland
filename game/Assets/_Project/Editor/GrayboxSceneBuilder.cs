@@ -275,10 +275,18 @@ namespace Worktown.Game.Editor
             NetworkObject nob = root.AddComponent<NetworkObject>();
             SetField(nob, "_enablePrediction", true);
             SetField(nob, "_predictionType", 0); // Other: CharacterController, not a rigidbody
-            SetField(nob, "_enableStateForwarding", true);
+            // Spec 054 (B1): no inputs or states to the other players; they see the root through a server-authoritative
+            // NetworkTransform at 15 Hz (NetRateRules), never sent to the owner (it predicts). FishNet configures it for prediction.
+            SetField(nob, "_enableStateForwarding", false);
+            NetworkTransform remote = AddServerAuthoritativeTransform(root, NetRateRules.RemotePlayerInterval, NetRateRules.RemoteInterpolation);
+            SetField(remote, "_sendToOwner", false);
+            SetField(nob, "_networkTransform", remote);
 
             var smoother = graphic.AddComponent<NetworkTickSmoother>();
             SetField(smoother, "_initializationSettings.TargetTransform", root.transform);
+            // Spec 054 (B1): the owner's smoothing is unchanged; for the others the NetworkTransform smooths the root, so the tick
+            // smoother stands aside while it does (FishNet: "Favor NetworkTransform"), and the two never fight.
+            SetField(smoother, "_favorPredictionNetworkTransform", true);
 
             var player = root.AddComponent<PlayerController>();
             SetField(player, "_graphic", graphic.transform);
@@ -345,7 +353,7 @@ namespace Worktown.Game.Editor
             TextMesh label = CreateLabel(root.transform, new Vector3(0f, 2.1f, 0f), 56, 0.045f);
 
             NetworkObject nob = root.AddComponent<NetworkObject>();
-            AddServerAuthoritativeTransform(root);
+            AddServerAuthoritativeTransform(root, NetRateRules.CustomerInterval, NetRateRules.CustomerInterpolation); // spec 054: 15 Hz
             var customer = root.AddComponent<Customer>();
             SetField(customer, "_label", label);
             SetField(customer, "_tinted", character.Renderers);
@@ -3281,11 +3289,21 @@ namespace Worktown.Game.Editor
             return cam;
         }
 
-        private static void AddServerAuthoritativeTransform(GameObject go)
+        /// <summary>
+        /// A server-authoritative NetworkTransform on a networked root. Spec 054 (B3): no scale (no root is scaled at run time; the
+        /// 031b draw scale is visual only), sent every <paramref name="interval"/> ticks (items: every tick while they move),
+        /// buffered <paramref name="interpolation"/> updates on the viewers.
+        /// </summary>
+        private static NetworkTransform AddServerAuthoritativeTransform(GameObject go, int interval = NetRateRules.ItemInterval,
+            int interpolation = 2)
         {
             var nt = go.AddComponent<NetworkTransform>();
             SetField(nt, "_clientAuthoritative", false);
             SetField(nt, "_sendToOwner", true);
+            SetField(nt, "_synchronizeScale", false);
+            SetField(nt, "_interval", interval);
+            SetField(nt, "_interpolation", interpolation);
+            return nt;
         }
 
         private static DistanceCondition CreateDistanceCondition()

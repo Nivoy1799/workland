@@ -721,15 +721,16 @@ namespace Worktown.Game.Net
             _contentsPlate = plate;
         }
 
-        /// <summary>044 follow-up: the answer to request <paramref name="answered"/>: a refused tip or scoop shows the real contents now.</summary>
+        /// <summary>
+        /// 044 follow-up: the answer to request <paramref name="answered"/>: a refused tip or scoop shows the real contents now. One check
+        /// (ContentsPrediction.RefusalEnds; 054 round, review nit): a yes leaves the note as it is (the synced contents end the look, and
+        /// request ids never repeat, so no later answer matches it); the next tip or scoop overwrites it.
+        /// </summary>
         private void AnswerContents(int answered, bool ok)
         {
-            if (answered == 0 || answered != _contentsRequest) return;
-            if (ContentsPrediction.RefusalEnds(answered, _contentsRequest, ok))
-            {
-                if (_contentsSource != null) _contentsSource.EndPredictedContents();
-                if (_contentsPlate != null) _contentsPlate.EndPredictedContents();
-            }
+            if (!ContentsPrediction.RefusalEnds(answered, _contentsRequest, ok)) return;
+            if (_contentsSource != null) _contentsSource.EndPredictedContents();
+            if (_contentsPlate != null) _contentsPlate.EndPredictedContents();
             _contentsRequest = 0;
             _contentsSource = null;
             _contentsPlate = null;
