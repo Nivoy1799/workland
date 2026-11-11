@@ -70,6 +70,24 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+26. **Two more drafts: the next stages of the climb** (nothing gets built until you approve them).
+    - **057 first restaurant (stage 2).** You pay the rent goal and move into your first rented restaurant, which
+      serves fast food. It uses the same kitchen with the covers off, renamed "Your restaurant". Rent is $5,750 per
+      service. Defaults:
+      - any player may spend shop money, but must press twice to confirm;
+      - unpaid rent is owed and paid first, capped at 2 rents;
+      - 4 dishes, fries included.
+
+      Order: 052b first, then 057, then measure stage 2 and calibrate it.
+    - **058 NPC rival teams** (after 057). Named rival shops in town; guests choose between you and them, and rivals
+      cut prices or improve. A rankings board shows where you stand. No crime and no harm. Defaults:
+      - town demand stays as it is for now, so mainly larger crews will feel the rivals at first;
+      - a guest can also choose to go "elsewhere".
+
+      Rival owner names: Tobi, Mira, Lu and Rosa. Mira is also the farmer in the storyboard draft; say if one should
+      change.
+
+    Say "approve 057" and/or "approve 058". The best order is 052b, 057, 058.
 25. **Two new drafts (nothing gets built until you approve them).**
     - **052b climb tuning v2** (/sim only). It applies the defaults from questions 22 and 24:
       - solo and small-crew scaling, and the crew chooses its menu;
