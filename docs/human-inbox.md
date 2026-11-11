@@ -99,10 +99,6 @@ every question has a default, and work continues on other items until you answer
     - protection for the shared cache.
     Until then, games use the built-in fallback names. Also FYI: the gateway now rejects animal-product words (D27) with
     a copy of the game's own word list, and a test keeps both lists equal.
-19. **Colour-blind ring colours (spec 048) and D32.** D32 says one palette of 16 named colours. The new colour-blind
-    option for the cooking rings uses 4 extra colours from the Okabe-Ito set, a standard palette that is safe for colour
-    blindness. Default: allow them as a separate "accessibility" set next to the 16, used only when that option is on.
-    Say no if you'd rather pick 4 of the 16.
 18. **Spec 045 results (in review).**
     - **16-player load test passed:** tick time p95 1 ms (target under 20), 49.6 KB/s per player (target 50, just met),
       host upload about 0.8 MB/s, all 17 processes alive.
@@ -207,6 +203,9 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11, question 19 (colour-blind ring colours):** "just do it, not important right now". The default stands: the 4
+  Okabe-Ito colours form a separate accessibility set. Visual polish waits for the art direction from your Blender
+  session.
 - **2026-11-11, question 24 (crew size):** decided as D40. Tuned for 4 players; solo is very easy, it gets harder up to 4,
   then stays flat up to 16. Prices never change with the crew; goals grow with it; progress is kept as a percentage.
   Starting curve: solo 0.55, 2 players 0.75, 3 players 0.9, 4 and more 1.0. 052b builds it.
