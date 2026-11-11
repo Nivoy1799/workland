@@ -33,7 +33,7 @@ namespace Worktown.Game.Tests
                 if (prefab != null) registered.Add(AssetDatabase.GetAssetPath(prefab));
             }
 
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 KitchenService kitchen = null;
@@ -100,7 +100,7 @@ namespace Worktown.Game.Tests
                 Assert.IsNotNull(kitchen.GetType().GetField("_cleaning", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     .GetValue(kitchen), "the kitchen's plates are counted by the cleaning service");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
     }
 }

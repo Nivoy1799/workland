@@ -43,7 +43,7 @@ namespace Worktown.Game.Tests
             Assert.IsNotNull(visual, "the Food's Visual child");
             float visualY = visual.localPosition.y * food.transform.localScale.y;
 
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 int checkedSpots = 0;
@@ -56,7 +56,7 @@ namespace Worktown.Game.Tests
                     float trayTop = tray.GetComponent<Renderer>().bounds.max.y;
                     Vector3 player = dispenser.transform.position + dispenser.transform.rotation * new Vector3(0f, 0f, -0.9f);
                     player.y = 0f;
-                    Assert.AreEqual(PickupOutcome.Ok, PickupService.PlanPlace(new PlaceSpots(), true, surface.Index, surface, PlaceTurn.Pack(0, 0),
+                    Assert.AreEqual(PickupOutcome.Ok, PickupService.PlanPlace(new PlaceSpots(), true, surface.Id, surface, PlaceTurn.Pack(0, 0),
                         player, false, Quaternion.identity, bottomOffset, null, out _, out Pose rest), surface.name);
                     float drawnBottom = rest.position.y + visualY + cupBottom;
                     TestContext.WriteLine(surface.name + ": tray top " + trayTop.ToString("F4") + ", spot " + surface.SpotWorldPosition(0).y.ToString("F4")
@@ -68,7 +68,7 @@ namespace Worktown.Game.Tests
                 }
                 Assert.AreEqual(DrinkRules.TapCount, checkedSpots);
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]

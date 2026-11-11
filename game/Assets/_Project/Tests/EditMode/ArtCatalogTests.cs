@@ -113,7 +113,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_StationsKeepCollidersAndPositionAndShowCatalogArt()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>(CatalogPath);
@@ -146,9 +146,10 @@ namespace Worktown.Game.Tests
                     foreach (Station station in root.GetComponentsInChildren<Station>(true))
                     {
                         count++;
-                        Assert.AreEqual(kinds[station.Index], station.Kind, station.name);
+                        int index = station.Id - 1; // spec 062a: the default layout's station ids are the old indices + 1
+                        Assert.AreEqual(kinds[index], station.Kind, station.name);
                         bool stock = StockLayout.IsStock(station.Kind);
-                        float x = fixedX[station.Index];
+                        float x = fixedX[index];
                         // Spec 026: the body is as high as the furniture (0.90 m, the counter 1.05 m; was 1.0 m); spec 028b: the stock 1.80 m.
                         bool register = station.Kind == StationKind.Register; // spec 032: it stands on the front counter
                         bool drinks = station.Kind == StationKind.DrinkDispenser; // spec 033: so does the drink dispenser
@@ -208,7 +209,7 @@ namespace Worktown.Game.Tests
                 }
                 Assert.AreEqual(18, count, "the twelve before, (spec 035) the dish return, the sink, the trash can and the bin, (spec 036) the spit, (spec 037) the menu board");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         // AC7

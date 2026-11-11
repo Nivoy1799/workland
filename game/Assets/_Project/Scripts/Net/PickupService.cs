@@ -12,14 +12,12 @@ namespace Worktown.Game.Net
     /// (PickupRegistry), then sets the cube's owner and attaches it (spec 003 design).
     /// Lives next to the NetworkManager; does nothing on pure clients.
     /// Spec 020: also puts held items on the spots of place surfaces (worktops); the client only names the
-    /// surface and the spot, the server checks hands, reach and the spot and picks the position.
+    /// surface and the spot, the server checks hands, reach and the spot and picks the position. Spec 062a: the surface is named by its
+    /// stable id (SurfaceId: piece and local number) and found in the LayoutRegistry.
     /// </summary>
     public sealed class PickupService : MonoBehaviour
     {
         [SerializeField] private NetworkManager _networkManager;
-
-        [Tooltip("Spec 020: index in this array = PlaceSurface.Index.")]
-        [SerializeField] private PlaceSurface[] _surfaces = new PlaceSurface[0];
 
         // Spec 020: a probe this small sits inside the item lying on a spot but misses the neighbours.
         private const float SpotProbeRadius = 0.03f;
@@ -115,7 +113,7 @@ namespace Worktown.Game.Net
 
         /// <summary>
         /// Spec 020: puts the held item on spot <paramref name="spotIndex"/> of surface
-        /// <paramref name="surfaceIndex"/>. Checks (PlaceSpots.CheckPlace): something held, the surface exists, the
+        /// <paramref name="surfaceIndex"/> (spec 062a: the surface's id). Checks (PlaceSpots.CheckPlace): something held, the surface exists, the
         /// spot index is valid, the spot is within reach (2.5 m, to the spot), the spot is free; also nothing else
         /// lies there (e.g. the knife at its home spot after a respawn). The item rests on the spot in its resting
         /// tilt (Pickup.RestTilt, e.g. the knife flat), turned with the surface's yaw; spec 039: a tool with a handle turned
@@ -127,7 +125,7 @@ namespace Worktown.Game.Net
         {
             int clientId = player.Owner.ClientId;
             bool holding = _registry.TryGetHeldItem(clientId, out int itemId);
-            PlaceSurface surface = surfaceIndex >= 0 && surfaceIndex < _surfaces.Length ? _surfaces[surfaceIndex] : null;
+            PlaceSurface surface = SurfaceAt(surfaceIndex);
             if (PlaceTurn.TryUnpack(packedSpot, out int unpacked, out _) && surface != null && unpacked >= 0 && unpacked < surface.SpotCount)
                 FreeIfStale(surfaceIndex, unpacked, surface.SpotWorldPosition(unpacked));
             Pickup pickup = null;
@@ -404,13 +402,8 @@ namespace Worktown.Game.Net
             ItemMoved?.Invoke(item, null);
         }
 
-        /// <summary>Spec 021, server: the place surface by index, or null.</summary>
-        public PlaceSurface SurfaceAt(int surfaceIndex)
-        {
-            return surfaceIndex >= 0 && surfaceIndex < _surfaces.Length ? _surfaces[surfaceIndex] : null;
-        }
-
-        public int SurfaceCount => _surfaces.Length;
+        /// <summary>Spec 021, server: the place surface by id (spec 062a: SurfaceId, from the LayoutRegistry), or null.</summary>
+        public PlaceSurface SurfaceAt(int surfaceId) => Layout.LayoutRegistry.Surface(surfaceId);
 
         /// <summary>
         /// Spec 021: the surface whose spot an item's pivot lies on (within 0.1 m horizontally, at most 0.3 m above the
@@ -418,7 +411,7 @@ namespace Worktown.Game.Net
         /// </summary>
         public PlaceSurface SurfaceUnder(Vector3 position)
         {
-            foreach (PlaceSurface surface in _surfaces)
+            foreach (PlaceSurface surface in Layout.LayoutRegistry.Surfaces)
             {
                 if (surface == null) continue;
                 for (int i = 0; i < surface.SpotCount; i++)

@@ -99,11 +99,11 @@ namespace Worktown.Game.Dev
                         if (me.RestTurn != PlaceTurn.Add(0, turn)) actor.CountTimeout("mouse controls: the wheel did not turn the rest");
                     }
                     yield return actor.PutDown("right click: the knife on " + name + " spot " + spot, spotAt, true,
-                        () => me.DevSendPlace(surface.Index, PlaceTurn.Pack(spot, turn)), capture.Before("rightclick-" + shot, null, 0f));
+                        () => me.DevSendPlace(surface.Id, PlaceTurn.Pack(spot, turn)), capture.Before("rightclick-" + shot, null, 0f));
                 }
                 else
                     yield return actor.Use("put the knife on " + name + " spot " + spot, spotAt, InteractionAction.Place,
-                        () => me.DevSendPlace(surface.Index, spot), capture.Before("place-" + shot, null, 0f));
+                        () => me.DevSendPlace(surface.Id, spot), capture.Before("place-" + shot, null, 0f));
                 yield return actor.AimAt(spotAt + Vector3.up * 0.15f, 0.5f);
                 yield return capture.Shot("placed-" + shot);
                 if (held != null) LogRest(held, actor.Position, name, turn);
@@ -118,7 +118,7 @@ namespace Worktown.Game.Dev
                 yield return actor.LevelView();
                 yield return actor.WalkTo(new Vector3(home.x, 0f, AisleZ), false, false);
                 yield return actor.Use("put the knife back home", prep.SpotWorldPosition(spot), InteractionAction.Place,
-                    () => me.DevSendPlace(prep.Index, spot));
+                    () => me.DevSendPlace(prep.Id, spot));
             }
 
             yield return TomatoWalk(actor, capture);
@@ -165,7 +165,7 @@ namespace Worktown.Game.Dev
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(tomato.Anchor.x + 1f, 0f, AisleZ), false, false);
             yield return actor.Use("take a " + tomato.IngredientId, tomato.Anchor, InteractionAction.Buy,
-                () => me.DevSendStation(tomato.Station.Index, tomato.Option));
+                () => me.DevSendStation(tomato.Station.Id, tomato.Option));
             yield return actor.LevelView();
             // Face east along the aisle and drop it about 1.2 m ahead.
             yield return actor.WalkTo(new Vector3(4.6f, 0f, AisleZ), false, false);
@@ -209,7 +209,7 @@ namespace Worktown.Game.Dev
             var found = new List<PlaceSurface>();
             foreach (PlaceSurface s in Object.FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
                 if (s.name == name) found.Add(s);
-            found.Sort((a, b) => a.Index.CompareTo(b.Index));
+            found.Sort((a, b) => a.Id.CompareTo(b.Id));
             return nth < found.Count ? found[nth] : null;
         }
 

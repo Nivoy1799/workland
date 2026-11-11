@@ -29,9 +29,12 @@ namespace Worktown.Game.Net
         /// (one ShopLedger balance instead of a Wallet SyncVar per player; players pass through each other by default). 4: spec 037 (D39:
         /// every money value on the wire is cents, not whole dollars: the ShopLedger balance, the goal, the register's change due and its
         /// tray (now a ushort), the reward's and the shift's money, the menu board's prices; the reflection sees the new types, not the unit).
+        /// 5: spec 062a (the kitchen is spawned layout pieces: RequestPlace's surface is a stable surface id, piece id &lt;&lt; 6 | local, not an
+        /// index; RequestStation's station and every station number on the wire, such as the reward's counter, is a piece id; the stations
+        /// and their nested objects are spawned prefabs, no longer scene objects; the same parameter types, so the reflection cannot see it).
         /// Every wire change bumps it (docs/architecture.md).
         /// </summary>
-        public const int Revision = 4;
+        public const int Revision = 5;
 
         /// <summary>The line that carries <see cref="Revision"/>.</summary>
         public static string RevisionLine => "revision " + Revision;

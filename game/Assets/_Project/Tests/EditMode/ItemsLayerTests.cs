@@ -72,7 +72,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_EveryItemIsOnTheItemsLayer()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 int items = 0;
@@ -85,7 +85,7 @@ namespace Worktown.Game.Tests
                     }
                 Assert.GreaterOrEqual(items, 9, "the knife, spatula, cloth and the cookware at their homes");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>

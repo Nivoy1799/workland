@@ -808,6 +808,21 @@
         "Raise the fries by $0.50 for a service, then lower them: do you notice fewer or more guests?",
         "Continue an older save: is your money where you expect it on the way to the rent?"
       ]
+    },
+    {
+      "id": "2026-11-11-spec-062a",
+      "date": "2026-11-11",
+      "title": "The kitchen is the same; under the hood it can now be rebuilt",
+      "items": [
+        "The kitchen is the same: every station, worktop and counter stands where it stood",
+        "Under the hood the kitchen is a list of pieces the host's game puts in place at the start, and the save remembers it",
+        "This is the base for building and buying furniture later"
+      ],
+      "test": [
+        "Play one service: does everything feel exactly like before?",
+        "Join a friend's game: can you put things on the front counter and use every station?",
+        "Continue an older save: is the kitchen as you left it?"
+      ]
     }
   ]
 }

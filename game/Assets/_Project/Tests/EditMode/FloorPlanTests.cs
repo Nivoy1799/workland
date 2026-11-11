@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using Worktown.Sim.Layout;
 using UnityEngine.SceneManagement;
 using Worktown.Game.Cooking;
 using Worktown.Game.Net;
@@ -99,7 +100,20 @@ namespace Worktown.Game.Tests
 
         private static Plan Open()
         {
-            var plan = new Plan { Scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive) };
+            var plan = new Plan { Scene = LayoutScene.Open() };
+            try
+            {
+                return Fill(plan);
+            }
+            catch
+            {
+                LayoutScene.Close(plan.Scene); // spec 062a: a failed plan must not leave the scene (and its pieces) open for the next test
+                throw;
+            }
+        }
+
+        private static Plan Fill(Plan plan)
+        {
             Scene scene = plan.Scene;
             plan.Stations = All<Station>(scene);
             foreach (Station s in plan.Stations)
@@ -126,7 +140,11 @@ namespace Worktown.Game.Tests
                 if (box.name.StartsWith("Front counter")) plan.FrontRuns.Add(box);
                 else if (box.name.StartsWith("Back wall") || box.name.StartsWith("Side wall")) plan.Walls.Add(box);
             }
-            Assert.AreEqual(2, plan.FrontRuns.Count, "the plain front counter either side of the serving counter");
+            // Spec 062a: the front counter is layout pieces: its plain runs and each counter-line module's own counter body.
+            int frontPieces = Worktown.Game.Layout.LayoutQuery.Pieces(PieceCatalog.FrontCounter).Count;
+            foreach (string module in new[] { PieceCatalog.RegisterModule, PieceCatalog.DispenserModule, PieceCatalog.SpitModule, PieceCatalog.DishReturnModule })
+                frontPieces += Worktown.Game.Layout.LayoutQuery.Pieces(module).Count;
+            Assert.AreEqual(frontPieces, plan.FrontRuns.Count, "the plain front counter either side of the serving counter");
             Assert.AreEqual(4, plan.Walls.Count, "the back wall, two side wall pieces at the staff gap end, one at the other end");
 
             plan.Street = Flat(plan.Serving.transform.position - plan.Shelf.transform.position);
@@ -158,7 +176,7 @@ namespace Worktown.Game.Tests
             return plan;
         }
 
-        private static void Close(Plan plan) => EditorSceneManager.CloseScene(plan.Scene, true);
+        private static void Close(Plan plan) => LayoutScene.Close(plan.Scene);
 
         private static Transform Find(Scene scene, string root, string child)
         {

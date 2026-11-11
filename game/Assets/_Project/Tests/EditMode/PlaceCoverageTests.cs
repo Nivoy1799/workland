@@ -235,7 +235,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void EveryCounterHeightTop_IsAPlaceSurface_OrAListedException()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 Scan scan = ScanTops(scene, All<PlaceSurface>(scene));
@@ -244,17 +244,17 @@ namespace Worktown.Game.Tests
                 Assert.Greater(scan.OnSurfaces, scan.Samples / 2, "most of the counter tops are place surfaces");
                 Assert.AreEqual(0, scan.Dead, "counter-height tops that are neither a place surface nor a listed exception:\n" + scan.Report);
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
-        /// <summary>The scan finds dead tops: without the spec 039 surfaces (index 12 and up) it names the front counter and the stations.</summary>
+        /// <summary>The scan finds dead tops: without the spec 039 surfaces (old index 12 and up, KitchenSnapshot) it names the front counter and the stations.</summary>
         [Test]
         public void WithoutTheNewSurfaces_TheScanNamesTheDeadTops()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
-                var old = All<PlaceSurface>(scene).FindAll(s => s.Index < 12);
+                var old = All<PlaceSurface>(scene).FindAll(s => KitchenSnapshot.OldIndexOf(s) is int i && i >= 0 && i < 12); // spec 062a: the old index
                 Assert.AreEqual(12, old.Count);
                 Scan scan = ScanTops(scene, old);
                 string report = scan.Report.ToString();
@@ -263,7 +263,7 @@ namespace Worktown.Game.Tests
                     StringAssert.Contains(dead, report, "the scan must name " + dead);
                 StringAssert.Contains("points take no items, e.g. (", report, "and a point");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>
@@ -273,7 +273,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void AShrunkWorktop_FailsTheScan_EvenUnderAFullFootprintBox()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
@@ -297,7 +297,7 @@ namespace Worktown.Game.Tests
                 Assert.Greater(boxed.Dead, 0, "a 1.3 m box from the floor does not stand on the top, so it hides nothing");
                 StringAssert.Contains(worktop.name, boxed.Report.ToString());
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         private static void SerializedPropertyShrink(UnityEditor.SerializedProperty size)
@@ -310,7 +310,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void EverySurface_RestsOnTheTopUnderIt_AtCounterHeight()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 Bounds shop = ShopArea(scene);
@@ -339,14 +339,14 @@ namespace Worktown.Game.Tests
                 }
                 Assert.GreaterOrEqual(frontCounter, 4, "both front counter runs take items, beside everything that stands on them");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>Spec 039 Q1: only the cook side of the front counter takes items; the aim collider still covers the whole top.</summary>
         [Test]
         public void FrontCounterTops_SpotsOnTheCookSideOnly()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 int tops = 0;
@@ -365,7 +365,7 @@ namespace Worktown.Game.Tests
                 }
                 Assert.GreaterOrEqual(tops, 4);
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]
@@ -378,7 +378,7 @@ namespace Worktown.Game.Tests
                 Assert.IsTrue(seen.Add(name), name + " is listed twice");
                 Assert.That(reason, Is.Not.Null.And.Length.GreaterThan(20), name + " needs a reason");
             }
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 Bounds shop = ShopArea(scene);
@@ -387,7 +387,7 @@ namespace Worktown.Game.Tests
                 for (int i = 0; i < PlaceCoverage.Exceptions.Count; i++)
                     Assert.IsTrue(found.Contains(i), "exception '" + PlaceCoverage.Exceptions[i].Name + "' names nothing in the shop (renamed or removed?)");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]

@@ -50,7 +50,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_TopsAndPlaceSurfacesAreAtWorktopHeight_TheCounterAtServingHeight()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 int counters = 0, stoves = 0;
@@ -115,7 +115,7 @@ namespace Worktown.Game.Tests
                             surface.name + " collider top");
                 }
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>Spec 039: the front counter run a surface lies on, or null.</summary>
@@ -139,7 +139,7 @@ namespace Worktown.Game.Tests
         {
             var catalog = AssetDatabase.LoadAssetAtPath<ArtCatalog>("Assets/_Project/Art/ArtCatalog.asset");
             Assert.IsTrue(catalog.TryGet(ArtKey.Worktop, out GameObject modulePrefab));
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 int worktops = 0;
@@ -175,13 +175,13 @@ namespace Worktown.Game.Tests
                 }
                 Assert.AreEqual(4, worktops); // spec 035: the bowl's worktop after the plate shelf is the sink (its drainboard)
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]
         public void BuiltScene_CookwareRestsOnItsSurface()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<Component> vessels = VesselTestKit.AllOf(scene, VesselTestKit.VesselType);
@@ -200,7 +200,7 @@ namespace Worktown.Game.Tests
                         vessel.name + " collider bottom on the top");
                 }
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>The cookware prefabs and their content anchor: a full load of the largest pieces stays inside the rim.</summary>
@@ -295,7 +295,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_StreetBuildingsAndPropsDoNotOverlapEachOtherOrTheStreet()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 GameObject street = Array.Find(scene.GetRootGameObjects(), g => g.name == "Street");
@@ -351,7 +351,7 @@ namespace Worktown.Game.Tests
                         Assert.IsFalse(Overlaps(p, rect), name + " stands on " + area);
                 }
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         private static void Encapsulate(ref Bounds bounds, ref bool any, Bounds add)

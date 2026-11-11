@@ -106,7 +106,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_HomeTools_HandleIntoTheAisle()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 var tools = new List<Component>();
@@ -134,7 +134,7 @@ namespace Worktown.Game.Tests
                         tool.name + " lies flat in its resting tilt (the knife on its edge)");
                 }
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>The surface with a spot right under <paramref name="position"/> (within 0.1 m across, up to 0.3 m above), or null.</summary>

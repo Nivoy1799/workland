@@ -26,7 +26,7 @@ namespace Worktown.Game.Save
         public const string FridgePrefix = "fridge:";
         public const string StockPrefix = "stock:";
 
-        /// <summary>This build's codec (spec 037: format version 2, the v1 to v2 money step).</summary>
+        /// <summary>This build's codec (spec 037: the v1 to v2 money step; spec 062a: format version 3, the v2 to v3 layout step).</summary>
         public static readonly ShopSaveCodec Default = new ShopSaveCodec(SaveMigrations.Current);
 
         private readonly SaveMigrations _migrations;
@@ -145,6 +145,7 @@ namespace Worktown.Game.Save
             s.stats ??= new ShopSave.StatsPart();
             s.stock ??= new ShopSave.StockPart[0];
             s.menu ??= new ShopSave.MenuPart[0];
+            s.layout ??= new ShopSave.LayoutPart();
             s.climb.unlocks ??= new string[0];
             s.shopName = string.IsNullOrEmpty(s.shopName) ? FoodCornerRules.ShopName : s.shopName;
             s.gameVersion ??= string.Empty;
@@ -182,6 +183,11 @@ namespace Worktown.Game.Save
                 if (normal != part.cents) notes.Add("menu " + part.id + " " + part.cents + " -> " + normal);
                 part.cents = normal;
             }
+
+            // Spec 062a: the layout's values in range (LayoutCodec); a piece of an unknown type stays in the file.
+            if (s.layout.pieces != null && s.layout.pieces.Length > 0)
+                s.layout = Worktown.Game.Layout.LayoutCodec.ToPart(
+                    Worktown.Game.Layout.LayoutCodec.ToLayout(s.layout, Worktown.Sim.Layout.PieceCatalog.CreateDefault(), notes));
 
             foreach (ShopSave.StockPart part in s.stock)
             {

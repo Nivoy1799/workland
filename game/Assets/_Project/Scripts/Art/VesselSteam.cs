@@ -83,6 +83,16 @@ namespace Worktown.Game.Art
                 enabled = false;
                 return;
             }
+            FindBurners();
+            BuildParticles();
+            // Spec 027c: the heat ring (its own scene object, see HeatRingView).
+            if (GetComponent<HeatRingView>() == null) gameObject.AddComponent<HeatRingView>().Init(_vessel, this, _material);
+        }
+
+        /// <summary>The stoves' burners (spec 062a: layout pieces, looked up again when the layout changes).</summary>
+        private void FindBurners()
+        {
+            _burnersLayout = Layout.LayoutRegistry.Version;
             var burners = new List<PlaceSurface>();
             var stoves = new List<StationContents>();
             foreach (PlaceSurface surface in FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
@@ -95,15 +105,15 @@ namespace Worktown.Game.Art
             }
             _burners = burners.ToArray();
             _stoves = stoves.ToArray();
-            BuildParticles();
-            // Spec 027c: the heat ring (its own scene object, see HeatRingView).
-            if (GetComponent<HeatRingView>() == null) gameObject.AddComponent<HeatRingView>().Init(_vessel, this, _material);
         }
+
+        private int _burnersLayout = -1;
 
         private void Update()
         {
             if (_vessel == null || Time.unscaledTime < _nextCheck) return;
             _nextCheck = Time.unscaledTime + CheckInterval;
+            if (_burners != null && _burnersLayout != Layout.LayoutRegistry.Version) FindBurners(); // spec 062a
             bool hot = ComputeHot();
             bool smoke = hot && _vessel.Zone == HeatZone.Burnt;
             if (smoke != _smoking) SetSmoke(smoke);

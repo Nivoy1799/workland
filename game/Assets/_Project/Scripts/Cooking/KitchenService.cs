@@ -28,8 +28,6 @@ namespace Worktown.Game.Cooking
         [SerializeField] private EconomyService _economy;
         [Tooltip("Spec 014. Optional: visible customers react to sales.")]
         [SerializeField] private Worktown.Game.Npc.CustomerService _customers;
-        [Tooltip("Index in this array = Station.Index.")]
-        [SerializeField] private Station[] _stations = new Station[0];
         [Tooltip("Spec 019: knife prefab for replacing a lost knife (the scene knife is an instance of it).")]
         [SerializeField] private NetworkObject _knifePrefab;
         [Tooltip("Spec 021: one prefab per kind of cookware (board, pan, pot, plate, bowl), for respawns and the plate shelf.")]
@@ -177,9 +175,8 @@ namespace Worktown.Game.Cooking
 
         public CookOutcome TryUseStation(PickupInteractor player, int stationIndex, int option)
         {
-            if (stationIndex < 0 || stationIndex >= _stations.Length || _stations[stationIndex] == null)
-                return CookOutcome.UnknownStation;
-            Station station = _stations[stationIndex];
+            Station station = StationOf(stationIndex); // spec 062a: the station id is its piece's id (LayoutRegistry)
+            if (station == null) return CookOutcome.UnknownStation;
             // Spec 053: a closed station or slot (stage 1, the food corner) refuses first and changes nothing.
             if (Worktown.Game.Climb.ClosedTargets.IsClosed(StageNow, station, option)) return CookOutcome.NotOpenYet;
             // Spec 034: a carried delivery box unpacks into the slot it is clicked on (reach to that slot's anchor).
@@ -267,7 +264,7 @@ namespace Worktown.Game.Cooking
         private CookOutcome UseBurner(Station stove, int option)
         {
             if (!StationRules.TryParseStoveOption(option, out int burner, out int button)) return CookOutcome.InvalidOption;
-            if (!_burnerSurface.TryGetValue(BurnerKey(stove.Index, burner), out int burnerId)) return CookOutcome.InvalidOption;
+            if (!_burnerSurface.TryGetValue(BurnerKey(stove.Id, burner), out int burnerId)) return CookOutcome.InvalidOption;
             CookOutcome changed = _kitchen.TryUseBurner(burnerId, button, Tick);
             if (changed == CookOutcome.Ok)
             {
@@ -289,15 +286,15 @@ namespace Worktown.Game.Cooking
             uint tick = Tick;
             if (option == FryerRules.PowerOption)
             {
-                _kitchen.TryToggleFryer(fryer.Index, tick);
+                _kitchen.TryToggleFryer(fryer.Id, tick);
                 RefreshFryer(fryer);
                 for (int b = 0; b < FryerRules.BasketsPerFryer; b++)
-                    if (_baskets.TryGetValue(BurnerKey(fryer.Index, b), out Vessel v)) RefreshVessel(v);
-                Debug.Log("[Kitchen] " + fryer.DisplayName + " " + (_kitchen.FryerIsOn(fryer.Index) ? "on" : "off"));
+                    if (_baskets.TryGetValue(BurnerKey(fryer.Id, b), out Vessel v)) RefreshVessel(v);
+                Debug.Log("[Kitchen] " + fryer.DisplayName + " " + (_kitchen.FryerIsOn(fryer.Id) ? "on" : "off"));
                 return CookOutcome.Ok;
             }
             if (!FryerRules.TryParseBasketOption(option, out int basket, out bool lower)
-                || !_baskets.TryGetValue(BurnerKey(fryer.Index, basket), out Vessel vessel) || vessel == null)
+                || !_baskets.TryGetValue(BurnerKey(fryer.Id, basket), out Vessel vessel) || vessel == null)
                 return CookOutcome.InvalidOption;
             // Spec 029b: the option says lower or raise; a request for where the basket already is is refused.
             CookOutcome moved = lower ? _kitchen.TryLowerBasket(vessel.ObjectId, tick) : _kitchen.TryRaiseBasket(vessel.ObjectId, tick, TickRate);
@@ -312,7 +309,7 @@ namespace Worktown.Game.Cooking
         private void RefreshFryer(Station fryer)
         {
             if (fryer == null || !fryer.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
-            contents.ServerSetStoveFlags(_kitchen.FryerFlags(fryer.Index, Tick));
+            contents.ServerSetStoveFlags(_kitchen.FryerFlags(fryer.Id, Tick));
         }
 
         /// <summary>Spec 029: a shake of a lowered basket, with empty hands.</summary>
@@ -331,11 +328,11 @@ namespace Worktown.Game.Cooking
         private CookOutcome UseGriddle(Station griddle, int option)
         {
             if (option != GriddleRules.PowerOption) return CookOutcome.InvalidOption;
-            _kitchen.TryToggleGriddle(griddle.Index, Tick);
+            _kitchen.TryToggleGriddle(griddle.Id, Tick);
             RefreshGriddle(griddle);
             for (int s = 0; s < GriddleRules.SpotsPerGriddle; s++)
-                if (_griddleSpots.TryGetValue(BurnerKey(griddle.Index, s), out Vessel spot)) RefreshVessel(spot);
-            Debug.Log("[Kitchen] " + griddle.DisplayName + " " + (_kitchen.GriddleIsOn(griddle.Index) ? "on" : "off"));
+                if (_griddleSpots.TryGetValue(BurnerKey(griddle.Id, s), out Vessel spot)) RefreshVessel(spot);
+            Debug.Log("[Kitchen] " + griddle.DisplayName + " " + (_kitchen.GriddleIsOn(griddle.Id) ? "on" : "off"));
             return CookOutcome.Ok;
         }
 
@@ -343,7 +340,7 @@ namespace Worktown.Game.Cooking
         private void RefreshGriddle(Station griddle)
         {
             if (griddle == null || !griddle.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
-            contents.ServerSetStoveFlags(_kitchen.GriddleFlags(griddle.Index));
+            contents.ServerSetStoveFlags(_kitchen.GriddleFlags(griddle.Id));
         }
 
         /// <summary>
@@ -389,7 +386,7 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome UseAssembly(PickupInteractor player, Station board, int option)
         {
-            if (!_assemblySpots.TryGetValue(board.Index, out Vessel spot) || spot == null) return CookOutcome.UnknownStation;
+            if (!_assemblySpots.TryGetValue(board.Id, out Vessel spot) || spot == null) return CookOutcome.UnknownStation;
             if (BuildRules.TryParseSqueeze(option, out int d, out bool start))
                 return start ? StartSqueeze(player, board, d) : StopSqueeze(player, board, d);
             if (BuildRules.TryParsePackaging(option, out int p)) return Package(player, spot, p);
@@ -398,9 +395,9 @@ namespace Worktown.Game.Cooking
 
         private CookOutcome StartSqueeze(PickupInteractor player, Station board, int d)
         {
-            CookOutcome started = Desk.Press(board.Index, d, player.OwnerId, Tick, WalletOf(player));
+            CookOutcome started = Desk.Press(board.Id, d, player.OwnerId, Tick, WalletOf(player));
             if (started != CookOutcome.Ok) return started;
-            _squeezers[AssemblyDesk.KeyOf(board.Index, d)] = player; // 032 review: the desk's key
+            _squeezers[AssemblyDesk.KeyOf(board.Id, d)] = player; // 032 review: the desk's key
             RefreshAssembly(board);
             return CookOutcome.Ok;
         }
@@ -412,17 +409,17 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome StopSqueeze(PickupInteractor player, Station board, int d)
         {
-            if (!_kitchen.IsSqueezing(board.Index, d, out int owner, out _) || owner != player.OwnerId) return CookOutcome.Ok;
+            if (!_kitchen.IsSqueezing(board.Id, d, out int owner, out _) || owner != player.OwnerId) return CookOutcome.Ok;
             return EndSqueeze(player, board, d);
         }
 
         private CookOutcome EndSqueeze(PickupInteractor player, Station board, int d)
         {
-            _squeezers.Remove(AssemblyDesk.KeyOf(board.Index, d));
-            CookOutcome made = Desk.End(board.Index, d, player.OwnerId, Tick, TickRate, WalletOf(player), out AssemblyDesk.SqueezeResult r);
+            _squeezers.Remove(AssemblyDesk.KeyOf(board.Id, d));
+            CookOutcome made = Desk.End(board.Id, d, player.OwnerId, Tick, TickRate, WalletOf(player), out AssemblyDesk.SqueezeResult r);
             RefreshAssembly(board);
             if (made != CookOutcome.Ok) return made;
-            if (_assemblySpots.TryGetValue(board.Index, out Vessel spot)) RefreshVessel(spot);
+            if (_assemblySpots.TryGetValue(board.Id, out Vessel spot)) RefreshVessel(spot);
             Debug.Log("[Kitchen] player " + player.OwnerId + " squeezed " + BuildRules.SauceOf(d) + " for " + r.Seconds.ToString("0.00")
                 + " s (" + EconomyRules.Money(r.Cost) + "), top " + r.TopSeconds.ToString("0.00") + " s: " + KitchenState.NameOf(r.Build)
                 + " q=" + KitchenState.QualityOf(r.Build).ToString("0.00"));
@@ -500,7 +497,7 @@ namespace Worktown.Game.Cooking
         private void RefreshAssembly(Station board)
         {
             if (board == null || !board.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
-            contents.ServerSetStoveFlags(_kitchen.AssemblyFlags(board.Index));
+            contents.ServerSetStoveFlags(_kitchen.AssemblyFlags(board.Id));
         }
 
         /// <summary>
@@ -516,13 +513,13 @@ namespace Worktown.Game.Cooking
                 foreach (long key in _leftSqueezes)
                 {
                     int board = AssemblyDesk.BoardOfKey(key), d = AssemblyDesk.DispenserOfKey(key);
-                    RefreshAssembly(board >= 0 && board < _stations.Length ? _stations[board] : null);
+                    RefreshAssembly(StationOf(board));
                     Debug.Log("[Kitchen] the squeeze of a player who left was dropped (board " + board + ", dispenser " + d + ")");
                 }
             }
             while (_kitchen.TryFindOverdueSqueeze(tick, tickRate, out int board, out int d, out int owner))
             {
-                Station station = board >= 0 && board < _stations.Length ? _stations[board] : null;
+                Station station = StationOf(board);
                 long key = AssemblyDesk.KeyOf(board, d);
                 if (_squeezers.TryGetValue(key, out PickupInteractor player) && player != null && player.OwnerId == owner && station != null)
                 {
@@ -564,9 +561,9 @@ namespace Worktown.Game.Cooking
 
         private CookOutcome StartPour(PickupInteractor player, Station dispenser, int tap)
         {
-            CookOutcome started = DrinkSteps.Press(dispenser.Index, tap, player.OwnerId, Tick, DrinkWalletOf(player));
+            CookOutcome started = DrinkSteps.Press(dispenser.Id, tap, player.OwnerId, Tick, DrinkWalletOf(player));
             if (started != CookOutcome.Ok) return started;
-            _pourers[DrinkDesk.KeyOf(dispenser.Index, tap)] = player;
+            _pourers[DrinkDesk.KeyOf(dispenser.Id, tap)] = player;
             RefreshDrinks(dispenser);
             return CookOutcome.Ok;
         }
@@ -578,11 +575,11 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome StopPour(PickupInteractor player, Station dispenser, int tap)
         {
-            if (!_kitchen.IsPouring(dispenser.Index, tap, out int owner, out _, out _) || owner != player.OwnerId)
+            if (!_kitchen.IsPouring(dispenser.Id, tap, out int owner, out _, out _) || owner != player.OwnerId)
             {
                 // 034 review: the pour may be gone already (its cup was put down, sold or discarded: CancelPoursOfCup): the server's table
                 // forgets it too and the tap's bit goes off.
-                DrinkSteps.ForgetGonePour(_pourers, dispenser.Index, tap, player); // 035 review: the pure step (tested)
+                DrinkSteps.ForgetGonePour(_pourers, dispenser.Id, tap, player); // 035 review: the pure step (tested)
                 RefreshDrinks(dispenser);
                 return CookOutcome.Ok;
             }
@@ -591,8 +588,8 @@ namespace Worktown.Game.Cooking
 
         private CookOutcome EndPour(PickupInteractor player, Station dispenser, int tap)
         {
-            _pourers.Remove(DrinkDesk.KeyOf(dispenser.Index, tap));
-            CookOutcome made = DrinkSteps.End(dispenser.Index, tap, player.OwnerId, Tick, TickRate, DrinkWalletOf(player), out DrinkDesk.PourResult r);
+            _pourers.Remove(DrinkDesk.KeyOf(dispenser.Id, tap));
+            CookOutcome made = DrinkSteps.End(dispenser.Id, tap, player.OwnerId, Tick, TickRate, DrinkWalletOf(player), out DrinkDesk.PourResult r);
             RefreshDrinks(dispenser);
             if (made != CookOutcome.Ok) return made;
             Food food = FoodById(r.CupObjectId);
@@ -666,7 +663,7 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome PutLid(PickupInteractor player, Station dispenser)
         {
-            int cup = DrinkSteps.LidTarget(dispenser.Index, HeldFoodId(player, out _));
+            int cup = DrinkSteps.LidTarget(dispenser.Id, HeldFoodId(player, out _));
             CookOutcome lidded = DrinkSteps.Lid(cup, out Item item);
             if (lidded != CookOutcome.Ok) return lidded;
             Food food = FoodById(cup);
@@ -713,11 +710,11 @@ namespace Worktown.Game.Cooking
         private void OnFoodMoved(NetworkObject item, PlaceSurface surface)
         {
             bool onSpot = surface != null && surface.IsCupSpot;
-            if (!DrinkSteps.Moved(item.ObjectId, onSpot, onSpot ? surface.DispenserIndex : -1, onSpot ? surface.CupTap : -1,
+            if (!DrinkSteps.Moved(item.ObjectId, onSpot, onSpot ? surface.DispenserPieceId : -1, onSpot ? surface.CupTap : -1,
                     out int station, out int tap))
                 return;
             _pourers.Remove(DrinkDesk.KeyOf(station, tap));
-            RefreshDrinks(station >= 0 && station < _stations.Length ? _stations[station] : null);
+            RefreshDrinks(StationOf(station));
             Debug.Log("[Kitchen] the cup was taken off the " + DrinkRules.DrinkName(tap) + " tap mid-pour: the pour stopped, nothing charged");
         }
 
@@ -762,9 +759,9 @@ namespace Worktown.Game.Cooking
         private void RefreshDrinks(Station dispenser)
         {
             if (dispenser == null || !dispenser.TryGetComponent(out StationContents contents) || !contents.IsServerInitialized) return;
-            byte flags = _kitchen.DrinkFlags(dispenser.Index);
+            byte flags = _kitchen.DrinkFlags(dispenser.Id);
             // Spec 035: someone wipes its spill (onlookers see the cloth go round).
-            if (_cleaning != null && _cleaning.IsWiping(dispenser.Index)) flags |= Worktown.Game.Shop.CleaningRules.WipingBit;
+            if (_cleaning != null && _cleaning.IsWiping(dispenser.Id)) flags |= Worktown.Game.Shop.CleaningRules.WipingBit;
             contents.ServerSetStoveFlags(flags);
         }
 
@@ -778,8 +775,8 @@ namespace Worktown.Game.Cooking
             get
             {
                 int n = 0;
-                foreach (Station s in _stations)
-                    if (s != null && s.Kind == StationKind.DrinkDispenser && _kitchen.HasSpill(s.Index)) n++;
+                foreach (Station s in Worktown.Game.Layout.LayoutRegistry.Stations)
+                    if (s != null && s.Kind == StationKind.DrinkDispenser && _kitchen.HasSpill(s.Id)) n++;
                 return n;
             }
         }
@@ -801,8 +798,8 @@ namespace Worktown.Game.Cooking
 
         public void RefreshDispenser(int station)
         {
-            if (station >= 0 && station < _stations.Length && _stations[station] != null && _stations[station].Kind == StationKind.DrinkDispenser)
-                RefreshDrinks(_stations[station]);
+            if (StationOf(station) != null && StationOf(station).Kind == StationKind.DrinkDispenser)
+                RefreshDrinks(StationOf(station));
         }
 
         /// <summary>
@@ -857,13 +854,13 @@ namespace Worktown.Game.Cooking
                 foreach (long key in _leftPours)
                 {
                     int station = DrinkDesk.StationOfKey(key), tap = DrinkDesk.TapOfKey(key);
-                    RefreshDrinks(station >= 0 && station < _stations.Length ? _stations[station] : null);
+                    RefreshDrinks(StationOf(station));
                     Debug.Log("[Kitchen] the pour of a player who left was dropped (dispenser " + station + ", tap " + tap + ")");
                 }
             }
             while (_kitchen.TryFindOverduePour(tick, tickRate, out int station, out int tap, out int owner))
             {
-                Station dispenser = station >= 0 && station < _stations.Length ? _stations[station] : null;
+                Station dispenser = StationOf(station);
                 long key = DrinkDesk.KeyOf(station, tap);
                 if (_pourers.TryGetValue(key, out PickupInteractor player) && player != null && player.OwnerId == owner && dispenser != null)
                 {
@@ -889,8 +886,8 @@ namespace Worktown.Game.Cooking
         /// </summary>
         private CookOutcome UseSpit(PickupInteractor player, Station spit, int option)
         {
-            if (spit.Kind != StationKind.Spit || !Spits.IsSpit(spit.Index)) return CookOutcome.UnknownStation;
-            int s = spit.Index;
+            if (spit.Kind != StationKind.Spit || !Spits.IsSpit(spit.Id)) return CookOutcome.UnknownStation;
+            int s = spit.Id;
             CookOutcome outcome;
             switch (option)
             {
@@ -1005,7 +1002,7 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 036: the spit's byte, its cone and its tray.</summary>
         private void RefreshSpit(int s)
         {
-            if (s >= 0 && s < _stations.Length && _stations[s] != null && _stations[s].TryGetComponent(out StationContents contents)
+            if (StationOf(s) != null && StationOf(s).TryGetComponent(out StationContents contents)
                 && contents.IsServerInitialized)
                 contents.ServerSetStoveFlags(Spits.Flags(s));
             if (_spitCones.TryGetValue(s, out Vessel cone)) RefreshSpitVessel(cone, s);
@@ -1190,7 +1187,7 @@ namespace Worktown.Game.Cooking
             if (item.TryGetComponent(out Food _)) OnFoodMoved(item, surface); // spec 042: the cup spots
             if (!item.TryGetComponent(out Vessel vessel)) return;
             if (!VesselRules.StandsOnBurner(vessel.Kind)) return;
-            int burner = surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner;
+            int burner = surface != null && surface.IsBurner ? surface.Id : KitchenState.NoBurner;
             _kitchen.SetVesselBurner(vessel.ObjectId, burner, Tick);
             RefreshVessel(vessel);
         }
@@ -1224,7 +1221,7 @@ namespace Worktown.Game.Cooking
             byte flags = 0;
             for (int b = 0; b < StationRules.BurnersPerStove; b++)
             {
-                if (!_burnerSurface.TryGetValue(BurnerKey(stove.Index, b), out int burnerId)) continue;
+                if (!_burnerSurface.TryGetValue(BurnerKey(stove.Id, b), out int burnerId)) continue;
                 StoveSettings settings = _kitchen.BurnerOf(burnerId);
                 flags |= StationRules.BurnerFlags(b, settings.IsOn, settings.Saute);
             }
@@ -1232,6 +1229,9 @@ namespace Worktown.Game.Cooking
         }
 
         private static long BurnerKey(int stoveIndex, int burner) => ((long)stoveIndex << 8) | (uint)burner;
+
+        /// <summary>Spec 062a: the station with id <paramref name="id"/> (its piece's id), or null.</summary>
+        private static Station StationOf(int id) => Worktown.Game.Layout.LayoutRegistry.Station(id);
 
         /// <summary>
         /// First server frame: every spawned cookware, the burners, the home spots of the knife and the cookware
@@ -1246,10 +1246,9 @@ namespace Worktown.Game.Cooking
             _vessels = new List<Vessel>();
             _homes = new List<HomeSlot>();
             _burnerSurface.Clear();
-            for (int i = 0; i < _pickups.SurfaceCount; i++)
+            foreach (PlaceSurface surface in Worktown.Game.Layout.LayoutRegistry.Surfaces)
             {
-                PlaceSurface surface = _pickups.SurfaceAt(i);
-                if (surface != null && surface.IsBurner) _burnerSurface[BurnerKey(surface.StoveIndex, surface.Burner)] = surface.Index;
+                if (surface != null && surface.IsBurner) _burnerSurface[BurnerKey(surface.StovePieceId, surface.Burner)] = surface.Id;
             }
             foreach (Vessel vessel in FindObjectsByType<Vessel>(FindObjectsSortMode.None))
             {
@@ -1274,8 +1273,8 @@ namespace Worktown.Game.Cooking
             foreach (GriddleSpot gs in FindObjectsByType<GriddleSpot>(FindObjectsSortMode.None))
             {
                 if (gs.Griddle == null || !gs.TryGetComponent(out Vessel spot) || !spot.IsSpawned) continue;
-                _kitchen.RegisterGriddleSpot(spot.ObjectId, gs.Griddle.Index, gs.Spot);
-                _griddleSpots[BurnerKey(gs.Griddle.Index, gs.Spot)] = spot;
+                _kitchen.RegisterGriddleSpot(spot.ObjectId, gs.Griddle.Id, gs.Spot);
+                _griddleSpots[BurnerKey(gs.Griddle.Id, gs.Spot)] = spot;
                 RefreshVessel(spot);
             }
             // Spec 031: the build spots of the assembly boards.
@@ -1283,8 +1282,8 @@ namespace Worktown.Game.Cooking
             foreach (AssemblySpot a in FindObjectsByType<AssemblySpot>(FindObjectsSortMode.None))
             {
                 if (a.Board == null || !a.TryGetComponent(out Vessel spot) || !spot.IsSpawned) continue;
-                _kitchen.RegisterAssemblySpot(spot.ObjectId, a.Board.Index);
-                _assemblySpots[a.Board.Index] = spot;
+                _kitchen.RegisterAssemblySpot(spot.ObjectId, a.Board.Id);
+                _assemblySpots[a.Board.Id] = spot;
                 RefreshVessel(spot);
             }
             // Spec 029: the fryer baskets (scene objects next to their fryer).
@@ -1293,8 +1292,8 @@ namespace Worktown.Game.Cooking
             foreach (FryerBasket fb in FindObjectsByType<FryerBasket>(FindObjectsSortMode.None))
             {
                 if (fb.Fryer == null || !fb.TryGetComponent(out Vessel basket) || !basket.IsSpawned) continue;
-                _kitchen.RegisterBasket(basket.ObjectId, fb.Fryer.Index, fb.Basket);
-                _baskets[BurnerKey(fb.Fryer.Index, fb.Basket)] = basket;
+                _kitchen.RegisterBasket(basket.ObjectId, fb.Fryer.Id, fb.Basket);
+                _baskets[BurnerKey(fb.Fryer.Id, fb.Basket)] = basket;
                 _basketList.Add(basket);
                 RefreshVessel(basket);
             }
@@ -1302,19 +1301,19 @@ namespace Worktown.Game.Cooking
             _spitCones.Clear();
             _spitTrays.Clear();
             _spitOf.Clear();
-            foreach (Station station in _stations)
-                if (station != null && station.Kind == StationKind.Spit) Spits.Register(station.Index);
+            foreach (Station station in Worktown.Game.Layout.LayoutRegistry.Stations)
+                if (station != null && station.Kind == StationKind.Spit) Spits.Register(station.Id);
             foreach (SpitPart part in FindObjectsByType<SpitPart>(FindObjectsSortMode.None))
             {
                 if (part.Spit == null || !part.TryGetComponent(out Vessel v) || !v.IsSpawned) continue;
-                Spits.Register(part.Spit.Index);
-                if (v.Kind == VesselKind.SpitCone) _spitCones[part.Spit.Index] = v;
-                else if (v.Kind == VesselKind.SpitTray) _spitTrays[part.Spit.Index] = v;
-                _spitOf[v] = part.Spit.Index;
+                Spits.Register(part.Spit.Id);
+                if (v.Kind == VesselKind.SpitCone) _spitCones[part.Spit.Id] = v;
+                else if (v.Kind == VesselKind.SpitTray) _spitTrays[part.Spit.Id] = v;
+                _spitOf[v] = part.Spit.Id;
             }
-            foreach (Station station in _stations)
+            foreach (Station station in Worktown.Game.Layout.LayoutRegistry.Stations)
             {
-                if (station != null && station.Kind == StationKind.Spit) RefreshSpit(station.Index);
+                if (station != null && station.Kind == StationKind.Spit) RefreshSpit(station.Id);
                 if (station != null && station.Kind == StationKind.Stove) RefreshStove(station);
                 else if (station != null && station.Kind == StationKind.Fryer) RefreshFryer(station);
                 else if (station != null && station.Kind == StationKind.Griddle) RefreshGriddle(station); // spec 030
@@ -1334,7 +1333,7 @@ namespace Worktown.Game.Cooking
         {
             if (!VesselRules.StandsOnBurner(vessel.Kind)) return;
             PlaceSurface surface = _pickups.SurfaceUnder(vessel.transform.position);
-            _kitchen.SetVesselBurner(vessel.ObjectId, surface != null && surface.IsBurner ? surface.Index : KitchenState.NoBurner, Tick);
+            _kitchen.SetVesselBurner(vessel.ObjectId, surface != null && surface.IsBurner ? surface.Id : KitchenState.NoBurner, Tick);
         }
 
         private NetworkObject VesselPrefab(VesselKind kind)
@@ -1715,7 +1714,7 @@ namespace Worktown.Game.Cooking
                 _feed.ServerAdd(entry);
                 // Spec 027c: the reward moment over the counter for everyone (stars, coin), through the feed's SyncVar. Spec 032: a
                 // guest's reward comes when it pays at the register (its tip is known then); a plain sale has no tip.
-                if (!served) _feed.ServerReward(counter.Index, starCount, soldPayout, 0);
+                if (!served) _feed.ServerReward(counter.Id, starCount, soldPayout, 0);
             }
 
             // Spec 014, after the sale is complete: customers must never be able to break the money transaction
