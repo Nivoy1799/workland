@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Spec 056b: the offline name bake (D38): runs the spec 006 pipeline once per reachable item on a developer's PC,
+       keeps a review sheet and publishes the approved names for the game. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Worktown.NameBake</AssemblyName>
+    <RootNamespace>Worktown.NameBake</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- CTJ001 (Corvus analyzer, flows in from the gateway): prefer u8 literals; not worth it in a tool. -->
+    <NoWarn>$(NoWarn);CTJ001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Worktown.Gateway/Worktown.Gateway.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Worktown.Gateway.Tests" />
+  </ItemGroup>
+</Project>

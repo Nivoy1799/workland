@@ -63,6 +63,17 @@ public sealed class GatewayOptions
     /// <summary>All validation errors. Messages name variables only, never values.</summary>
     internal IReadOnlyList<string> Validate()
     {
+        var errors = ValidatePipeline();
+        errors.AddRange(ValidateServiceToken());
+        return errors;
+    }
+
+    /// <summary>
+    /// Spec 056b: the rules of the item-name pipeline (upstream, model, limits); everything but the service token, which
+    /// only the web host needs (the offline bake runs the pipeline without it).
+    /// </summary>
+    internal List<string> ValidatePipeline()
+    {
         var errors = new List<string>(LoadErrors);
         if (UpstreamBaseUrl.Length == 0)
             errors.Add($"{UpstreamBaseUrlKey} is required.");
@@ -74,10 +85,6 @@ public sealed class GatewayOptions
             errors.Add($"{ModelKey} is required.");
         else if (Model.Contains('|') || Model.Any(char.IsWhiteSpace))
             errors.Add($"{ModelKey} must not contain '|' or whitespace.");
-        if (ServiceToken.Length == 0)
-            errors.Add($"{ServiceTokenKey} is required.");
-        else if (ServiceToken.Length < 32)
-            errors.Add($"{ServiceTokenKey} must be at least 32 characters.");
         if (UpstreamFlavor != FlavorOpenRouter && UpstreamFlavor != FlavorOpenAi)
             errors.Add($"{UpstreamFlavorKey} must be '{FlavorOpenRouter}' or '{FlavorOpenAi}'.");
         if (double.IsNaN(Temperature) || Temperature < 0 || Temperature > 2)
@@ -90,6 +97,17 @@ public sealed class GatewayOptions
             errors.Add($"{RateLimitBurstKey} must be at least 1.");
         if (CacheMaxEntries < 1)
             errors.Add($"{CacheMaxEntriesKey} must be at least 1.");
+        return errors;
+    }
+
+    /// <summary>The web host's service-token rule (spec 006 AC12).</summary>
+    internal List<string> ValidateServiceToken()
+    {
+        var errors = new List<string>();
+        if (ServiceToken.Length == 0)
+            errors.Add($"{ServiceTokenKey} is required.");
+        else if (ServiceToken.Length < 32)
+            errors.Add($"{ServiceTokenKey} must be at least 32 characters.");
         return errors;
     }
 
@@ -111,12 +129,22 @@ public sealed class GatewayOptions
         return fallback;
     }
 
-    /// <summary>Hooks <see cref="Validate"/> into the options pipeline (used with ValidateOnStart).</summary>
-    internal sealed class Validator : IValidateOptions<GatewayOptions>
+    /// <summary>Hooks <see cref="ValidatePipeline"/> into the options pipeline (registered by <c>AddItemNamePipeline</c>).</summary>
+    internal sealed class PipelineValidator : IValidateOptions<GatewayOptions>
     {
         public ValidateOptionsResult Validate(string? name, GatewayOptions options)
         {
-            var errors = options.Validate();
+            var errors = options.ValidatePipeline();
+            return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+        }
+    }
+
+    /// <summary>Hooks <see cref="ValidateServiceToken"/> into the options pipeline (the web host only, with ValidateOnStart).</summary>
+    internal sealed class ServiceTokenValidator : IValidateOptions<GatewayOptions>
+    {
+        public ValidateOptionsResult Validate(string? name, GatewayOptions options)
+        {
+            var errors = options.ValidateServiceToken();
             return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
         }
     }

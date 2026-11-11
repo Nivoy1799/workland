@@ -1,46 +1,22 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
+using Worktown.Gateway;
 using Worktown.Gateway.Api;
 using Worktown.Gateway.Auth;
-using Worktown.Gateway.Cache;
 using Worktown.Gateway.Config;
-using Worktown.Gateway.Moderation;
 using Worktown.Gateway.Pipeline;
-using Worktown.Gateway.Upstream;
-using Worktown.Gateway.Validation;
 
 const string ServerIdHeader = "X-Worktown-Server-Id";
 const string ItemNamePolicy = "per-server";
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuration: GATEWAY_* keys only (env vars in production, UseSetting in tests).
-builder.Services.AddOptions<GatewayOptions>()
-    .Configure<IConfiguration>((options, config) => options.LoadFrom(config))
-    .ValidateOnStart();
-builder.Services.AddSingleton<IValidateOptions<GatewayOptions>, GatewayOptions.Validator>();
-
-builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton(_ => SchemaValidator.ForItemNameV1());
-builder.Services.AddSingleton<IContentCache>(sp => new InMemoryContentCache(
-    sp.GetRequiredService<IOptions<GatewayOptions>>().Value.CacheMaxEntries,
-    sp.GetRequiredService<ILogger<InMemoryContentCache>>()));
-builder.Services.AddSingleton<IModerator>(_ => new PlaceholderDenyListModerator());
-builder.Services.AddScoped<ItemNamePipeline>();
-
-// Typed upstream client. Its built-in request logging is removed, so nothing about upstream
-// traffic reaches the logs. Timeouts are per attempt inside the client. The response body is
-// capped (a larger one is an error) and redirects are not followed, so the configured host is
-// the only one ever called; a 3xx is a final upstream error.
-builder.Services.AddHttpClient<IUpstreamClient, OpenAiCompatibleClient>(OpenAiCompatibleClient.HttpClientName)
-    .ConfigureHttpClient(client =>
-    {
-        client.Timeout = Timeout.InfiniteTimeSpan;
-        client.MaxResponseContentBufferSize = OpenAiCompatibleClient.MaxResponseBytes;
-    })
-    .ConfigurePrimaryHttpMessageHandler(OpenAiCompatibleClient.CreatePrimaryHandler)
-    .RemoveAllLoggers();
+// The spec 006 pipeline (spec 056b: shared with the offline name bake). The web host adds the service-token rule and
+// checks every option at startup.
+builder.Services.AddItemNamePipeline(builder.Configuration);
+builder.Services.AddOptions<GatewayOptions>().ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<GatewayOptions>, GatewayOptions.ServiceTokenValidator>();
 
 // Token bucket per server id. Requests without a valid token or server id are not counted
 // (no limiter): the endpoint answers them with 401/400, so they cannot use up a server's quota.

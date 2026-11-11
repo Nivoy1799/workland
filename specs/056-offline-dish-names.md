@@ -213,7 +213,53 @@ secret-0001`); `scripts/verify.sh`'s secret scan covers the new files.
 6. Moderation and release (O6). [OPEN: not decided here]
 
 ## Implementation notes
-(Builder fills this in, one subsection per part.)
+
+### 056a (/sim)
+- Pinned: **714 items (155 targets), set hash `d88c6ba25d0dd9a1`**. That is under the 1,000-1,800 estimate because the
+  "any other ingredient" needs list a few bases only: onion soup + potato or tomato; veggie mix = tomato, onion and one of
+  cucumber, paprika or red cabbage (all diced); grilled veggies = paprika + eggplant or mushroom. "Any cut" targets: potato
+  soup dice, tomato salad slices, fried apple slices or halves. Other combinations keep the fallback name.
+- Each `RouteStep.Target` names its buckets; params left out take the first sweep value that matches. Pan and fryer
+  targets are `temp=hot` (the kitchen's only heat, 190 and 180 C). Fried apple's target is `time=medium` (done).
+- Rule 1 takes the product along a chain: every bucket of a step over every item of the step before it, deduplicated by
+  hash (the first item of a hash goes on; no default chain has two heat steps, so stats never matter).
+- Mix routes give the mix, the mix on a plate and the parts on one plate. This covers both the mixed dishes and the
+  plated ones (grilled veggies, veggie mix) without a new `RouteDef` field. Single routes give each chain target and its
+  plate. Drink routes add the empty cup.
+- Builds: the candidates for a template layer are the chain targets that fit it as prepared. The finished build must score
+  with nothing missing, prepared wrong or short (`RecipeTemplates.Score`), otherwise it throws. The folded step before the
+  wrap paper or the bag is listed as well.
+- `LabelWords`: only the label words that the plain name shows, and no words under 3 letters ("a dash of" gives `dash`).
+  The wrapped, boxed and bagged labels never show in names, so they would only cause false `doneness` flags.
+- Deviation: `ItemFactory` does not expose its operations, and `ItemFactory.cs` is out of scope. So
+  `Enumerate(factory, routes, limits)` reads the params from `OperationCatalog.CreateDefault()`, and an overload
+  `Enumerate(factory, operations, routes, limits)` takes them explicitly.
+- Extras: `ReachableItemsText.SetHash` (the format name constant is `FormatName`, because `Format` is the method),
+  `KitchenItems.CreateItemCatalog()`. ItemList exit codes: 0 ok, 1 bad args or write, 2 wrong route or too many items.
+  `sim/Sim.sln` was CRLF in the working copy; now LF (the index was already LF).
+
+### 056b (/ai-gateway)
+- Options: `ValidatePipeline()` and `ValidateServiceToken()`. `AddItemNamePipeline` registers `PipelineValidator`;
+  `Program.cs` adds `ServiceTokenValidator` and `ValidateOnStart`, so the web host checks the same rules as before.
+  Options still come from the container's `IConfiguration` (the given one is registered only if none is).
+- The bake builds `ItemNamePipeline` through `ActivatorUtilities` with the `FileContentCache` and a counting decorator
+  around the registered `IModerator`. The pipeline returns one code for both rejections, and the decorator is what tells
+  vegan from moderator rejections apart. The pipeline file is unchanged. The bake checks the cache itself (same
+  `CacheKey`) to count misses for `--limit` and for `--dry-run`. A dry run and publish need only `GATEWAY_MODEL`.
+- A cached entry whose input hash no longer matches its item (the plain name or tags changed) counts as an error and is
+  listed by key prefix. It is not regenerated on its own.
+- Review: an existing row keeps its name, description, decision and note, so reviewer edits survive. A `no` row's cache
+  entry is removed only right before it is generated again within `--limit`. If that new call fails, the row leaves the
+  sheet until the item is generated again. `target` is `true`/`false`. `dup` means the same name (any case) on a row with
+  another route list.
+- Publish maps `key12` to the item through `CacheKey` with `GATEWAY_MODEL`. Two items with the same `key12` give exit 1;
+  a decision other than ok, no or empty gives exit 2.
+- `FileContentCache`: a torn last line is ignored and the next write rewrites the whole file. The file layer is a nested
+  internal `IFileOps` for the tests. NameBake types are internal (tests see them through InternalsVisibleTo). The tool
+  logs to the console at Warning and above.
+- Data: `offline/reachable.v1.json` (714 items), an empty `name-cache.jsonl`, `review.tsv` with the header only. A gateway
+  test checks that the committed reachable file equals the /sim output. `Gateway.sln` is now LF. The new scripts are
+  mode 644 like `climb-report.sh` (run them with `bash`).
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
