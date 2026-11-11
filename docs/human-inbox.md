@@ -18,8 +18,8 @@ every question has a default, and work continues on other items until you answer
   joining a friend while hosting asks first; Alt-F4 tells your guests the shop closed; a kicked player stays out for
   the session. For the real Steam app id, upload game/Steam/rich_presence_localization.vdf in Steamworks.
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
-- **Run 3 (from 2026-11-11 afternoon):** 052 climb simulation, then 054 network headroom and 053 food corner with the
-  save file. 037 still waits for question 17; 040 is with your second session.
+- **Run 3 (from 2026-11-11 afternoon):** merged: 052 climb simulation (findings in question 22) and the 041/042/044
+  follow-ups. Building: 054 network headroom, then 053 food corner with the save file. 037 still waits for question 17; 040 is with your second session.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
@@ -69,6 +69,21 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+22. **What the climb simulation found (spec 052, merged).** With 4 and 16 players the climb works: stage 5 after about
+    19-20 h, inside the targets. Stage 1 to 2 takes about 1.2 h for every crew size. Four design problems remain:
+    1. **A solo player gets stuck in stage 2.** One person cannot serve the guests of a full menu: about 156 actions a
+       service against 25-47 guests, and more dishes cost more actions per guest. Default: fewer, more patient guests
+       for crews of 1-3, and the crew chooses which dishes are on the menu, so it can drop one.
+    2. **Charging +$1 looks like a shortcut.** It isn't really about price. Higher prices turn guests away, and fewer
+       guests pass the stage 4 check sooner. That is fixed by point 4.
+    3. **Late in the game, money has no use.** Rich crews buy everything by about 25 h. Default: costs that come
+       back and grow with you, such as a bigger place with higher rent, staff wages, event stakes that grow, and
+       cars and decor (D34).
+    4. **The stage 4 gate punishes growth.** Stage 4 asks whether the crew runs the place with few players, and every
+       extra service bought in stage 3 makes that harder. Default: stage 4 is unlocked by an "automation" purchase
+       (staff and machines) plus stars, not by the few-players check.
+    If you agree, I write spec 052b (climb tuning v2) and rerun the simulation. Meanwhile 053 (stage 1, which already
+    works) goes ahead.
 20. **AI gateway (spec 006) and player-hosted games (D33).** Spec 006 was planned for official servers only: they
     alone held the gateway's password. Under D33 the host is a player's PC, so that password ships inside the game and
     is public. Anyone could then run up our API bill, or claim an item's name first and show a bad name to everyone.
