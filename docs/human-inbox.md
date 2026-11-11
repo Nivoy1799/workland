@@ -69,6 +69,18 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+23. **Should players walk through each other? (spec 054, built, not merged yet)** Network traffic fell from about
+    44 KB/s to about 3 KB/s per player: other players are now sent 15 times a second instead of re-simulated. But
+    when you bump into another player, your own character is now pulled back about 224 times a minute, typically by
+    16-64 cm and up to 1.3 m. That is visible rubber-banding. Your game draws the others 133 ms late, while the server
+    collides you with where they really are.
+    - **A (default, recommended): players pass through each other.** 0 corrections in the 16-player test, traffic still
+      about 3 KB/s. Walls, stations and guests still block you. Many co-op kitchen games do this, and it also stops
+      players from blocking the aisle.
+    - **B: players block each other.** That needs a new design that rewinds the other players during the prediction
+      replay. It is bigger work, and until then 054 stays unmerged.
+    Try it yourself in a dev build with `-player-collision off` (pass-through) or `on`. If you don't answer, A
+    becomes the default when 054 merges.
 22. **What the climb simulation found (spec 052, merged).** With 4 and 16 players the climb works: stage 5 after about
     19-20 h, inside the targets. Stage 1 to 2 takes about 1.2 h for every crew size. Four design problems remain:
     1. **A solo player gets stuck in stage 2.** One person cannot serve the guests of a full menu: about 156 actions a
