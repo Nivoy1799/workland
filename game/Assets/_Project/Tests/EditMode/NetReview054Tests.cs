@@ -38,9 +38,10 @@ namespace Worktown.Game.Tests
         public void TheWireRevision_IsInTheSurface_AndChangesTheHash()
         {
             // Spec 037 re-pin: 4, money on the wire is cents (D39), which no reflected line shows.
-            Assert.AreEqual(4, ProtocolSurface.Revision, "054, the 053 review, then spec 037 changed the wire (bump on every wire change)");
+            // Spec 062a re-pin: 5, the surface and station numbers on the wire are stable ids (the same int parameters).
+            Assert.AreEqual(5, ProtocolSurface.Revision, "054, the 053 review, spec 037, then spec 062a changed the wire (bump on every wire change)");
             List<string> lines = ProtocolSurface.Lines(Game);
-            Assert.AreEqual(1, lines.Count(l => l == "revision 4"));
+            Assert.AreEqual(1, lines.Count(l => l == "revision 5"));
             Assert.AreEqual(1, lines.Count(l => l.StartsWith("revision ", StringComparison.Ordinal)));
             List<string> before = lines.Where(l => !l.StartsWith("revision ", StringComparison.Ordinal)).ToList();
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before), BuildHash.Compute("0.1.0", lines), "a build without the revision is refused");
@@ -109,7 +110,7 @@ namespace Worktown.Game.Tests
             // 053 review: the shapes the helper relies on.
             Assert.IsTrue(typeof(System.Collections.ICollection).IsAssignableFrom(TransformGoals.QueueType), "the queue is a collection");
             Assert.IsFalse(TransformGoals.CurrentType.IsValueType, "the current goal is a reference (it is set to null)");
-            // A real NetworkTransform (by reflection: this test assembly has no FishNet reference).
+            // A real NetworkTransform (by reflection, as the other wire tests).
             Type ntType = Type.GetType("FishNet.Component.Transforming.NetworkTransform, FishNet.Runtime");
             Assert.IsNotNull(ntType);
             var go = new GameObject("TransformGoalsTest");

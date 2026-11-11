@@ -11,7 +11,7 @@ namespace Worktown.Game.Tests
     /// <summary>
     /// Spec 047 AC1: only connection messages were added to the network surface: three broadcasts with exactly these fields (no game
     /// data: no positions, money, items), and no RPC carries them. AC2: the build hash (Rules.BuildHash over ProtocolSurface) is stable
-    /// and follows the surface. Found by reflection and type names, so this test assembly needs no FishNet reference.
+    /// and follows the surface. Found by reflection and type names, so it does not depend on FishNet's types.
     /// Follow-up 047 (2026-11-11): the session ban's refusal is a new reason byte (KickedBefore = 10) inside the existing
     /// ConnectionNotice; no broadcast, RPC or synced field changed (the reason bytes are pinned in Followup047Tests).
     /// </summary>

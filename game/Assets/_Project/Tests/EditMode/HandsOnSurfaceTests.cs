@@ -9,7 +9,7 @@ namespace Worktown.Game.Tests
     /// <summary>
     /// Spec 019 AC6: the cut progress is bytes only, the stove lights sync one byte, and the knife and buttons
     /// add no request of their own (spec 021: the stove buttons use RequestStation(int, int), cookware RequestUse). Found by reflection and
-    /// attribute name, so this test assembly needs no FishNet reference (like RpcSurfaceTests).
+    /// attribute name, so it does not depend on FishNet's types (like RpcSurfaceTests).
     /// </summary>
     public class HandsOnSurfaceTests
     {

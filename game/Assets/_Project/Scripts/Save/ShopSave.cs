@@ -6,7 +6,8 @@ namespace Worktown.Game.Save
     /// Spec 053: what the host's save file holds: the business, not the players (D33). A [Serializable] DTO for JsonUtility (like
     /// GameSettings): plain public fields, nested parts as classes that always exist. Spec 037 (D39 revises D23): money in cents, format
     /// version 2 (a version 1 save held the old scale's whole dollars; SaveMigrations.V1ToV2 converts it when it loads), and the menu
-    /// board's prices (<see cref="menu"/>). Validated, clamped and migrated by <see cref="ShopSaveCodec"/>.
+    /// board's prices (<see cref="menu"/>). Spec 062a: format version 3, the kitchen's layout (<see cref="layout"/>). Validated, clamped and
+    /// migrated by <see cref="ShopSaveCodec"/>.
     /// </summary>
     [Serializable]
     public sealed class ShopSave
@@ -14,7 +15,7 @@ namespace Worktown.Game.Save
         public const string Format = "worktown-shop-save";
 
         public string format = Format;
-        public int formatVersion = 2;
+        public int formatVersion = 3;
         /// <summary>Informational: Application.version and the 047 build hash of the build that wrote it.</summary>
         public string gameVersion = string.Empty;
         public string buildHash = string.Empty;
@@ -35,6 +36,11 @@ namespace Worktown.Game.Save
         public StatsPart stats = new StatsPart();
         /// <summary>Spec 037: the menu board's prices that differ from their reference (a line id and cents); unknown ids are ignored.</summary>
         public MenuPart[] menu = new MenuPart[0];
+        /// <summary>
+        /// Spec 062a (format version 3): the kitchen's furniture (LayoutCodec turns it into a ShopLayout). A version 2 save gets the default
+        /// layout (SaveMigrations.V2ToV3). Unknown piece types are kept in the file but not spawned.
+        /// </summary>
+        public LayoutPart layout = new LayoutPart();
 
         [Serializable]
         public sealed class ClimbPart
@@ -79,6 +85,44 @@ namespace Worktown.Game.Save
             public string id = string.Empty;
             /// <summary>Its price on the board, in cents.</summary>
             public long cents;
+        }
+
+        /// <summary>Spec 062a: a shop layout as data (also the format of Resources/Layouts/default.json).</summary>
+        [Serializable]
+        public sealed class LayoutPart
+        {
+            /// <summary>The layout data's version (ShopLayout.CurrentVersion).</summary>
+            public int version = 1;
+            public PiecePart[] pieces = new PiecePart[0];
+            /// <summary>Reserved for spec 062b: ids of pieces that are owned but not placed.</summary>
+            public int[] stored = new int[0];
+            public HomePart[] homes = new HomePart[0];
+            /// <summary>The next free piece id (ids are never reused).</summary>
+            public int nextId = 1;
+        }
+
+        /// <summary>Spec 062a: one placed piece (millimetres and quarter turns; tier and paid cents are reserved for spec 062c).</summary>
+        [Serializable]
+        public sealed class PiecePart
+        {
+            public int id;
+            public string type = string.Empty;
+            public int xMm;
+            public int zMm;
+            public int turns;
+            public int lengthMm;
+            public int tier = 1;
+            public long paidCents;
+        }
+
+        /// <summary>Spec 062a: where an item (cookware, a tool) lies at the start: spot of local surface of piece.</summary>
+        [Serializable]
+        public sealed class HomePart
+        {
+            public string item = string.Empty;
+            public int piece;
+            public int local;
+            public int spot;
         }
 
         [Serializable]

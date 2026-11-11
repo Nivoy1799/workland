@@ -13,7 +13,7 @@ namespace Worktown.Game.Tests
     /// <summary>
     /// Spec 019/021: the generated scene has a knife next to the cutting board (normal pickups; the knife with the Knife marker and its
     /// model), a knob and a button per burner on the stoves, and the Food Kit models in the catalog. Network types
-    /// are looked up with typeof, so this test assembly needs no FishNet reference.
+    /// are looked up with typeof, so it does not depend on FishNet's types.
     /// </summary>
     public class HandsOnSceneTests
     {
@@ -67,7 +67,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_OneKnifeNextToTheCuttingBoard_AndTheServiceCanReplaceThem()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<Knife> knives = All<Knife>(scene);
@@ -92,13 +92,13 @@ namespace Worktown.Game.Tests
                 }
                 CollectionAssert.AreEquivalent(new[] { VesselKind.Board, VesselKind.Pan, VesselKind.Pot, VesselKind.Plate, VesselKind.Bowl }, kinds);
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]
         public void BuiltScene_StovesHaveAKnobAndAButtonPerBurnerInFrontOfThem()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 var options = new Dictionary<int, List<int>>();
@@ -114,7 +114,7 @@ namespace Worktown.Game.Tests
                     Assert.IsNotNull(box, button.name + " has no collider to aim at");
                     Bounds body = station.transform.Find("Body").GetComponent<BoxCollider>().bounds;
                     Assert.Less(box.bounds.max.z, body.min.z + 0.001f, button.name + " must sit in front of the station body");
-                    if (!options.TryGetValue(station.Index, out List<int> list)) options[station.Index] = list = new List<int>();
+                    if (!options.TryGetValue(station.Id, out List<int> list)) options[station.Id] = list = new List<int>();
                     list.Add(button.Option);
                     Assert.IsNotNull(station.GetComponent<StoveButtonVisual>(), station.name + " has no button lights");
                     Assert.IsNotNull(station.GetComponent(typeof(StationContents)), station.name + " has no synced flags");
@@ -127,7 +127,7 @@ namespace Worktown.Game.Tests
                         StationRules.StoveOption(1, StationRules.StoveSwitch), StationRules.StoveOption(1, StationRules.PanMode)
                     }, list);
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
     }
 }

@@ -7,7 +7,8 @@
         "Worktown.Game",
         "Worktown.Game.Dev",
         "Worktown.Sim",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "FishNet.Runtime"
     ],
     "includePlatforms": [
         "Editor"

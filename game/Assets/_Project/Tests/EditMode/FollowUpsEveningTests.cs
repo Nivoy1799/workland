@@ -59,7 +59,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_ClosedCovers_NothingPokesThrough_SageClothAndASmallSign()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 var renderers = new List<Renderer>();
@@ -118,7 +118,7 @@ namespace Worktown.Game.Tests
                 }
                 Assert.Greater(withContents, 0, "a stove's pan rests under a cover");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         // ---- 053: the money lines ----

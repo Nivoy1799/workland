@@ -104,11 +104,11 @@ namespace Worktown.Game.UI
             return top;
         }
 
-        private static Station CounterOf(int index)
+        /// <summary>Spec 062a: the counter (or register, spec 032: a guest pays there) with station id <paramref name="id"/>, or null.</summary>
+        private static Station CounterOf(int id)
         {
-            foreach (Station s in FindObjectsByType<Station>(FindObjectsSortMode.None))
-                if (s.Index == index && (s.Kind == StationKind.Counter || s.Kind == StationKind.Register)) return s; // spec 032: a guest pays at the register
-            return null;
+            Station s = Worktown.Game.Layout.LayoutRegistry.Station(id);
+            return s != null && (s.Kind == StationKind.Counter || s.Kind == StationKind.Register) ? s : null;
         }
 
         private Popup Create(Vector3 start, int earned, string money)

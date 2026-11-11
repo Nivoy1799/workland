@@ -219,7 +219,7 @@ namespace Worktown.Game.Tests
             var so = new SerializedObject(visual);
             Assert.AreSame(Catalog(), so.FindProperty("_catalog").objectReferenceValue);
             Assert.IsNotNull(so.FindProperty("_fallback").objectReferenceValue, "no fallback cube");
-            Component food = prefab.GetComponent(typeof(Food)); // typed as Component: no FishNet reference here
+            Component food = prefab.GetComponent(typeof(Food)); // typed as Component, found by its type
             Assert.IsNotNull(food);
             Assert.AreSame(visual, new SerializedObject(food).FindProperty("_visual").objectReferenceValue);
         }

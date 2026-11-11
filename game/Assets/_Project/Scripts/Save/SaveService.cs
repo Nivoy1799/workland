@@ -30,6 +30,8 @@ namespace Worktown.Game.Save
         [SerializeField] private CleaningService _cleaning;
         [SerializeField] private CustomerService _customers;
         [SerializeField] private ShopStage _stage;
+        [Tooltip("Spec 062a: spawns the save's layout (or the default) when a game begins.")]
+        [SerializeField] private Worktown.Game.Layout.LayoutSpawner _layout;
 
         private const int NewIdAttempts = 8;
 
@@ -39,6 +41,7 @@ namespace Worktown.Game.Save
         /// <summary>037 review: menu lines of a loaded save this build does not know, kept for the next save (like the stock's).</summary>
         private readonly List<ShopSave.MenuPart> _unknownMenu = new List<ShopSave.MenuPart>();
         private bool _begun;
+        private bool _layoutSpawned;
         private float _lastSaveAt;
         private float _playStartedAt;
         private long _playSecondsBefore;
@@ -100,6 +103,7 @@ namespace Worktown.Game.Save
         private void Begin()
         {
             _begun = true;
+            _layoutSpawned = false;
             ShopStart start = _bootstrap != null ? _bootstrap.HostStart : ShopStart.OpenKitchen;
             _current = null;
             _unknownStock.Clear();
@@ -127,6 +131,21 @@ namespace Worktown.Game.Save
                 Debug.LogError("[Save] the game could not begin from its save; the shop opens without one");
                 _current = null;
             }
+            if (!_layoutSpawned) SpawnLayout(null); // spec 062a: the open kitchen (or a failed start) gets the standard layout
+        }
+
+        /// <summary>
+        /// Spec 062a: spawns the layout of <paramref name="part"/> (null or empty: the standard one) before the first player and the first
+        /// shift; the save then holds what was spawned (a layout that could not be used is not kept: LayoutSpawner logs it).
+        /// </summary>
+        private void SpawnLayout(ShopSave.LayoutPart part)
+        {
+            _layoutSpawned = true;
+            if (_layout == null) return;
+            Worktown.Sim.Layout.ShopLayout wanted = part != null && part.pieces != null && part.pieces.Length > 0
+                ? Worktown.Game.Layout.LayoutCodec.ToLayout(part, _layout.Catalog) : null;
+            Worktown.Sim.Layout.ShopLayout spawned = _layout.ServerBegin(wanted);
+            if (_current != null && spawned != null) _current.layout = Worktown.Game.Layout.LayoutCodec.ToPart(spawned);
         }
 
         private void BeginNewShop()
@@ -179,6 +198,7 @@ namespace Worktown.Game.Save
         private void Apply(ShopSave save)
         {
             _current = save;
+            SpawnLayout(save.layout); // spec 062a: the furniture first, so everything after finds its stations
             _unknownStock.Clear();
             _unknownMenu.Clear();
             foreach (ShopSave.StockPart part in save.stock)
@@ -287,6 +307,7 @@ namespace Worktown.Game.Save
                 day, play, counts, _unknownStock, _cleaning != null ? _cleaning.HygienePercent : save.hygienePercent,
                 _stage != null ? _stage.ServerStage : (byte)save.climb.stage, _stage != null && _stage.ServerReached);
             if (_economy != null) save.menu = MenuParts(_economy.Menu.Capture(), _unknownMenu); // spec 037: the board's prices
+            if (_layout != null && _layout.Current != null) save.layout = Worktown.Game.Layout.LayoutCodec.ToPart(_layout.Current); // spec 062a
         }
 
         /// <summary>Spec 037: the menu board's changed prices as the save's parts (line id, cents).</summary>

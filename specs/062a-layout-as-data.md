@@ -202,7 +202,71 @@ None to build. Play one service after it lands; it should feel exactly like befo
 6. What an invalid saved layout does. [fall back to the default with a feed line; no repair attempt]
 
 ## Implementation notes
-(Builder fills this in.)
+Built by the Opus builder on 2026-11-11 as **Part A** (data, ids, spawn, save, parity) of the spec's own split. **Part B is not
+built**: `LayoutRules`, `LayoutReport`, `LayoutProblem(Kind)`, `RoomDef`, `WalkGrid`, `GridPath`, `NpcRoute(s)`, the waypoint
+walker and the AC2 rules tests, AC7, and AC8's "an overlapping layout falls back" case. The guests still use the scene's
+`StreetEntry`, `QueueHead` and `PayHead` (the parity test pins them).
+
+- **Migration proof.** Before any builder change, the unchanged builder rebuilt the scene in batch mode (main 075c101) and a
+  first `LayoutExporter` (since rewritten) wrote `Tests/EditMode/Data/kitchen-snapshot.json` (18 stations, 27 surfaces with old
+  index, piece, local, pose, size, top, spots; 9 item homes; 7 anchors) and `Resources/Layouts/default.json` (27 pieces, 9 homes,
+  `nextId` 28). `DefaultLayoutParityTests` compares the offline-spawned default with it (1 mm, 0.1 deg, sizes, tops, spots, names).
+- **Ids.** Station id = piece id = old index + 1 (ids 1-18); worktops 19-22 (old surface order), front counter runs 23-27 west to
+  east (27 is a 90 mm filler between the dispenser and the serving counter: a run under 100 mm has no top, as 039's gaps).
+- **Front counter (Q4).** Modules carry their own counter body named exactly `Front counter` (PlaceCoverage's exception matches
+  it unchanged); module width = appliance + 2 x 20 mm. A 10 mm gap by the register gets no filler (under 20 mm).
+- **Numbering (deviation).** A type placed more than once shows its number ("Stove 1", "Worktop 3", "Counter top 2"): the
+  prefab marks it with `#`, and `PieceBehaviour` has a third SyncVar `_number` (byte) next to `PieceId` and `PosePacked`,
+  because the client cannot know the rank. Worktop names lost their old surface index ("Worktop 5" is now "Worktop 3").
+- **Spawning.** `SaveService.Begin` calls `LayoutSpawner.ServerBegin` (the save's layout, else the default) before the first
+  player; nested NetworkObjects (baskets, griddle spots, the build spot, spit parts, station NOBs) spawn inside their piece
+  prefab: no fallback was needed. Counters stretch at spawn (colliders, top, cabinet modules instantiated at run time).
+  Items at the homes are spawned objects now (no scene cookware), so spec 045's "scene plates back to their start" happens by
+  despawn and respawn.
+- **Registry.** `LayoutRegistry` is a static per-process registry (both sides; `Version` invalidates the client's aim caches in
+  PickupInteractor, VesselSteam's burners and TutorialTargets). CleaningService (its four stations), CustomerService (the register)
+  and EconomyService (the menu board; it republishes the prices when the layout changes) look stations up by kind; ServeReward's
+  counter and ServeRewardView's lookup use the station id.
+- **Spawned items.** `LayoutSpawner.ServerBegin` despawns the pieces it spawned before, but it does not track the items it spawned
+  at their homes yet (the KitchenService owns them once spawned): spec 062b, which changes the layout while a game runs, must decide.
+- **Save v3.** `layout` part; `V2ToV3` loads default.json; the codec clamps through `LayoutCodec`; unknown types are kept and
+  not spawned; a layout missing a required piece after `DefaultLayout.Backfill` falls back to the default with the feed line.
+- **Builder.** `GrayboxSceneBuilder` keeps the station code (`BuildKitchenParts`, now internal) and its scene holds only the room
+  shell and services; `PiecePrefabBuilder` cuts that kitchen into 19 prefabs (+ `PiecePrefabs.asset`). Closed covers are in the
+  prefabs; a stove's cover spans what rests on both stoves.
+- **Tests.** The 16 built-scene test files open through `LayoutScene`; assertion changes beyond index literals: FloorPlanTests'
+  front-run count (2 runs became the 9 front counter bodies), RegisterSceneTests and MenuBoardTests (no serialized station
+  fields: the registry), the save version (3) and `Revision` (5) re-pins. The test assembly now references FishNet.Runtime.
+- **AC10 (visual check, 2026-11-11, `.verify/visual062a`):** look, walk, cook, tutorial, menu and corner all ok: tour and observer
+  exit 0, 0 Exception lines, 0 crash log entries, 0 timeouts, 0 aim fallbacks. Each host logged "[Layout] spawned 27 pieces and 9
+  items" (8 hosts). The joined client (the look tour joins the observer's host after it spawned the layout) put the knife on
+  Counter top 1 spot 7 and Counter top 2 by right click, so the late joiner's surface ids, poses and counter lengths match the host's.
+  The walk tour has no place step.
+- **Follow-ups.** `ProtocolSurface.Revision` is 5; spec 054b may also bump it (merge: take the next number). DefaultPrefabObjects
+  keeps main's order with the 19 pieces appended.
+
+### 062a review fixes
+1. PrefabRegistrationTests: every `PiecePrefabs` piece and item prefab is in DefaultPrefabObjects; the scene's spawner uses that
+   table and the save service begins it.
+2. LayoutSurfaceTests (AC9): the wire grows only by `PieceBehaviour._pieceId` (SyncVar Int32), `_posePacked` (Int64) and `_number`
+   (Byte), no RPC, no broadcast; RequestPlace and RequestStation keep their int parameters; revision 5.
+3. AC10 recorded above.
+4. `nextId` clamps to 1..`ShopLayout.MaxPieceId` (LayoutCodec, noted); `DefaultLayout.Backfill` adds no piece past the limit.
+5. The parity snapshot also holds main's 56 stock slots, 13 buttons, 11 nested objects and 6 body colliders (4 worktops, the 2
+   front counter runs), added once from main 075c101's scene by `LayoutExporter.ExtendFromMainScene` (the existing entries are
+   unchanged). Parity asserts each slot, button and nested object (inside its station's piece) within 1 mm, the worktop bodies, and
+   that the 9 front counter bodies cover the 2 old runs at the same height and depth with no gap of 21 mm or more; stations' piece =
+   old index + 1.
+6. Each worktop's new name is pinned (Worktop 0, 1, 5, 9 became Worktop 1 to 4).
+7. FloorPlanTests pins 9 front counter bodies; RegisterSceneTests checks CustomerService's registry lookups; a new LayoutSpawnTests
+   case checks EconomyService, CustomerService and CleaningService find their stations through the registry.
+8. `ServerBegin` logs why it spawns nothing; a rejected layout logs its notes and the layout itself (as JSON).
+- Nits: the dead `IsSceneObject` branch and `_plateStarts` are gone from KitchenService (SceneStartSpots stays, with its tests);
+  RectMm.Contains is tested in ShopLayoutTests; `PointMm` is removed (Part B adds it with `RoomDef`); the stale "no FishNet
+  reference" comments are fixed.
+- Checks: verify.sh green (EditMode 1514, sim 542, gateway 216); visual check look and cook in `.verify/visual062a2`: both ok, 0
+  Exception lines, 0 timeouts, 0 aim fallbacks, "[Layout] spawned 27 pieces and 9 items" on both hosts, the joined client put the
+  knife on Counter top 1.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

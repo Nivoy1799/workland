@@ -11,7 +11,7 @@ namespace Worktown.Game.Cooking
     {
         /// <summary>Counts sales from 1 (0 = none yet); wraps around.</summary>
         public int Serial;
-        /// <summary>Station index of the counter.</summary>
+        /// <summary>Station id of the counter (spec 062a: its piece id).</summary>
         public int Counter;
         /// <summary>1-5.</summary>
         public byte Stars;

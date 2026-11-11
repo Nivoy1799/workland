@@ -7,8 +7,8 @@ namespace Worktown.Game.Tests
 {
     /// <summary>
     /// Spec 017 AC3: the look clients get is bytes only (no float, string, stats or times), and the synced
-    /// members of Food (and spec 021 Vessel) carry only names, stars and looks (no quality float, D21). Found by reflection, so this test
-    /// assembly needs no FishNet reference.
+    /// members of Food (and spec 021 Vessel) carry only names, stars and looks (no quality float, D21). Found by reflection, so the
+    /// test does not depend on FishNet's types.
     /// </summary>
     public class FoodLookSurfaceTests
     {

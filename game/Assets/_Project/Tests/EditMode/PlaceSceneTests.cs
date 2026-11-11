@@ -36,7 +36,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_EachTap_HasOneCupSpot_RightUnderItsSpout()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 var taps = new Dictionary<int, Worktown.Game.Art.DrinkTapView>();
@@ -50,7 +50,7 @@ namespace Worktown.Game.Tests
                     Station dispenser = surface.GetComponentInParent<Station>();
                     Assert.IsNotNull(dispenser, surface.name);
                     Assert.AreEqual(StationKind.DrinkDispenser, dispenser.Kind);
-                    Assert.AreEqual(dispenser.Index, surface.DispenserIndex, surface.name);
+                    Assert.AreEqual(dispenser.Id, surface.DispenserPieceId, surface.name);
                     Assert.AreEqual(1, surface.SpotCount, surface.name + ": one cup");
                     Assert.IsFalse(surface.IsBurner);
                     Vector3 spot = surface.SpotWorldPosition(0);
@@ -62,27 +62,30 @@ namespace Worktown.Game.Tests
                 }
                 Assert.AreEqual(DrinkRules.TapCount, seen.Count);
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]
         public void BuiltScene_SurfacesAreRegisteredByIndex_WithSpotsAtStationHeight()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
                 Assert.AreEqual(27, surfaces.Count, "spec 042: the three taps' cup spots; spec 021: five worktops, and per stove its top and two burners; spec 030: the griddle's deck; "
                     + "spec 039: four front counter tops, the stoves' front strips, the fryer deck, the assembly back, the sink front and back, "
                     + "the plate shelf front and back");
-                SerializedProperty list = new SerializedObject(All<PickupService>(scene)[0]).FindProperty("_surfaces");
-                Assert.AreEqual(surfaces.Count, list.arraySize);
+                // Spec 062a: registered by their stable id (SurfaceId) in the LayoutRegistry, not by an index in an array.
+                IReadOnlyList<PlaceSurface> list = Worktown.Game.Layout.LayoutRegistry.Surfaces;
+                Assert.AreEqual(surfaces.Count, list.Count);
                 int burners = 0;
-                for (int i = 0; i < list.arraySize; i++)
+                for (int n = 0; n < list.Count; n++)
                 {
-                    var surface = (PlaceSurface)list.GetArrayElementAtIndex(i).objectReferenceValue;
-                    Assert.IsNotNull(surface, "surface " + i);
-                    Assert.AreEqual(i, surface.Index, surface.name);
+                    PlaceSurface surface = list[n];
+                    Assert.IsNotNull(surface, "surface " + n);
+                    Assert.AreSame(surface, Worktown.Game.Layout.LayoutRegistry.Surface(surface.Id), surface.name);
+                    int i = KitchenSnapshot.OldIndexOf(surface); // the old index (the snapshot)
+                    Assert.GreaterOrEqual(i, 0, surface.name + " is in the parity snapshot");
                     Assert.IsNotNull(surface.GetComponent<BoxCollider>(), surface.name + " needs a collider for the aim ray");
                     Assert.AreEqual(Vector3.one, surface.transform.lossyScale, surface.name + " must not be scaled");
                     if (surface.IsBurner)
@@ -92,7 +95,7 @@ namespace Worktown.Game.Tests
                         Station stove = surface.GetComponentInParent<Station>();
                         Assert.IsNotNull(stove, surface.name);
                         Assert.AreEqual(StationKind.Stove, stove.Kind);
-                        Assert.AreEqual(stove.Index, surface.StoveIndex, surface.name);
+                        Assert.AreEqual(stove.Id, surface.StovePieceId, surface.name);
                     }
                     else if (i < 12) Assert.Greater(surface.SpotCount, 1, surface.name);
                     else Assert.GreaterOrEqual(surface.SpotCount, 1, surface.name + ": spec 039 rule 3, a narrow top still has a spot");
@@ -103,13 +106,13 @@ namespace Worktown.Game.Tests
                 }
                 Assert.AreEqual(4, burners, "two stoves with two burners each");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]
         public void BuiltScene_WorktopsFillTheGaps_WithoutOverlappingStations()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<Station> stations = All<Station>(scene);
@@ -130,14 +133,14 @@ namespace Worktown.Game.Tests
                 }
                 Assert.AreEqual(4, worktops); // spec 035: the bowl's worktop after the plate shelf is the sink (its drainboard)
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>Spec 021: the knife and every piece of cookware start on a spot (their home); the pan and the pot on burners.</summary>
         [Test]
         public void BuiltScene_KnifeAndCookwareStartOnSpots_PanAndPotOnBurners()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<PlaceSurface> surfaces = All<PlaceSurface>(scene);
@@ -162,7 +165,7 @@ namespace Worktown.Game.Tests
                     Assert.AreEqual(heat, on.IsBurner, item.name + " on " + on.name);
                 }
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         private static PlaceSurface SurfaceUnder(List<PlaceSurface> surfaces, Vector3 position)
@@ -179,7 +182,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_StationLabelsShowNoKeys()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 foreach (Station station in All<Station>(scene))
@@ -189,7 +192,7 @@ namespace Worktown.Game.Tests
                     StringAssert.StartsWith(station.DisplayName.Replace(" crate", string.Empty), text, station.name);
                 }
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]

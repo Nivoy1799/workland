@@ -165,7 +165,7 @@ namespace Worktown.Game.Dev
                 PickupInteractor hands = actor.Interactor;
                 if (!hands.AimClosed) Fail("the stove under its cover is not shown as closed");
                 yield return _capture.Shot("closed-stove-prompt");
-                hands.DevSendStation(stove.Index, 0);
+                hands.DevSendStation(stove.Id, 0);
                 yield return Until(() => hands.LastCookOutcome == CookOutcome.NotOpenYet, "the stove refused: " + ShopStageRules.NotOpenText);
                 yield return Wait(0.3f);
                 yield return _capture.Shot("closed-stove-refused");
@@ -191,7 +191,7 @@ namespace Worktown.Game.Dev
                 {
                     // The part switches the fryer on itself, so it goes off first (from the fryer: the last step ended at the register).
                     yield return actor.WalkTo(new Vector3(fryer.transform.position.x, 0f, laneZ), false, false);
-                    actor.Interactor.DevSendStation(fryer.Index, FryerRules.PowerOption);
+                    actor.Interactor.DevSendStation(fryer.Id, FryerRules.PowerOption);
                     yield return Wait(0.6f);
                     if (FryerRules.IsOn(contents.StoveFlags.Value)) Fail("the fryer did not switch off between the two guests");
                 }

@@ -24,7 +24,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_HasTheRegister_OnTheFrontCounter_WiredToTheGuests()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<Component> registers = VesselTestKit.AllOf(scene, typeof(Register));
@@ -44,14 +44,16 @@ namespace Worktown.Game.Tests
                 Assert.IsNotNull(body, "aimable");
                 Assert.AreEqual(Worktown.Game.Art.ArtSizeTable.ServingCounterHeight, body.bounds.min.y, 0.01f, "on the counter top");
 
-                List<Component> kitchens = VesselTestKit.AllOf(scene, typeof(KitchenService));
-                SerializedProperty list = new SerializedObject(kitchens[0]).FindProperty("_stations");
-                Assert.AreSame(station, list.GetArrayElementAtIndex(station.Index).objectReferenceValue, "the register is station " + station.Index);
+                // Spec 062a: the kitchen finds the register in the LayoutRegistry by its id (its piece id).
+                Assert.AreSame(station, Worktown.Game.Layout.LayoutRegistry.Station(station.Id), "the register is station " + station.Id);
 
                 List<Component> services = VesselTestKit.AllOf(scene, typeof(CustomerService));
                 var so = new SerializedObject(services[0]);
-                Assert.AreSame(registers[0], so.FindProperty("_register").objectReferenceValue);
-                Assert.AreSame(station, so.FindProperty("_registerStation").objectReferenceValue);
+                // Spec 062a: the guests' service finds the register (and its station) in the LayoutRegistry, not in a scene field.
+                const System.Reflection.BindingFlags statics = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+                Assert.AreSame(station, typeof(CustomerService).GetProperty("RegisterStation", statics).GetValue(null), "the register's station");
+                Assert.AreSame(registers[0], typeof(CustomerService).GetProperty("RegisterNow", statics).GetValue(null), "the register's synced state");
+                Assert.IsNull(so.FindProperty("_register"), "no scene reference to a spawned piece");
                 Assert.IsNotNull(so.FindProperty("_feed").objectReferenceValue);
                 var pay = (Transform)so.FindProperty("_payHead").objectReferenceValue;
                 var head = (Transform)so.FindProperty("_queueHead").objectReferenceValue;
@@ -67,7 +69,7 @@ namespace Worktown.Game.Tests
             }
             finally
             {
-                EditorSceneManager.CloseScene(scene, true);
+                LayoutScene.Close(scene);
             }
         }
 
