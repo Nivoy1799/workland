@@ -73,22 +73,6 @@ every question has a default, and work continues on other items until you answer
 27. **Spec 037 asked for "rating unlocks more menu items over the days"**, but D34 and D37 start the food corner with
     exactly one dish. Default: no rating unlocks in the corner; new dishes come with stage 2 (spec 057, 4 dishes) and
     later stages.
-24. **Crew size: more players should not make the climb much faster (your idea, my proposal).**
-    You said: with more players it is easier to make money, and the work should grow in step with the players.
-    Proposal: **"the crew factor"**, which goes into 052b, being built now:
-    - **Prices stay real.** Fries cost $4.00 no matter who is playing. Lowering the pay per guest when friends join
-      would feel bad: "my fries are worth less because Mira joined", and the board price would not match what is paid.
-    - **More players bring more guests.** Demand grows with the crew (factor about n^0.9: 1, 1.9, 3.5, 6.5, 12 for 1, 2,
-      4, 8, 16 players), so there is always work for everyone.
-    - **Goals and big one-time purchases grow with the crew too** (about n^0.85: 1, 1.8, 3.3, 5.9, 10.6). Rent goals, the
-      next place and automation all count. Stock and ingredients do not, because the crew uses more of them anyway.
-    - **The result:** a stage takes about the same time for 1 or 16 players. A big crew is about 15 % faster, a small
-      bonus for playing together.
-    - **Joining and leaving is fair.** Progress is stored as a percentage of the goal, and each service adds
-      "earned / goal for this crew". A friend who joins changes only the services after that, never past progress, and
-      nobody is punished for leaving.
-    - **The crew counts** at service start (the default from 052b).
-    Default: yes. 052b keeps all scaling in one place so the curve can be tuned.
 22. **What the climb simulation found (spec 052, merged).** With 4 and 16 players the climb works: stage 5 after about
     19-20 h, inside the targets. Stage 1 to 2 takes about 1.2 h for every crew size. Four design problems remain:
     1. **A solo player gets stuck in stage 2.** One person cannot serve the guests of a full menu: about 156 actions a
@@ -223,6 +207,9 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11, question 24 (crew size):** decided as D40. Tuned for 4 players; solo is very easy, it gets harder up to 4,
+  then stays flat up to 16. Prices never change with the crew; goals grow with it; progress is kept as a percentage.
+  Starting curve: solo 0.55, 2 players 0.75, 3 players 0.9, 4 and more 1.0. 052b builds it.
 - **2026-11-11 evening, questions 17, 25 and 26:** all four drafts approved (052b, 056, 057, 058); prices in cents (D39
   revises D23). Order: 037, then 052b on the new scale, then 057, then 058; 056 in parallel.
 - **2026-11-11, question 23 (players pass through each other):** no answer, so default A applies: players

@@ -48,6 +48,7 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D37 | Game design v1 | docs/game-design.md v1 is binding: co-op restaurant climb in 5 stages (food corner first), NPC rivals, 16 players, time runs only while playing | 2026-11-11 | Approved by the human (inbox question 13); specs 052 and 053 follow it |
 | D38 | AI content for Early Access | No live AI gateway at Early Access; names are generated offline and shipped with the game. Spec 055 (gateway go-live) is deferred | 2026-11-11 | Decided by the human ("AI live we skip"): no hosting, no running cost, no public-token risk |
 | D39 | Currency sub-units (revises D23) | Dollars **with cents**; all money is integer cents in the sim and game (spec 037) | 2026-11-11 | Decided by the human (inbox question 17): street-food prices like $9.50 need cents |
+| D40 | Crew-size difficulty | The climb is tuned for **4 players** (the optimum). Per-player difficulty rises from very easy solo to 1.0 at 4 players, then stays flat (no harder for 8-16, coordination is hard enough). Demand grows with the crew; goals and big one-time purchases grow by players x difficulty; prices never change with the crew; progress is stored as a fraction of the goal, so joining or leaving is fair | 2026-11-11 | Decided by the human (inbox question 24): "only as hard as players are there", "focus on 4 people", "at some point it stagnates" |
 
 ## OPEN
 
