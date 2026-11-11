@@ -14,6 +14,9 @@ every question has a default, and work continues on other items until you answer
   006 (AI gateway skeleton: item names via an OpenAI-compatible API, strict JSON, vegan check, cache; stays off, see 20).
   048 (settings: graphics, audio, rebinding, FOV, colour-blind rings), 049 (crash log, freeze watchdog,
   `scripts/perf-check.sh`; 2-hour soak with 16 players passed). Digest: docs/digest-2026-11-11.md.
+  Follow-ups 2026-11-11: E takes the cup back from the tray; the cursor relocks after settings; controls fit 720p;
+  joining a friend while hosting asks first; Alt-F4 tells your guests the shop closed; a kicked player stays out for
+  the session. For the real Steam app id, upload game/Steam/rich_presence_localization.vdf in Steamworks.
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
 - **Autonomous run 2 is finished.** The approved queue is done except 037 (question 17); 040 is with your second
   session. Next is the climb, after question 13 (docs/early-access.md).
