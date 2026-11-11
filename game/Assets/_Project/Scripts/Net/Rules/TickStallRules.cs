@@ -17,6 +17,16 @@ namespace Worktown.Game.Net.Rules
         public static bool IsStalled(bool serverStarted, double secondsSinceTick, int framesSinceTick) =>
             serverStarted && secondsSinceTick > StallSeconds && framesSinceTick >= MinFrames;
 
+        /// <summary>049 review: the exit code of a dedicated server that quit after a stall (non-zero: its supervisor restarts or reports it).</summary>
+        public const int DedicatedExitCode = 3;
+
+        /// <summary>
+        /// 049 review: after the stall close, a dedicated server (<c>-server</c>, or a server build) quits with
+        /// <see cref="DedicatedExitCode"/>: nobody plays on it to read the error screen. A host stays on its "The shop stopped" screen,
+        /// and a <c>-stall-test</c> run quits by itself (StallTestRunner decides its exit code).
+        /// </summary>
+        public static bool QuitsAfterStall(bool dedicatedServer, bool stallTest) => dedicatedServer && !stallTest;
+
         /// <summary>The loud log line.</summary>
         public static string Describe(double secondsSinceTick, int framesSinceTick, uint lastTick, int clients) =>
             "HOST TICK STALL: no network tick for " + secondsSinceTick.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)

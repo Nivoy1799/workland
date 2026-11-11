@@ -1,4 +1,5 @@
 using UnityEngine;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.UI
 {
@@ -31,6 +32,14 @@ namespace Worktown.Game.UI
             Vector3 eye = CameraTarget + Quaternion.Euler(0f, yaw, 0f) * (CameraEye - CameraTarget);
             return new Pose(eye, Quaternion.LookRotation(CameraTarget - eye, Vector3.up));
         }
+
+        /// <summary>
+        /// The friends list with nobody hosting. 049 review: it names the bound Players key (the lobby, where a host invites), so it
+        /// follows a rebind (KeyPrompts).
+        /// </summary>
+        public static string NoFriendsHosting(ControlBindings bindings) =>
+            "None of your Steam friends has a shop open right now. When one does, they can invite you ("
+            + KeyPrompts.KeyName(bindings, ControlAction.Players) + " in their shop), or use Join Game in Steam.";
 
         /// <summary>The corner line: "build 0.1.0 (a1b2c3d4)".</summary>
         public static string BuildLine(string version, string shortHash) => "build " + version + " (" + shortHash + ")";

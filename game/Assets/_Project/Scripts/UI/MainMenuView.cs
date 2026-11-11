@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
+using Worktown.Game.Settings;
 
 namespace Worktown.Game.UI
 {
@@ -239,7 +240,7 @@ namespace Worktown.Game.UI
             }
             List<FriendHost> hosts = friends.HostingFriends();
             _friendHint.text = hosts.Count == 0
-                ? "None of your Steam friends has a shop open right now. When one does, they can invite you (Tab in their shop), or use Join Game in Steam."
+                ? MenuRules.NoFriendsHosting(GameSettings.CurrentBindings)
                 : "Friends with a shop open:";
             foreach (FriendHost host in hosts)
             {

@@ -60,9 +60,8 @@ namespace Worktown.Game.UI
             _leave.AddToClassList("menu-button");
             _box.Add(_leave);
             _hint = new Label();
-            var hint = _hint;
-            hint.AddToClassList("lobby-hint");
-            _box.Add(hint);
+            _hint.AddToClassList("lobby-hint");
+            _box.Add(_hint);
             _box.style.display = DisplayStyle.None;
             documentRoot.Add(_box);
         }

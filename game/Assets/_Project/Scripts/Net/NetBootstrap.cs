@@ -34,6 +34,8 @@ namespace Worktown.Game.Net
         private JoinAuthenticator _join;
         private JoinTarget _queuedJoin;
         private bool _closing;
+        /// <summary>A dedicated server (<c>-server</c>, or a server build's default): nobody plays on it, so a stall ends the process.</summary>
+        private bool _dedicated;
 
         /// <summary>Spec 047: the client's connection as the menus show it.</summary>
         public JoinFlow Flow { get; } = new JoinFlow();
@@ -92,6 +94,7 @@ namespace Worktown.Game.Net
             switch (Args.Mode)
             {
                 case LaunchMode.Server:
+                    _dedicated = true;
                     StartServer();
                     break;
                 case LaunchMode.Host:
@@ -106,6 +109,7 @@ namespace Worktown.Game.Net
                 default:
 #if UNITY_SERVER && !UNITY_EDITOR
                     // A dedicated server build has nobody to click the menu.
+                    _dedicated = true;
                     StartServer();
 #else
                     Status = "title screen";
@@ -237,9 +241,21 @@ namespace Worktown.Game.Net
             Debug.Log("[Net] the host closes the shop");
             // 1 s, not less: the HostClosed notice must survive a resend over the Steam relay before the server stops.
             yield return new WaitForSecondsRealtime(1f);
-            if (_networkManager.IsClientStarted) _networkManager.ClientManager.StopConnection();
-            if (_networkManager.IsServerStarted) _networkManager.ServerManager.StopConnection(true);
+            // 049 review: each stop on its own, so a throw from a broken FishNet (the stall close) cannot skip the other one, nor what
+            // follows (the stall's error screen and the transport pump).
+            GuardedCall.Run(StopClient, "[Net] stopping the client", Debug.LogWarning);
+            GuardedCall.Run(StopServer, "[Net] stopping the server", Debug.LogWarning);
             _closing = false;
+        }
+
+        private void StopClient()
+        {
+            if (_networkManager.IsClientStarted) _networkManager.ClientManager.StopConnection();
+        }
+
+        private void StopServer()
+        {
+            if (_networkManager.IsServerStarted) _networkManager.ServerManager.StopConnection(true);
         }
 
         /// <summary>
@@ -291,6 +307,12 @@ namespace Worktown.Game.Net
                 yield return null;
             }
             Debug.Log("[Net] stall: the shop is closed (server " + (_networkManager.IsServerStarted ? "still started" : "stopped") + ")");
+            if (TickStallRules.QuitsAfterStall(_dedicated, Args.StallTestSeconds > 0))
+            {
+                // 049 review: a dedicated server has no player to read the screen; a non-zero exit tells its supervisor.
+                Debug.LogError("[Net] stall: the dedicated server quits (exit " + TickStallRules.DedicatedExitCode + ")");
+                Application.Quit(TickStallRules.DedicatedExitCode);
+            }
         }
 
         /// <summary>Spec 047, the host: removes a player from the shop (JoinAuthenticator.Kick).</summary>

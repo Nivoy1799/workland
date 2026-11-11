@@ -12,7 +12,7 @@ run it: docs/workflow.md, "Perf check".
 | Frame time p99, GC bytes per frame | no budget; only the regression rule | recorded so a slow or allocating change is caught |
 | Managed heap growth over the soak | at most 10 MB | the heap's floor (minimum of a window: the GC's saw-tooth removed), first vs last window after the warm-up |
 | Unity object count growth over the soak | at most 2 % | median of a window ("Object Count" profiler counter), first vs last window |
-| Regression | more than 10 % worse than the best passing run of the same scenario fails | with a noise floor: 0.25 ms (avg, p95), 0.5 ms (p99), 256 B/frame, 1 MB, 0.5 % |
+| Regression | frame avg, p95, p99 or GC per frame more than 10 % worse than ONE baseline row fails: the passing run of the same scenario with the lowest p95, not from a dirty tree or a stale build (heap and objects only have their bounds) | with a noise floor: 0.25 ms (avg, p95), 0.5 ms (p99), 256 B/frame; `perf-check.sh --self-test` checks the rule |
 
 The 16.7 ms and the memory bounds are the builder's reading of the spec ("60 fps", "no growth beyond a bound"); the reviewer or
 the human may set other numbers in `scripts/perf-check.sh` (the constants at the top of its verdict part).
@@ -31,34 +31,36 @@ on the same PC, so the host's frame times are pessimistic (16 game processes sha
 | Date | Commit | Build | Scenario | Frame avg ms | p95 ms | p99 ms | GC B/frame | Heap growth MB | Objects growth | Result |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 2026-11-11 07:21 | f795e0b+dirty | 7a49dcff | 15 bots, 15 min, 1920x1080 | 1.73 | 2.43 | 2.85 | 2025 | +0.6 | +0.0 % | PASS (crash PASS, watchdog PASS) |
+| 2026-11-11 07:59 | 44ea185 | 7a49dcff | 15 bots, 120 min, 1920x1080 | 1.68 | 2.22 | 2.65 | 1965 | -0.1 | +0.0 % | PASS: 2-hour soak (crash part skipped; run separately), 16 of 16 processes alive, 47.9 KB/s per client (worst second 51.9), tick p95 0.78 ms; added by hand as spec 049 AC3 evidence (.verify/perf/20261111-075937) |
+| 2026-11-11 10:07 | 7a78a00+dirty | 7a49dcff | 15 bots, 10 min, 1920x1080 | 1.55 | 1.98 | 2.36 | 1957 | +1.1 | +0.0 % | PASS (crash PASS, watchdog PASS) |
 <!-- perf-runs:end -->
 
 ## Stations
 
 <!-- perf-stations:start -->
-Latest run: 2026-11-11 07:21, commit f795e0b+dirty, 15 bots, 15 min, 1920x1080. Sorted by p95, the worst first.
+Latest run: 2026-11-11 10:07, commit 7a78a00+dirty, 15 bots, 10 min, 1920x1080. Sorted by p95, the worst first.
 
 | Station | Kind | Frames | Avg ms | p95 ms | p99 ms | Max ms | GC B/frame |
 |---|---|---|---|---|---|---|---|
-| Drinks | DrinkDispenser | 2613 | 2.30 | 3.05 | 3.64 | 5.82 | 2282 |
-| Spit | Spit | 2826 | 2.12 | 2.86 | 3.53 | 37.05 | 2462 |
-| Bin | Bin | 3494 | 1.72 | 2.42 | 2.93 | 4.81 | 1957 |
-| Orders | Terminal | 3353 | 1.79 | 2.40 | 2.69 | 3.79 | 1967 |
-| Fryer | Fryer | 3532 | 1.70 | 2.37 | 2.75 | 3.88 | 1916 |
-| Trash | TrashCan | 3525 | 1.70 | 2.37 | 2.80 | 5.32 | 1963 |
-| Sink | Sink | 3520 | 1.71 | 2.28 | 2.62 | 4.40 | 1952 |
-| Counter | Counter | 3398 | 1.77 | 2.28 | 2.84 | 4.92 | 2118 |
-| Plates | PlateShelf | 3438 | 1.75 | 2.28 | 2.75 | 4.22 | 2013 |
-| Dish return | DishReturn | 3604 | 1.67 | 2.27 | 2.69 | 4.13 | 1949 |
-| Griddle | Griddle | 3531 | 1.70 | 2.22 | 2.53 | 3.82 | 1953 |
-| Stove 2 | Stove | 3636 | 1.65 | 2.17 | 2.63 | 3.88 | 1898 |
-| Stove 1 | Stove | 3591 | 1.67 | 2.17 | 2.56 | 3.77 | 1911 |
-| Register | Register | 3751 | 1.60 | 2.15 | 2.79 | 3.35 | 2152 |
-| Dry shelf | Shelf | 3679 | 1.63 | 2.15 | 2.53 | 3.22 | 2035 |
-| Fridge | Fridge | 3690 | 1.63 | 2.12 | 2.50 | 3.74 | 2087 |
-| Assembly | Assembly | 3884 | 1.54 | 2.01 | 2.31 | 3.76 | 1959 |
+| Spit | Spit | 3585 | 1.67 | 2.16 | 2.56 | 4.08 | 2417 |
+| Fryer | Fryer | 3743 | 1.60 | 2.08 | 2.42 | 3.97 | 1862 |
+| Drinks | DrinkDispenser | 3619 | 1.66 | 2.08 | 2.44 | 3.56 | 1889 |
+| Counter | Counter | 3738 | 1.60 | 2.03 | 2.38 | 3.87 | 2041 |
+| Plates | PlateShelf | 3796 | 1.58 | 2.02 | 2.33 | 3.37 | 2197 |
+| Fridge | Fridge | 3803 | 1.58 | 2.02 | 2.36 | 3.75 | 2106 |
+| Griddle | Griddle | 3755 | 1.60 | 2.02 | 2.31 | 4.64 | 1926 |
+| Dish return | DishReturn | 3862 | 1.55 | 2.00 | 2.40 | 3.89 | 1921 |
+| Stove 1 | Stove | 3904 | 1.54 | 1.99 | 2.36 | 2.97 | 1864 |
+| Dry shelf | Shelf | 3890 | 1.54 | 1.99 | 2.36 | 2.85 | 2005 |
+| Sink | Sink | 3866 | 1.55 | 1.95 | 2.39 | 4.43 | 1894 |
+| Orders | Terminal | 4024 | 1.49 | 1.92 | 2.31 | 2.88 | 1805 |
+| Trash | TrashCan | 4024 | 1.49 | 1.90 | 2.23 | 3.95 | 1865 |
+| Stove 2 | Stove | 4007 | 1.50 | 1.90 | 2.28 | 4.38 | 1932 |
+| Bin | Bin | 4011 | 1.50 | 1.89 | 2.22 | 3.42 | 1711 |
+| Register | Register | 4112 | 1.46 | 1.86 | 2.24 | 3.21 | 1850 |
+| Assembly | Assembly | 4187 | 1.43 | 1.78 | 2.15 | 2.94 | 2031 |
 
-Soak: 909 samples with all players; heap floor and unity_objects median, first vs last 90 s after a 181 s warm-up; GC 2445 B/frame over the soak.
+Soak: 610 samples with all players; heap floor and unity_objects median, first vs last 61 s after a 122 s warm-up; GC 2259 B/frame over the soak.
 <!-- perf-stations:end -->
 
 ## Findings and plan

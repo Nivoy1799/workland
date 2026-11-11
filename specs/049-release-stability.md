@@ -19,7 +19,7 @@ builder: opus
 ## Acceptance criteria
 - [ ] AC1: `verify.sh`.
 - [ ] AC2: The profiling tour numbers in docs/performance.md, within budget or with a plan.
-- [ ] AC3: The soak test result.
+- [x] AC3: The soak test result. (2-hour soak 2026-11-11, `--soak-minutes 120 --skip-crash`: PASS, heap -0.1 MB, objects +0.0 %, 16 of 16 alive; row in docs/performance.md, run folder `.verify/perf/20261111-075937`.)
 - [ ] AC4: The crash log written on a forced exception (test).
 
 ## Repeatable, not one-off (the human, 2026-11-10: "will need to run multiple times, especially in late-game dev")
@@ -106,6 +106,25 @@ avg 1.73 ms, p95 2.43, p99 2.85 (budget 16.7: met by far); GC 2.0 KB/frame (2.5 
 +0.6 MB, objects +0.0 % (bounds 10 MB, 2 %): PASS; crash log and watchdog checks PASS. The 2-hour soak was started once and died
 at about 80 minutes of Git Bash fork failures (the shell's process table, with the builder's grep polling loops running beside 16
 game processes), not of the game; per the coordinator the default is now 15 minutes and the script forks no polling loops
-(`run_player` waits once, a watcher sleeps once). AC3's 2-hour soak is therefore still open (`--soak-minutes 120`).
+(`run_player` waits once, a watcher sleeps once). AC3's 2-hour soak then ran on 2026-11-11 (see AC3).
+
+**049 review fixes (part 1, C#).** `CloseSoon` runs each `StopConnection` through `Net/Rules/GuardedCall` (pure; a throw is
+logged, the next stop, `Flow.Fail` and the pump still run). A dedicated server (`-server`, or a server build's default) quits with
+exit 3 after the stall close (`TickStallRules.QuitsAfterStall`; not under `-stall-test`, whose runner owns the exit). Crash log:
+a session cap of 256 keys and 1000 entries (`CrashReport.WithinCap`), then one `CapText` line, the rest only counted in the closing
+line; the recorder scrubs message and stack (`CrashReport.Scrub`): the temp folder becomes `%TEMP%` (first, it sits inside the profile),
+the user profile `%USERPROFILE%`, either slash, any case, whole folder names only; this also covers the previous-session note's
+Crashes path. `UsesSavedSettings` also treats `-stall-test`, `-crash-test`, `-perf-tour` as scripted. The friends hint names the
+bound Players key (`MenuRules.NoFriendsHosting`). An unknown reason shows "Disconnected (reason n)" (`ConnectionMessages.Unknown`);
+ProtocolSurface's doc says enum values are not hashed. Tests: `Review049Tests` (11). verify.sh PASS (EditMode 1350, sim 400).
+
+**049 review fixes (part 2, perf-check.sh).** The regression baseline is ONE row (`baseline()`: the passing, non-partial run of the
+same scenario with the lowest p95, never `+dirty` or `(stale build)`); avg, p95, p99 and GC are compared with that row, heap and
+objects only with their bounds; `--self-test` checks the rule on made-up rows and prints each scenario's baseline from the doc. The
+watcher falls back to `kill -9` when the Windows pid is unknown (`kill_player`). The start refuses when port 7770 is in use
+(netstat: TCP LISTENING or a UDP socket; Tugboat is UDP). The stall test now runs `-stall-test 20` with one bot, which must log the
+HostStalled notice (no polling loops: start, one wait, then the bot is killed). The 2-hour soak row was added by hand (AC3).
+Quick run 2026-11-11 10:07 on fresh builds: PASS (crash, watchdog with the bot's notice, 16 of 16 alive); visual check
+`.verify/visual049b` PASS.
 
 **Checks.** Visual check `--tours look,cook,tutorial,menu --out .verify/visual049` on fresh builds: PASS, 0 Exception lines in every log, no tick stall; `verify.sh` PASS (EditMode 1339, was 1322; sim 400).

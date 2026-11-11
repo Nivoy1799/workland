@@ -8,6 +8,8 @@ namespace Worktown.Game.Diagnostics
     /// Spec 049: turns exceptions from any thread into crash log entries (CrashReport.Entry) and hands them to a sink. Thread-safe:
     /// CrashLog calls it from Unity's threaded log callback, the AppDomain's unhandled-exception event (any thread, also a dying one) and
     /// the unobserved-task event. The clock is injected (the tests), the build hash can arrive later (it is computed after start).
+    /// 049 review: the session cap (CrashReport.WithinCap: one cap line, then only counted) and the scrub of the player's folders
+    /// (<see cref="SetPrivateFolders"/>, CrashReport.Scrub) on every message and stack before it reaches the sink.
     /// </summary>
     public sealed class CrashRecorder
     {
@@ -23,6 +25,10 @@ namespace Worktown.Game.Diagnostics
         private readonly Dictionary<string, int> _seen = new Dictionary<string, int>();
         private readonly object _lock = new object();
         private int _written;
+        private bool _capped;
+        private int _afterCap;
+        private string _userProfile = string.Empty;
+        private string _tempPath = string.Empty;
 
         public CrashRecorder(ICrashSink sink, string version, string buildHash, int mainThreadId, Func<DateTime> utcNow)
         {
@@ -36,8 +42,23 @@ namespace Worktown.Game.Diagnostics
         public string Version { get; }
         /// <summary>The spec 047 build hash (set once known).</summary>
         public string BuildHash { get; set; }
-        /// <summary>Entries handed to the sink this session.</summary>
+        /// <summary>Entries handed to the sink this session (the cap line not counted).</summary>
         public int Written => _written;
+        /// <summary>The session cap was reached (CrashReport.MaxEntries or MaxKeys): the cap line was written, nothing after it.</summary>
+        public bool Capped => _capped;
+
+        /// <summary>
+        /// The player's own folders (the user profile, the temp folder), written as %USERPROFILE% and %TEMP%. Set once, before the
+        /// first entry (CrashLog's install); empty = no scrub.
+        /// </summary>
+        public void SetPrivateFolders(string userProfile, string tempPath)
+        {
+            lock (_lock)
+            {
+                _userProfile = userProfile ?? string.Empty;
+                _tempPath = tempPath ?? string.Empty;
+            }
+        }
 
         /// <summary>An exception object on the calling thread (unhandled, or from a task).</summary>
         public void RecordException(string kind, object exceptionObject)
@@ -63,7 +84,7 @@ namespace Worktown.Game.Diagnostics
         public void CloseSession()
         {
             string text;
-            lock (_lock) text = CrashReport.SuppressedText(_seen);
+            lock (_lock) text = CrashReport.SuppressedText(_seen, _afterCap);
             if (text.Length > 0) _sink?.Write(text);
         }
 
@@ -71,15 +92,40 @@ namespace Worktown.Game.Diagnostics
         {
             try
             {
+                string profile, temp;
+                bool capLine = false;
                 lock (_lock)
                 {
-                    if (!CrashReport.Admit(_seen, CrashReport.Key(kind, message, stack))) return;
-                    _written++;
+                    if (_capped)
+                    {
+                        _afterCap++;
+                        return;
+                    }
+                    string key = CrashReport.Key(kind, message, stack);
+                    if (!CrashReport.WithinCap(_seen, key, _written))
+                    {
+                        _capped = true;
+                        _afterCap++;
+                        capLine = true;
+                    }
+                    else
+                    {
+                        if (!CrashReport.Admit(_seen, key)) return;
+                        _written++;
+                    }
+                    profile = _userProfile;
+                    temp = _tempPath;
+                }
+                if (capLine)
+                {
+                    _sink?.Write(CrashReport.CapText);
+                    return;
                 }
                 Thread t = Thread.CurrentThread;
                 string thread = CrashReport.ThreadText(t.ManagedThreadId == _mainThreadId, t.ManagedThreadId, t.Name, t.IsThreadPoolThread,
                     t.IsBackground);
-                _sink?.Write(CrashReport.Entry(_utcNow(), Version, BuildHash, kind, thread, message, stack));
+                _sink?.Write(CrashReport.Entry(_utcNow(), Version, BuildHash, kind, thread, CrashReport.Scrub(message, profile, temp),
+                    CrashReport.Scrub(stack, profile, temp)));
             }
             catch (Exception)
             {

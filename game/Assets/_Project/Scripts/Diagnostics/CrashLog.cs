@@ -43,6 +43,9 @@ namespace Worktown.Game.Diagnostics
             FilePath = args.CrashLogPath.Length > 0 ? Path.GetFullPath(args.CrashLogPath) : Path.Combine(dataDir, CrashReport.DefaultFileName);
             var sink = new CrashFileSink(FilePath);
             _recorder = new CrashRecorder(sink, Application.version, string.Empty, Thread.CurrentThread.ManagedThreadId, () => DateTime.UtcNow);
+            // 049 review: no account name in the log (stacks, the data folder, the previous-session note's Crashes folder in temp).
+            _recorder.SetPrivateFolders(SafeFolder(() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
+                SafeFolder(Path.GetTempPath));
             Application.logMessageReceivedThreaded += OnLog;
             AppDomain.CurrentDomain.UnhandledException += OnUnhandled;
             TaskScheduler.UnobservedTaskException += OnUnobservedTask;
@@ -61,6 +64,19 @@ namespace Worktown.Game.Diagnostics
 #endif
         }
 
+        private static string SafeFolder(Func<string> folder)
+        {
+            try
+            {
+                return folder() ?? string.Empty;
+            }
+            catch (Exception)
+            {
+                return string.Empty; // no such folder on this platform: nothing to scrub
+            }
+        }
+
+        // The previous-session note names Unity's Crashes folder under the temp path; the recorder writes it as %TEMP% (Scrub).
         private static void CheckPreviousSession(string dataDir)
         {
             try

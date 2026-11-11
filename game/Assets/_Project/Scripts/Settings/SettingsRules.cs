@@ -31,11 +31,13 @@ namespace Worktown.Game.Settings
         /// <c>-metrics</c>: the load test and spec 049's perf check) neither reads nor writes the player's saved settings. It runs on the
         /// defaults, so its pictures and numbers never depend on this PC's settings, and anything it changes stays in memory.
         /// 048 review: from the parsed command line (Net.Rules.LaunchArgs), not a second parse; null = a normal start.
+        /// 049 review: spec 049's own runs are scripted too (<c>-stall-test</c>, <c>-crash-test</c>, <c>-perf-tour</c>).
         /// </summary>
         public static bool UsesSavedSettings(Net.Rules.LaunchArgs args)
         {
             if (args == null) return true;
-            return args.Tour.Length == 0 && args.Observe.Length == 0 && !args.IsBot && args.MetricsPath.Length == 0;
+            return args.Tour.Length == 0 && args.Observe.Length == 0 && !args.IsBot && args.MetricsPath.Length == 0
+                && args.StallTestSeconds <= 0 && !args.CrashTest && args.PerfTourPath.Length == 0;
         }
 
         /// <summary>Application.targetFrameRate for a cap (-1, the platform's own, for no cap).</summary>

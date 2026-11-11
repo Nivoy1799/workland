@@ -87,7 +87,8 @@ assembly only exists in the editor and development builds.
 with 15 bots in the restaurant, 1920x1080) and a soak (memory and object counts; 15 minutes by default,
 `--soak-minutes 120` for the spec's 2 hours, before a release). It appends a dated row to
 `docs/performance.md`, replaces the per-station table there, and exits 1 when the budget (60 fps: frame avg and p95 at most
-16.7 ms), a memory bound or the best passing run of the same scenario (more than 10 % worse) is broken.
+16.7 ms), a memory bound or the baseline (one row: the clean passing run of the same scenario with the lowest p95; more than
+10 % worse) is broken.
 - **When:** at least once per merged milestone, and for big specs the orchestrator adds it to the pipeline after the
   visual check (never at the same time as a visual check or a load test: they share port 7770; the script refuses then).
   Commit the new row with the merge (`docs: perf check [spec NNN]`).

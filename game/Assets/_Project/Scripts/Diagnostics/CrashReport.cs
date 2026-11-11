@@ -10,7 +10,9 @@ namespace Worktown.Game.Diagnostics
     /// (version and the spec 047 build hash), the kind (an unhandled exception on any thread, an exception Unity logged, an unobserved
     /// task, a host tick stall), the thread, the message and the whole stack. The same exception repeating is written
     /// <see cref="MaxRepeats"/> times, then only counted (<see cref="Admit"/>), so a per-frame exception cannot fill the disk; the file
-    /// starts over above <see cref="MaxBytes"/> (the old one is kept once as <c>.old</c>).
+    /// starts over above <see cref="MaxBytes"/> (the old one is kept once as <c>.old</c>). 049 review: a session writes at most
+    /// <see cref="MaxEntries"/> entries and <see cref="MaxKeys"/> different exceptions, then one <see cref="CapText"/> line and nothing
+    /// more (<see cref="WithinCap"/>); the player's own folders are written as <c>%TEMP%</c> and <c>%USERPROFILE%</c> (<see cref="Scrub"/>).
     /// </summary>
     public static class CrashReport
     {
@@ -19,6 +21,14 @@ namespace Worktown.Game.Diagnostics
         public const long MaxBytes = 2L * 1024 * 1024;
         /// <summary>The same exception (kind, message, first stack line) is written this often per session.</summary>
         public const int MaxRepeats = 5;
+        /// <summary>049 review: at most this many different exceptions (keys) per session.</summary>
+        public const int MaxKeys = 256;
+        /// <summary>049 review: at most this many entries per session.</summary>
+        public const int MaxEntries = 1000;
+        /// <summary>049 review: the one line written when the session's cap is reached; nothing is written after it.</summary>
+        public const string CapText = "(the crash log cap of this session was reached: further entries suppressed)\n\n";
+        public const string UserProfileToken = "%USERPROFILE%";
+        public const string TempToken = "%TEMP%";
         public const string EntryStart = "=== Worktown crash log entry ===";
 
         /// <summary>
@@ -82,14 +92,83 @@ namespace Worktown.Game.Diagnostics
             return count < MaxRepeats;
         }
 
-        /// <summary>The closing line of a session: how many repeats were only counted (empty when none).</summary>
-        public static string SuppressedText(Dictionary<string, int> seen)
+        /// <summary>
+        /// 049 review, the session cap: false once <paramref name="written"/> entries reached <see cref="MaxEntries"/>, or when
+        /// <paramref name="key"/> is new while <see cref="MaxKeys"/> keys are already in <paramref name="seen"/>. Changes nothing: the
+        /// caller asks this before <see cref="Admit"/> (which then never grows <paramref name="seen"/> past the cap).
+        /// </summary>
+        public static bool WithinCap(Dictionary<string, int> seen, string key, int written)
         {
-            if (seen == null) return string.Empty;
-            int extra = 0;
-            foreach (int count in seen.Values) if (count > MaxRepeats) extra += count - MaxRepeats;
-            return extra > 0 ? "(" + extra + " repeats of logged exceptions were counted, not written)\n\n" : string.Empty;
+            if (written >= MaxEntries) return false;
+            if (seen == null) return true;
+            return seen.Count < MaxKeys || seen.ContainsKey(key ?? string.Empty);
         }
+
+        /// <summary>The closing line of a session: how many repeats were only counted (empty when none).</summary>
+        public static string SuppressedText(Dictionary<string, int> seen) => SuppressedText(seen, 0);
+
+        /// <summary>
+        /// The closing line of a session: how many repeats were only counted and how many entries came after the cap (empty when
+        /// none).
+        /// </summary>
+        public static string SuppressedText(Dictionary<string, int> seen, int afterCap)
+        {
+            int extra = 0;
+            if (seen != null)
+                foreach (int count in seen.Values) if (count > MaxRepeats) extra += count - MaxRepeats;
+            if (extra == 0 && afterCap <= 0) return string.Empty;
+            var sb = new StringBuilder(112);
+            sb.Append('(');
+            if (extra > 0) sb.Append(extra).Append(" repeats of logged exceptions were counted, not written");
+            if (afterCap > 0) sb.Append(extra > 0 ? "; " : string.Empty).Append(afterCap).Append(" entries came after the cap, not written");
+            sb.Append(")\n\n");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 049 review: <paramref name="text"/> with the player's own folders replaced, so a crash log names no account: the temp folder
+        /// by <see cref="TempToken"/> (first: it is usually inside the profile, and may be in its short 8.3 form), then the user profile
+        /// by <see cref="UserProfileToken"/>. Either slash and any case match, only as a whole folder name (a profile "C:\Users\jo"
+        /// leaves "C:\Users\joan" alone). Empty folders and folders shorter than 3 characters (a root) are skipped; null gives "".
+        /// </summary>
+        public static string Scrub(string text, string userProfile, string tempPath)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            text = ReplaceFolder(text, tempPath, TempToken);
+            return ReplaceFolder(text, userProfile, UserProfileToken);
+        }
+
+        private static string ReplaceFolder(string text, string folder, string token)
+        {
+            if (string.IsNullOrWhiteSpace(folder)) return text;
+            string trimmed = folder.Trim().TrimEnd('\\', '/');
+            if (trimmed.Length < 3) return text;
+            text = ReplaceWhole(text, trimmed.Replace('/', '\\'), token);
+            return ReplaceWhole(text, trimmed.Replace('\\', '/'), token);
+        }
+
+        private static string ReplaceWhole(string text, string folder, string token)
+        {
+            int at = text.IndexOf(folder, StringComparison.OrdinalIgnoreCase);
+            if (at < 0) return text;
+            var sb = new StringBuilder(text.Length);
+            int from = 0;
+            while (at >= 0)
+            {
+                int end = at + folder.Length;
+                bool whole = end >= text.Length || !ContinuesName(text[end]);
+                sb.Append(text, from, at - from);
+                if (whole) sb.Append(token);
+                else sb.Append(text, at, folder.Length);
+                from = end;
+                at = text.IndexOf(folder, from, StringComparison.OrdinalIgnoreCase);
+            }
+            sb.Append(text, from, text.Length - from);
+            return sb.ToString();
+        }
+
+        /// <summary>A character that would make the match only the start of a longer folder name.</summary>
+        private static bool ContinuesName(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '~';
 
         /// <summary>A file of <paramref name="size"/> bytes starts over before the next entry.</summary>
         public static bool NeedsRotation(long size) => size >= MaxBytes;
