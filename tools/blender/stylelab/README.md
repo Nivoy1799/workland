@@ -35,6 +35,9 @@ Round 3 (lived-in pass, the climb) the same way with `render_round3.py`. File na
 Round 4 (vibe frames with ink outlines) with `render_round4.py`; `--only morning,guest` picks frames, `--no-ink`
 renders without outlines. Several frames run in separate Blender processes.
 
+Round 5 (the town in 2222) with `render_round5.py` and round 6 (the whole town plan, its edges, weather and light,
+spec 051) with `render_round6.py`, same options as round 4.
+
 ## Layout
 
 | File | What it holds |
@@ -55,6 +58,10 @@ renders without outlines. Several frames run in separate Blender processes.
 | `lab/scene3.py` | round 3 shots: grit levels, mid-rush kitchen, the climb, lived-in street |
 | `lab/concept.py` | round 4 concept kit: robots, dining, crowd, animals, town blocks, dome, monorail |
 | `lab/scene4.py` | round 4 vibe frames and the ink-outline look |
+| `lab/future.py` | round 5 kit: towers, sky bridges, hover cars, drones, airship, garden street pieces |
+| `lab/scene5.py` | round 5 frames: skyline street (sunset, night), garden promenade, roof drone pad, aerial |
+| `lab/world.py` | round 6 kit: low-poly terrain, the Wreck, the old highway, Wildbelt hedge and gate, cows, pigs, deer, ranger robot, lookout, lighthouse, pier, buoys, lifeguard drone, ferry, rain, lightning, clouds, umbrellas |
+| `lab/scene6.py` | round 6 frames: the town model (plan of spec 051 in 3D), the Wreck, the Wildbelt, storm, lake fog |
 | `lab/post.py` | greyscale, colour-blind simulation (Machado 2009), pixel compare |
 
 ## Rules the scripts keep

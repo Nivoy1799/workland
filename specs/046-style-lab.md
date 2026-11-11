@@ -199,6 +199,13 @@ airship; a car-free garden promenade with beds, trees, a fountain and café tabl
 at the foot of the towers. Frames: the street with the skyline (sunset and night), the garden promenade (morning),
 the restaurant's rooftop drone pad (day), the town from above (sunset). Output `docs/art/stylelab/round-5/`.
 
+## Round 6: the whole town (human, 2026-11-11: "start designing the full town placements ... how big ... where the map
+ends ... a natural way like a crashed plane ... the map is flat, does not look natural ... add weather, dynamic
+lighting")
+The design itself is spec 051 (draft). This round only draws it: the plan map (SVG on the page), the town model in
+the Town Hall (the plan in 3D), the west edge (the Wreck), the south edge (the Wildbelt), the east edge in morning
+fog, and Main Street in a thunderstorm. Output `docs/art/stylelab/round-6/`.
+
 ## Open questions
 0. **Real-world cultures in the town?** So far the world has only its own fictional history (D27, D28). Can a
    business be "Mexican-inspired" or "Japanese-inspired", or do we invent fictional regional cuisines that echo real
@@ -291,6 +298,16 @@ Round 5 (2026-11-11, Opus):
 - Fix: in round 4 the dining chairs faced away from the tables (a chair's yaw must equal its guest's yaw);
   `vibe_guest.jpg` re-rendered.
 - The aerial frame is the weakest: the kit reads like a model railway from above.
+
+Round 6 (2026-11-11, Opus):
+- Plan: `specs/051-town-layout.md` (draft, open questions for the human). Page:
+  https://claude.ai/artifact/2e2gPzEnZGef63NN6WxXjN (source
+  `docs/art/stylelab/round-6/compare.html`), with the plan map drawn to scale as inline SVG.
+- `lab/world.py` and `lab/scene6.py`; five frames by `tools/blender/stylelab/render_round6.py`. The town model uses
+  the same coordinates as spec 051 and the plan map, built at 1:1 and scaled 1:100 onto the table.
+- Storm uses EEVEE screen-space reflections for the wet street (the other frames keep them off). Fog and storm fade
+  the ink outlines with distance.
+- Weak spots: the Wreck's rust panels stand off the hull; the north edge has no picture yet.
 
 ## Blockers
 (none)
