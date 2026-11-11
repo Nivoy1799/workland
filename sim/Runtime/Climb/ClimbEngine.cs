@@ -48,8 +48,7 @@ namespace Worktown.Sim.Climb
             {
                 var step = RunService(state, setup);
                 state = step.State;
-                ServiceResult r = step.Result;
-                results.Add(r);
+                results.Add(step.Result);
             }
             return new ClimbRun(setup, horizonSeconds, results, state);
         }

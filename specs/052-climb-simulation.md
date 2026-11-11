@@ -193,32 +193,32 @@ capacity (mistakes at their mean rate) serves at least 900‰ of the guests who 
   1 bad arguments.
 
 ## Acceptance criteria
-- [ ] AC1: `bash scripts/verify.sh` passes (sim tests, no UnityEngine); `git diff --stat main -- sim/Runtime/Cooking
+- [x] AC1: `bash scripts/verify.sh` passes (sim tests, no UnityEngine); `git diff --stat main -- sim/Runtime/Cooking
       sim/Runtime/Core sim/Runtime/Economy` is empty.
-- [ ] AC2: Determinism: the same `CrewSetup` twice gives equal `ClimbRun` digests and an identical report string;
+- [x] AC2: Determinism: the same `CrewSetup` twice gives equal `ClimbRun` digests and an identical report string;
       seeds 1 and 2 give different digests. `grep -rnE "DateTime|Stopwatch|TickCount|System.Random" sim/Runtime/Climb`
       finds nothing.
-- [ ] AC3: Guest choice: two equal shops and no outside option split 10,000 guests within 50 % +- 3 %; higher quality,
+- [x] AC3: Guest choice: two equal shops and no outside option split 10,000 guests within 50 % +- 3 %; higher quality,
       higher reputation, lower price or shorter wait each raise the share; attraction is never below `Min`; guests
       per channel never exceed the ceiling with all bonuses.
-- [ ] AC4: Demand ceiling: at stage 1, 16 average players earn at most 1.15 x the median net income per service of 4.
-- [ ] AC5: Capacity: players beyond the work spots add exactly `OverflowPermille`; a solo novice serves fewer guests
+- [x] AC4: Demand ceiling: at stage 1, 16 average players earn at most 1.15 x the median net income per service of 4.
+- [x] AC5: Capacity: players beyond the work spots add exactly `OverflowPermille`; a solo novice serves fewer guests
       than a solo expert; a mistake costs actions and ingredients twice.
-- [ ] AC6: Floors: a state forced to -$100 buys nothing until its balance is >= 0; the stage never decreases;
+- [x] AC6: Floors: a state forced to -$100 buys nothing until its balance is >= 0; the stage never decreases;
       reputation never goes below the stage floor.
-- [ ] AC7: Rivals: three services ahead trigger exactly one reaction; cuts and quality steps never exceed their
+- [x] AC7: Rivals: three services ahead trigger exactly one reaction; cuts and quality steps never exceed their
       maximums; the undo rule works.
-- [ ] AC8: Each `PricePolicy` and `SpendPolicy` decision is tested on a hand-built state; Builder buys the gate only
+- [x] AC8: Each `PricePolicy` and `SpendPolicy` decision is tested on a hand-built state; Builder buys the gate only
       when no Productive item of the stage is unowned.
-- [ ] AC9: Catalog validation: duplicate id, bad id, missing reference, stage 1 with 2 dishes, a name with a D27
+- [x] AC9: Catalog validation: duplicate id, bad id, missing reference, stage 1 with 2 dishes, a name with a D27
       forbidden word, and `ReferencePrice <= IngredientCost` each throw; `CreateDefault()` does not.
-- [ ] AC10: Each target T1-T8 has a passing and a failing test on hand-built `ClimbRun` data.
-- [ ] AC11: `bash scripts/climb-report.sh --players 1,4,16 --seeds 5` prints one section per player count, all target
+- [x] AC10: Each target T1-T8 has a passing and a failing test on hand-built `ClimbRun` data.
+- [x] AC11: `bash scripts/climb-report.sh --players 1,4,16 --seeds 5` prints one section per player count, all target
       lines and the RESULT line, in under 60 s, exit 0 or 2.
-- [ ] AC12 (tuning): the default catalog passes T1-T8 for 1, 4 and 16 players (exit 0). Tuning only changes numbers
+- [ ] AC12 (tuning) **FAILED after 3 rounds, see Blockers (allowed outcome):** the default catalog passes T1-T8 for 1, 4 and 16 players (exit 0). Tuning only changes numbers
       in `ClimbCatalog.CreateDefault()`, each change logged in Implementation notes. If a target still fails after 3
       tuning rounds, stop: that is a design finding. Write the failing lines and your best guess under Blockers.
-- [ ] AC13: Every public method in `sim/Runtime/Climb` has at least one test; the Climb tests add < 15 s to
+- [x] AC13: Every public method in `sim/Runtime/Climb` has at least one test; the Climb tests add < 15 s to
       `dotnet test`.
 
 ## Test plan
@@ -297,10 +297,15 @@ Tuning stopped after 3 rounds (AC12). Design findings, for the human:
 1. **Solo (question 3).** `FAIL T1 1p average S3 DNF`, plus T3, T4, T6, T7, T8 for 1p. Without solo scaling a solo is
    capacity-bound from S2: about 156 actions a service against about 40 guests who choose it. It misses about 47%, and
    missed guests pull stars to 2.8, below the 3.5 gate. No single demand ceiling fits both 1 player and 4-16 players
-   inside the T1 bands. Best guess: solo scaling (fewer guests and more patience for small crews) is needed, i.e.
-   question 3 = on.
-2. **Price policy is a shortcut (T4).** `FAIL T4 4p average fastest balanced+plus1 15.4 h >= 0.85 x median 20.0 h`
-   (same for 4p/16p expert, 16p average, 4p novice). The price term scales with the offset as a share of the menu's
+   inside the T1 bands. Review (2026-11-11): the menu model makes it worse. With fries only a solo holds 3.5-3.9
+   stars and would pa2. **Price shortcut (T4): a symptom of finding 4, not of price units.** `FAIL T4 4p average fastest balanced+plus1
+   15.4 h >= 0.85 x median 20.0 h`. Review (2026-11-11): Plus1 is not faster in S2-S4 (16p average reaches S4 at 8.8 h
+   with Match, 8.3 h with Plus1); the whole gain is inside S4 (10.0 h with Match, 2.4 h with Plus1). A higher price
+   turns guests away, lowers `LastDemandActions` and passes the few-players check of the S4 gate sooner. For experts
+   Plus1 is only 12 % faster. T4 also compares with the median of all finishing strategies, which the weak Minus1,
+   Plus2 and Undercut strategies pull up. Best guess: fix the S4 gate (finding 4); then re-check T4, maybe against
+   Match instead of the median.
+e term scales with the offset as a share of the menu's
    average reference price. +$1 is 25% on fries ($4) in S1-S2 but about 11% on the S3+ menu, so no one weight keeps
    Match best in every stage. Best guess: price units relative to each dish (e.g. Plus1 = +10%), or a weight per
    stage.
@@ -308,7 +313,7 @@ Tuning stopped after 3 rounds (AC12). Design findings, for the human:
    buy every finite item by about 25 h, and the big-job deposits ($600-1000) stay under 3x their income. 4p novices
    are also idle in S4 (833): everything is bought while the few-players check still fails. Best guess: repeatable
    sinks that scale with income (a bigger place to rent, stakes that grow) and an S4 gate with a money part.
-4. **The S4 gate punishes channels.** The few-players check grows with every channel bought in S3, while staff
+4. **The S4 gate punishes channels (and causes finding 2).** The few-players check grows with every channel bought in S3, while staff
    capacity is fixed. Builder and Rush (more channels) finish S4 later or not at all, and Balanced gets S4 almost
    free. R3 fixed the length only with a 20-service star window. Best guess: a gate purchase for S4 (data
    structure, not a number, so out of tuning scope).

@@ -54,7 +54,7 @@ namespace Worktown.ClimbReport
             catch (Exception e) when (e is ArgumentException || e is FormatException || e is OverflowException)
             {
                 Console.Error.WriteLine("climb-report: " + e.Message);
-                Console.Error.WriteLine("usage: climb-report [--players 1,4,16] [--profiles novice,average,expert] [--seeds 5] [--hours 40] [--service-seconds 360] [--between-seconds 60] [--out file] [--trace players,profile,strategy,seed]");
+                Console.Error.WriteLine("usage: climb-report [--players 1,4,16] [--profiles novice,average,expert] [--seeds 5] [--hours 40] [--service-seconds 360] [--between-seconds 60] [--out file] [--trace players,profile,strategy,seed]  (--trace prints one run and always exits 0)");
                 return 1;
             }
 
