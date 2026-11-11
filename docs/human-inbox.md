@@ -70,13 +70,25 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-24. **How long stage 1 takes (spec 053, merged).** The rent goal is $34,500. Measured in the game:
-    - **One cook** serves a guest about every 82 s and needs about 16 services, roughly 1.7 h. That is a bit over the
-      0.75-1.5 h target.
-    - **A crew of 2 or more** is capped by the potato slot: 12 fries per service. They reach the goal in about 5 services,
-      roughly 0.5 h, which is too fast.
-    Default: fold this into spec 052b (question 22). Scale the goal and the delivery by crew size, the same way as the
-    solo scaling.
+27. **Spec 037 asked for "rating unlocks more menu items over the days"**, but D34 and D37 start the food corner with
+    exactly one dish. Default: no rating unlocks in the corner; new dishes come with stage 2 (spec 057, 4 dishes) and
+    later stages.
+24. **Crew size: more players should not make the climb much faster (your idea, my proposal).**
+    You said: with more players it is easier to make money, and the work should grow in step with the players.
+    Proposal: **"the crew factor"**, which goes into 052b, being built now:
+    - **Prices stay real.** Fries cost $4.00 no matter who is playing. Lowering the pay per guest when friends join
+      would feel bad: "my fries are worth less because Mira joined", and the board price would not match what is paid.
+    - **More players bring more guests.** Demand grows with the crew (factor about n^0.9: 1, 1.9, 3.5, 6.5, 12 for 1, 2,
+      4, 8, 16 players), so there is always work for everyone.
+    - **Goals and big one-time purchases grow with the crew too** (about n^0.85: 1, 1.8, 3.3, 5.9, 10.6). Rent goals, the
+      next place and automation all count. Stock and ingredients do not, because the crew uses more of them anyway.
+    - **The result:** a stage takes about the same time for 1 or 16 players. A big crew is about 15 % faster, a small
+      bonus for playing together.
+    - **Joining and leaving is fair.** Progress is stored as a percentage of the goal, and each service adds
+      "earned / goal for this crew". A friend who joins changes only the services after that, never past progress, and
+      nobody is punished for leaving.
+    - **The crew counts** at service start (the default from 052b).
+    Default: yes. 052b keeps all scaling in one place so the curve can be tuned.
 22. **What the climb simulation found (spec 052, merged).** With 4 and 16 players the climb works: stage 5 after about
     19-20 h, inside the targets. Stage 1 to 2 takes about 1.2 h for every crew size. Four design problems remain:
     1. **A solo player gets stuck in stage 2.** One person cannot serve the guests of a full menu: about 156 actions a
