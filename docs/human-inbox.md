@@ -196,13 +196,6 @@ every question has a default, and work continues on other items until you answer
    style, our palette and the same bevels everywhere, which is exactly what spec 040 needs. Install it yourself
    (Claude does not install software): `winget install BlenderFoundation.Blender` (or blender.org, version 4.x LTS),
    then write "Blender installed" here. **Until then:** 040 runs last and uses code-built stand-ins; no downloads.
-8. **Crash on quit (Direct3D 12).** After the visual-check tours finish, the game sometimes crashes while shutting
-   down (4 of 6 runs): an access violation inside Windows' `D3D12Core.dll`, after networking has stopped; no game code
-   on the stack. An older dump from 11-07 shows a different shutdown crash. Players would see "Worktown has stopped"
-   when quitting. Claude switched the visual-check tours to Direct3D 11 so checks stay reliable. Option A: Claude
-   investigates in a small spec (driver update check, PSO cache, Unity graphics settings, try D3D11 as default).
-   Option B: ignore until real players report it. **Default: A**, after the cooking roadmap. Do you also see it when
-   you quit the game?
 7. **Price scale.** Bills now come from the economy's market values: a wrap costs about **$1,525**, ingredients
    $45–110 each, the player starts with $500, and a cash guest hands over a $1,900 note. That reads like a luxury
    restaurant, not street food. Option A: rescale the whole economy to street-food money (wrap about $9, fries $4,
@@ -244,6 +237,19 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11, question 8/24 (crash on quit):** you also see crashes (FindTheNeedle too) and suspect the Intel
+  13th/14th gen bug. Claude checked this PC (read-only): i7-13700K (affected family), MSI MPG Z690 FORCE WIFI with
+  BIOS A.K0 (2024-10-01), microcode **0x12B** (not the newest 0x12F), RAM 2x32 GB DDR5 at **6600 (XMP)**, above
+  Intel's spec for this CPU. Windows logs: 54 unexpected shutdowns since 2025-03 (8 between 10-29 and 11-10), six
+  different bluescreen codes (0xD1, 0x139, 0x13A, 0x1E, 0x1A, 0x3B), no WHEA entries; access-violation crashes in
+  three programs at changing addresses (FindTheNeedle 4x, Kebab Chefs 3x, Worktown). That spread is the typical
+  fingerprint of unstable hardware (CPU degradation or the RAM overclock), not of one program. Exception: the 4
+  Worktown D3D12 quit crashes hit the *same* address every time, which looks like a real software bug; D3D11 stays the
+  Windows default. Your steps (Claude does not touch BIOS or system settings): 1. update to MSI's newest BIOS for
+  MS-7D30 (check the notes for microcode 0x12F), load defaults, pick the "Intel Default Settings" power profile;
+  2. turn XMP off (or set 5600) for a week; 3. if the PC still crashes on stock settings, the CPU is likely degraded:
+  Intel's extended warranty (5 years for boxed 13th/14th gen) covers a replacement. If crashes stop only with XMP off,
+  the RAM speed was the cause.
 - **2026-11-11, question 19 (colour-blind ring colours):** "just do it, not important right now". The default stands: the 4
   Okabe-Ito colours form a separate accessibility set. Visual polish waits for the art direction from your Blender
   session.
