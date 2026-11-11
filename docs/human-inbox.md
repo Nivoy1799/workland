@@ -9,7 +9,8 @@ every question has a default, and work continues on other items until you answer
   play-test: can you fill a drink while doing something else?), 043 (perfect means best, names like "golden fries"
   match the ring, one pace table; pan and pot now twice as fast).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 044 (feel polish 3) is being built, then 037, 045. After that: 047, 048, 049, 006.
+- **Next:** 044 (feel polish 3) is in review, 045 (stability, 16-player load test) is being built. 037 waits for
+  question 17. After that: 047, 048, 049, 006.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
@@ -59,6 +60,12 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+17. **Spec 037 (street-food prices) conflicts with D23 "whole dollars only, no cents".** 037 wants cents (a wrap $9.50,
+    an ingredient $0.30, coins 0.10-2). I did not build it, because D23 is your decision. Options:
+    - **A (default once you answer, recommended): cents.** D23 becomes "dollars with cents; integer cents inside".
+    - **B: whole dollars.** A wrap is $9, an ingredient $1 or $2, coins $1 and $2, notes $5, $10 and $20. Small ingredients
+      are bundled. Simpler change, coarser prices.
+    Meanwhile the queue goes on with 045, then 047, 048 and 049. 037 waits for your answer.
 16. **Cooking tuning after spec 043 (defaults are in; change any number you like).**
     - **Good versus Perfect:** Good rates 0.9 of Perfect. Default: keep 0.9.
     - **Just burnt still rates well:** for about 2 s past the window, food still rates about 0.95 and still counts as an exact
