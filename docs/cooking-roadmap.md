@@ -213,3 +213,6 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
 - Follow-up round 2026-11-11 (042, 043, 048; approved with nits): ScrollOverflow should be dev-only; the menu tour's
   720p scroll check passes trivially at other sizes and has no slack; the Esc re-lock order is argued, not tested; the
   cook tour calls the station key directly, not through GameInput.
+- 053/054 (merged 2026-11-11): the shop ledger shows a negative balance as $0 (display only); remote jitter p95 0.42
+  stays over the 0.15 guard in every variant (likely the bots' uneven motion); the closed-station covers look rough;
+  stage 1 pace depends on the potato slot for crews (question 24).

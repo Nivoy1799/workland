@@ -19,7 +19,8 @@ every question has a default, and work continues on other items until you answer
   the session. For the real Steam app id, upload game/Steam/rich_presence_localization.vdf in Steamworks.
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
 - **Run 3 (from 2026-11-11 afternoon):** merged: 052 climb simulation (findings in question 22) and the 041/042/044
-  follow-ups. Building: 054 network headroom, then 053 food corner with the save file. 037 still waits for question 17; 040 is with your second session.
+  follow-ups, 054 network headroom (about 3 KB/s per player, players pass through each other) and 053 food corner with
+  the host save file and Continue. **Please try:** New shop on the title screen, play a service, quit, Continue. 037 still waits for question 17; 040 is with your second session.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
@@ -69,18 +70,13 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-23. **Should players walk through each other? (spec 054, built, not merged yet)** Network traffic fell from about
-    44 KB/s to about 3 KB/s per player: other players are now sent 15 times a second instead of re-simulated. But
-    when you bump into another player, your own character is now pulled back about 224 times a minute, typically by
-    16-64 cm and up to 1.3 m. That is visible rubber-banding. Your game draws the others 133 ms late, while the server
-    collides you with where they really are.
-    - **A (default, recommended): players pass through each other.** 0 corrections in the 16-player test, traffic still
-      about 3 KB/s. Walls, stations and guests still block you. Many co-op kitchen games do this, and it also stops
-      players from blocking the aisle.
-    - **B: players block each other.** That needs a new design that rewinds the other players during the prediction
-      replay. It is bigger work, and until then 054 stays unmerged.
-    Try it yourself in a dev build with `-player-collision off` (pass-through) or `on`. If you don't answer, A
-    becomes the default when 054 merges.
+24. **How long stage 1 takes (spec 053, merged).** The rent goal is $34,500. Measured in the game:
+    - **One cook** serves a guest about every 82 s and needs about 16 services, roughly 1.7 h. That is a bit over the
+      0.75-1.5 h target.
+    - **A crew of 2 or more** is capped by the potato slot: 12 fries per service. They reach the goal in about 5 services,
+      roughly 0.5 h, which is too fast.
+    Default: fold this into spec 052b (question 22). Scale the goal and the delivery by crew size, the same way as the
+    solo scaling.
 22. **What the climb simulation found (spec 052, merged).** With 4 and 16 players the climb works: stage 5 after about
     19-20 h, inside the targets. Stage 1 to 2 takes about 1.2 h for every crew size. Four design problems remain:
     1. **A solo player gets stuck in stage 2.** One person cannot serve the guests of a full menu: about 156 actions a
@@ -221,6 +217,9 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11, question 23 (players pass through each other):** no answer, so default A applies: players
+  pass through each other in every build (0 corrections in the 16-player test). In dev builds `-player-collision on`
+  turns blocking back on.
 - **2026-11-11, questions 13 and 21:** "13 and 21 go burn the tokens. AI live we skip, you are right." Design v1 is
   approved (D37). Specs 052, 053 and 054 are approved with their defaults. The live AI gateway is skipped for Early Access:
   names are generated offline (D38), and 055 is deferred.
