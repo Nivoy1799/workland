@@ -214,7 +214,35 @@ None to build. Read the report's place table if you want to see the town in numb
    is the stage 3 spec's call]
 
 ## Implementation notes
-(Builder fills this in.)
+- **Deviation, needs a human nod (Open question 8): Dome radii 465 x 385 m (930 x 770), not 385 x 320 (770 x 640).**
+  An ellipse of 770 x 640 cannot hold the corners of a 640 x 480 rectangle (corner (320, 240): 0.69 + 0.56 = 1.25 > 1),
+  so C7 and AC4 cannot both pass with the plan's number. "Tuning changes numbers only", so the radius changed; C5 pins
+  the play area. A test (`C7TheTownPlanDomeIsTooSmallForTheCorners`) keeps the plan's size as a failing literal. Town
+  plan 3.2 may want the new size (or a foot that is not an ellipse).
+- `IReadOnlyList<T>` instead of `ImmutableArray<T>` (System.Collections.Immutable is not in /sim or Unity without a
+  package); the catalog copies every list, including the ones inside records. `TownPoint` and `TownRect` are readonly
+  structs with value equality, not record structs (the sim is C# 9 for Unity).
+- Extra public helpers (all tested): `TownPoint.Metres`, `TownRect.Metres/Contains/Overlaps/Touches/Corners`,
+  `TownCatalog.District/Curve/Place/Node/HasPlace/InPlayArea/OnPlayAreaEdge`, `TownPaths.Distance`,
+  `Footfall.DistrictHourly/DistrictSum` (inclusive, wraps midnight), `TownCheck.CheckIds/Describe`.
+- Readings: C7 "20 m to spare" = each play-area vertex pushed 20 m outward on both axes is inside the ellipse (decimal
+  maths, no float). C9 compares within each kind. C10: c3 strictly busier than every other pitch. C11 uses district
+  footfall (no frontage), 21-03 and 10-16 inclusive. C12: commute = the max of 07-09 and of 17-19 each above every other
+  hour; shops / market / evening > 500 in 10-19 / 06-13 / 16-23; night >= 500 in 20-03; other curve ids have no shape.
+  C4 and C6 walk without lifts. `WalkRoute.LengthMm` includes ride edges; `Ms` = walked length x 2 / 5 + ride seconds
+  (exact: costs are kept in fifths of a ms). `Daily` of the event-only c8 is 0, so its location is 0.
+- Extra validation: walked edges need a length; FixedSeconds only (and > 0) on Lift/Funicular; nodes inside the play
+  area; Border anchors on its edge; the play area counter-clockwise; the fall height below every node.
+- Data: `DistrictDef.HeightMm` is the table's first value; nodes carry the terrain. Main Street: 10 m at x -150, the
+  shop's flat pad 8.4 m at x -115..-45, 6.4 m at the fountain, then down to 2.06 m at x 148. Greenhouse Hill: a gentle
+  east path to the tunnel door (18.5 m) plus switchbacks to the lab (45 m); the funicular is a shortcut. Steepest
+  Path/Ramp 46 permille. Neighbours = areas touching (corners count) or one edge; a test derives and compares them.
+  Report: c3 daily 2063 (location 1723), s1 1197 (1000); bulkhead to water gate 266 s; tunnel to Wildbelt 208 s.
+- Place walks are node to node (the anchor's last <= 30 m is not counted). Follow-up for a delivery spec if it matters.
+- Climb report: identical before and after (521 lines; only the "done in N ms" line differs). It was already
+  `RESULT: FAIL (135/143)`, exit 2, on main; not from this spec.
+- Tests: sim 592 -> 678 (+86 Town tests, about 0.1 s). `bash scripts/town-report.sh`: `RESULT: PASS (12/12)`, exit 0,
+  about 3 s.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
