@@ -124,6 +124,8 @@ namespace Worktown.Sim.Town
                 foreach (TownRect r in d.Areas)
                 {
                     if (r.X0Mm >= r.X1Mm || r.Z0Mm >= r.Z1Mm) throw new ArgumentException(d.Id + ": area " + r + " needs X0 < X1 and Z0 < Z1.");
+                    // 064 review: only the four corners are tested. That is exact for a convex play area (the default is a
+                    // rectangle); a concave play area may let an area cover a notch whose corners are all inside.
                     if (r.Corners().Any(p => !InPlayArea(p))) throw new ArgumentException(d.Id + ": area " + r + " is outside the play area.");
                 }
             }
@@ -148,8 +150,11 @@ namespace Worktown.Sim.Town
             {
                 if (_nodes.ContainsKey(n.Id)) throw new ArgumentException("Duplicate node id " + n.Id + ".");
                 _nodes[n.Id] = n;
-                if (!_districts.ContainsKey(n.DistrictId ?? "")) throw new ArgumentException("Node " + n.Id + ": unknown district '" + n.DistrictId + "'.");
+                if (!_districts.TryGetValue(n.DistrictId ?? "", out DistrictDef? home)) throw new ArgumentException("Node " + n.Id + ": unknown district '" + n.DistrictId + "'.");
                 if (!InPlayArea(n.At)) throw new ArgumentException("Node " + n.Id + " is outside the play area.");
+                // 064 review: a node lies inside one of its district's areas (or on its border); a district without any area
+                // is check C8's finding, not a constructor error.
+                if (home.Areas.Count > 0 && !home.Areas.Any(r => r.Contains(n.At))) throw new ArgumentException("Node " + n.Id + " at " + n.At + " is outside its district " + home.Id + ".");
             }
             foreach (PathEdge e in Edges)
             {
@@ -266,29 +271,29 @@ namespace Worktown.Sim.Town
             // HeightMm is the table's first (base) value; the nodes carry the real heights.
             var districts = new[]
             {
-                D("station_square", "Station Square", new[] { TownRect.Metres(-210, -150, -40, 40) }, 10000, true, 1400, "commute",
+                D("station_square", "Station Square", new[] { TownRect.Metres(-210, -40, -150, 40) }, 10000, true, 1400, "commute",
                     "main_street", "tower_rise", "low_ring"),
-                D("main_street", "Main Street", new[] { TownRect.Metres(-150, -20, -20, 20), TownRect.Metres(20, 150, -20, 20) }, 10000, true, 1200, "shops",
+                D("main_street", "Main Street", new[] { TownRect.Metres(-150, -20, -20, 20), TownRect.Metres(20, -20, 150, 20) }, 10000, true, 1200, "shops",
                     "station_square", "fountain_cross", "market_hall", "lakefront", "homes"),
-                D("fountain_cross", "Fountain Cross", new[] { TownRect.Metres(-20, 20, -20, 20) }, 6400, true, 1600, "shops",
+                D("fountain_cross", "Fountain Cross", new[] { TownRect.Metres(-20, -20, 20, 20) }, 6400, true, 1600, "shops",
                     "main_street", "market_hall", "garden_promenade"),
-                D("market_hall", "Market Hall", new[] { TownRect.Metres(-70, -20, -90, -20) }, 6000, true, 1000, "market",
+                D("market_hall", "Market Hall", new[] { TownRect.Metres(-70, -90, -20, -20) }, 6000, true, 1000, "market",
                     "main_street", "fountain_cross", "workshop_lane"),
-                D("garden_promenade", "Garden Promenade", new[] { TownRect.Metres(-15, 15, 20, 170), TownRect.Metres(-15, 15, -140, -20) }, 6400, false, 700, "evening",
+                D("garden_promenade", "Garden Promenade", new[] { TownRect.Metres(-15, 20, 15, 170), TownRect.Metres(-15, -140, 15, -20) }, 6400, false, 700, "evening",
                     "fountain_cross", "greenhouse_hill", "festival_meadow"),
-                D("lakefront", "Lakefront", new[] { TownRect.Metres(150, 260, -120, 140) }, 2000, false, 600, "evening",
+                D("lakefront", "Lakefront", new[] { TownRect.Metres(150, -120, 260, 140) }, 2000, false, 600, "evening",
                     "main_street", "homes"),
-                D("homes", "Homes", new[] { TownRect.Metres(30, 150, 25, 130), TownRect.Metres(30, 150, -130, -25) }, 3000, false, 400, "commute",
+                D("homes", "Homes", new[] { TownRect.Metres(30, 25, 150, 130), TownRect.Metres(30, -130, 150, -25) }, 3000, false, 400, "commute",
                     "main_street", "lakefront"),
-                D("workshop_lane", "Workshop Lane", new[] { TownRect.Metres(-150, -75, -170, -95) }, 7000, false, 350, "shops",
+                D("workshop_lane", "Workshop Lane", new[] { TownRect.Metres(-150, -170, -75, -95) }, 7000, false, 350, "shops",
                     "market_hall"),
-                D("greenhouse_hill", "Greenhouse Hill", new[] { TownRect.Metres(-140, 120, 175, 280) }, 15000, false, 150, "market",
+                D("greenhouse_hill", "Greenhouse Hill", new[] { TownRect.Metres(-140, 175, 120, 280) }, 15000, false, 150, "market",
                     "garden_promenade"),
-                D("festival_meadow", "Festival Meadow", new[] { TownRect.Metres(-60, 120, -200, -145) }, 5000, false, 100, "shops",
+                D("festival_meadow", "Festival Meadow", new[] { TownRect.Metres(-60, -200, 120, -145) }, 5000, false, 100, "shops",
                     "garden_promenade"),
-                D("tower_rise", "Tower Rise", new[] { TownRect.Metres(-380, -220, -40, 170) }, 16000, false, 500, "shops",
+                D("tower_rise", "Tower Rise", new[] { TownRect.Metres(-380, -40, -220, 170) }, 16000, false, 500, "shops",
                     "station_square", "low_ring"),
-                D("low_ring", "Low Ring", new[] { TownRect.Metres(-380, -220, -200, -40) }, 10000, false, 450, "night",
+                D("low_ring", "Low Ring", new[] { TownRect.Metres(-380, -200, -220, -40) }, 10000, false, 450, "night",
                     "station_square", "tower_rise"),
             };
 
@@ -312,7 +317,8 @@ namespace Worktown.Sim.Town
                 N(504, 0, 130, 10507, "garden_promenade"), N(505, 0, 168, 11925, "garden_promenade"),
                 N(511, 0, -22, 6377, "garden_promenade"), N(512, 0, -60, 5933, "garden_promenade"), N(513, 0, -100, 5467, "garden_promenade"),
                 N(514, 0, -138, 5023, "garden_promenade"),
-                // Lakefront (lake level 0 east of x 200; the pier reaches x 255; 607 is the cleaning-boat jetty)
+                // Lakefront (lake level 0 east of x 200; the pier reaches x 255; 607 is the cleaning-boat jetty; 064 review: 605
+                // is the airlock jetty, a deck over the water from the shore at 604 to Airlock 2 at the play-area edge)
                 N(601, 165, 0, 2000, "lakefront"), N(602, 255, 0, 2000, "lakefront"), N(603, 205, 60, 1000, "lakefront"),
                 N(604, 190, 120, 2000, "lakefront"), N(605, 240, 130, 2000, "lakefront"), N(606, 180, -90, 2000, "lakefront"),
                 N(607, 240, -60, 2000, "lakefront"),
@@ -328,8 +334,8 @@ namespace Worktown.Sim.Town
                 // Festival Meadow
                 N(1001, 0, -152, 5000, "festival_meadow"), N(1002, -40, -170, 5000, "festival_meadow"),
                 N(1003, 40, -182, 5000, "festival_meadow"), N(1004, 90, -178, 5000, "festival_meadow"),
-                // Tower Rise: 1101 is the switchback's turn (between the station and the towers)
-                N(1101, -212, 95, 13000, "tower_rise"), N(1102, -235, 35, 16000, "tower_rise"), N(1103, -228, 20, 16000, "tower_rise"),
+                // Tower Rise: 1101 is the switchback's turn (064 review: at x -222, inside Tower Rise; it was in no district)
+                N(1101, -222, 100, 13000, "tower_rise"), N(1102, -235, 35, 16000, "tower_rise"), N(1103, -228, 20, 16000, "tower_rise"),
                 N(1104, -300, 60, 16000, "tower_rise"), N(1105, -300, 140, 16000, "tower_rise"), N(1106, -350, 100, 16000, "tower_rise"),
                 N(1107, -360, 150, 16000, "tower_rise"),
                 // Low Ring
@@ -358,7 +364,7 @@ namespace Worktown.Sim.Town
                 // Festival Meadow
                 E(514, 1001, prom), E(1001, 1002, path), E(1001, 1003, path), E(1003, 1004, path),
                 // Lakefront
-                E(601, 602, pier), E(601, 603, path), E(603, 604, path), E(604, 605, path), E(601, 606, path), E(601, 607, pier),
+                E(601, 602, pier), E(601, 603, path), E(603, 604, path), E(604, 605, pier), E(601, 606, path), E(601, 607, pier),
                 // Homes
                 E(207, 701, path), E(701, 702, path), E(702, 703, path), E(703, 604, path),
                 E(208, 704, path), E(704, 705, path), E(704, 706, path), E(706, 606, path),

@@ -173,7 +173,67 @@ accept the open questions.
 8. Do rival NPC meals count. [no, only the players' meals: the players bring the town back]
 
 ## Implementation notes
-(Builder fills this in: interpretations, tuning log per round, the final report summary.)
+Built 2026-11-11 (builder) on `spec/065-revival` from main 3f61ca5. Sim tests 723 -> 820 (+89 Revival, about 0.5 s; +8
+Town). `env -u UNITY_PATH bash scripts/verify.sh` green (Unity skipped). Nothing under `sim/Runtime/Climb`, `Cooking`,
+`Core`, `Economy` or `game` changed.
+
+**Needs a human nod (Open question 1): the crew curve's premise does not hold.** 052b's guest demand is D = n / 4 with no
+plateau (spots and staff scale too), so a 16-player crew serves 4x the meals of 4 (Main Street meals over 40 h: 1p 6,819,
+4p 25,741, 16p 104,065). With the spec's rows (1000 at 16) 16 players revived 2.4-2.6x faster than 4 (R0: V1, V2 and V3
+failed for 16p). Round 1 sets the rows from 4 players to 250 x n (4000 at 16, inside the validated 1..5000): D40's "goals
+grow with players x difficulty". AC5's "16 players need the same as 4" is tested on a catalog with the spec's literal rows
+(`TestRevival.Spec()`); the default now gives every crew the same pace instead.
+
+Interpretations and deviations:
+- Scope additions: `RevivalTrace.cs` (the replay result needs a public type of its own). The `RevivalCatalog` constructor
+  takes the `TownCatalog` first, so "one row per town district" can be validated. Lists are `IReadOnlyList`, not
+  `ImmutableArray` (as 064: no System.Collections.Immutable in /sim). `stageBonusPpm` is validated 0..999,999 (not listed).
+- Engine: Thriving's progress is always 1,000,000 (there is no next goal). A level-up's rest is rescaled by the ratio of the
+  level goals (district and crew factors cancel; `EnterStage` has no crew). Each call floors its ppm, so split calls can
+  lose 1 ppm against one call. Level-ups list home first, then neighbours. `FromSaved` reads up to the shortest of the
+  three lists, the first entry of a repeated id wins, a null save gives the start state.
+- Replay: the first service has no "service before"; a jump of several stages gives each stage's bonus. Meals of one service
+  are added per district in catalog order. `RevivalPlan` adds `HomeDistrict` (channels without a share) and
+  `CompetitionJobIds` (`cook_off`; a competition serves 0 guests anyway).
+- Targets: V1, V2 compare the median level hour with the median stage entry hours (as T1); a DNF S5 bounds Thriving by the
+  horizon. V3 runs for every crew other than 4, V5 for every crew, V4 for 4 players. V6 is counted at the top footfall
+  level; INFO lines show the lower levels and the plan's 1100, 1200 and 1300. `RevivalEvaluation.WithFootfall` rebuilds
+  the climb catalog (money divided back by `MoneyScale`); at 1000 it gives the same run digest (test).
+
+**064 review nits** (the coordinator's request; outside this spec's Scope and AC1's Town line, so listed here):
+1. Node 1101 moved from (-212, 95), in no district, to (-222, 100) in Tower Rise (ramp slopes 39 and 45 permille). The
+   catalog now rejects a node outside its district's areas (a district without areas stays C8's finding).
+2. `TownRect.Metres(x0, z0, x1, z1)` now has the constructor's order; every caller was swapped.
+3. Documented: the area check tests corners only, exact for a convex play area (a concave one is still allowed, a 064
+   test uses an L-shape); a test pins the default as convex.
+4. `TownCheck` details, `TownPoint.ToString` and `TownRect.ToString` use the invariant culture (tested with a culture
+   whose minus sign is "~").
+5. Node 605 and Airlock 2 stay at x 240-260: the edge 604-605 is now a 4 m jetty deck over the lake, like 607.
+`bash scripts/town-report.sh`: PASS (12/12); only Tower Rise walks change (+4.3 s: sky_deck, tower_1, tower_2, airlock_1).
+
+**Tuning log** (`--players 1,4,16 --seeds 5`, under 5 s):
+- R0 (the spec's numbers): FAIL (7/19). 16p 2.4-2.6x fast (above); solo Lively 6.2 h after its S4 (4.4 h), Thriving
+  19.3 h; Workshop Lane and Greenhouse Hill never Patched (spill does not travel, the stage bonus is only 40 %), so V4
+  and V5 failed; V6 at 1.3x moved 4p S4 to 6.1 h (band 7-11).
+- R1: crew rows 290 / 540 / 800, then 250 x n from 4; level goals 300 / 4,000 / 20,000 -> 400 / 3,100 / 15,000 (solo
+  must reach Lively before its own S4 but no faster than 0.67x of 4p); delivery Homes 350, Workshop Lane 120,
+  Greenhouse Hill 120, Tower Rise 100, Festival Meadow 100, Garden Promenade 60, Low Ring 50, Station Square 50;
+  footfall 1000 / 1040 / 1070 / 1100 (1.2x already fails T1 S4). Result: **PASS (19/19)**, exit 0. Rounds 2-3 not needed.
+
+**Final report** (median hours; S2/S3/S4/S5 entry 1p 0.7/2.1/4.4/9.2, 4p 1.2/3.9/7.9/15.3, 16p 1.2/3.9/7.9/15.1):
+
+| crew | Main Street Patched / Lively / Thriving | last district Patched | Low Ring Patched |
+|---|---|---|---|
+| 1 | 1.1 / 4.2 / 11.9 | Low Ring | 34.4 |
+| 4 | 1.4 / 4.1 / 13.9 | Low Ring | 22.5 |
+| 16 | 1.3 / 4.1 / 13.8 | Low Ring | 24.2 |
+
+Main Street turns Patched near the first restaurant and Lively at the start of the service mix. Margins are thin: solo
+Lively 4.2 h against its S4 at 4.4 h, 4p Lively 4.1 h against S3 at 3.9 h. Other districts (4p) reach Patched at 3-23 h
+(spill and delivery) and seven reach Lively at 19-34 h; only Main Street and the Festival Meadow (events) reach Thriving within
+40 h. V6 at 1.1x: 4p S2/S3/S4/S5 1.2/3.5/7.2/13.9 h (S4 is 0.2 h inside its band).
+
+Climb report: identical before and after (`RESULT: FAIL (135/143)`, exit 2, as on main); revival feeds nothing back.
 
 ## Blockers
-(Builder fills this in after 3 failed tuning rounds.)
+None. Tuning passed in round 1.

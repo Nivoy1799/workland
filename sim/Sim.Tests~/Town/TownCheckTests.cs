@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Worktown.Sim.Town;
 using Xunit;
@@ -22,6 +23,25 @@ namespace Worktown.Sim.Tests.Town
         public void DefaultTownPassesEveryCheck() // AC4
         {
             Assert.Empty(TownCheck.Run(TownCatalog.CreateDefault()));
+        }
+
+        [Fact]
+        public void DetailsIgnoreTheCurrentCulture() // 064 review: invariant numbers in every detail
+        {
+            P parts = TestTown.Small();
+            parts.DomeRadiusX = 110000; // the play-area corners have less than 20 m to spare
+            TownCatalog c = parts.Build();
+            List<string> invariant = TownCheck.Run(c).Select(p => p.Detail).ToList();
+            CultureInfo before = CultureInfo.CurrentCulture;
+            var odd = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+            odd.NumberFormat.NegativeSign = "~";
+            try
+            {
+                CultureInfo.CurrentCulture = odd;
+                Assert.Equal(invariant, TownCheck.Run(c).Select(p => p.Detail).ToList());
+            }
+            finally { CultureInfo.CurrentCulture = before; }
+            Assert.Contains("play-area corner (-100000, -100000) has less than 20 m to spare inside the Dome", invariant);
         }
 
         [Fact]
@@ -69,7 +89,7 @@ namespace Worktown.Sim.Tests.Town
         {
             // Station Square moved 30 m further west by pushing its far nodes out (still inside the square's area).
             var parts = P.Default();
-            parts.District("station_square", d => d with { Areas = new[] { TownRect.Metres(-218, -150, -40, 40) } });
+            parts.District("station_square", d => d with { Areas = new[] { TownRect.Metres(-218, -40, -150, 40) } });
             parts.Node(102, n => n with { At = TownPoint.Metres(-216, 0) });
             parts.Node(105, n => n with { At = TownPoint.Metres(-216, 20) });
             parts.Place("station", x => x with { Anchor = TownPoint.Metres(-217, 0) });

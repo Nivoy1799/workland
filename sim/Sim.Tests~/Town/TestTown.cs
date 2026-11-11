@@ -21,8 +21,8 @@ namespace Worktown.Sim.Tests.Town
             Curves = { new FootfallCurve("flat", Flat()) },
             Districts =
             {
-                new DistrictDef("alpha", "Alpha", new[] { TownRect.Metres(-100, 0, -100, 100) }, 0, true, 1000, "flat", 1200, new[] { "beta" }),
-                new DistrictDef("beta", "Beta", new[] { TownRect.Metres(0, 100, -100, 100) }, 0, false, 500, "flat", 1300, new[] { "alpha" }),
+                new DistrictDef("alpha", "Alpha", new[] { TownRect.Metres(-100, -100, 0, 100) }, 0, true, 1000, "flat", 1200, new[] { "beta" }),
+                new DistrictDef("beta", "Beta", new[] { TownRect.Metres(0, -100, 100, 100) }, 0, false, 500, "flat", 1300, new[] { "alpha" }),
             },
             Nodes =
             {
