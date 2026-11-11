@@ -198,3 +198,6 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
   more [Kitchen] lines, clients time out and cannot rejoin), the main thread keeps drawing, then a native crash. 045
   traced one case to an unhandled exception on a FishNet background thread (TimeManager.LocalTick). A clean re-run
   passed. For spec 049: log unhandled thread exceptions, find the trigger, and make the host survive or close cleanly.
+- 048 review (changes requested, fixes in the 049 round): prompts follow rebinds; key capture no longer leaks into the
+  game; own URP asset copy; settings schema version. Open: Esc frees the cursor; the Controls page scrolls at 720p; no
+  tour shot of gamepad capture, a resolution change or the colour-blind rings while cooking. Human question 19.

@@ -13,7 +13,7 @@ every question has a default, and work continues on other items until you answer
   047 (title screen: open your shop, join a friend through Steam or by address, lobby with kick on Tab, auto-rejoin).
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 048 (settings and comfort), then 049 (stability for release), then 006. 037 waits for question 17.
+- **Next:** 048 (settings and comfort) is in its fix round inside 049 (stability for release), then 006. 037 waits for question 17.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
@@ -63,6 +63,10 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+19. **Colour-blind ring colours (spec 048) and D32.** D32 says one palette of 16 named colours. The new colour-blind
+    option for the cooking rings uses 4 extra colours from the Okabe-Ito set, a standard palette that is safe for colour
+    blindness. Default: allow them as a separate "accessibility" set next to the 16, used only when that option is on.
+    Say no if you'd rather pick 4 of the 16.
 18. **Spec 045 results (in review).**
     - **16-player load test passed:** tick time p95 1 ms (target under 20), 49.6 KB/s per player (target 50, just met),
       host upload about 0.8 MB/s, all 17 processes alive.
