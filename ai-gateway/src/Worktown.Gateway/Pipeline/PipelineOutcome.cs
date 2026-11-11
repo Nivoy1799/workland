@@ -5,8 +5,6 @@ namespace Worktown.Gateway.Pipeline;
 /// <summary>Result of <see cref="ItemNamePipeline.RunAsync"/>: a response or an error code with its HTTP status.</summary>
 public sealed record PipelineOutcome(int StatusCode, ItemNameResponse? Response, string? ErrorCode)
 {
-    public bool IsSuccess => Response is not null;
-
     /// <summary>Outcome code used in logs: "ok" or the error code.</summary>
     public string Code => ErrorCode ?? "ok";
 

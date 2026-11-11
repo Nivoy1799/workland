@@ -16,6 +16,12 @@ public sealed class OpenAiCompatibleClient : IUpstreamClient
     public const string HttpClientName = "upstream";
     public const int MaxTokens = 300;
 
+    /// <summary>Upper bound for an upstream response body (HttpClient.MaxResponseContentBufferSize).</summary>
+    public const int MaxResponseBytes = 64 * 1024;
+
+    /// <summary>The production primary handler: redirects are never followed (the host stays pinned).</summary>
+    public static HttpMessageHandler CreatePrimaryHandler() => new SocketsHttpHandler { AllowAutoRedirect = false };
+
     private readonly HttpClient _http;
     private readonly GatewayOptions _options;
     private readonly TimeProvider _time;

@@ -30,9 +30,16 @@ builder.Services.AddSingleton<IModerator>(_ => new PlaceholderDenyListModerator(
 builder.Services.AddScoped<ItemNamePipeline>();
 
 // Typed upstream client. Its built-in request logging is removed, so nothing about upstream
-// traffic reaches the logs. Timeouts are per attempt inside the client.
+// traffic reaches the logs. Timeouts are per attempt inside the client. The response body is
+// capped (a larger one is an error) and redirects are not followed, so the configured host is
+// the only one ever called; a 3xx is a final upstream error.
 builder.Services.AddHttpClient<IUpstreamClient, OpenAiCompatibleClient>(OpenAiCompatibleClient.HttpClientName)
-    .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan)
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = Timeout.InfiniteTimeSpan;
+        client.MaxResponseContentBufferSize = OpenAiCompatibleClient.MaxResponseBytes;
+    })
+    .ConfigurePrimaryHttpMessageHandler(OpenAiCompatibleClient.CreatePrimaryHandler)
     .RemoveAllLoggers();
 
 // Token bucket per server id. Requests without a valid token or server id are not counted

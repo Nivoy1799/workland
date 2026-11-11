@@ -12,12 +12,16 @@ namespace Worktown.Gateway.Pipeline;
 
 /// <summary>
 /// The item_name pipeline after auth and rate limiting: request validation, cache lookup,
-/// upstream call (at most <see cref="MaxAttempts"/>), schema validation, moderation, cache write.
+/// upstream call (at most <see cref="MaxAttempts"/>), schema validation, moderation (the fixed
+/// <see cref="VeganContentRule"/>, then the replaceable <see cref="IModerator"/>), cache write.
 /// Logs only ids, codes and timings; never secrets, prompts or upstream output.
 /// </summary>
 public sealed class ItemNamePipeline
 {
     public const int MaxAttempts = 2;
+
+    /// <summary>Wait before retrying an upstream 429 (on the injected <see cref="TimeProvider"/>).</summary>
+    public static readonly TimeSpan RateLimitedBackoff = TimeSpan.FromMilliseconds(500);
 
     private readonly IContentCache _cache;
     private readonly IUpstreamClient _upstream;
@@ -48,13 +52,14 @@ public sealed class ItemNamePipeline
         var trace = new RequestTrace();
         var outcome = await RunCoreAsync(request, serverId, trace, ct).ConfigureAwait(false);
         _logger.LogInformation(
-            "item_name server={ServerId} item={ItemHash} key={KeyPrefix} cache={Cache} attempts={Attempts} outcome={Outcome} latency_ms={LatencyMs}",
+            "item_name server={ServerId} item={ItemHash} key={KeyPrefix} cache={Cache} attempts={Attempts} outcome={Outcome} reason={Reason} latency_ms={LatencyMs}",
             RequestValidator.IsValidServerId(serverId) ? serverId : "-",
             trace.ItemHash ?? "-",
             trace.KeyPrefix ?? "-",
             trace.Cache,
             trace.Attempts,
             outcome.Code,
+            trace.Reason ?? "-",
             (long)_time.GetElapsedTime(started).TotalMilliseconds);
         return outcome;
     }
@@ -69,12 +74,15 @@ public sealed class ItemNamePipeline
         trace.ItemHash = itemHash;
         var key = CacheKey.Compute(_validator.ContentType, _validator.SchemaVersion, ItemNamePrompt.Version, _options.Model, itemHash);
         trace.KeyPrefix = key[..12];
+        var inputHash = ItemNamePrompt.InputHash(request);
 
         var cached = await _cache.GetAsync(key, ct).ConfigureAwait(false);
         if (cached is not null)
         {
             trace.Cache = "hit";
-            if (!string.Equals(cached.CanonicalTree, tree, StringComparison.Ordinal))
+            // The key holds only the item hash; the stored input hash covers every other prompt input.
+            if (!string.Equals(cached.CanonicalTree, tree, StringComparison.Ordinal)
+                || !string.Equals(cached.InputHash, inputHash, StringComparison.Ordinal))
             {
                 _logger.LogWarning("item_name tree mismatch server={ServerId} item={ItemHash} key={KeyPrefix}",
                     serverId, itemHash, trace.KeyPrefix);
@@ -87,8 +95,11 @@ public sealed class ItemNamePipeline
 
         var messages = ItemNamePrompt.Build(request);
         string lastError = ErrorResponse.UpstreamError;
+        var rateLimited = false;
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
+            if (rateLimited) await Task.Delay(RateLimitedBackoff, _time, ct).ConfigureAwait(false);
+            rateLimited = false;
             trace.Attempts = attempt;
             var result = await _upstream.CompleteAsync(messages, _validator.ContentType, _validator.Schema, ct).ConfigureAwait(false);
             switch (result)
@@ -99,15 +110,23 @@ public sealed class ItemNamePipeline
                         lastError = ErrorResponse.UpstreamInvalidOutput;
                         continue;
                     }
-                    var verdict = await _moderator.CheckAsync(_validator.ContentType, payload, ct).ConfigureAwait(false);
-                    if (!verdict.Allowed) return PipelineOutcome.Error(ErrorResponse.ContentRejected);
-                    var entry = new CachedContent(_validator.ContentType, itemHash, tree, ok.Content!,
+                    var verdict = VeganContentRule.Check(payload);
+                    if (verdict.Allowed)
+                        verdict = await _moderator.CheckAsync(_validator.ContentType, payload, ct).ConfigureAwait(false);
+                    if (!verdict.Allowed)
+                    {
+                        trace.Reason = verdict.ReasonCode;
+                        return PipelineOutcome.Error(ErrorResponse.ContentRejected);
+                    }
+                    var entry = new CachedContent(_validator.ContentType, itemHash, tree, inputHash, ok.Content!,
                         ContentVersion, _options.Model, _time.GetUtcNow());
                     await _cache.SetAsync(key, entry, ct).ConfigureAwait(false);
                     return PipelineOutcome.Success(ToResponse(itemHash, payload, cacheHit: false, ContentVersion, _options.Model));
                 case UpstreamResult.HttpError http:
                     lastError = ErrorResponse.UpstreamError;
+                    // 3xx (redirects are not followed) and 4xx other than 429 are final.
                     if (!http.IsRetryable) return PipelineOutcome.Error(lastError);
+                    rateLimited = http.Status == StatusCodes.Status429TooManyRequests;
                     continue;
                 case UpstreamResult.Timeout:
                     lastError = ErrorResponse.UpstreamTimeout;
@@ -130,5 +149,6 @@ public sealed class ItemNamePipeline
         public string? KeyPrefix { get; set; }
         public string Cache { get; set; } = "-";
         public int Attempts { get; set; }
+        public string? Reason { get; set; }
     }
 }

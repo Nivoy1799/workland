@@ -30,7 +30,8 @@ public sealed class ServiceTokenFilter : IEndpointFilter
         var header = request.Headers.Authorization;
         if (header.Count != 1) return false;
         var value = header[0];
-        if (value is null || !value.StartsWith(BearerPrefix, StringComparison.Ordinal)) return false;
+        // The auth scheme is case-insensitive (RFC 9110 section 11.1); the token itself is not.
+        if (value is null || !value.StartsWith(BearerPrefix, StringComparison.OrdinalIgnoreCase)) return false;
         return TokensMatch(value[BearerPrefix.Length..], configuredToken);
     }
 

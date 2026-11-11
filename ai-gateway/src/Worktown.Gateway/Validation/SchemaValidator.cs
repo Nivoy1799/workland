@@ -28,14 +28,12 @@ public sealed class SchemaValidator
     {
         ContentType = contentType;
         SchemaVersion = schemaVersion;
-        SchemaText = schemaText;
         Schema = JsonNode.Parse(schemaText) ?? throw new InvalidOperationException("Schema text is empty.");
         _schema = CorvusSchema.FromText(schemaText);
     }
 
     public string ContentType { get; }
     public int SchemaVersion { get; }
-    public string SchemaText { get; }
 
     /// <summary>The full schema as a node (clone before changing it).</summary>
     public JsonNode Schema { get; }

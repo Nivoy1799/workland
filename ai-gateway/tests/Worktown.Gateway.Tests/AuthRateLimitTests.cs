@@ -27,6 +27,31 @@ public class AuthRateLimitTests
         Assert.Equal(0, factory.Stub.CallCount);
     }
 
+    [Theory]
+    [InlineData("bearer")]
+    [InlineData("BEARER")]
+    [InlineData("Bearer")]
+    public async Task BearerSchemeIsCaseInsensitive(string scheme)
+    {
+        using var factory = new GatewayFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Worktown-Server-Id", GatewayFactory.ServerId);
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", scheme + " " + GatewayFactory.ServiceToken);
+        var response = await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TokenItselfIsCaseSensitive()
+    {
+        using var factory = new GatewayFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Worktown-Server-Id", GatewayFactory.ServerId);
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", "Bearer " + GatewayFactory.ServiceToken.ToUpperInvariant());
+        var response = await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Fact]
     public async Task AC7_HealthzNeedsNoTokenAndNoUpstream()
     {

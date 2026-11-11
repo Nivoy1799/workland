@@ -105,6 +105,96 @@ public class ItemNameEndpointTests
     }
 
     [Fact]
+    public async Task D27_AnimalProductInOutputIsRejectedAsVeganRuleAndNotCached()
+    {
+        using var factory = new GatewayFactory();
+        factory.Stub.Default = _ => StubUpstreamHandler.Completion(
+            "{\"name\":\"Golden Spud Sticks\",\"description\":\"Crisp sticks with creamy butter.\"}");
+        using var client = factory.CreateAuthedClient();
+
+        var response = await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        await AssertError(response, HttpStatusCode.UnprocessableEntity, "content_rejected");
+        Assert.DoesNotContain("butter", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, factory.Stub.CallCount);
+        var line = Assert.Single(factory.Logs.Entries, e => e.Contains("item_name server="));
+        Assert.Contains("reason=vegan_rule", line);
+
+        await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        Assert.Equal(2, factory.Stub.CallCount);
+    }
+
+    [Fact]
+    public async Task D27_EggplantIsNotAVeganRuleHit()
+    {
+        using var factory = new GatewayFactory();
+        factory.Stub.Default = _ => StubUpstreamHandler.Completion(
+            "{\"name\":\"Smoky Eggplant Stack\",\"description\":\"Grilled eggplant with herbs.\"}");
+        using var client = factory.CreateAuthedClient();
+        var response = await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpstreamRedirectIsAnErrorAndNotRetried()
+    {
+        using var factory = new GatewayFactory();
+        factory.Stub.Default = _ =>
+        {
+            var redirect = new HttpResponseMessage(HttpStatusCode.Found);
+            redirect.Headers.Location = new Uri("https://upstream.test/v1/elsewhere");
+            return redirect;
+        };
+        using var client = factory.CreateAuthedClient();
+        var response = await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        await AssertError(response, HttpStatusCode.BadGateway, "upstream_error");
+        Assert.Equal(1, factory.Stub.CallCount);
+    }
+
+    private static HttpResponseMessage PaddedCompletion(int totalBytes)
+    {
+        var json = $"{{\"id\":\"cmpl-test\",\"choices\":[{{\"index\":0,\"finish_reason\":\"stop\",\"message\":{{\"role\":\"assistant\",\"content\":{JsonSerializer.Serialize(StubUpstreamHandler.ValidContent)}}}}}]}}";
+        // Trailing whitespace keeps the envelope valid JSON, so only the size decides the outcome.
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json + new string(' ', totalBytes - json.Length), Encoding.UTF8, "application/json"),
+        };
+    }
+
+    [Fact]
+    public async Task OversizedUpstreamBodyIsAnError()
+    {
+        using var factory = new GatewayFactory();
+        factory.Stub.Default = _ => PaddedCompletion(Upstream.OpenAiCompatibleClient.MaxResponseBytes + 1);
+        using var client = factory.CreateAuthedClient();
+        var response = await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        await AssertError(response, HttpStatusCode.BadGateway, "upstream_error");
+        // HttpClient throws HttpRequestException past the buffer cap: handled like a network error (retried once).
+        Assert.Equal(2, factory.Stub.CallCount);
+
+        // Nothing was cached: the next request calls upstream again.
+        await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        Assert.Equal(4, factory.Stub.CallCount);
+    }
+
+    [Fact]
+    public async Task UpstreamBodyAtTheLimitIsAccepted()
+    {
+        using var factory = new GatewayFactory();
+        factory.Stub.Default = _ => PaddedCompletion(Upstream.OpenAiCompatibleClient.MaxResponseBytes);
+        using var client = factory.CreateAuthedClient();
+        var response = await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public void PrimaryHandlerDoesNotFollowRedirects()
+    {
+        using var handler = Upstream.OpenAiCompatibleClient.CreatePrimaryHandler();
+        var sockets = Assert.IsType<SocketsHttpHandler>(handler);
+        Assert.False(sockets.AllowAutoRedirect);
+    }
+
+    [Fact]
     public async Task Upstream5xxIsRetriedThenUpstreamError()
     {
         using var factory = new GatewayFactory();
@@ -218,6 +308,31 @@ public class ItemNameEndpointTests
         await AssertError(response, HttpStatusCode.Conflict, "tree_mismatch");
         Assert.Equal(1, factory.Stub.CallCount);
         Assert.Contains(factory.Logs.Entries, e => e.StartsWith("Warning") && e.Contains("tree mismatch"));
+    }
+
+    public static TheoryData<string, string[]> OtherPromptInputs => new()
+    {
+        { "golden fried potato sticks", new[] { "fried" } },
+        { "crispy fried potato sticks", new[] { "fried", "salty" } },
+        { "crispy fried potato sticks", Array.Empty<string>() },
+    };
+
+    [Theory]
+    [MemberData(nameof(OtherPromptInputs))]
+    public async Task HitWithSameTreeButOtherFallbackNameOrTagsIs409(string fallbackName, string[] tags)
+    {
+        using var factory = new GatewayFactory();
+        using var client = factory.CreateAuthedClient();
+        Assert.Equal(HttpStatusCode.OK, (await GatewayFactory.PostItemNameAsync(client, GatewayFactory.FriesBody())).StatusCode);
+        var response = await GatewayFactory.PostItemNameAsync(client, new
+        {
+            itemHash = GatewayFactory.FriesHash,
+            canonicalTree = GatewayFactory.FriesTree,
+            fallbackName,
+            tags,
+        });
+        await AssertError(response, HttpStatusCode.Conflict, "tree_mismatch");
+        Assert.Equal(1, factory.Stub.CallCount);
     }
 
     [Fact]

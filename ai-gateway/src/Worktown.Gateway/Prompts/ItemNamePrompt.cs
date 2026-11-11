@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Worktown.Gateway.Api;
 
 namespace Worktown.Gateway.Prompts;
@@ -21,10 +23,19 @@ public static class ItemNamePrompt
         "Reply with JSON only, exactly in the form {\"name\": \"...\", \"description\": \"...\"}.";
 
     /// <summary>System and user messages for a request that already passed <see cref="RequestValidator"/>.</summary>
-    public static IReadOnlyList<(string Role, string Content)> Build(ItemNameRequest request)
+    public static IReadOnlyList<(string Role, string Content)> Build(ItemNameRequest request) =>
+        new[] { ("system", SystemText), ("user", UserText(request)) };
+
+    /// <summary>
+    /// SHA-256 (lowercase hex, UTF-8) of the user message, so it covers every request field that
+    /// reaches the prompt (tree, fallback name, tags). Stored with a cache entry and compared on a hit.
+    /// </summary>
+    public static string InputHash(ItemNameRequest request) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(UserText(request))));
+
+    private static string UserText(ItemNameRequest request)
     {
         var tags = request.Tags is { Count: > 0 } list ? string.Join(", ", list) : "none";
-        var user = $"Process: {request.CanonicalTree}\nPlain name: {request.FallbackName}\nTags: {tags}";
-        return new[] { ("system", SystemText), ("user", user) };
+        return $"Process: {request.CanonicalTree}\nPlain name: {request.FallbackName}\nTags: {tags}";
     }
 }
