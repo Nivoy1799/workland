@@ -70,6 +70,17 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+30. **The Dome is a little too small (spec 064, merged).** An oval of 770 x 640 m cannot hold the corners of the
+    640 x 480 m play area; the corners stick out through the glass. Options:
+    - **A (default for now in the simulation):** 930 x 770 m. It fits, but leaves a wide strip of about 145 m between
+      the town edge and the glass.
+    - **B (recommended):** a "superellipse" foot of about 810 x 620 m, an oval with fuller corners. It still looks
+      organic, because the round crown carries the shape.
+    - **D (your Blender session's idea):** keep the planned 770 x 640 m oval and round off the play area's corners.
+      They hold only hills, the canyon and the lake, with no pitches or places, so nothing is lost, and the strip to
+      the glass stays the smallest.
+
+    All of them keep the bulkhead, the water gate and the tunnel door in the wall.
 27. **Do good reviews unlock extra dishes?** The old spec 037 said: "the better your shop's rating, the more dishes you
     may put on the menu over the days". But the food corner (stage 1) has exactly one dish, fries, and new dishes come
     with the next stage (spec 057: 4 dishes in your first restaurant). So the question is how new dishes arrive:
