@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Spec 052: the climb report console tool. The "~" folder keeps Unity out; it is in no Unity assembly. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Worktown.ClimbReport</AssemblyName>
+    <RootNamespace>Worktown.ClimbReport</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Sim.csproj" />
+  </ItemGroup>
+</Project>
