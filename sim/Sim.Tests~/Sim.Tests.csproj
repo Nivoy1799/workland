@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Sim.csproj" />
+    <ProjectReference Include="../Tools~/ClockReport/ClockReport.csproj" />
   </ItemGroup>
 </Project>
