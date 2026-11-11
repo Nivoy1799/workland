@@ -11,7 +11,7 @@ every question has a default, and work continues on other items until you answer
   put-downs, buttons sink, faster sprint start, tip and scoop at the click, both hands on a box, smaller tutorial card,
   tilted ticket rail).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 045 (stability, 16-player load test) is being built. 037 waits for
+- **Next:** 045 (stability, 16-player load test) is in review; 047 (main menu and joining) is being built. 037 waits for
   question 17. After that: 047, 048, 049, 006.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
@@ -62,6 +62,15 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+18. **Spec 045 results (in review).**
+    - **16-player load test passed:** tick time p95 1 ms (target under 20), 49.6 KB/s per player (target 50, just met),
+      host upload about 0.8 MB/s, all 17 processes alive.
+    - **VPN / Tailscale (MTU 1280):** the direct-IP transport (Tugboat) cannot run there without editing FishNet.
+      Proposed decision: **players connect through Steam; direct IP stays for LAN and dev.** Default: yes, and that
+      becomes D37 once you agree.
+    - **Crash on quit:** it is inside Direct3D 12 itself (no game code on the stack). Windows builds now start with
+      D3D11 and fall back to D3D12. Default: keep it until a Unity update.
+    - **FYI:** a partly shaved spit cone now stays on the spit after a restart (it used to be lost).
 17. **Spec 037 (street-food prices) conflicts with D23 "whole dollars only, no cents".** 037 wants cents (a wrap $9.50,
     an ingredient $0.30, coins 0.10-2). I did not build it, because D23 is your decision. Options:
     - **A (default once you answer, recommended): cents.** D23 becomes "dollars with cents; integer cents inside".
