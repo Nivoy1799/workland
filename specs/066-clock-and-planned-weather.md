@@ -192,3 +192,5 @@ None to build. The clock report shows a month of weather for one seed.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
+
+**066 review (2026-11-11):** approved with nits. Fixed: the weather salt moved to the high bits (`0x066UL << 48`), so weather and climb draws are no longer correlated (tests still green, 637). Open nits: `Spans` walks second by second (step by hour, or document a max interval); dead `Math.Max` in LightningSchedule; catalog arrays exposed as IReadOnlyList can be cast back (wrap with Array.AsReadOnly); `TownClock.At` does not validate the catalog.

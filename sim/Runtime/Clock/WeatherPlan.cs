@@ -10,7 +10,8 @@ namespace Worktown.Sim.Clock
     /// </summary>
     public static class WeatherPlan
     {
-        public const ulong WeatherSalt = 0x066;
+        /// <summary>066 review: in the high bits, so day d never shares a random sequence with ForTick(worldSeed, small tick) used by the climb and the economy.</summary>
+        public const ulong WeatherSalt = 0x066UL << 48;
 
         public static DayWeather For(WeatherCatalog w, ulong worldSeed, long day)
         {
