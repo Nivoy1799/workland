@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://worktown.invalid/schemas/item_name.v1.schema.json",
+  "title": "item_name v1",
+  "description": "Display name and one-sentence description for a cooked item. Flavor text only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 40,
+      "pattern": "^[A-Za-z]+([ '-][A-Za-z]+)*$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 160,
+      "pattern": "^[A-Z0-9][A-Za-z0-9 ,.'!?-]*[.!?]$"
+    }
+  }
+}

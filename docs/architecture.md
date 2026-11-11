@@ -42,7 +42,7 @@
 - MonoBehaviours are thin adapters between Unity, FishNet and /sim.
 
 ### /ai-gateway
-- Speaks the OpenAI-compatible chat completions API to the game server.
+- Exposes typed content endpoints to the game server and speaks the OpenAI-compatible chat completions API to the upstream.
 - Pipeline per request: rate limit, cache lookup (hash of inputs), upstream call,
   JSON schema validation, moderation, cache write, response.
 - Upstream is configured by two env vars. Cloud now, own vLLM server later.

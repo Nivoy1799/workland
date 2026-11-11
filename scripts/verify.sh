@@ -62,13 +62,16 @@ if [ -f scripts/check-assets.sh ]; then
   run "assets: manifest and size" bash scripts/check-assets.sh
 fi
 
-# 3. AI gateway tests
-if [ -f ai-gateway/package.json ]; then
-  run "ai-gateway: tests" bash -c "cd ai-gateway && npm test --silent"
-elif [ -f ai-gateway/pyproject.toml ]; then
-  run "ai-gateway: tests" bash -c "cd ai-gateway && python -m pytest -q"
+# 3. AI gateway (C# / ASP.NET, D25): build and tests. Tests use a stub upstream, so they
+# need no network and no API key (spec 006).
+if [ -f ai-gateway/Gateway.sln ]; then
+  if command -v dotnet >/dev/null 2>&1 && dotnet --version >/dev/null 2>&1; then
+    run "ai-gateway: dotnet test" dotnet test ai-gateway/Gateway.sln --nologo --verbosity quiet
+  else
+    skip "ai-gateway: dotnet test" "dotnet not installed or not working"
+  fi
 else
-  skip "ai-gateway: tests" "not created yet"
+  skip "ai-gateway: dotnet test" "not created yet"
 fi
 
 # 4. Secrets check: no .env or obvious keys tracked by git

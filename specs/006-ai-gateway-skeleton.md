@@ -274,7 +274,40 @@ session. Spec 007 is already built without this, so the game-side client gets it
 10. No negative cache in the gateway; the game remembers failures per session (game-side follow-up spec). [yes]
 
 ## Implementation notes
-(Builder fills this in.)
+- Packages: Corvus.Text.Json.Validator 5.8.8 (Apache-2.0; pulls in Corvus.Text.Json and
+  Corvus.Regex.Ecma262, both Apache-2.0), Microsoft.AspNetCore.Mvc.Testing 10.0.15. Corvus gives
+  error paths only through a results collector, which is not used: a failed attempt logs only the
+  outcome code, never the output or its length. Corvus ships analyzer CTJ001 (prefer `u8`
+  literals), which flows into both projects: the gateway uses `u8` literals, the tests set
+  `NoWarn CTJ001`.
+- Auth before rate limit: the built-in rate limiter middleware runs before endpoint filters, so the
+  partition function calls the same `ServiceTokenFilter.IsAuthorized` and returns a no-limiter
+  partition for a bad token or bad server id. Those requests get 401/400 and use no quota (tested).
+  Token bucket: `TokenLimit = burst`, 1 token every `60 s / perMinute`.
+- Upstream typed client: `RemoveAllLoggers()` (no HttpClient request logs at all),
+  `HttpClient.Timeout` infinite, per-attempt timeout via a `CancellationTokenSource` on the
+  injected `TimeProvider`. A malformed 2xx envelope counts as invalid output (retried). Network
+  errors map to 502 `upstream_error`. The last attempt's failure picks the code.
+- Stricter than the spec text: `tags` is required (may be `[]`); duplicate JSON properties are
+  rejected in the request and in upstream output (.NET 10 `AllowDuplicateProperties = false`); a
+  body over 8 KiB is 400 `invalid_request` (the table has no 413). Request regexes use `\z`,
+  because .NET `$` also matches before a trailing newline. Whitespace around the JSON document
+  is valid JSON and is accepted (that is parsing, not repair). `GATEWAY_MODEL` must not contain
+  `|` or whitespace (the cache-key separator).
+- Prompt messages are a `(Role, Content)` tuple list, so no extra message type file. Options
+  validation is `GatewayOptions.Validator` (nested), wired with `ValidateOnStart`.
+- D27 (vegan) was not in the spec. I added one sentence to the system prompt ("the game world is
+  fully vegan: never mention meat, fish, seafood, eggs, dairy, honey or any other animal product").
+  `ItemNamePrompt.Version` stays 1 because nothing has shipped. **Not enforced**: the placeholder
+  moderator holds only profanity and slurs. A vegan word check (in moderation or validation) is a
+  follow-up and a human decision (ties to O6).
+- Tests: 119 (`dotnet test ai-gateway/Gateway.sln`). No network: the only base URL is
+  `https://upstream.test/v1`, and the stub throws for any other host. verify.sh was run in the
+  worktree as `env -u UNITY_PATH bash scripts/verify.sh`, so the Unity section was skipped. That
+  section is unchanged.
+- Smoke check: the built app started with test env vars. `/healthz` returned 200 and a POST
+  without a token returned 401. Without `GATEWAY_SERVICE_TOKEN`, startup fails with
+  `OptionsValidationException: GATEWAY_SERVICE_TOKEN is required.`
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
