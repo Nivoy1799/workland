@@ -36,7 +36,11 @@ Round 4 (vibe frames with ink outlines) with `render_round4.py`; `--only morning
 renders without outlines. Several frames run in separate Blender processes.
 
 Round 5 (the town in 2222) with `render_round5.py` and round 6 (the whole town plan, its edges, weather and light,
-spec 051) with `render_round6.py`, same options as round 4.
+spec 051) with `render_round6.py`, same options as round 4. Round 7 (the Canopy, the four seasons, three tries for
+the Wreck) with `render_round7.py`; for example `--only spring,summer,autumn,winter`.
+
+Round 7 made the airship's hull finer (36 profile steps instead of 10) so its rust panels lie on the skin, so a
+re-render of round 6 no longer matches its committed `r6_wreck.jpg` pixel for pixel.
 
 ## Layout
 
@@ -62,6 +66,9 @@ spec 051) with `render_round6.py`, same options as round 4.
 | `lab/scene5.py` | round 5 frames: skyline street (sunset, night), garden promenade, roof drone pad, aerial |
 | `lab/world.py` | round 6 kit: low-poly terrain, the Wreck, the old highway, Wildbelt hedge and gate, cows, pigs, deer, ranger robot, lookout, lighthouse, pier, buoys, lifeguard drone, ferry, rain, lightning, clouds, umbrellas |
 | `lab/scene6.py` | round 6 frames: the town model (plan of spec 051 in 3D), the Wreck, the Wildbelt, storm, lake fog |
+| `lab/canopy.py` | round 7 kit: the Canopy (glass vault, lattice, gutter, tree columns, cisterns), rain and snow that stop at the glass, the lightning running across the lattice, season colours, trees, firs, fallen leaves, petals, snowman, banners |
+| `lab/wrecks.py` | round 7: two more Wrecks with the airship's layout, the Pelican freight plane and the Stella starliner |
+| `lab/scene7.py` | round 7 frames: the town in the rain from the air, Main Street under the Canopy in a storm, one promenade in four seasons, the three Wrecks |
 | `lab/post.py` | greyscale, colour-blind simulation (Machado 2009), pixel compare |
 
 ## Rules the scripts keep

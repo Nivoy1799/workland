@@ -206,6 +206,14 @@ The design itself is spec 051 (draft). This round only draws it: the plan map (S
 the Town Hall (the plan in 3D), the west edge (the Wreck), the south edge (the Wildbelt), the east edge in morning
 fog, and Main Street in a thunderstorm. Output `docs/art/stylelab/round-6/`.
 
+## Round 7: the Canopy, the seasons, the Wreck (human, 2026-11-11, answers to spec 051: "season would be nice (but
+maybe there is a shield over the world to protect against rain and collect everything. Leaves are saved to produce
+soil" ... the Wreck: "try something" ... "we need some identity -> backstory")
+Still only pictures for spec 051 (the design and the answers live there; the story is `docs/town-story.md`):
+the whole town in the rain from the air with the Canopy over the core, Main Street under the Canopy in a storm, one
+promenade in spring, summer, autumn and winter, and three tries for the Wreck in the same valley shot (the Albatross
+as Ark Flight 9, the Pelican freight plane, the Stella starliner). Output `docs/art/stylelab/round-7/`.
+
 ## Open questions
 0. **Real-world cultures in the town?** So far the world has only its own fictional history (D27, D28). Can a
    business be "Mexican-inspired" or "Japanese-inspired", or do we invent fictional regional cuisines that echo real
@@ -308,6 +316,19 @@ Round 6 (2026-11-11, Opus):
 - Storm uses EEVEE screen-space reflections for the wet street (the other frames keep them off). Fog and storm fade
   the ink outlines with distance.
 - Weak spots: the Wreck's rust panels stand off the hull; the north edge has no picture yet.
+
+Round 7 (2026-11-11, Opus):
+- Page: https://claude.ai/artifact/Mw2bPuTgkt2fyiPvJv5Ras (source `docs/art/stylelab/round-7/compare.html`).
+- `lab/canopy.py`, `lab/wrecks.py`, `lab/scene7.py`; nine frames by `tools/blender/stylelab/render_round7.py`.
+- The three Wreck frames reuse round 6's valley scene with the camera moved back, so whole silhouettes compare.
+- Weak spots: the summer Canopy's open panels hardly read (the glass is faint against the sky); the snow on the
+  outer panels and the plaque at the Ark's ramp are too small to see; the north edge still has no picture.
+- The Canopy is a disc of triangle rings mapped onto an ellipse (panels about the same size everywhere), with a
+  Wireframe lattice, a gutter, tree columns and cisterns. The glass casts no shadow; the lattice does. Rain and snow
+  are rejected under the glass, so they stop on it.
+- Seasons swap the leaf and flower colours the older kits read (`future.LEAVES`, `world.LEAVES`, `future.FLOWERS`)
+  once per frame, which is safe because every frame runs in its own Blender process.
+- Fix from round 6: the airship hull now has 36 profile steps and the rust panels sit on the hull's flat faces.
 
 ## Blockers
 (none)

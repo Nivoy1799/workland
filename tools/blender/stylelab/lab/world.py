@@ -264,11 +264,12 @@ def lookout(p, loc, yaw=0.0, h=2.6):
 
 # --- the Wreck (west edge) ---------------------------------------------------------------------------------------------
 
-def wreck(p, loc, yaw=0.0, length=150.0, r=17.0, seed=7, lit=True, pitch=-3.0, roll=7.0):
+def wreck(p, loc, yaw=0.0, length=150.0, r=17.0, seed=7, lit=True, pitch=-3.0, roll=7.0, ark=False):
     """The Albatross: an old cargo airship broken in two across the valley, overgrown, a market in its belly.
 
     Built along +X before turning: the nose piece lies tilted into the ground, a gap with bare ribs, the tail piece
-    with its fins. A big opening in the nose piece's side holds the night market.
+    with its fins. A big opening in the nose piece's side holds the night market. ark=True (round 7) adds the cargo
+    ramp the animals walked down and the seed library hatch (the town's story, docs/town-story.md).
     """
     rng = random.Random(seed)
     skin = _m("#C4BBA9", 0.75, 0.15)
@@ -279,7 +280,7 @@ def wreck(p, loc, yaw=0.0, length=150.0, r=17.0, seed=7, lit=True, pitch=-3.0, r
 
     def hull(name, z0, z1, rx0, rx1, closed0, closed1):
         prof = []
-        steps = 10
+        steps = 36  # round 7: fine enough that the patches lie on the skin (round 6 had 10 and they stood off)
         for k in range(steps + 1):
             t = k / steps
             z = z0 + (z1 - z0) * t
@@ -331,8 +332,10 @@ def wreck(p, loc, yaw=0.0, length=150.0, r=17.0, seed=7, lit=True, pitch=-3.0, r
         if nose_len - 4 < x < nose_len + gap + 4:
             continue
         a = rng.uniform(-1.2, 1.4)
-        rr = radius(x)
-        parts.append(b.box("wreck_patch", (rng.uniform(4, 9), 0.4, rng.uniform(2, 5)),
+        if ark and k % 2:  # round 7: fewer patches, so the ramp and the name read
+            continue
+        rr = radius(x) * math.cos(math.pi / 28) - 0.05  # the flat face of the 28-sided hull, not its corner
+        parts.append(b.box("wreck_patch", (rng.uniform(3, 6), 0.4, rng.uniform(1.5, 3.0)),
                            (x, -math.cos(a) * rr, axis(x) + math.sin(a) * rr), 0.1, 1,
                            rust if k % 3 else _m("#3D3A36", 0.8), rad(-math.degrees(a), 0, 0)))
         if k % 3 == 0:
@@ -374,6 +377,31 @@ def wreck(p, loc, yaw=0.0, length=150.0, r=17.0, seed=7, lit=True, pitch=-3.0, r
                        b.mat("market_dark", rough=0.9, hex_override="#2A211C")))
     if lit:
         parts.append(b.box("wreck_glow", (20.0, 0.2, 8.5), (ox, -r * 0.84 - 1.95, 0.4), 1.5, 2, b.lamp(0.35, "lamp_warm")))
+    if ark:
+        # The cargo ramp of Ark Flight 9: down it the animals walked out into the valley in 2122.
+        rx = nose_len * 0.86
+        parts.append(b.box("wreck_hatch", (11.0, 4.0, 7.5), (rx, -r * 0.8, 0.0), 1.0, 2,
+                           b.mat("market_dark", rough=0.9, hex_override="#2A211C")))
+        if lit:
+            parts.append(b.box("wreck_hatch_glow", (10.0, 0.2, 7.0), (rx, -r * 0.8 - 1.95, 0.3), 0.8, 2,
+                               b.lamp(0.25, "lamp_warm")))
+        ramp = b.box("wreck_ramp", (10.0, 14.0, 0.6), (rx, -r * 0.8 - 7.6, 0.6), 0.1, 1, _m("#8E8A84", 0.7, 0.3),
+                     rad(-14, 0, 0))
+        parts.append(ramp)
+        for k in range(7):
+            parts.append(b.box("wreck_ramp_rib", (10.0, 0.25, 0.2), (rx, -r * 0.8 - 2.0 - k * 1.9, 0.8 + 3.4 - k * 0.5),
+                               0, 1, rib, rad(-14, 0, 0)))
+        ark_txt = b.text("wreck_ark", "ARK FLIGHT 9", 1.6, (rx, -radius(rx) - 0.3, axis(rx) + 1.6), rad(90, 0, 0),
+                         _m("#2F6E5E", 0.7), 0.03)
+        ark_txt.visible_shadow = False
+        parts.append(ark_txt)
+        # The seed library ports high on the tail piece, now garden windows.
+        for k in range(6):
+            sx = length * 0.68 + k * 3.0
+            parts.append(b.cyl("wreck_seedport", 0.9, 0.5, (sx, -math.sqrt(radius(sx) ** 2 - 16.0) + 0.2,
+                                                            axis(length) + 4.0), 12,
+                               material=b.lamp(0.6, "lamp_warm") if lit else _m("#4A6B7C", 0.15, 0.4),
+                               rot=rad(90, 0, 0)))
     g = b.group("wreck", parts, loc, rad(roll, pitch, yaw))
     p.add(g)
     return g

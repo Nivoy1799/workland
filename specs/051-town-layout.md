@@ -6,7 +6,7 @@ owner: architect
 builder: opus
 ---
 
-# 051: The town plan (DRAFT, 2026-11-11, not decided)
+# 051: The town plan (DRAFT, 2026-11-11, not decided; first answers in, see "Answers")
 
 ## Goal
 Decide where everything in the town happens, how big the map must be, where and how the world ends without an
@@ -14,7 +14,8 @@ invisible wall, how the ground rises and falls, and how weather and daylight cha
 the base for the graybox, for every location-based number (D34 "location", rent, footfall, delivery distances) and for
 spec 050 (street life).
 
-Pictures: style lab round 6 (spec 046) and the plan map on the round 6 page.
+Pictures: style lab round 6 (spec 046) and the plan map on the round 6 page. Round 7 adds the Canopy, the four
+seasons and three tries for the Wreck. The town's story is drafted in `docs/town-story.md`.
 
 ## Fixed inputs (decided elsewhere)
 - D8: one hand-built small town. D33: co-op, player-hosted, 1–16 players, the host's PC runs the server.
@@ -24,12 +25,14 @@ Pictures: style lab round 6 (spec 046) and the plan map on the round 6 page.
   imagined it.
 
 ## Scope
-- `specs/051-town-layout.md` (this file). Later, after approval: `docs/town-plan.md` (the binding plan), and
+- `specs/051-town-layout.md` (this file) and `docs/town-story.md` (the backstory, draft). Later, after approval:
+  `docs/town-plan.md` (the binding plan), and
   follow-up specs for the graybox (`game/`), the location and weather model (`sim/`), and the light and weather
   visuals (`game/`). Each follow-up names its own folders.
 
 ## Out of scope
-Building anything in Unity or /sim. Final art. Seasons and snow (see open question 2). Player homes (question 5).
+Building anything in Unity or /sim. Final art. (Seasons, snow and player homes were out of scope in the first
+draft. The human said yes to both on 2026-11-11, so they are now sections 7b and 4b.)
 
 ## Design
 
@@ -81,7 +84,7 @@ Getting around:
 | 4 | **Market Hall** | ingredient suppliers (spec 034), crates from named farmers, decor and equipment stalls | 1–5 |
 | 5 | **Garden Promenade** | the car-free green spine from the hill to the meadow; café terraces, outdoor tables | 2–4 |
 | 6 | **Lakefront** | pier with the lighthouse, beach, ferry (deliveries only); the most beautiful places to rent | 3–4 |
-| 7 | **Homes** (south and north of Main Street) | NPC homes: delivery addresses, drone ports, regulars living there | 3 |
+| 7 | **Homes** (south and north of Main Street) | NPC homes: delivery addresses, drone ports, regulars living there; the players' own flats (4b) | 1–5 |
 | 8 | **Workshop Lane** | garage and car dealer (stage 5 cars), the delivery depot, a hardware and decor store | 3–5 |
 | 9 | **Greenhouse Hill** | vertical farms, the compost and recycling works (the circular economy), the ingredient lab | 5 |
 | 10 | **Festival Meadow and Arena** | event days, the fair, the cooking competitions against the best NPC teams | 5 |
@@ -119,6 +122,20 @@ NPC rival teams run the places you do not have. They move up and down too.
   - **Private:** NPC homes. You can ring the bell, deliver to the door or the drone port, and look at the window boxes.
 - Your own restaurant: the team sets its opening hours and which doors are open to guests.
 
+### 4b. Player homes (yes, 2026-11-11)
+Basics are free in 2222 (docs/setting.md, money option C), so every player gets a flat for free.
+- **Where:** the Homes district. The **Crew House**, a block of 16 small flats by the Promenade, one per player slot,
+  plus a shared kitchen table and a roof garden. Later, with credits, a player can move to a house of their own.
+- **What it is for:**
+  - your own corner to decorate: furniture, plants and posters bought with credits (the round 2 personalisation);
+  - a wardrobe to change your look;
+  - a bed that ends your day. (Proposed: the clock only skips the night when every player in the game is in bed,
+    the usual co-op rule.)
+  - your mailbox: fan letters, rival challenges, the town paper.
+- **Visits:** your door is Private by default. You can set it to Open (friends walk in) or invite one player.
+  The same door rules as section 4.
+- **Save:** flats are part of the host's save (D33). A player who joins another host's game gets a flat there too.
+
 ### 5. Where the world ends: natural edges, never a bare wall
 Each edge has a reason in the story and a soft way to turn you back.
 
@@ -137,6 +154,15 @@ Last resort, in case a player gets through anyway:
 
 The user's idea of a crashed plane became the Wreck. An airship fits 2222 better, and it is useful as a place, not
 just a barrier.
+
+**Round 7: three tries for the Wreck** (the human said "try something"). All three have the night market inside and
+work as the west edge. They change the story a little (docs/town-story.md):
+
+| Try | What it is | Story fit |
+|---|---|---|
+| **A. Albatross, Ark Flight 9** (proposed) | the airship, now with the cargo ramp down which the animals walked out, and the seed library ports | best: an airship lands softly enough for people and animals to walk away, and it explains the Wildbelt and Greenhouse Hill |
+| B. Pelican | a 2100s freight plane, broken behind the wing, its cargo door swung up, a T-tail on the skyline | good: your original idea. The landing reads harder, so the story needs a lucky belly landing |
+| C. Stella | a 2100s starliner (a retro rocket) lying on its side, nose in the hillside, rows of lit portholes | the most retro-future picture, but a rocket carrying cows needs a bigger story |
 
 ### 6. Day and night
 - **One town clock**, run by the host. It runs only while the game runs (game-design v1).
@@ -171,6 +197,51 @@ Weather is planned by the town, which suits 2222, and sometimes it comes in wild
 | Rain | umbrellas, wet reflective streets, puddles | fewer walk-ups, more delivery orders, outdoor tables close. Rain washes the street, but guests carry mud in, so there is more cleaning inside (spec 035) |
 | Storm | dark sky, heavy rain, **lightning hits the rods on the towers** (never people), thunder, neon flickers | like rain, plus drones are grounded: deliveries go by ground courier and take longer |
 | Windy | leaves, flapping umbrellas, the airship moors | outdoor tables fewer, otherwise neutral |
+
+### 7b. Seasons and the Canopy (yes to seasons, 2026-11-11)
+The human's idea: a shield over the town that keeps the rain off and collects everything, with the leaves saved to
+make soil. Here it is the **Canopy** (locals call it "the Sail"): a high glass roof over the town core, built in
+2161 after a hail summer, with its lattice copied from the Albatross's envelope (docs/town-story.md).
+
+**What it is:**
+- a glass vault on Googie tree columns over the core: Station Square, Main Street, Fountain Cross, the Market Hall
+  and the middle of the Promenade (an ellipse of about 280 × 190 m on the plan map);
+- the rim sits at 40 m and the top at 58 m. The monorail (26 m) and every building pass under it. Flying lanes and
+  the Sky Deck stay outside, over Tower Rise;
+- **open at the sides**, so it is a roof, not a box: you walk in and out anywhere, and wind and birds pass;
+- its panels slide open on fine days (spring, summer) and close for rain, storms and snow. The Weather Office runs it.
+
+**What it collects:**
+- **Rain** runs into the gutter, down the columns and into cisterns at their feet. It waters Greenhouse Hill.
+- **Leaves:** in autumn the leaves of the hill woods and street trees land on the glass. They slide into the
+  gutter and down a glass leaf chute into a hopper ("leaves to soil"), and robots carry them up to the Compost Works.
+- **Kitchen scraps** from every restaurant (players and NPCs) go the same way (the cleaning loop of spec 035).
+- **Soil** from the Compost Works feeds the greenhouses. (Proposed for /sim: a town soil stock that nudges the
+  supply and price of greenhouse ingredients a little. More scraps and leaves composted means slightly cheaper
+  produce next season.)
+
+**What it changes in the game:**
+- Under the Canopy, weather never closes outdoor tables. The street stays dry, so footfall is steady.
+- Outside it (the Lakefront, the Homes, the Meadow and Arena, the Wreck, Workshop Lane, Greenhouse Hill) weather
+  counts in full (section 7): sunny days are great at the lake, and rainy ones empty it.
+- So the choice of pitch is a trade-off: steady and expensive under the glass, or cheaper and weather-dependent
+  outside it.
+- Storms: lightning hits the rods on the Canopy and on the towers, and you see it run across the lattice. It never
+  hits people.
+
+**Seasons:**
+- Four seasons of **7 game days each** (proposed). That is a 28-day year, about 19 hours of play at 40 minutes a day.
+- Deterministic like the weather: from the save's seed and the day number.
+
+| Season | Look | Weather mix | Demand and supply (/sim inputs) | Festival |
+|---|---|---|---|---|
+| Spring | blossom, petals on the paving, a fresh green hill, the Canopy partly open | mild, showers | salads and greens up; the first garden crops | Blossom Fair (Promenade) |
+| Summer | deep green, the Canopy wide open with lattice shadows, parasols | clear, warm haze, storms now and then | cold drinks and light dishes up; the Lakefront at its best | Lake Nights (Lakefront) |
+| Autumn | orange and red woods, leaves on the glass and the ground, sweeper robots, the leaf chute | windy, fog, rain | harvest dishes, soups; the most produce at the lowest prices | **Landing Day**, the town's birthday and harvest supper |
+| Winter | snow outside the rim, dry and warm under it, bare trees with lights, a snowman on the hill path | snow, cold clear days | hot drinks and stews up; greenhouse produce only, a bit dearer | Winter Lights market in the Wreck |
+
+Rules for older players: seasons change the look and the demand, never the paths. The core is always dry and clear.
+Outside it, robots clear the paths of snow and leaves before the morning.
 
 Comfort settings (spec 048):
 - lightning flash strength, from full to off (photosensitivity);
@@ -209,7 +280,20 @@ Comfort settings (spec 048):
 - [ ] AC5: 16 bots in the full town keep the 049 performance budget on the reference host PC.
 - [ ] AC6 (manual): an older test player finds the Market Hall, the pier and the Town Hall without a map in 5 minutes.
 
-## Open questions
+## Answers (from the human, 2026-11-11)
+1. Day length 40 minutes: "sounds good". **Accepted.**
+2. Seasons: "yeah season would be nice (but maybe there is a shield over the world to protect against rain and
+   collect everything. Leaves are saved to produce soil". **Yes**, worked out as the Canopy in section 7b.
+3. The Wreck: "try something". Three tries in round 7 (section 5). The pick is still open (question 10).
+4. Wildbelt animals: "yeah lets try". **Yes.** In the story they walked out of the Wreck (docs/town-story.md).
+5. Player homes: "yeah". **Yes**, section 4b.
+6. The monorail as a real train you ride: "good start". **Accepted** as the first version.
+7. Town name: "yeah we need some identity -> backstory". Drafted in docs/town-story.md, with three names (question 11).
+
+Decision lines (D numbers) for these get added to docs/decisions.md when this branch is merged, because main is
+ahead and the numbers must not clash.
+
+## Open questions (original list, answered above)
 1. **Day length:** 40 real minutes per game day (proposed)? Shorter means more sunsets per evening; longer means calmer
    shifts.
 2. **Seasons:** none in v1 (proposed), maybe a winter fair event later?
@@ -219,6 +303,15 @@ Comfort settings (spec 048):
 5. **Player homes:** none in v1 (proposed). Later, a shared crew flat above the restaurant?
 6. **The town monorail as fast travel:** a real train you ride (proposed), or no fast travel at all?
 7. **Town name** (O1 is the game title; the town may need its own name).
+
+## Open questions (round 7)
+8. **Season length:** 7 game days per season (proposed)? Fewer days means more festivals per evening of play.
+9. **Canopy coverage:** only the core (proposed), so the edges keep their weather? Or the whole bowl?
+10. **The Wreck:** A, the Albatross as Ark Flight 9 (proposed); B, the Pelican freight plane; or C, the Stella
+    starliner?
+11. **Town name:** Seedfall (proposed), Albatross Landing, or Kettlebay? See docs/town-story.md.
+12. **Sleeping:** the night skips only when every player is in bed (proposed), or never?
+13. **Compost to soil in /sim:** a small effect on greenhouse prices (proposed), or only for the look?
 
 ## Implementation notes
 (None yet; this is a design draft.)
