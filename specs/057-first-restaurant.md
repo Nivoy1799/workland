@@ -19,6 +19,8 @@ cleaning, rent and upkeep per service, and a visible stage 2 gate. Every amount 
 ## Depends on
 D23, D27, D33, D34, D37; specs 032 (card), 033 (drinks), 034 (terminal), 035 (cleaning), 052 (`ClimbCatalog`), 053
 (save v1, `ShopStage`, `FoodCornerRules.Scale`, covers, one shop wallet). Not 037 (prices stay the market's).
+**Builds on 062a** (moved behind it with the human's approval, 2026-11-11): the restaurant is the default layout data,
+not a fixed scene. Stations are spawned pieces with stable ids; the goal board is a layout piece.
 **Numbers warning:** 052b is not needed for the mechanics, but neither 052 nor 052b calibrates stage 2 to the game
 (052b open question 3: the game serves about 4x fewer guests per service than the sim assumes). With today's catalog
 the rent is $5,750 per service (sim $50 x 115) against about $2,700 net for a solo fries cook. **Recommended order:
@@ -44,7 +46,8 @@ Only `/game` (plus the tour hook in `scripts/visual-check.sh`). Paths under `gam
   (capture and apply the new fields), `SaveTrigger.cs` (`StageChanged`), `AutosaveRules.cs`.
 - `Scripts/UI/HudView.cs`, `ShiftSummaryView.cs` (stage 2 lines), `GoalBoardView.cs` (new: the board's text, client).
 - `Scripts/Net/ProtocolSurface.cs` (change: `Revision` + 1).
-- `Editor/GrayboxSceneBuilder.cs` (change: the goal board) and the regenerated scene.
+- `Resources/Layouts/default.json` (change: the `goal_board` piece, 062a's reserved catalog row, flagged for 062a's
+  `Backfill` so older saves get it) and `Editor/PiecePrefabBuilder.cs` (change: its prefab).
 - `Scripts/Dev/RestaurantTourRunner.cs` (new), `scripts/visual-check.sh` (change: `restaurant` tour).
 - Tests in `Tests/EditMode/`; `Resources/WhatsNew.json`; this spec.
 - No change in `/sim` (052b owns it), no change to specs 040, 046, 050, 051.
@@ -59,14 +62,15 @@ Only `/game` (plus the tour hook in `scripts/visual-check.sh`). Paths under `gam
 ## Design
 
 ### Where the restaurant is (recommendation)
-**Recommended: the same graybox scene, as 053 built it.** Stage 1 is the kitchen with closed stations covered; at
-stage 2 every station opens and its `ClosedCover` disappears (they already read the synced stage). The move is made
+**Recommended: the same place, the default layout (062a).** Stage 1 is the default layout with closed stations
+covered; at stage 2 every station opens and its `ClosedCover` (part of each piece prefab since 062a) disappears (they
+already read the synced stage). The move is made
 visible by the sign: the shop name changes from "Your food corner" to "Your restaurant", the feed says "Moving day:
 the whole kitchen is yours", and the covers vanish at once.
 Trade-off: a separate small corner area (a cart on the street) would make the move a real place change and status
-(pillar 3), but it needs a second fryer and counter, new spawn points, a second queue path and a scene the 049 budget
-must hold, and the stage 1 tours and covers would be redone. The same scene costs nothing new and keeps every 053
-test. A separate cart can come with 040's art as a later spec.
+(pillar 3), but it needs a second fryer and counter, new spawn points, a second queue path and a second layout the 049
+budget must hold, and the stage 1 tours and covers would be redone. The same layout costs nothing new and keeps every
+053 test. A separate cart can come with 040's art as a later spec.
 
 ### Numbers from the catalog (`RestaurantRules`, pure; every amount via `FoodCornerRules.Scale`)
 `S = climb.StageOf(ClimbStage.FirstRestaurant)`; `scale(x) = FoodCornerRules.Scale(x, GameDishPrice, SimDishPrice)`.
@@ -125,8 +129,8 @@ never goes below 0 (053).
   "Licence within reach! Delivery and more services come in a later update." The licence is not bought in this build.
 
 ### The goal board (`StationKind.GoalBoard`, one new station, no new RPC)
-A wall board inside by the front door (graybox panel, Cream with Ink text, D32). It uses the existing station-use
-intent; the slot is the row. Rows: 0 the stage step; 1..4 the recipes. Stage 0 (open kitchen): every row refuses
+A `goal_board` wall piece of the default layout, inside by the front door (graybox panel, Cream with Ink text, D32).
+It uses the existing station-use intent (its station id is its piece id, 062a); the slot is the row. Rows: 0 the stage step; 1..4 the recipes. Stage 0 (open kitchen): every row refuses
 (`NotOpenYet`). Stage 1: row 0 rents; rows 1..4 refuse (`NotOpenYet`). Stage 2: row 0 shows the gate (no action);
 a recipe row not owned buys it (confirm, money, owed = 0); owned toggles it on/off (refused over `MaxDishes`: "The menu
 holds 4 dishes"). Purchases and toggles apply from the next service start ("On the menu from the next service").
@@ -186,7 +190,7 @@ keeps everything else. Codec clamps: `stage` 1..2 (`ClampSaved`), `rentOwed` 0..
   right before the stage 2 calibration.
 
 ## Open questions (recommended default in brackets)
-1. Where the restaurant is. [same scene, covers come off; a separate cart later with 040]
+1. Where the restaurant is. [same place, the 062a default layout, covers come off; a separate cart later with 040]
 2. Who may spend the shop's money (rent, recipes). [any player, two presses within 4 s; the feed names who bought]
 3. When the move happens. [at once between services, else at the end of the current service]
 4. Rent the crew cannot pay. [owed, paid first; spending blocked; capped at 2 rents, the rest forgiven; the reserve
