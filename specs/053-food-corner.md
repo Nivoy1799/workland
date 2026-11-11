@@ -196,7 +196,62 @@ per-player wallets are updated and listed in Implementation notes.
 10. Steam Cloud and copies to crew members. [later; needs a real Steam app id]
 
 ## Implementation notes
-(Builder fills this in.)
+Built 2026-11-11 on `spec/053-food-corner` (main merged in with `--no-commit`, so 052's `ClimbCatalog` is there; the merge is staged,
+053's own changes are not). The 054 review fixes are folded into this round (see spec 054, "054 review fixes").
+
+**Design as built**
+- *Open kitchen vs food corner:* `ShopStage.Stage` 0 is the open kitchen (every station: `-host`, `-server`, the tours, tests), 1 the
+  food corner. `NetBootstrap.HostStart` (`Save/ShopStart`: OpenKitchen, NewShop, Continue) says how the next hosted game starts; the
+  title's New shop and Continue, `-new-shop` and `-continue` set it; `SaveService` applies it when the server starts (before the first
+  player spawns).
+- *One shop wallet:* `EconomyRules.AccountId` returns `ShopAccount` ("shop") for every player, so every existing money step (grocer,
+  portions, pours, supply orders, sales, guest payments, refunds) works on the one account unchanged and keeps its charge-once and
+  refund-backstop guarantees. `EconomyService` publishes the balance to every player's `Wallet` after every step. The account opens once
+  per game: `StartGame(seed, day, opening)` (a new shop's scaled starting money, or a save's balance: no grant), or in the open kitchen
+  with `StartingGrant` at the first spawn; `TryOpenAccount` refuses every later join or rejoin.
+- *New game, fresh economy:* `StartGame` makes a new `TownEconomy` (seed `worldSeed ^ day`, ticked to 08:00) and shows the saved day
+  through a tick offset of (day - 1) x 24 (`EconomyService.Tick` and `GameMinute` include it, so the shift, the clock text, deliveries
+  and hygiene all see the same day). The stock and the cleaning reset on the new economy as before (`EnsureGame`, now public, so the
+  save's counts and hygiene are applied after the reset, never undone by it).
+- *Stage 1 rules* are pure (`ShopStageRules`, `FoodCornerRules`); `ClosedTargets.IsClosed` is the one component test the server
+  (`KitchenService.TryUseStation`, `TryUseVessel`, the place guard) and the client prompt (`PickupInteractor.AimClosed`, HudView)
+  share. Guests: `CustomerService` keeps every draw (same RNGs, same count) and `FoodCornerRules.StageOrder` overrides the result
+  (fries, to go, no drink, cash, no modifiers); only the fries' market sends guests (`WantsMarket`), so a sale never makes a guest of
+  another market leave. The register refuses the card terminal (`RegisterDesk.AcceptsCard`).
+- *Service moments:* `CustomerService.ServiceOpened` / `ServiceClosed` (new events, guarded). `SaveService` drives them:
+  `ShopStage.ServerServiceOpened` (the supplier's drop: `StockRoom.Drop`, the potato slot up to capacity, paid once from the shop
+  wallet at the bulk price of n units, only what the money covers, refund backstop) and `ServerServiceEnded` (pitch fee, wallet clamped
+  at 0, then the goal flips once), then the autosave (ServiceEnd, or GoalReached when it flipped).
+- *Amounts (default catalogs):* game dish price 460 (snack ceiling 400 at 650 permille), sim 4, so x 115: starting money $2,875,
+  pitch fee $575 per service, rent goal $34,500. The spec's "$230 / $400" was an example.
+
+**Save format:** `ShopSave` as in the Design, `formatVersion` 1, JsonUtility, indented (about 3 KB). Stock slots are named
+`shelf:<id>`, `fridge:<id>`, `stock:<id>` (`ShopSaveCodec.SlotOf`). `SaveError` has the five errors plus `None`. Files:
+`<folder>/shop-<12 hex>.json`, `.tmp` then `File.Replace` with `.bak`. The folder: `-save-dir`, else none for any scripted run
+(`LaunchArgs.IsScripted`: tours, observer, bots, metrics, the 049 test flags), else `persistentDataPath/saves`
+(`%USERPROFILE%\AppData\LocalLow\DefaultCompany\Worktown\saves`; the company name is still "DefaultCompany", O1, not changed).
+The captured balance adds the cost of supply orders still on their way (they are refunded when the server stops).
+
+**Deviations and scope (reviewer, please check)**
+- Touched outside the listed files, each a few lines: `Shop/CleaningRoom.cs` and `Shop/CleaningService.cs` (the hygiene restore;
+  `ShopHygiene` is only the synced byte), `Shop/SupplyService.cs` (the drop, the shop's supply wallet, `EnsureGame` public),
+  `Tutorial/TutorialRunner.cs` (it picks `TutorialSteps.ForStage`), `Dev/TourRunner.cs` (skips the corner tour), `Climb/ClosedTargets.cs`
+  (new: the shared test lives outside the NetworkBehaviour so tests can call it without FishNet), `Save/ShopStart.cs` (new enum).
+- Not changed although listed: `StockCounts.cs`, `ShopHygiene.cs` (capture and restore go through StockRoom and CleaningRoom),
+  `Menu.cs` and `TutorialOrders.cs` (the stage override in `FoodCornerRules.StageOrder` covers the tutorial's scripted guest too: at
+  stage 1 only its fries guest comes, taken to go).
+- `AutosaveRules.ShouldSave` has a fifth parameter `serviceOpen` (Periodic needs it). `SaveTrigger.Created` is a sixth trigger: New
+  shop writes its file at once, so Continue exists before the first service ends.
+- `-continue` without a loadable save logs the error, keeps the file and opens a new food corner (the game always starts).
+- Tests updated because they pinned per-player wallets: `EconomyDemoTests.AccountIdAndMoney` (now the shop account) and
+  `StockRulesTests.Money_NoMoneyNoIngredient_TheGrocerIsPaidThePrice` (two engine accounts by literal ids).
+- AC5's "both wallets show it" is covered at the ledger level (`ShopWalletTests`: every player id is the one account); the publish to
+  every Wallet is `EconomyService.PublishWallets` and is seen in the corner tour, not in an EditMode test (it needs spawned objects).
+- AC8 is `SaveServiceTests` over the real economy, stock room, cleaning room and store on real temp files (SaveService's pure parts:
+  `NewSave`, `Fill`, `AddService`, `CountsOf`, `SeedOf`), not a running FishNet server.
+
+**Follow-ups:** boxes lying at the back door or waiting are not saved (a load starts clean; stage 1 has none). The menu tour now ends
+in a food corner (its New shop), without a save (no `-save-dir`). Inbox question 17 (cents) stays open: its spec adds the v1 to v2 step.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

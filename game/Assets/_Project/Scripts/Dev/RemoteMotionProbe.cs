@@ -57,7 +57,7 @@ namespace Worktown.Game.Dev
                 if (_bins[i] > 0) fields.Add(new KeyValuePair<string, double>(RemoteMotionStats.BinName(i), _bins[i]));
         }
 
-        private readonly int[] _bins = new int[RemoteMotionStats.CorrectionBinEdgesCm.Length + 1];
+        private readonly int[] _bins = new int[RemoteMotionStats.CorrectionBinEdgesCm.Count + 1];
 
         public void Dispose() => Watch(null);
 

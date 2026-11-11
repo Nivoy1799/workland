@@ -13,6 +13,8 @@ namespace Worktown.Game.Net.Rules
         public const ushort DefaultTugboatPort = 7770;
         /// <summary>Spec 047: the menu tour (Dev/MenuTourRunner) starts on the title screen, so it takes no mode flag.</summary>
         public const string MenuTour = "menu";
+        /// <summary>Spec 053: the food corner tour (Dev/CornerTourRunner) starts on the title screen too, with <c>-save-dir</c>.</summary>
+        public const string CornerTour = "corner";
         /// <summary>Spec 047: the highest <c>-max-players</c>.</summary>
         public const int MaxPlayersLimit = 64;
 
@@ -67,6 +69,18 @@ namespace Worktown.Game.Net.Rules
         public bool PlayerCollision { get; private set; } = true;
         /// <summary>Spec 054: true when <c>-player-collision</c> was given.</summary>
         public bool PlayerCollisionGiven { get; private set; }
+        /// <summary>Spec 053: <c>-new-shop</c>, host a new food corner with its own save file and skip the title screen.</summary>
+        public bool NewShop { get; private set; }
+        /// <summary>Spec 053: <c>-continue</c>, host the newest save and skip the title screen.</summary>
+        public bool ContinueShop { get; private set; }
+        /// <summary>Spec 053: <c>-save-dir path</c>, the save folder instead of the player's (tests, tours). Empty = the default (none in a
+        /// scripted run).</summary>
+        public string SaveDir { get; private set; } = string.Empty;
+        /// <summary>Spec 053: this host starts with a save (<c>-new-shop</c> or <c>-continue</c>); <c>-host</c> is the open kitchen.</summary>
+        public bool HostsSave => NewShop || ContinueShop;
+        /// <summary>Spec 053: a tour that starts on the title screen (no mode flag).</summary>
+        public bool TitleTour => Tour == MenuTour || Tour == CornerTour;
+
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
 
@@ -95,6 +109,20 @@ namespace Worktown.Game.Net.Rules
                     case "-host":
                         modeFlags++;
                         result.Mode = LaunchMode.Host;
+                        break;
+                    case "-new-shop": // spec 053
+                        modeFlags++;
+                        result.Mode = LaunchMode.Host;
+                        result.NewShop = true;
+                        break;
+                    case "-continue": // spec 053
+                        modeFlags++;
+                        result.Mode = LaunchMode.Host;
+                        result.ContinueShop = true;
+                        break;
+                    case "-save-dir": // spec 053
+                        if (!HasValue(args, i)) return Fail("-save-dir needs a directory");
+                        result.SaveDir = args[++i];
                         break;
                     case "-connect":
                         modeFlags++;
@@ -193,11 +221,16 @@ namespace Worktown.Game.Net.Rules
                 }
             }
 
-            if (modeFlags > 1) return Fail("only one of -server, -host, -connect, -steam is allowed");
+            if (modeFlags > 1) return Fail("only one of -server, -host, -new-shop, -continue, -connect, -steam is allowed");
             if (result.Tour.Length > 0 && result.Observe.Length > 0) return Fail("-tour and -observe exclude each other");
             // Spec 047: the menu tour starts on the title screen (no mode flag); every other tour joins with -connect.
-            if (result.Tour == MenuTour && result.Mode != LaunchMode.Menu) return Fail("-tour menu takes no -server, -host, -connect or -steam");
-            if (result.Tour.Length > 0 && result.Tour != MenuTour && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
+            if (result.TitleTour && result.Mode != LaunchMode.Menu)
+                return Fail("-tour " + result.Tour + " takes no -server, -host, -new-shop, -continue, -connect or -steam");
+            if (result.Tour.Length > 0 && !result.TitleTour && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
+            // Spec 053: the corner tour saves and continues, so it brings its own folder (never the player's saves).
+            if (result.Tour == CornerTour && result.SaveDir.Length == 0) return Fail("-tour corner needs -save-dir");
+            if (result.SaveDir.Length > 0 && result.Mode != LaunchMode.Menu && !result.HostsSave)
+                return Fail("-save-dir needs the title screen, -new-shop or -continue");
             if (result.Observe.Length > 0 && result.Mode != LaunchMode.ClientTugboat && result.Mode != LaunchMode.Host)
                 return Fail("-observe needs -connect or -host");
             if (result.IsBot && result.Mode != LaunchMode.ClientTugboat) return Fail("-bot needs -connect (bots use Tugboat)");

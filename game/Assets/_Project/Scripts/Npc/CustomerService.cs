@@ -61,6 +61,24 @@ namespace Worktown.Game.Npc
         [SerializeField] private ServeFeed _feed;
         [Tooltip("Spec 035: the shop's cleaning (its hygiene score shortens patience and costs review stars). Optional.")]
         [SerializeField] private CleaningService _cleaning;
+        [Tooltip("Spec 053: the shop's stage (stage 1: one dish, to go, cash). Optional: without it, the open kitchen.")]
+        [SerializeField] private Worktown.Game.Climb.ShopStage _shopStage;
+
+        /// <summary>Spec 053, server: a service (shift) opened; raised once per service, after its first queue sync.</summary>
+        public event System.Action ServiceOpened;
+        /// <summary>Spec 053, server: a service closed (its summary numbers are final: every waiting payment settled).</summary>
+        public event System.Action ServiceClosed;
+
+        /// <summary>Spec 053, server: a service is open now.</summary>
+        public bool ServiceOpen => _shift.IsOpen;
+        /// <summary>Spec 053, server: the day the next service belongs to (the open one, or the day after the last closed one).</summary>
+        public long NextDay => Worktown.Game.Save.AutosaveRules.NextDay(_shift.IsOpen, _shift.Day, _shift.HasLast, _shift.LastDay,
+            Shift.DayOf(_economy != null ? _economy.Tick : 0));
+        /// <summary>Spec 053, server: the last closed service's numbers.</summary>
+        public ShiftSummary LastSummary => _shift.Last;
+
+        /// <summary>Spec 053: the shop's stage now (the open kitchen without a stage object).</summary>
+        private byte ShopStageNow => _shopStage != null ? _shopStage.StageNow : Worktown.Game.Climb.ShopStageRules.OpenKitchen;
 
         private readonly CustomerQueue _queue = new CustomerQueue();
         private readonly Dictionary<int, Customer> _customers = new Dictionary<int, Customer>();
@@ -224,6 +242,8 @@ namespace Worktown.Game.Npc
                 _economy.SkipHours(Shift.HoursToNextOpen(_economy.Tick));
             }
             Flow.HygienePercent = Hygiene; // spec 035: reviews notice a dirty shop
+            // Spec 053: the card terminal is closed at the food corner (cash only).
+            Flow.Desk.AcceptsCard = Worktown.Game.Climb.ShopStageRules.IsOpen(ShopStageNow, StationKind.Register, RegisterRules.CardOption);
             UpdatePatience(Time.deltaTime, Time.time);
             SettleForPayeesWhoLeft();
             // 032 review: a head payment nobody took for 30 s settles by itself (bill only), so one cook away never blocks the till.
@@ -256,8 +276,17 @@ namespace Worktown.Game.Npc
                 return;
             }
             if (!wasOpen && _shift.IsOpen) Debug.Log("[Customers] shift of day " + _shift.Day + " opens");
+            // Spec 053: the service's start moment (the food corner's stock drop) comes before the first guests walk in.
+            if (!wasOpen && _shift.IsOpen) Raise(ServiceOpened, "opened");
             Sync();
             PublishShift();
+        }
+
+        /// <summary>Spec 053: listeners (the stage, the save) never break the shift.</summary>
+        private static void Raise(System.Action moment, string what)
+        {
+            try { moment?.Invoke(); }
+            catch (System.Exception e) { Debug.LogException(e); Debug.LogWarning("[Customers] a listener failed when the service " + what); }
         }
 
         /// <summary>14:00: everyone still waiting leaves (they were counted as missed by the shift); spec 032: those at the register pay.</summary>
@@ -281,9 +310,12 @@ namespace Worktown.Game.Npc
                 + ShiftSummary.StarsText(sum.AverageStarsTenths) + ", reviews " + sum.Reviews + " (" + ShiftSummary.StarsText(sum.AverageReviewTenths)
                 + "), missed " + sum.Missed + " (patience " + sum.MissedPatience + ", gone " + sum.MissedGone + ", closed " + sum.MissedClosed + ")");
             PublishRegister();
+            Raise(ServiceClosed, "closed"); // spec 053: the pitch fee, the goal, the autosave
         }
 
-        private static bool HasDishes(string market) => Menu.HasDishes(market, Menu.CrateIngredients);
+        /// <summary>Spec 053: a market sends guests when it has a dish, and (stage 1) only the stage's dish's market.</summary>
+        private bool HasDishes(string market) =>
+            Menu.HasDishes(market, Menu.CrateIngredients) && Worktown.Game.Climb.FoodCornerRules.WantsMarket(ShopStageNow, market);
 
         /// <summary>Spec 035: the shop's hygiene score (100 without the cleaning service).</summary>
         private int Hygiene => _cleaning != null ? _cleaning.HygienePercent : HygieneRules.StartPercent;
@@ -560,17 +592,19 @@ namespace Worktown.Game.Npc
                 if (spawned >= free) break;
                 MenuDish dish = DrawDish(wish, out GuestOrder order, out float patienceScale, out string drink);
                 if (dish == null) continue; // cannot happen: only markets with dishes are desired
+                bool eatIn = GuestOrders.DrawEatIn(_eatInOrders); // spec 035: its own RNG, one draw per guest
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                if (_tourOrders != null && _tourOrders.LastScripted) eatIn = _tourOrders.LastEatIn; // the tour's scripted guests
+#endif
+                if (_lastTutorialScripted) eatIn = _tutorial.Orders.LastEatIn; // spec 038
+                // Spec 053: the draws above stay the same (same seed, same count); stage 1 overrides the results: fries, to go, cash.
+                order = Worktown.Game.Climb.FoodCornerRules.StageOrder(ShopStageNow, order, ref dish, ref drink, ref eatIn);
                 RecipeTemplate template = dish.Template != null ? RecipeTemplates.ById(dish.Template) : null;
                 byte modifiers = OrderModifiers.Pack(template, order.Modifiers);
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_customerPrefab, true);
                 nob.transform.SetPositionAndRotation(_entry.position, _entry.rotation);
                 var customer = nob.GetComponent<Customer>();
                 byte drinkByte = DrinkRules.DrinkByte(drink); // spec 033
-                bool eatIn = GuestOrders.DrawEatIn(_eatInOrders); // spec 035: its own RNG, one draw per guest
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
-                if (_tourOrders != null && _tourOrders.LastScripted) eatIn = _tourOrders.LastEatIn; // the tour's scripted guests
-#endif
-                if (_lastTutorialScripted) eatIn = _tutorial.Orders.LastEatIn; // spec 038
                 customer.ServerInit(wish, dish.Id, modifiers, drinkByte, eatIn, _entry.position); // before Spawn: values go out with the spawn
                 _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;

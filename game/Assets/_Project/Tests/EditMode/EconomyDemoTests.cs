@@ -139,7 +139,9 @@ namespace Worktown.Game.Tests
         [Test]
         public void AccountIdAndMoney()
         {
-            Assert.AreEqual("p3", EconomyRules.AccountId(3));
+            // Spec 053 (pillar 2): every player shares the one shop account (it was "p" + id per player).
+            Assert.AreEqual(EconomyRules.ShopAccount, EconomyRules.AccountId(3));
+            Assert.AreEqual(EconomyRules.AccountId(1), EconomyRules.AccountId(2));
             Assert.AreEqual("$1,234", EconomyRules.Money(1234));
             Assert.AreEqual("-$60", EconomyRules.Money(-60));
         }

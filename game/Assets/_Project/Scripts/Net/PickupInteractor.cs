@@ -369,11 +369,19 @@ namespace Worktown.Game.Net
                 CurrentHeld = Held.Nothing;
                 CurrentAim = AimTarget.Nothing;
                 CurrentAction = InteractionAction.None;
+                AimClosed = TargetClosed(); // spec 053: the third-person prompt of the nearest station
                 return;
             }
             CurrentHeld = Hands(held);
             CurrentAim = TargetTooFar ? Describe(Target).TooFar() : Describe(Target);
             CurrentAction = InteractionRules.ActionFor(CurrentHeld, CurrentAim);
+            // Spec 053: a closed station, slot or cookware offers nothing; the prompt says why (the server refuses it the same way).
+            AimClosed = TargetClosed();
+            if (AimClosed)
+            {
+                CurrentAction = InteractionAction.None;
+                CurrentAim = AimTarget.Nothing;
+            }
             // Spec 029b: while a take is on its way and nothing is really held, a click offers nothing (no Place, PutInto or
             // Sell of food that is not there yet), and the prompt stays empty.
             if (InteractionRules.WaitsForTake(_pendingTake != null, held != null))
@@ -2261,6 +2269,33 @@ namespace Worktown.Game.Net
         /// <summary>Owner side: the target station, for keys and the overlay prompt. Null if none. Kept as an
         /// alias of <see cref="Target"/> so older readers keep working.</summary>
         public Station NearestStation => Target as Station;
+
+        /// <summary>
+        /// Spec 053, owner side: what the dot (first person) or the nearest station (third person) is on is closed at this stage of the
+        /// climb (ShopStage.IsClosed, the server's own test), so nothing is offered and the prompt shows ShopStageRules.NotOpenText.
+        /// </summary>
+        public bool AimClosed { get; private set; }
+
+        private Worktown.Game.Climb.ShopStage _shopStage;
+        private float _nextStageLookup;
+
+        /// <summary>Spec 053: the stage this client sees (the synced ShopStage, looked up once a second until found).</summary>
+        private byte StageSeen()
+        {
+            if (_shopStage == null && Time.unscaledTime >= _nextStageLookup)
+            {
+                _nextStageLookup = Time.unscaledTime + 1f;
+                _shopStage = Worktown.Game.Climb.ShopStage.Find();
+            }
+            return _shopStage != null ? _shopStage.StageNow : Worktown.Game.Climb.ShopStageRules.OpenKitchen;
+        }
+
+        private bool TargetClosed()
+        {
+            byte stage = StageSeen();
+            return stage != Worktown.Game.Climb.ShopStageRules.OpenKitchen && Target != null
+                && Worktown.Game.Climb.ClosedTargets.IsClosed(stage, Target);
+        }
 
         /// <summary>Owner side: true while the local camera is in first person.</summary>
         public bool IsFirstPerson => _rig != null && _rig.IsFirstPerson;

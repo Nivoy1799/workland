@@ -20,6 +20,18 @@ namespace Worktown.Game.Net
     /// </summary>
     public static class ProtocolSurface
     {
+        /// <summary>
+        /// 054 review: the wire revision, hashed as the line "revision N". The lines see RPCs, synced fields and broadcasts, but not how a
+        /// prefab is put together: the order of its NetworkBehaviours (their indexes on the wire), its NetworkObject's prediction and
+        /// state forwarding flags, or a NetworkTransform's settings that change what it sends. Every such wire change bumps this number,
+        /// so an older and a newer build refuse each other cleanly. 1: up to spec 047 (no line). 2: spec 054 (the player root's
+        /// NetworkTransform, no state forwarding, items silent while held, no scale sync; 054 review: item teleports).
+        /// </summary>
+        public const int Revision = 2;
+
+        /// <summary>The line that carries <see cref="Revision"/>.</summary>
+        public static string RevisionLine => "revision " + Revision;
+
         private const BindingFlags Declared = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
             | BindingFlags.DeclaredOnly;
 
@@ -72,6 +84,7 @@ namespace Worktown.Game.Net
                     lines.Add(sb.Append('}').ToString());
                 }
             }
+            lines.Add(RevisionLine); // 054 review: wire changes the reflection cannot see
             return lines;
         }
 

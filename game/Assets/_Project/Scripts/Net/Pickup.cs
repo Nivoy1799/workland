@@ -280,6 +280,9 @@ namespace Worktown.Game.Net
             if (held == _clientFollowing) return;
             _clientFollowing = held;
             ApplyHeldSync(gameObject, held);
+            // 054 review: goals still buffered from before the pick-up (a landing within about 100 ms) are stale: the release must not
+            // play them first.
+            if (held && TryGetComponent(out NetworkTransform nt)) TransformGoals.Clear(nt);
             if (!held)
             {
                 _followHolder = PickupRegistry.NoHolder;

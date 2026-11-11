@@ -96,21 +96,34 @@ namespace Worktown.Game.Shop
         private double TickRate => _networkManager.TimeManager.TickRate;
         private long Minute => _economy != null ? _economy.GameMinute : (long)(Time.time * 60f / EconomyRules.SecondsPerHour);
 
+        /// <summary>A new economy is a new game: clean plates, an empty trash, 100 %. Spec 053: public, so a loaded save's hygiene is
+        /// applied after this reset (<see cref="RestoreHygiene"/>), never undone by it.</summary>
+        public void EnsureGame()
+        {
+            object game = _economy != null ? _economy.Game : this;
+            if (ReferenceEquals(game, _game)) return;
+            _game = game;
+            _room.Reset(Minute); // a new game: clean plates, an empty trash, 100 %
+            if (_tourTrash)
+            {
+                _room.StartTrashAt(TourTrashStart);
+                Debug.Log("[Cleaning] tour trash (-tour-orders): the trash starts at " + TourTrashStart);
+            }
+        }
+
+        /// <summary>Spec 053, server: a loaded save's hygiene score (after <see cref="EnsureGame"/> of its new game).</summary>
+        public void RestoreHygiene(int percent)
+        {
+            EnsureGame();
+            _room.RestoreHygiene(percent, Minute);
+            Publish();
+        }
+
         private void Update()
         {
             if (!_networkManager.IsServerStarted) return;
             long minute = Minute;
-            object game = _economy != null ? _economy.Game : this;
-            if (!ReferenceEquals(game, _game))
-            {
-                _game = game;
-                _room.Reset(minute); // a new game: clean plates, an empty trash, 100 %
-                if (_tourTrash)
-                {
-                    _room.StartTrashAt(TourTrashStart);
-                    Debug.Log("[Cleaning] tour trash (-tour-orders): the trash starts at " + TourTrashStart);
-                }
-            }
+            EnsureGame();
             int back = _room.Dishes.ReturnDue(minute);
             if (back > 0) Debug.Log("[Cleaning] " + back + " dirty plate(s) came back to the dish return (" + _room.Dishes.AtReturn + " waiting)");
             StopDueHolds();

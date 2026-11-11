@@ -5,7 +5,11 @@
 # numbers to names). The tour client starts first and the observer second, so another window has focus while
 # the tour runs: the tour moves through its intents, not simulated keys.
 #
-#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
+#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu,corner] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
+#
+#   corner (spec 053): one window, its own host: from the title screen (-tour corner, no mode flag) New shop, the food corner with its
+#                  covers and goal line, a closed station's refusal, two fries guests paid in cash, the service summary with the goal,
+#                  Close the shop, Continue with its line, Continue. Its saves go to <out>/corner-saves (-save-dir), never the player's.
 #
 #   menu (spec 047): the tour window starts on the title screen (-tour menu, no -connect) and joins the observer window (-host -observe
 #                  menu) through Join by address; the host kicks it; it then opens its own shop and closes it. Local server only.
@@ -65,6 +69,7 @@ timeout_for() {
     cook) echo 1860 ;; # spec 030: the griddle part; spec 031: the falafel wrap; spec 031b: the box; spec 032: the register; spec 033: the lemonade; spec 034: the stock run; spec 035: the cleaning loop; spec 036: the spit
     tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)
     menu) echo 360 ;; # spec 047: title, join by address, lobby, kick, own shop
+    corner) echo 720 ;; # spec 053: new shop, two fries guests, the service end, close, continue
     *) echo 420 ;;
   esac
 }
@@ -122,10 +127,12 @@ failed=0
 report=()
 IFS=',' read -r -a tour_list <<< "$TOURS"
 for tour in "${tour_list[@]}"; do
-  case "$tour" in look|walk|cook|tutorial|menu) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  case "$tour" in look|walk|cook|tutorial|menu|corner) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
   if [ "$tour" = "menu" ] && [ "$SERVER" != "local" ]; then echo "the menu tour needs --server local (its host is the observer window)" >&2; failed=1; continue; fi
   rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer" "${OUT:?}/${tour:?}-native-crash"
   rm -f "${OUT:?}/${tour:?}-tour.crash.log" "${OUT:?}/${tour:?}-observer.crash.log"
+  # Spec 053: the corner tour's own save folder starts empty (it must not see an older run's shop).
+  if [ "$tour" = "corner" ]; then rm -rf "${OUT:?}/${tour:?}-saves"; mkdir -p "$OUT/$tour-saves"; fi
   tour_log="$OUT/$tour-tour.log"
   observer_log="$OUT/$tour-observer.log"
   # Spec 049b: each window writes its own crash log (049's CrashLog: exceptions from every thread, the tick watchdog's dump)
@@ -143,6 +150,8 @@ for tour in "${tour_list[@]}"; do
   # Spec 047: the menu tour starts on the title screen and joins through it (no -connect).
   tour_connect=(-connect "$ADDRESS")
   if [ "$tour" = "menu" ]; then tour_connect=(); fi
+  # Spec 053: the corner tour is its own host from the title screen, with its own save folder and the tutorial's calm guests.
+  if [ "$tour" = "corner" ]; then tour_connect=(); tour_extra=(-save-dir "$(cygpath -w "$OUT/$tour-saves")" -tutorial); fi
   "$GAME" "${tour_connect[@]}" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -crash-log "$(cygpath -w "$tour_crash")" -logFile "$(cygpath -w "$tour_log")" &
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
@@ -152,19 +161,25 @@ for tour in "${tour_list[@]}"; do
   if [ "$tour" = "cook" ]; then host_extra=(-tour-orders); fi
   # Spec 038: the tutorial host has the tour's stock and trash set-up and the tutorial's calm guests (its scripted orders come first).
   if [ "$tour" = "tutorial" ]; then host_extra=(-tour-orders -tutorial); fi
-  if [ "$SERVER" = "local" ]; then
+  observer_pid=""
+  if [ "$tour" = "corner" ]; then
+    : # spec 053: no second window (the tour hosts its own shop on the port)
+  elif [ "$SERVER" = "local" ]; then
     "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${host_extra[@]}" "${WINDOW[@]}" -crash-log "$(cygpath -w "$observer_crash")" -logFile "$(cygpath -w "$observer_log")" &
   else
     "$GAME" -connect "$ADDRESS" -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -crash-log "$(cygpath -w "$observer_crash")" -logFile "$(cygpath -w "$observer_log")" &
   fi
-  observer_pid=$!
+  if [ "$tour" != "corner" ]; then observer_pid=$!; fi
 
   wait_window "$tour_pid" "$deadline"
   tour_code=$WAIT_CODE
   # The observer quits a few seconds after the tour player left; give it at least 30 s more.
-  now=$(date +%s)
-  wait_window "$observer_pid" $(( now + 30 > deadline ? now + 30 : deadline ))
-  observer_code=$WAIT_CODE
+  observer_code=0
+  if [ -n "$observer_pid" ]; then
+    now=$(date +%s)
+    wait_window "$observer_pid" $(( now + 30 > deadline ? now + 30 : deadline ))
+    observer_code=$WAIT_CODE
+  fi
   kill_windows
 
   exceptions=0

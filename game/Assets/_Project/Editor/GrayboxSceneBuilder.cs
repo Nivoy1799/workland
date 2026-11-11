@@ -32,6 +32,8 @@ using Worktown.Game.UI;
 using Worktown.Game.Social;
 using Worktown.Game.Npc;
 using Worktown.Game.Shop;
+using Worktown.Game.Climb;
+using Worktown.Game.Save;
 using UnityEngine.UIElements;
 using Unity.Cinemachine;
 using UnityEngine.InputSystem;
@@ -231,6 +233,7 @@ namespace Worktown.Game.Editor
             NetworkManager networkManager = CreateNetworkManager(playerPrefab, spawns, distance);
             CreateKitchen(networkManager, foodPrefab, knifePrefab, spatulaPrefab, vesselPrefabs, catalog, boxPrefab);
             CreateCustomers(networkManager, customerPrefab);
+            CreateFoodCorner(networkManager); // spec 053: the stage, the covers, the save; 054 review: the session's physics rule
             CreateBootstrap(networkManager);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -280,6 +283,8 @@ namespace Worktown.Game.Editor
             SetField(nob, "_enableStateForwarding", false);
             NetworkTransform remote = AddServerAuthoritativeTransform(root, NetRateRules.RemotePlayerInterval, NetRateRules.RemoteInterpolation);
             SetField(remote, "_sendToOwner", false);
+            // 054 review: one extrapolated update, not FishNet's 2 (2 overshoot a sprint stop by about 33 cm at 15 Hz).
+            SetField(remote, "_extrapolation", NetRateRules.RemoteExtrapolation);
             SetField(nob, "_networkTransform", remote);
 
             var smoother = graphic.AddComponent<NetworkTickSmoother>();
@@ -508,6 +513,115 @@ namespace Worktown.Game.Editor
             if (feed == null) throw new InvalidOperationException("the serve feed is missing");
             SetField(service, "_feed", feed);
             SetField(service, "_cleaning", networkManager.GetComponent<CleaningService>()); // spec 035: hygiene in patience and reviews
+        }
+
+        // ---- Spec 053: the food corner and the host's save ----
+
+        public const string ClosedCoverName = "Closed cover";
+        private const string ClosedCoverMaterialPath = Root + "/Settings/Closed_Cover.mat";
+        private const float CoverMargin = 0.03f;
+        private const float CoverThickness = 0.03f;
+        private const float CoverDrape = 0.35f;
+
+        /// <summary>
+        /// Spec 053: the shop's stage (a global scene object like the stock counts: the stage, the goal), the save service next to the
+        /// other services, a graybox cover over every station a food corner keeps closed, and (054 review) the session's physics rule.
+        /// </summary>
+        private static void CreateFoodCorner(NetworkManager networkManager)
+        {
+            ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
+            var stageObject = new GameObject("ShopStage");
+            NetworkObject stageNob = stageObject.AddComponent<NetworkObject>();
+            SetField(stageNob, "_isGlobal", true);
+            var stage = stageObject.AddComponent<ShopStage>();
+            SetField(stage, "_economy", networkManager.GetComponent<EconomyService>());
+            SetField(stage, "_supply", networkManager.GetComponent<SupplyService>());
+            SetField(stage, "_feed", feed);
+            SetField(networkManager.GetComponent<KitchenService>(), "_shopStage", stage);
+            SetField(networkManager.GetComponent<CustomerService>(), "_shopStage", stage);
+
+            var save = networkManager.gameObject.AddComponent<SaveService>();
+            SetField(save, "_networkManager", networkManager);
+            SetField(save, "_economy", networkManager.GetComponent<EconomyService>());
+            SetField(save, "_supply", networkManager.GetComponent<SupplyService>());
+            SetField(save, "_cleaning", networkManager.GetComponent<CleaningService>());
+            SetField(save, "_customers", networkManager.GetComponent<CustomerService>());
+            SetField(save, "_stage", stage);
+
+            // 054 review: one session object carries the players' collision rule (not every player).
+            var sessionObject = new GameObject("SessionPhysics");
+            NetworkObject sessionNob = sessionObject.AddComponent<NetworkObject>();
+            SetField(sessionNob, "_isGlobal", true);
+            sessionObject.AddComponent<SessionPhysics>();
+
+            Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Plaster);
+            int covers = 0;
+            var stations = new List<Station>(UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None));
+            stations.Sort((a, b) => a.Index.CompareTo(b.Index));
+            foreach (Station station in stations)
+            {
+                if (ShopStageRules.IsStationOpen(ShopStageRules.FoodCorner, station.Kind)) continue;
+                if (CreateClosedCover(station, cloth)) covers++;
+            }
+            Debug.Log("[Graybox] food corner: " + covers + " closed covers");
+        }
+
+        /// <summary>Spec 053: a cloth over the station's top with a drape at its front, and the sign above it. No collider.</summary>
+        private static bool CreateClosedCover(Station station, Material cloth)
+        {
+            Renderer[] renderers = station.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return false;
+            Bounds b = renderers[0].bounds;
+            foreach (Renderer r in renderers)
+                if (!(r is ParticleSystemRenderer) && !(r.GetComponent<TextMesh>() != null)) b.Encapsulate(r.bounds);
+            var root = new GameObject(ClosedCoverName);
+            root.transform.SetParent(station.transform, false);
+            var cover = root.AddComponent<ClosedCover>();
+            SetField(cover, "_kind", (int)station.Kind);
+            var shown = new GameObject("Cloth and sign");
+            shown.transform.SetParent(root.transform, false);
+            SetField(cover, "_cover", shown);
+
+            Vector3 size = new Vector3(b.size.x + 2f * CoverMargin, CoverThickness, b.size.z + 2f * CoverMargin);
+            GameObject top = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            top.name = "Cloth";
+            UnityEngine.Object.DestroyImmediate(top.GetComponent<Collider>());
+            top.transform.SetParent(shown.transform, true);
+            top.transform.SetPositionAndRotation(new Vector3(b.center.x, b.max.y + CoverThickness * 0.5f, b.center.z), Quaternion.identity);
+            top.transform.localScale = WorldToLocalScale(top.transform, size);
+            top.GetComponent<MeshRenderer>().sharedMaterial = cloth;
+
+            // The drape hangs down the aisle side of the station (its forward is the cook side for most stations).
+            Vector3 front = -station.transform.forward; // the cook side (a station faces the wall; the counter is turned 180)
+            front.y = 0f;
+            front = front.sqrMagnitude > 0.01f ? front.normalized : Vector3.back;
+            bool alongX = Mathf.Abs(front.z) >= Mathf.Abs(front.x);
+            float half = alongX ? b.extents.z : b.extents.x;
+            float drape = Mathf.Min(CoverDrape, b.size.y);
+            Vector3 drapeSize = alongX ? new Vector3(size.x, drape, CoverThickness) : new Vector3(CoverThickness, drape, size.z);
+            GameObject side = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            side.name = "Drape";
+            UnityEngine.Object.DestroyImmediate(side.GetComponent<Collider>());
+            side.transform.SetParent(shown.transform, true);
+            Vector3 centre = new Vector3(b.center.x, b.max.y - drape * 0.5f + CoverThickness, b.center.z) + front * (half + CoverMargin);
+            side.transform.SetPositionAndRotation(centre, Quaternion.identity);
+            side.transform.localScale = WorldToLocalScale(side.transform, drapeSize);
+            side.GetComponent<MeshRenderer>().sharedMaterial = cloth;
+
+            TextMesh sign = CreateLabel(shown.transform, Vector3.zero, 40, 0.025f);
+            sign.name = "Sign";
+            sign.transform.position = new Vector3(b.center.x, b.max.y + 0.08f, b.center.z) + front * (half * 0.5f);
+            sign.transform.rotation = Quaternion.LookRotation(-front, Vector3.up);
+            sign.text = ShopStageRules.NotOpenText;
+            sign.color = Palette.Ink;
+            return true;
+        }
+
+        /// <summary>The local scale that gives <paramref name="t"/> the world size <paramref name="world"/> under its parents' scale.</summary>
+        private static Vector3 WorldToLocalScale(Transform t, Vector3 world)
+        {
+            Vector3 parent = t.parent != null ? t.parent.lossyScale : Vector3.one;
+            return new Vector3(world.x / Mathf.Max(0.0001f, parent.x), world.y / Mathf.Max(0.0001f, parent.y), world.z / Mathf.Max(0.0001f, parent.z));
         }
 
         // Spec 022: the ticket rail board above the counter. Two rows of three cards. Spec 027a: above the front counter's
@@ -3303,6 +3417,12 @@ namespace Worktown.Game.Editor
             SetField(nt, "_synchronizeScale", false);
             SetField(nt, "_interval", interval);
             SetField(nt, "_interpolation", interpolation);
+            // 054 review: an item (every tick while it moves) jumps to a pose further than NetRateRules.ItemTeleportMetres away instead of
+            // sliding there, so a lost release teleport (FishNet's later reliable resend is a plain update) never drags the item across the
+            // kitchen. Players and customers walk; they keep interpolating.
+            bool item = interval == NetRateRules.ItemInterval;
+            SetField(nt, "_enableTeleport", item);
+            if (item) SetField(nt, "_teleportThreshold", NetRateRules.ItemTeleportMetres);
             return nt;
         }
 

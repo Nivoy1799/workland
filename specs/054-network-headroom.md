@@ -279,5 +279,34 @@ Test: `MouseControlsFollowUpTests.Footprint_OffThePivot_IsCheckedWhereTheBoxLies
 **Follow-ups.** The replay rewind above (or a human decision that the corrections are acceptable). Bots at 30 fps limit what the
 jitter metric can show; a 60 fps bot or a human capture would tell more. Wire bytes over the Steam transport (Human steps).
 
+### 054 review fixes (2026-11-11, built on branch spec/053-food-corner with spec 053)
+
+**Must-fix**
+1. **Build hash and wire changes the reflection cannot see.** `ProtocolSurface.Revision` (now 2) is hashed as the surface line
+   `revision 2`. Rule (in its doc comment): every wire change the lines cannot see (a prefab's NetworkBehaviour order, NetworkObject
+   prediction or state forwarding flags, NetworkTransform settings that change what it sends) bumps it. Revision 1 is everything up to
+   spec 047 (no line), so a 054 build and an older one compute different hashes and refuse each other. Pinned in
+   `NetReview054Tests.TheWireRevision_IsInTheSurface_AndChangesTheHash` (the line is present once, and the hash differs without it or
+   with `revision 1`).
+2. **The collision rule is one session object.** `PlayerController.CollidesWithPlayers` is gone; `Net/SessionPhysics.cs` (a global scene
+   NetworkBehaviour, built by the graybox builder) holds `SyncVar<bool> PlayersCollide`. The host sets it in `OnStartServer` from
+   `-player-collision` (dev builds); a client applies the layer rule when the scene object arrives, before its own player spawns, and
+   every player's ground and headroom probes follow (`PlayerController.RefreshBodyMask`). A stop resets the matrix to the default. The
+   default (players collide) is unchanged (inbox question 23). Pinned in `NetReview054Tests.TheCollisionRule_IsOneSessionField_NotOnEveryPlayer`.
+3. **A lost release packet no longer slides the item.** `AddServerAuthoritativeTransform` turns `_enableTeleport` on for items (the
+   every-tick interval) with `_teleportThreshold` `NetRateRules.ItemTeleportMetres` = 0.5 m; players and customers keep interpolating.
+   A client clears its NetworkTransform's buffered goals at a pick-up (`Net/TransformGoals.cs`, `Pickup.SetClientFollow`), so goals from
+   a landing just before (within about 100 ms) are never played after the release. FishNet has no public call for it and is not edited:
+   the two private fields (`_goalDataQueue`, `_currentGoalData`) are cleared by reflection; a test pins that they exist. It clears on
+   every client pick-up, not only within 100 ms of a landing (a held item's NetworkTransform drives nothing, so nothing is lost).
+   Pinned in `Items_TeleportPastHalfAMetre_PlayersAndCustomersDoNot` and `APickUp_CanClearTheTransformsStaleGoals`.
+
+**Nits**
+- The player's root NetworkTransform extrapolates one update (`NetRateRules.RemoteExtrapolation` = 1); pinned in `ThePlayer_ExtrapolatesOneUpdate`.
+- A release build warns on `-player-collision` (SessionPhysics, at the server start) instead of ignoring it silently.
+- `RemoteMotionStats.CorrectionBinEdgesCm` is a read-only list (pinned in `TheCorrectionBins_AreReadOnly`).
+- Graybox.unity churn: not cheap to reduce. The builder makes a new scene each run and Unity gives every new object a random file id,
+  so a rebuild rewrites most of the file whatever changed. Stable ids would need the builder to edit the old scene in place.
+
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

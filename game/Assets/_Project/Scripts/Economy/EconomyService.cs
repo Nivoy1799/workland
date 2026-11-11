@@ -9,9 +9,12 @@ using Worktown.Sim.Economy;
 namespace Worktown.Game.Economy
 {
     /// <summary>
-    /// Server-side economy for the demo (spec 009). Opens an account per player on spawn, runs the
-    /// in-game clock (one economy tick per <see cref="EconomyRules.SecondsPerHour"/>) and publishes
-    /// wallets and the market board. Does nothing on pure clients.
+    /// Server-side economy for the demo (spec 009). Runs the in-game clock (one economy tick per
+    /// <see cref="EconomyRules.SecondsPerHour"/>) and publishes wallets and the market board. Does nothing on pure clients.
+    /// Spec 053 (pillar 2, the money belongs to the group): one shop wallet. Every player's money step goes to the one shop account
+    /// (<see cref="EconomyRules.ShopAccount"/>), every change is published to every player's Wallet, and the account opens once per
+    /// game: <see cref="StartGame"/> (a new shop with its starting money, or a loaded save's balance, no grant) or, in the open kitchen,
+    /// with <see cref="EconomyRules.StartingGrant"/> when the first player spawns. A joining or rejoining player gets nothing.
     /// </summary>
     public sealed class EconomyService : MonoBehaviour
     {
@@ -20,8 +23,14 @@ namespace Worktown.Game.Economy
         [SerializeField] private NetworkManager _networkManager;
         [SerializeField] private MarketBoard _board;
 
-        private readonly TownEconomy _economy = TownEconomy.CreateDemo();
+        private TownEconomy _economy = TownEconomy.CreateDemo();
         private float _secondsIntoHour;
+        // Spec 053: the shown day of a loaded game (the economy itself starts fresh at day 1), every player's wallet, and what the shop
+        // earned and spent in this game (for the save).
+        private long _tickOffset;
+        private readonly List<Wallet> _wallets = new List<Wallet>();
+        private long _earned;
+        private long _spent;
 
         /// <summary>Spec 014: raised on the server after every in-game hour (demand changed).</summary>
         public event System.Action HourTicked;
@@ -32,8 +41,57 @@ namespace Worktown.Game.Economy
             return _economy.TryGetMarket(marketId, out MarketState market) ? market.OpenDemand : 0;
         }
 
-        /// <summary>Spec 022: the in-game clock (one tick per hour, day 1 starts at tick 0).</summary>
-        public long Tick => _economy.Tick;
+        /// <summary>Spec 022: the in-game clock (one tick per hour, day 1 starts at tick 0). Spec 053: with a loaded game's day offset.</summary>
+        public long Tick => _economy.Tick + _tickOffset;
+
+        /// <summary>Spec 053, server: the one shop balance (-1 before the shop opened).</summary>
+        public long ShopBalance => _economy.BalanceOf(EconomyRules.ShopAccount);
+
+        /// <summary>Spec 053: what the shop took in (sales, guests' payments) and paid out (stock, fees; refunds count back) in this game.</summary>
+        public long Earned => _earned;
+        public long Spent => _spent;
+
+        /// <summary>
+        /// Spec 053, server: a new game (New shop, or Continue from a save): a fresh economy (seeded with <paramref name="seed"/>, ticked to
+        /// 08:00), shown as day <paramref name="day"/>, and the shop account opened once with <paramref name="opening"/> (the starting money,
+        /// or the saved balance: no grant). <paramref name="earned"/> and <paramref name="spent"/> carry the save's totals on. The stock and
+        /// the cleaning see a new game (<see cref="Game"/>) and start over; the save service then applies the saved stock and hygiene.
+        /// </summary>
+        public void StartGame(ulong seed, long day, long opening, long earned = 0, long spent = 0)
+        {
+            _economy = TownEconomy.CreateGame(seed);
+            _tickOffset = EconomyRules.DayOffsetTicks(day);
+            _secondsIntoHour = 0f;
+            _economy.TryOpenAccount(EconomyRules.ShopAccount, System.Math.Max(0L, System.Math.Min(EconomyLimits.MaxBalance, opening)));
+            _earned = System.Math.Max(0L, earned);
+            _spent = System.Math.Max(0L, spent);
+            Debug.Log("[Economy] a new game: day " + System.Math.Max(1L, day) + ", the shop opens with " + EconomyRules.Money(ShopBalance));
+            PublishWallets();
+            PublishBoard();
+        }
+
+        /// <summary>Spec 053, server: the shop pays a fee (the food corner's pitch fee), up to its balance. Returns what was paid.</summary>
+        public long PayFee(long amount)
+        {
+            long before = ShopBalance;
+            long paid = _economy.PayFee(EconomyRules.ShopAccount, amount);
+            Track(before, false);
+            PublishWallets();
+            return paid;
+        }
+
+        /// <summary>Spec 053, server: whether the shop could pay <paramref name="cost"/> now (no charge).</summary>
+        public bool CanAffordShop(long cost) => ShopBalance >= cost;
+
+        /// <summary>Spec 053, server: the shop pays a supply nobody ordered (the food corner's fixed drop), once, at the bulk price.</summary>
+        public EconomyError TryBuySupplyShop(SupplierOffer offer, int packs, out long cost)
+        {
+            long before = ShopBalance;
+            EconomyError error = _economy.TryBuySupply(EconomyRules.ShopAccount, offer, packs, out cost);
+            Track(before, false);
+            PublishWallets();
+            return error;
+        }
 
         /// <summary>
         /// Spec 022, server: moves the clock forward by <paramref name="hours"/> economy ticks at once (the night between
@@ -45,7 +103,7 @@ namespace Worktown.Game.Economy
             for (int i = 0; i < hours; i++) _economy.TickHour();
             _secondsIntoHour = 0f;
             PublishBoard();
-            Debug.Log("[Economy] skipped " + hours + " h to " + EconomyRules.ClockText(_economy.Tick) + " " + PriceText());
+            Debug.Log("[Economy] skipped " + hours + " h to " + EconomyRules.ClockText(Tick) + " " + PriceText());
             try { HourTicked?.Invoke(); }
             catch (System.Exception e) { Debug.LogException(e); }
         }
@@ -75,7 +133,7 @@ namespace Worktown.Game.Economy
             _secondsIntoHour -= EconomyRules.SecondsPerHour;
             _economy.TickHour();
             PublishBoard();
-            Debug.Log("[Economy] " + EconomyRules.ClockText(_economy.Tick) + " " + PriceText());
+            Debug.Log("[Economy] " + EconomyRules.ClockText(Tick) + " " + PriceText());
             // Last, and isolated: listeners (spec 014 customers) must not break the clock.
             try { HourTicked?.Invoke(); }
             catch (System.Exception e) { Debug.LogException(e); }
@@ -83,25 +141,42 @@ namespace Worktown.Game.Economy
 
         private void OnPlayerSpawned(NetworkObject player)
         {
-            string account = EconomyRules.AccountId(player.OwnerId);
-            if (_economy.TryOpenAccount(account, EconomyRules.StartingGrant))
-                Debug.Log("[Economy] player " + player.OwnerId + " joined with " + EconomyRules.Money(EconomyRules.StartingGrant));
-            PublishWallet(player);
+            // Spec 053: one shop wallet: the open kitchen opens it once with the grant (a game started by StartGame has it open already);
+            // a joining or rejoining player adds no money.
+            if (_economy.TryOpenAccount(EconomyRules.ShopAccount, EconomyRules.StartingGrant))
+                Debug.Log("[Economy] the shop opened with " + EconomyRules.Money(EconomyRules.StartingGrant) + " (the open kitchen)");
+            if (player != null && player.TryGetComponent(out Wallet wallet) && !_wallets.Contains(wallet)) _wallets.Add(wallet);
+            if (player != null) Debug.Log("[Economy] player " + player.OwnerId + " joined; the shop has " + EconomyRules.Money(ShopBalance));
+            PublishWallets();
+        }
+
+        /// <summary>Spec 053: a change of the shop balance since <paramref name="before"/> counts as earned or spent (a refund counts back).</summary>
+        private void Track(long before, bool refund)
+        {
+            long after = ShopBalance;
+            if (before < 0 || after < 0 || after == before) return;
+            long delta = after - before;
+            if (refund || delta < 0) _spent = System.Math.Max(0L, _spent - delta);
+            else _earned += delta;
         }
 
         /// <summary>Server: charge the grocer price for one base item.</summary>
         public EconomyError TryBuy(NetworkObject player, string baseId, out long cost)
         {
+            long before = ShopBalance;
             EconomyError error = _economy.TryBuyBase(EconomyRules.AccountId(player.OwnerId), baseId, out cost);
-            PublishWallet(player);
+            Track(before, false);
+            PublishWallets();
             return error;
         }
 
         /// <summary>Spec 031b, server: charge <paramref name="percent"/> % of one base item's grocer price (a squeezed portion).</summary>
         public EconomyError TryBuyPortion(NetworkObject player, string baseId, int percent, out long cost)
         {
+            long before = ShopBalance;
             EconomyError error = _economy.TryBuyPortion(EconomyRules.AccountId(player.OwnerId), baseId, percent, out cost);
-            PublishWallet(player);
+            Track(before, false);
+            PublishWallets();
             return error;
         }
 
@@ -115,8 +190,10 @@ namespace Worktown.Game.Economy
         /// <summary>Spec 033, server: charge one pour at the drink dispenser (the drink's share, and the cup when it was empty), once.</summary>
         public EconomyError TryBuyFill(NetworkObject player, string drinkId, int percent, bool withCup, out long cost)
         {
+            long before = ShopBalance;
             EconomyError error = _economy.TryBuyFill(EconomyRules.AccountId(player.OwnerId), drinkId, percent, withCup, out cost);
-            PublishWallet(player);
+            Track(before, false);
+            PublishWallets();
             return error;
         }
 
@@ -136,13 +213,15 @@ namespace Worktown.Game.Economy
         /// Spec 034, server: the game minute (one economy tick is an hour; the minutes run with the real seconds into it), for the
         /// supplier's delivery times.
         /// </summary>
-        public long GameMinute => _economy.Tick * 60L + (long)System.Math.Floor(_secondsIntoHour * 60f / EconomyRules.SecondsPerHour);
+        public long GameMinute => Tick * 60L + (long)System.Math.Floor(_secondsIntoHour * 60f / EconomyRules.SecondsPerHour);
 
         /// <summary>Spec 034, server: pays an order from the supplier, once (the bulk price).</summary>
         public EconomyError TryBuySupply(NetworkObject player, SupplierOffer offer, int packs, out long cost)
         {
+            long before = ShopBalance;
             EconomyError error = _economy.TryBuySupply(EconomyRules.AccountId(player.OwnerId), offer, packs, out cost);
-            PublishWallet(player);
+            Track(before, false);
+            PublishWallets();
             return error;
         }
 
@@ -160,21 +239,32 @@ namespace Worktown.Game.Economy
         /// 034 review, server: a refund to account <paramref name="accountId"/> (its player may be gone, e.g. a supply order refunded when
         /// the server stops); bounded like <see cref="Refund"/> by what the account paid.
         /// </summary>
-        public EconomyError RefundAccount(string accountId, long amount) => _economy.Refund(accountId, amount);
+        public EconomyError RefundAccount(string accountId, long amount)
+        {
+            long before = ShopBalance;
+            EconomyError error = _economy.Refund(accountId, amount);
+            Track(before, true);
+            PublishWallets();
+            return error;
+        }
 
         /// <summary>Spec 034, server, the refund backstop: <paramref name="amount"/> goes back to the player's account.</summary>
         public EconomyError Refund(NetworkObject player, long amount)
         {
+            long before = ShopBalance;
             EconomyError error = _economy.Refund(EconomyRules.AccountId(player.OwnerId), amount);
-            PublishWallet(player);
+            Track(before, true);
+            PublishWallets();
             return error;
         }
 
         /// <summary>Server: sell a plated dish to NPC demand or the wholesaler.</summary>
         public SaleResult TrySell(NetworkObject player, Item plated)
         {
+            long before = ShopBalance;
             SaleResult result = _economy.TrySell(EconomyRules.AccountId(player.OwnerId), plated);
-            PublishWallet(player);
+            Track(before, false);
+            PublishWallets();
             if (result.Ok) PublishBoard();
             return result;
         }
@@ -182,8 +272,10 @@ namespace Worktown.Game.Economy
         /// <summary>Spec 032, server: a dish handed to a waiting guest (paid later at the register; see TownEconomy.TrySellForGuest).</summary>
         public SaleResult TrySellForGuest(NetworkObject player, Item plated)
         {
+            long before = ShopBalance;
             SaleResult result = _economy.TrySellForGuest(EconomyRules.AccountId(player.OwnerId), plated);
-            PublishWallet(player);
+            Track(before, false);
+            PublishWallets();
             if (result.Ok) PublishBoard();
             return result;
         }
@@ -194,21 +286,33 @@ namespace Worktown.Game.Economy
         /// </summary>
         public bool TryPayGuest(int ownerId, NetworkObject player, long amount, out long paid)
         {
+            long before = ShopBalance;
             bool ok = _economy.TryPayGuest(EconomyRules.AccountId(ownerId), amount, out paid);
-            if (ok && player != null) PublishWallet(player);
+            Track(before, false);
+            if (ok) PublishWallets(); // spec 053: every player sees the one shop balance
             return ok;
         }
 
-        private void PublishWallet(NetworkObject player)
+        /// <summary>Spec 053: the one shop balance to every player's wallet (a player gone is forgotten).</summary>
+        private void PublishWallets()
         {
-            if (player != null && player.TryGetComponent(out Wallet wallet))
-                wallet.ServerSet(_economy.BalanceOf(EconomyRules.AccountId(player.OwnerId)));
+            long balance = System.Math.Max(0L, ShopBalance);
+            for (int i = _wallets.Count - 1; i >= 0; i--)
+            {
+                Wallet wallet = _wallets[i];
+                if (wallet == null || !wallet.IsSpawned)
+                {
+                    _wallets.RemoveAt(i);
+                    continue;
+                }
+                if (wallet.IsServerInitialized) wallet.ServerSet(balance);
+            }
         }
 
         private void PublishBoard()
         {
             if (_board == null || !_board.IsSpawned) return;
-            _board.ServerSet(EconomyRules.ClockText(_economy.Tick), PriceText());
+            _board.ServerSet(EconomyRules.ClockText(Tick), PriceText());
         }
 
         private string PriceText()

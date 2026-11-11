@@ -211,7 +211,7 @@ namespace Worktown.Game.Tests
 
             // The real grocer (EconomyService.TryBuy calls this): every slot's ingredient has a price and is paid for it.
             TownEconomy economy = TownEconomy.CreateDemo();
-            string rich = EconomyRules.AccountId(1), broke = EconomyRules.AccountId(2);
+            string rich = "rich", broke = "broke"; // spec 053: two accounts of the engine (every player now shares the shop account)
             Assert.IsTrue(economy.TryOpenAccount(rich, 10000));
             Assert.IsTrue(economy.TryOpenAccount(broke, 10));
             foreach (StationKind kind in new[] { StationKind.Fridge, StationKind.Shelf })

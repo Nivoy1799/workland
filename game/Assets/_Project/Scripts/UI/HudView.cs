@@ -40,6 +40,11 @@ namespace Worktown.Game.UI
         private const float HeldTextSeconds = 0.1f;
         private Label _clock;
         private Label _orders;
+        // Spec 053: the food corner's goal line under the wallet ("Save for the rent: $230 / $400"), rebuilt only when it changed.
+        private Label _goal;
+        private Worktown.Game.Climb.ShopStage _shopStage;
+        private float _nextStageLookup;
+        private (byte Stage, long Balance, long Goal, bool Reached) _goalShown = (byte.MaxValue, 0, 0, false);
         // Spec 034: "Low stock: tomato, cups" (lines below a quarter of their capacity), rebuilt only when the counts change.
         private Label _lowStock;
         private Worktown.Game.Shop.StockCounts _stockCounts;
@@ -89,6 +94,7 @@ namespace Worktown.Game.UI
 
             var walletBox = Panel("wallet-box");
             _wallet = AddLabel(walletBox, "wallet");
+            _goal = AddLabel(walletBox, "clock"); // spec 053
             _clock = AddLabel(walletBox, "clock");
             _orders = AddLabel(walletBox, "clock"); // spec 022
             _lowStock = AddLabel(walletBox, "clock"); // spec 034
@@ -147,6 +153,7 @@ namespace Worktown.Game.UI
                 _walletShown = balance;
                 _wallet.text = hasWallet ? EconomyRules.Money(balance) : string.Empty;
             }
+            UpdateGoal(balance);
             if (_board == null) _board = FindFirstObjectByType<MarketBoard>();
             string clock = _board != null && _board.IsSpawned ? _board.Clock.Value : string.Empty;
             bool clockChanged = !ReferenceEquals(clock, _clockShown);
@@ -160,7 +167,8 @@ namespace Worktown.Game.UI
             bool firstPerson = player.IsFirstPerson;
             // Third person: the bottom prompt as before. First person: the dot and its prompt instead.
             Show(_promptBox, !firstPerson && station != null);
-            if (!firstPerson && station != null) _prompt.text = station.Prompt;
+            if (!firstPerson && station != null)
+                _prompt.text = player.AimClosed ? Worktown.Game.Climb.ShopStageRules.NotOpenText : station.Prompt; // spec 053
             UpdateCrosshair(player, firstPerson, held);
 
             Show(_heldBox, held != null);
@@ -176,6 +184,32 @@ namespace Worktown.Game.UI
             UpdateResultToast(player);
             UpdateFeedToast();
             ExpireToasts();
+        }
+
+        /// <summary>Spec 053: the goal line at the food corner (hidden in the open kitchen); the wallet is the one shop balance.</summary>
+        private void UpdateGoal(long balance)
+        {
+            if (_shopStage == null && Time.unscaledTime >= _nextStageLookup)
+            {
+                _nextStageLookup = Time.unscaledTime + 1f;
+                _shopStage = Worktown.Game.Climb.ShopStage.Find();
+            }
+            byte stage = _shopStage != null ? _shopStage.StageNow : Worktown.Game.Climb.ShopStageRules.OpenKitchen;
+            long goal = _shopStage != null ? _shopStage.GoalMoney.Value : 0L;
+            bool reached = _shopStage != null && _shopStage.GoalReached.Value;
+            var shown = (stage, balance, goal, reached);
+            if (shown == _goalShown) return;
+            _goalShown = shown;
+            _goal.text = GoalText(stage, balance, goal, reached);
+            _goal.style.color = reached ? Palette.Mustard : Palette.Cream;
+            Show(_goal, _goal.text.Length > 0);
+        }
+
+        /// <summary>Spec 053: the HUD's goal text: empty in the open kitchen, the rent line at the food corner, a short line once reached.</summary>
+        public static string GoalText(byte stage, long balance, long goal, bool reached)
+        {
+            if (stage == Worktown.Game.Climb.ShopStageRules.OpenKitchen || goal <= 0) return string.Empty;
+            return reached ? "Rent goal reached" : Worktown.Game.Climb.FoodCornerRules.GoalLine(balance, goal);
         }
 
         /// <summary>Spec 022: "Shift until 14:00" after the clock, and "Orders open: 3 · served 2 · missed 1".</summary>
@@ -333,7 +367,8 @@ namespace Worktown.Game.UI
 
             InteractionAction action = player.CurrentAction;
             _crosshair.style.backgroundColor = action != InteractionAction.None ? CrosshairOnTarget : CrosshairIdle;
-            string text = InteractionRules.PromptFor(player.CurrentHeld, player.CurrentAim);
+            string text = player.AimClosed ? Worktown.Game.Climb.ShopStageRules.NotOpenText // spec 053: a closed station says why
+                : InteractionRules.PromptFor(player.CurrentHeld, player.CurrentAim);
             bool reason = action == InteractionAction.None;
             if (text == null && held != null)
             {
@@ -488,6 +523,7 @@ namespace Worktown.Game.UI
                 case CookOutcome.StillHolding: return "Finish the other one first"; // 035 review
                 case CookOutcome.NoCone: return "Load a seitan cone first"; // spec 036
                 case CookOutcome.ConeLoaded: return "The cone still has seitan on it";
+                case CookOutcome.NotOpenYet: return Worktown.Game.Climb.ShopStageRules.NotOpenText; // spec 053
                 default: return outcome.ToString();
             }
         }

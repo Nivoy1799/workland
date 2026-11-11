@@ -4,6 +4,7 @@ using UnityEngine.UIElements;
 using Worktown.Game.Art;
 using Worktown.Game.Cooking;
 using Worktown.Game.Economy;
+using Worktown.Game.Net;
 
 namespace Worktown.Game.UI
 {
@@ -34,6 +35,8 @@ namespace Worktown.Game.UI
         private Label _reviews;
         private readonly Label[] _reviewLines = new Label[3];
         private Label _footer;
+        private Label _goal; // spec 053: the food corner's goal progress
+        private Worktown.Game.Climb.ShopStage _shopStage;
         private TicketRailView _rail;
         private bool _pinned;
         private float _demoAt = -1f;
@@ -103,8 +106,28 @@ namespace Worktown.Game.UI
                 _reviewLines[i].text = line;
                 _reviewLines[i].style.display = line.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }
+            UpdateGoal();
             _footer.text = _rail.SummaryOpen.Value ? "Next shift starts at 08:00 tomorrow." : "F3 closes this.";
         }
+
+        /// <summary>Spec 053: "Save for the rent: $230 / $400 (57 %)" at the food corner (the one shop wallet), hidden in the open kitchen.</summary>
+        private void UpdateGoal()
+        {
+            if (_shopStage == null) _shopStage = Worktown.Game.Climb.ShopStage.Find();
+            string text = string.Empty;
+            if (_shopStage != null && _shopStage.StageNow != Worktown.Game.Climb.ShopStageRules.OpenKitchen && _shopStage.GoalMoney.Value > 0)
+            {
+                PickupInteractor player = LocalPlayer.Find(FishNet.InstanceFinder.NetworkManager);
+                long balance = player != null && player.TryGetComponent(out Wallet wallet) ? wallet.Balance.Value : 0L;
+                text = GoalText(balance, _shopStage.GoalMoney.Value, _shopStage.GoalReached.Value);
+            }
+            _goal.text = text;
+            _goal.style.display = text.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        /// <summary>Spec 053: the summary's goal line (with the reached message once the goal flipped).</summary>
+        public static string GoalText(long balance, long goal, bool reached) =>
+            reached ? Worktown.Game.Climb.FoodCornerRules.GoalReachedText : Worktown.Game.Climb.FoodCornerRules.GoalProgressLine(balance, goal);
 
         private VisualElement BuildPanel()
         {
@@ -134,6 +157,9 @@ namespace Worktown.Game.UI
             }
             _missed = AddLabel(panel, 16, Palette.Cream);
             _missed.style.whiteSpace = WhiteSpace.Normal;
+            _goal = AddLabel(panel, 16, Palette.Mustard); // spec 053
+            _goal.style.whiteSpace = WhiteSpace.Normal;
+            _goal.style.marginTop = 4;
             _footer = AddLabel(panel, 13, Palette.Plaster);
             _footer.style.marginTop = 6;
             return panel;

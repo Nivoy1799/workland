@@ -22,6 +22,10 @@ namespace Worktown.Game.Net.Rules
         public const int CustomerInterpolation = 2;
         /// <summary>Loose items (food, cookware, tools, boxes): every tick while they move, as before.</summary>
         public const int ItemInterval = 1;
+        /// <summary>054 review: an item's NetworkTransform jumps (teleports) to a pose at least this far (m) from the last one.</summary>
+        public const float ItemTeleportMetres = 0.5f;
+        /// <summary>054 review: the remote player's extrapolation (NetworkTransform updates; FishNet's default 2 overshoots a stop).</summary>
+        public const int RemoteExtrapolation = 1;
 
         /// <summary>A carried item's NetworkTransform sends neither position nor rotation (B2): nobody sees its root while held.</summary>
         public const bool SyncWhileHeld = false;

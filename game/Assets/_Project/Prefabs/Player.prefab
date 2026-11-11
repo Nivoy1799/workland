@@ -419,7 +419,7 @@ MonoBehaviour:
     Scale: 0
   _useScaledTime: 1
   _interpolation: 2
-  _extrapolation: 2
+  _extrapolation: 1
   _enableTeleport: 0
   _teleportThreshold: 1
   _clientAuthoritative: 0

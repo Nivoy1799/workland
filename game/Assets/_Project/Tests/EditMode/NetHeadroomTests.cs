@@ -230,7 +230,7 @@ namespace Worktown.Game.Tests
             stats.TakeSecond(out _, out _, out _, out int corrections, out int reconciles);
             Assert.AreEqual(1, corrections);
             Assert.AreEqual(2, reconciles);
-            var bins = new int[RemoteMotionStats.CorrectionBinEdgesCm.Length + 1];
+            var bins = new int[RemoteMotionStats.CorrectionBinEdgesCm.Count + 1];
             stats.TakeCorrectionSizes(bins, out float maxCm);
             Assert.AreEqual(20f, maxCm, 0.01f, "the 20 cm correction");
             Assert.AreEqual(1, bins[RemoteMotionStats.BinOf(maxCm)]);
@@ -244,8 +244,8 @@ namespace Worktown.Game.Tests
         {
             Assert.AreEqual(0, RemoteMotionStats.BinOf(5.5f));
             Assert.AreEqual("owner_corr_cm_le_6", RemoteMotionStats.BinName(0));
-            Assert.AreEqual(RemoteMotionStats.CorrectionBinEdgesCm.Length, RemoteMotionStats.BinOf(400f), "the open last bin");
-            Assert.AreEqual("owner_corr_cm_gt_150", RemoteMotionStats.BinName(RemoteMotionStats.CorrectionBinEdgesCm.Length));
+            Assert.AreEqual(RemoteMotionStats.CorrectionBinEdgesCm.Count, RemoteMotionStats.BinOf(400f), "the open last bin");
+            Assert.AreEqual("owner_corr_cm_gt_150", RemoteMotionStats.BinName(RemoteMotionStats.CorrectionBinEdgesCm.Count));
             Assert.AreEqual(RemoteMotionStats.BinOf(10f), RemoteMotionStats.BinOf(9.9f), "an edge belongs to its own bin");
         }
     }

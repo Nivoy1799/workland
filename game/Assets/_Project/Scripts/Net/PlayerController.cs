@@ -78,22 +78,13 @@ namespace Worktown.Game.Net
         /// <summary>Crouch state for players who do not simulate this object (spectators).</summary>
         public readonly SyncVar<bool> CrouchedForOthers = new SyncVar<bool>(false);
 
-        /// <summary>
-        /// Spec 054 (experiment): whether players collide with each other. The host decides (<c>-player-collision</c>, dev builds; on by
-        /// default) and every client applies the same physics layer rule, so the server and the owner's prediction never disagree.
-        /// The world, stations and NPCs are unaffected (only Player against Player).
-        /// </summary>
-        public readonly SyncVar<bool> CollidesWithPlayers = new SyncVar<bool>(true);
-
-        /// <summary>Spec 054: Player against Player in the physics layer matrix (global; every player carries the same value).</summary>
+        /// <summary>Spec 054: Player against Player in the physics layer matrix (global). 054 review: the host's rule lives on one session
+        /// object (<see cref="SessionPhysics"/>), not on every player.</summary>
         public static void ApplyPlayerCollision(bool collide) =>
             Physics.IgnoreLayerCollision(PhysicsLayers.Player, PhysicsLayers.Player, !collide);
 
-        private void SyncPlayerCollision()
-        {
-            ApplyPlayerCollision(CollidesWithPlayers.Value);
-            _bodyMask = PhysicsLayers.BodyMask(gameObject.layer); // the ground and headroom probes follow the matrix
-        }
+        /// <summary>Spec 054: the ground and headroom probes follow the matrix (SessionPhysics calls this when the rule changes).</summary>
+        internal void RefreshBodyMask() => _bodyMask = PhysicsLayers.BodyMask(gameObject.layer);
 
         [Tooltip("Smoothed visual child (NetworkTickSmoother). The camera follows it.")]
         [SerializeField] private Transform _graphic;
@@ -161,7 +152,6 @@ namespace Worktown.Game.Net
         {
             _controller = GetComponent<CharacterController>();
             _bodyMask = PhysicsLayers.BodyMask(gameObject.layer); // spec 039: what the body meets (not items)
-            CollidesWithPlayers.OnChange += (_, _, asServer) => { if (!asServer) SyncPlayerCollision(); }; // spec 054
             SetTickCallbacks(TickCallback.Tick | TickCallback.PostTick);
         }
 
@@ -180,17 +170,14 @@ namespace Worktown.Game.Net
             NetBootstrap boot = FindFirstObjectByType<NetBootstrap>();
             int interval = NetRateRules.RemotePlayerIntervalFor(boot != null ? boot.Args.RemoteHz : 0);
             if (interval != NetRateRules.RemotePlayerInterval && TryGetComponent(out NetworkTransform nt)) nt.SetInterval((byte)interval);
-            // Spec 054 (experiment): -player-collision off; the clients get it with this player's spawn.
-            bool collide = boot == null || boot.Args.PlayerCollision;
-            if (CollidesWithPlayers.Value != collide) CollidesWithPlayers.Value = collide;
 #endif
-            SyncPlayerCollision();
+            RefreshBodyMask(); // 054 review: the collision rule comes from the session object (SessionPhysics)
         }
 
         public override void OnStartClient()
         {
             base.OnStartClient();
-            if (!IsServerStarted) SyncPlayerCollision(); // spec 054: the host's rule, before the first predicted tick
+            if (!IsServerStarted) RefreshBodyMask(); // spec 054: the host's rule (SessionPhysics arrived with the scene), before the first tick
             if (!IsOwner) return;
             _input = FindFirstObjectByType<PlayerInputReader>();
             PlayerCameraRig rig = FindFirstObjectByType<PlayerCameraRig>();

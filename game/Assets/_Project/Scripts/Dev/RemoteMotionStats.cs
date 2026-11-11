@@ -54,21 +54,22 @@ namespace Worktown.Game.Dev
         /// above the last edge). The metrics line writes one field per non-empty bin (<see cref="BinName"/>), so the load-test summary
         /// can give the run's p50 and p95 over all bots; the window's largest correction is exact (<see cref="TakeCorrectionSizes"/>).
         /// </summary>
-        public static readonly float[] CorrectionBinEdgesCm = { 6f, 8f, 10f, 13f, 16f, 20f, 25f, 32f, 40f, 50f, 65f, 80f, 100f, 150f };
-        private readonly int[] _sizeBins = new int[CorrectionBinEdgesCm.Length + 1];
+        public static readonly System.Collections.Generic.IReadOnlyList<float> CorrectionBinEdgesCm =
+            System.Array.AsReadOnly(new[] { 6f, 8f, 10f, 13f, 16f, 20f, 25f, 32f, 40f, 50f, 65f, 80f, 100f, 150f }); // 054 review: read-only
+        private readonly int[] _sizeBins = new int[CorrectionBinEdgesCm.Count + 1];
         private float _sizeMaxCm;
 
         /// <summary>The field name of bin <paramref name="bin"/>: owner_corr_cm_le_10 (up to 10 cm), the last owner_corr_cm_gt_150.</summary>
-        public static string BinName(int bin) => bin < CorrectionBinEdgesCm.Length
+        public static string BinName(int bin) => bin < CorrectionBinEdgesCm.Count
             ? "owner_corr_cm_le_" + CorrectionBinEdgesCm[bin].ToString(System.Globalization.CultureInfo.InvariantCulture)
-            : "owner_corr_cm_gt_" + CorrectionBinEdgesCm[CorrectionBinEdgesCm.Length - 1].ToString(System.Globalization.CultureInfo.InvariantCulture);
+            : "owner_corr_cm_gt_" + CorrectionBinEdgesCm[CorrectionBinEdgesCm.Count - 1].ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         /// <summary>The bin of a correction of <paramref name="cm"/>.</summary>
         public static int BinOf(float cm)
         {
-            for (int i = 0; i < CorrectionBinEdgesCm.Length; i++)
+            for (int i = 0; i < CorrectionBinEdgesCm.Count; i++)
                 if (cm <= CorrectionBinEdgesCm[i]) return i;
-            return CorrectionBinEdgesCm.Length;
+            return CorrectionBinEdgesCm.Count;
         }
 
         /// <summary>The window's correction sizes (counts per bin into <paramref name="bins"/>, which must have
