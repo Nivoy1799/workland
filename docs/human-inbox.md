@@ -13,7 +13,7 @@ every question has a default, and work continues on other items until you answer
   047 (title screen: open your shop, join a friend through Steam or by address, lobby with kick on Tab, auto-rejoin).
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 048 (settings and comfort), then 049 (stability for release), then 006. 037 waits for question 17. After that: 047, 048, 049, 006.
+- **Next:** 048 (settings and comfort), then 049 (stability for release), then 006. 037 waits for question 17.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
