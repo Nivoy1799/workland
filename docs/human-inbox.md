@@ -3,12 +3,13 @@
 Hop in whenever you like. Answer by writing under a question (or just tell Claude in chat). Claude never waits:
 every question has a default, and work continues on other items until you answer. Newest first.
 
-## Status (updated 2026-11-10 20:45)
+## Status (updated 2026-11-11 03:30)
 - **Merged in run 2:** 039 (every counter accepts items, items are not stairs, tools handle towards you) and 041
   (left click does, right click puts down, the wheel turns), 042 (put the cup on the drip tray, then hold to fill;
-  play-test: can you fill a drink while doing something else?).
+  play-test: can you fill a drink while doing something else?), 043 (perfect means best, names like "golden fries"
+  match the ring, one pace table; pan and pot now twice as fast).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next (only when you say so):** 037 pricing, then the follow-up lists at the end of docs/cooking-roadmap.md.
+- **Next:** 044 (feel polish 3) is being built, then 037, 045. After that: 047, 048, 049, 006.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
@@ -58,6 +59,16 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+16. **Cooking tuning after spec 043 (defaults are in; change any number you like).**
+    - **Good versus Perfect:** Good rates 0.9 of Perfect. Default: keep 0.9.
+    - **Just burnt still rates well:** for about 2 s past the window, food still rates about 0.95 and still counts as an exact
+      order. Default: keep it as a grace margin.
+    - **Sauteed apple** with the faster pan: Perfect from 2.5 to 4.9 s, burnt at 6.5 s. It is playable but twitchy. Default:
+      widen the apple window a little in 044's follow-ups unless you say no.
+    - **Griddle:** the stars use the mean of both sides, so one side Good and the other Perfect can give the best stars.
+      Default: keep the mean (simpler); say "per side" if you want the stricter rule.
+    - **Onion and tomato** still have a placeholder window, so they are Good from the first second. Default: give them real
+      windows when 040 brings the new models.
 15. **Gamepad turn (spec 041).** The bumpers already open the emote wheel (LB) and ping (RB), so turning stays on Y.
     Default: keep it on Y. Say if you'd rather move the emote wheel or the ping.
 14. **Setting (2026-11-10 brainstorm):** the year 2222 as imagined in 1950–80 (retro-futurism), with a little
