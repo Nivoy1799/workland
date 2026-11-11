@@ -7,9 +7,11 @@ every question has a default, and work continues on other items until you answer
 - **Merged in run 2:** 039 (every counter accepts items, items are not stairs, tools handle towards you) and 041
   (left click does, right click puts down, the wheel turns), 042 (put the cup on the drip tray, then hold to fill;
   play-test: can you fill a drink while doing something else?), 043 (perfect means best, names like "golden fries"
-  match the ring, one pace table; pan and pot now twice as fast).
+  match the ring, one pace table; pan and pot now twice as fast), 044 (others see food fly into pots and bins and hear
+  put-downs, buttons sink, faster sprint start, tip and scoop at the click, both hands on a box, smaller tutorial card,
+  tilted ticket rail).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 044 (feel polish 3) is in review, 045 (stability, 16-player load test) is being built. 037 waits for
+- **Next:** 045 (stability, 16-player load test) is being built. 037 waits for
   question 17. After that: 047, 048, 049, 006.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
