@@ -11,9 +11,10 @@ every question has a default, and work continues on other items until you answer
   put-downs, buttons sink, faster sprint start, tip and scoop at the click, both hands on a box, smaller tutorial card,
   tilted ticket rail), 045 (spam guard, late answers fixed, restart paths, D3D11 default, 16-player load test passed),
   047 (title screen: open your shop, join a friend through Steam or by address, lobby with kick on Tab, auto-rejoin).
+  006 (AI gateway skeleton: item names via an OpenAI-compatible API, strict JSON, vegan check, cache; stays off, see 20).
   **Please try:** join through Steam from a second PC (spec 003 AC2 and 047 AC4).
 - **Autonomous run 2 is running:** specs 039, 041, 042, 043, 044, 037, 045 in that order, each merged when green (040 is built by your second session).
-- **Next:** 048 (settings and comfort) is in its fix round inside 049 (stability for release), then 006. 037 waits for question 17.
+- **Next:** 048 (settings) and 049 (stability for release) merge after the 2-hour soak. 037 waits for question 17.
 - **Feel standard** (what "feels good" means, in measurable rules): docs/feel.md.
 - **Merged since you left:**
   - **Specs 030-032: griddle, assembly, orders 2.0** (and two polish rounds; several review rounds caught a
