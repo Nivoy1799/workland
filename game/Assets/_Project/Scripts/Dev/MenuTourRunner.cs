@@ -238,6 +238,15 @@ namespace Worktown.Game.Dev
             _settings.ShowPage(SettingsPage.Controls);
             yield return Wait(0.3f);
             yield return _capture.Shot("settings-controls");
+            // Follow-up 2026-11-11 (spec 048): the Controls page fits at 1280x720 (two binding columns), so nothing needs scrolling.
+            float overflow = _settings.ScrollOverflow;
+            Debug.Log("[Tour] menu: the controls page reaches " + overflow.ToString("0") + " px past the visible area at "
+                + Screen.width + "x" + Screen.height);
+            if (overflow > 1f)
+            {
+                _timeouts++;
+                Debug.LogError("[Tour] menu: the controls page still needs scrolling at " + Screen.width + "x" + Screen.height);
+            }
             _settings.ScrollTo(1f);
             if (!_settings.Rebind(ControlAction.Jump, Key.E) || GameSettings.CurrentBindings.KeyOf(ControlAction.Use) != Key.Space)
             {

@@ -119,14 +119,16 @@ namespace Worktown.Sim.Tests.Cooking
 
         [Theory]
         [InlineData(0)]
+        [InlineData(3)]
         [InlineData(5)]
         [InlineData(6)]
         [InlineData(13)]
         public void AC2_TheNamesChangeExactlyAtTheZones(int index)
         {
-            // The names players read: pale / golden / dark fries, lightly / plain / dark fried potato sticks, pale / plain / charred
-            // shaved seitan. The plain name comes exactly with Good.
+            // The names players read: pale / golden / dark fries, lightly / plain / dark fried potato sticks, lightly / plain / soft
+            // boiled potato, pale / plain / charred shaved seitan. The plain name comes exactly with Good.
             Case c = Cases[index];
+            var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach ((float t, Item item) in Cook(c))
             {
                 string name = Name(item);
@@ -134,9 +136,13 @@ namespace Worktown.Sim.Tests.Cooking
                 string first = name.Split(' ')[c.Op == "fry" ? 1 : 0]; // the pan's name starts with its heat ("crispy")
                 string want = c.Op == DeepFry.OperationId ? (zone == DonenessZone.Undercooked ? "pale" : zone == DonenessZone.Overdone ? "dark" : "golden")
                     : c.Op == Spit.OperationId ? (zone == DonenessZone.Undercooked ? "pale" : zone == DonenessZone.Overdone ? "charred" : "shaved")
+                    : c.Op == "boil" ? (zone == DonenessZone.Undercooked ? "lightly" : zone == DonenessZone.Overdone ? "soft" : "boiled")
                     : (zone == DonenessZone.Undercooked ? "lightly" : zone == DonenessZone.Overdone ? "dark" : "fried");
                 Assert.True(want == first, c.Label + " at " + t + " sim s is " + zone + " but named \"" + name + "\"");
+                seen.Add(first);
             }
+            // Follow-up 2026-11-11: every sweep meets all three names (undercooked, done, overdone), so each boundary is checked.
+            Assert.True(seen.Count == 3, c.Label + " met only " + string.Join(", ", seen));
         }
 
         [Fact]
@@ -156,6 +162,48 @@ namespace Worktown.Sim.Tests.Cooking
             // The zones the names follow: the side at "good" is just in the window, "over + 1" just past it.
             Assert.Equal(DonenessZone.Good, DonenessZones.Of(DeepFry.DonenessAt(curve, window, good), window));
             Assert.Equal(DonenessZone.Overdone, DonenessZones.Of(DeepFry.DonenessAt(curve, window, over + 1f), window));
+        }
+
+        private static readonly string[] TimeBuckets = { "short", "medium", "long" };
+
+        [Fact]
+        public void AC2_GriddleUnequalSides_RateByTheMeanOfBothSides()
+        {
+            // Follow-up 2026-11-11: pins today's rule; inbox question 16 lets the human pick a stricter "per side" rule later. Side B
+            // runs ahead of side A by the Good half of the window, so B reaches Perfect when A reaches Good. While both sides are in
+            // the window the item's doneness (what the stars read) is their mean, so one Good and one Perfect side can rate Perfect.
+            // Each side's own zone names its bucket ("time" the shorter side, the long side its own).
+            FryCurve curve = Griddle.SeitanSide;
+            DonenessWindow window = StreetFoodItems.Seitan.IdealDoneness;
+            float lead = curve.PerfectAt - curve.WindowMinAt;
+            var unequal = new Case("griddle: seitan strips, side B ahead", Griddle.OperationId, () => Cut(Base("seitan"), "sticks"),
+                s => Griddle.Params(s, s + lead), 0f, 300f, 0.25f);
+            float start = unequal.Input().Components[0].Doneness;
+            bool goodAndPerfectRatePerfect = false;
+            List<(float T, Item Item)> samples = Cook(unequal);
+            foreach ((float t, Item item) in samples)
+            {
+                float a = Griddle.SideDoneness(curve, window, start, t);
+                float b = Griddle.SideDoneness(curve, window, start, t + lead);
+                float d = item.Components[0].Doneness;
+                if (Griddle.Distance(a, window) <= 0f && Griddle.Distance(b, window) <= 0f)
+                    Assert.True(Math.Abs((a + b) * 0.5f - d) < 1e-5f, unequal.Label + " at " + t + ": not the mean of both sides");
+                else
+                    Assert.True(Math.Abs(Griddle.CombineSides(a, b, window) - d) < 1e-5f, unequal.Label + " at " + t + ": not the far side");
+                Assert.Equal(TimeBuckets[DonenessZones.BucketIndex(DonenessZones.Of(a, window))], item.Buckets["time"]);
+                Assert.Equal(TimeBuckets[DonenessZones.BucketIndex(DonenessZones.Of(b, window))], item.Buckets[Griddle.LongSideParam]);
+                if (DonenessZones.Of(a, window) == DonenessZone.Good && DonenessZones.Of(b, window) == DonenessZone.Perfect
+                    && Zone(item) == DonenessZone.Perfect)
+                    goodAndPerfectRatePerfect = true;
+            }
+            Assert.True(goodAndPerfectRatePerfect, "one Good and one Perfect side never rated Perfect");
+
+            (float bestT, Item best) = samples.OrderByDescending(s => Quality(s.Item)).ThenBy(s => s.T).First();
+            _out.WriteLine(unequal.Label + ": best " + Quality(best).ToString("R") + " at " + bestT + " sim s (lead " + lead + ")");
+            Assert.Equal(DonenessZone.Perfect, Zone(best));
+            // Pinned 2026-11-11 (mean of both sides): side A at 84 sim s, side B 12 s ahead.
+            Assert.Equal(84f, bestT);
+            Assert.Equal(0.40729168f, Quality(best));
         }
 
         [Fact]
@@ -294,6 +342,26 @@ namespace Worktown.Sim.Tests.Cooking
             Assert.False(DonenessZones.IsUndercooked(Shaved(80f))); // overdone is not undercooked
             Assert.True(DonenessZones.IsUndercooked(Grilled(Cut(Base("seitan"), "sticks"), 6f)));
             Assert.False(DonenessZones.IsUndercooked(Squeeze("chili_sauce")));
+        }
+
+        [Fact]
+        public void IsUndercooked_OnlyForHeatOpsWithZoneBuckets()
+        {
+            // Follow-up 2026-11-11: the same "short" time bucket means undercooked only when the op buckets by zone. A heat op without
+            // zone buckets picks its bucket from the seconds, so its first bucket says nothing about the doneness zone.
+            Assert.True(OperationCatalog.CreateDefault().TryGet("boil", out OperationDef boil));
+            OperationDef bySeconds = boil with { Heat = boil.Heat! with { ZoneBuckets = false } };
+            var plain = new ItemFactory(Items, new OperationCatalog(new[] { bySeconds }));
+            Item potato = Base("potato");
+            Item zoned = TestItems.Ok(Factory.Apply("boil", new[] { potato }, Pot(30f)));
+            Item seconds = TestItems.Ok(plain.Apply("boil", new[] { TestItems.Ok(plain.CreateBase("potato")) }, Pot(30f)));
+
+            Assert.Equal(DonenessZones.UnderBucket, zoned.Buckets["time"]);
+            Assert.Equal(DonenessZones.UnderBucket, seconds.Buckets["time"]);
+            Assert.True(DonenessZones.IsUndercooked(zoned));
+            Assert.False(DonenessZones.IsUndercooked(seconds));
+            // The flag is not part of the identity: the same op id, buckets and inputs give the same hash either way.
+            Assert.Equal(zoned.Hash, seconds.Hash);
         }
 
         [Fact]

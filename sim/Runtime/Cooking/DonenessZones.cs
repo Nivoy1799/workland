@@ -75,13 +75,15 @@ namespace Worktown.Sim.Cooking
 
         /// <summary>
         /// True for a layer whose heat op (the first met from the top, <see cref="Assembly.HeatOpOf"/>) left it undercooked: its time
-        /// bucket is that op's first one (zone buckets only). A layer without a heat op is never undercooked.
+        /// bucket is that op's first one (zone buckets only: a heat op without <see cref="HeatProfile.ZoneBuckets"/> buckets by
+        /// seconds, so its first bucket says nothing about the zone). A layer without a heat op is never undercooked.
         /// </summary>
         public static bool IsUndercooked(Item? layer)
         {
             for (Item? c = layer; c != null; c = c.Inputs.Count > 0 ? c.Inputs[0] : null)
                 if (c.Kind == OperationKind.Heat)
-                    return c.Buckets.TryGetValue("time", out string? bucket) && string.Equals(bucket, UnderBucket, StringComparison.Ordinal);
+                    return c.ZoneBuckets && c.Buckets.TryGetValue("time", out string? bucket)
+                        && string.Equals(bucket, UnderBucket, StringComparison.Ordinal);
             return false;
         }
 

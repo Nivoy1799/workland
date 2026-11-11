@@ -85,3 +85,22 @@ settings-in-shop (what Esc opens), 25 labels-on, 26 labels-off. The tour fails i
 - Esc that closes the settings in the shop also hits PlayerInputReader's Esc (cursor free): one click locks it again.
 - The UI and cue sound groups are a judgement call (only the feedback cues are "UI"; no menu click sounds exist).
 - Quality presets change a runtime copy of the URP asset (048 review, fixed in the 049 round), never the shared asset.
+
+**Follow-ups (2026-11-11)** (branch `spec/followups-042-043-048`):
+6. Esc that closes the settings in the shop now leaves the cursor locked. `PlayerInputReader` records the frame on which the last
+   open menu closed. Its Esc/Alt check (`CaptureGate.FreesCursor`) does not free the cursor on that frame, so the close locks
+   it no matter which script's Update runs first. The lock on close is the pure `CaptureGate.LocksOnClose(playing, anyMenuOpen)`,
+   which is only true while the player's input is active, so the title screen keeps a free cursor. Test:
+   `Review048Tests.CaptureGate_EscThatClosesTheSettingsInTheShop_LeavesTheCursorLocked_TheTitleScreenKeepsItFree`.
+   Not exercised by a tour: the menu tour presses buttons, it sends no real Esc.
+7. The Controls page fits at 1280x720:
+   - the bindings sit in two columns (`SettingsRules.BindingsPerColumn`: 8 and 7, Walk forward to First/third person, then Use
+     to Players), each column with its own header;
+   - the binding buttons are 116 x 24 px (13 px text), the rows 26 px high, and the action name takes the rest of the column;
+   - the settings box is wider on every page (left/right 15 % instead of 20 %).
+   The menu tour logs how far the Controls page reaches past the visible area (`SettingsView.ScrollOverflow`) and fails if it
+   needs scrolling. Test: `Review048Tests.ControlsPage_TwoBindingColumns_TheFirstTakesTheExtraOne`.
+   Checks: `verify.sh` PASS (EditMode 1353, sim 403, gateway 175); `BuildAll` succeeded. The first full visual check
+   (`.verify/visual-fu1`) failed only on the menu tour's new overflow check: the page was 4 px too tall. The rows went from 28 to
+   26 px, then a menu re-run (`.verify/visual-fu1b`) passed: "reaches 0 px past the visible area at 1280x720", sheet cell 04
+   settings-controls, 0 exceptions.

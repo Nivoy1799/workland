@@ -1133,6 +1133,26 @@ namespace Worktown.Game.Dev
             Debug.Log("[Demo] drinks: the cup stands under the lemonade tap (" + (cup != null ? Vector3.Distance(cup.transform.position,
                 spot.SpotWorldPosition(0)).ToString("0.000") : "?") + " m from the spot), the hands hold '" + HeldName(me) + "'");
 
+            // Follow-up 2026-11-11 (spec 042): in third person, E with empty hands takes that empty cup back off the tray (it took a new
+            // cup from the stack before); then the cup goes back onto the tray by the left click again.
+            actor.Intents.View = Worktown.Game.Player.ViewMode.ThirdPerson;
+            yield return actor.Look(0f, -12f, 0.6f);
+            yield return capture.Shot("cup-tray-third");
+            bool keyed = me.DevStationKey(drinks);
+            until = Time.unscaledTime + 3f;
+            while (HeldCup(me) == null && Time.unscaledTime < until) yield return null;
+            Debug.Log("[Demo] drinks: third person E " + (keyed ? "acted" : "did nothing") + "; the hands hold '" + HeldName(me) + "' ("
+                + (HeldCup(me) == cup && cup != null ? "the cup from the tray" : "not the cup from the tray") + ")");
+            if (HeldCup(me) != cup || cup == null) actor.CountTimeout("cook: third person E did not take the cup off the tray");
+            yield return capture.Shot("cup-e-take-third");
+            actor.Intents.View = Worktown.Game.Player.ViewMode.FirstPerson;
+            yield return actor.LevelView();
+            yield return actor.Use("put the cup back under the lemonade tap", onTray, InteractionAction.Place,
+                () => me.DevSendPlace(spot.Index, 0), null, viaInput: true);
+            until = Time.unscaledTime + 3f;
+            while (!OnSpot(cup, spot) && Time.unscaledTime < until) yield return null;
+            if (!OnSpot(cup, spot)) actor.CountTimeout("cook: the cup is not back on the lemonade tap's tray");
+
             // The tap: hold it with free hands, the lever goes down and the lemonade rises to the line in the cup on the tray.
             yield return actor.AimAt(lemonade.Anchor, 1.5f, () => me.CurrentAction == InteractionAction.Fill);
             yield return capture.Shot("lemonade-aim");

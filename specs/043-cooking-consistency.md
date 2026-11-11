@@ -98,3 +98,21 @@ Built 2026-11-11 (builder, opus), on top of 042. Merged into main (2026-11-11, r
 - Fryer: cell 74 shows "pale fries" while Cooking (20 s); cell 82 shows "golden fries" from Good (25 s).
 - Griddle: cells 602 and 603 go from warm to half-grilled; the log reads "grilled" once both sides are Good.
 - Spit: cell 720 is "pale shaved seitan", cell 721 "shaved seitan" at Good (40 s).
+
+**Follow-ups (2026-11-11)** (sim follow-ups the game-only 044 round skipped; branch `spec/followups-042-043-048`):
+1. `AssemblyTests.Pre031Items_KeepTheirHashesAndRatings`: the doc comment now gives the 043 reasons. The saute at 50 s on the 2x
+   pan is the old dose, so its quality stays 0.121. It is undercooked now, so its bucket is "short" and its hash is new. The fries
+   are pinned at 80 s (Perfect). The seitan at 13 s a side is Good (the 0.9 factor).
+2. `DonenessZones.IsUndercooked` checks zone buckets, as its comment says. `Item` has a new internal `ZoneBuckets` flag, set by
+   `ItemFactory` for a heat op whose profile has `ZoneBuckets`. The flag is not in the hash, so no pinned value moves. New test:
+   `IsUndercooked_OnlyForHeatOpsWithZoneBuckets`. It uses the same boil at 30 s with and without zone buckets: same "short"
+   bucket, same hash, but only the zoned one counts as undercooked.
+3. `AC2_TheNamesChangeExactlyAtTheZones` covers the pot too (boiled potato: lightly / boiled / soft). Every sweep must now also
+   reach all three names, so each boundary is really crossed.
+4. New `AC2_GriddleUnequalSides_RateByTheMeanOfBothSides` pins today's mean-of-both-sides rule (inbox question 16; the human may
+   choose "per side" later). In the sweep, side B runs 12 sim s (the Good half) ahead of side A. The test checks four things:
+   - While both sides are in the window, the item's doneness is their mean.
+   - Each side's own zone names its bucket.
+   - One Good side plus one Perfect side can rate Perfect.
+   - The best rating is 0.40729168 at side A = 84 sim s.
+   Checks: sim 403/403 (was 400, +3), `verify.sh` PASS.

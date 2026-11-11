@@ -126,6 +126,17 @@ namespace Worktown.Game.UI
             bar.value = bar.lowValue + Mathf.Clamp01(share) * (bar.highValue - bar.lowValue);
         }
 
+        /// <summary>Follow-up 2026-11-11, the menu tour: how far the shown page reaches past the visible area (0 when it fits).</summary>
+        public float ScrollOverflow
+        {
+            get
+            {
+                if (_scroll == null) return 0f;
+                float content = _scroll.contentContainer.layout.height, visible = _scroll.contentViewport.layout.height;
+                return float.IsNaN(content) || float.IsNaN(visible) ? 0f : Mathf.Max(0f, content - visible);
+            }
+        }
+
         public void ShowPage(SettingsPage page)
         {
             _page = page;
@@ -383,15 +394,29 @@ namespace Worktown.Game.UI
                 () => GameSettings.Current.GamepadSensitivity, v => Change(s => s.GamepadSensitivity = Round2(v)), v => v.ToString("0.00") + "x");
             AddToggle(page, "Invert Y", () => GameSettings.Current.InvertY, v => Change(s => s.InvertY = v));
 
-            var header = new VisualElement();
-            header.AddToClassList("settings-bind-row");
-            header.Add(Text("Action", "settings-bind-name"));
-            header.Add(Text("Keyboard", "settings-bind-head"));
-            header.Add(Text("Gamepad", "settings-bind-head"));
-            page.Add(header);
-            foreach (ControlAction action in ControlBindings.Actions)
+            // Follow-up 2026-11-11: the bindings in two columns (walking and moving left, the hands and the social keys right), so the
+            // whole page fits at 1280x720 without scrolling.
+            var columns = new VisualElement();
+            columns.AddToClassList("settings-bind-columns");
+            page.Add(columns);
+            int perColumn = SettingsRules.BindingsPerColumn(ControlBindings.Actions.Count);
+            VisualElement column = null;
+            for (int i = 0; i < ControlBindings.Actions.Count; i++)
             {
+                ControlAction action = ControlBindings.Actions[i];
                 ControlAction a = action;
+                if (i % perColumn == 0)
+                {
+                    column = new VisualElement();
+                    column.AddToClassList("settings-bind-column");
+                    columns.Add(column);
+                    var header = new VisualElement();
+                    header.AddToClassList("settings-bind-row");
+                    header.Add(Text("Action", "settings-bind-name"));
+                    header.Add(Text("Keyboard", "settings-bind-head"));
+                    header.Add(Text("Gamepad", "settings-bind-head"));
+                    column.Add(header);
+                }
                 var row = new VisualElement();
                 row.AddToClassList("settings-bind-row");
                 row.Add(Text(SettingsRules.ActionText(action), "settings-bind-name"));
@@ -402,7 +427,7 @@ namespace Worktown.Game.UI
                 pad.AddToClassList("settings-bind");
                 row.Add(key);
                 row.Add(pad);
-                page.Add(row);
+                column.Add(row);
                 _bindingButtons[action] = (key, pad);
             }
             _refreshers.Add(() =>
