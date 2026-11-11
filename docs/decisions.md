@@ -29,7 +29,7 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D20 | Item identity | Every operation creates a new item; identity = hash of its process tree with time/temperature in buckets. Exact values only affect quality | 2026-11-05 | Process matters (potato vs fries) while keeping discoveries and the AI text cache meaningful |
 | D21 | Process visibility | Players see only buckets ("crispy fried"), never exact values | 2026-11-05 | Readable, keeps a skill element |
 | D22 | Operations | Fixed set of operations per station to start; which items go in and what comes out stays open (data-driven, not a recipe list) | 2026-11-05 | Balanceable start without closing off emergent combinations |
-| D23 | Currency | Dollar ($), whole dollars only, no sub-units | 2026-11-05 | Simple to read; integer money keeps the sim deterministic |
+| D23 | Currency | (revised by D39: cents) Dollar ($), whole dollars only, no sub-units | 2026-11-05 | Simple to read; integer money keeps the sim deterministic |
 | D24 | Cloud LLM provider (was O2) | OpenRouter, with pinned providers that support strict JSON output | 2026-11-05 | One key, easy model comparison; switching is a config change (D3) |
 | D25 | Gateway language (was O3) | C# / ASP.NET on .NET 10 | 2026-11-05 | One language and toolchain for the project; can reuse /sim (item hash, process tree) without a second implementation |
 | D26 | Asset packs (was O8) | Start with free CC0 packs, Kenney first; KayKit/Quaternius only to fill gaps. Art sits behind a swap layer (spec 015). Paid packs (e.g. Synty POLYGON) only if the project heads to release, and then bought outright; no subscription-licensed assets in the project | 2026-11-07 | Project is a playground for now: $0 and no licence risk. Synty's subscription licence requires an active subscription for any further development after cancelling |
@@ -47,6 +47,7 @@ Humans: when you decide, move the row to DECIDED with date and a one-line reason
 | D36 | Player cap (was O7) | 16 players per game | 2026-11-10 | Decided by the human (D33); spec 045 load test now tests 16 players |
 | D37 | Game design v1 | docs/game-design.md v1 is binding: co-op restaurant climb in 5 stages (food corner first), NPC rivals, 16 players, time runs only while playing | 2026-11-11 | Approved by the human (inbox question 13); specs 052 and 053 follow it |
 | D38 | AI content for Early Access | No live AI gateway at Early Access; names are generated offline and shipped with the game. Spec 055 (gateway go-live) is deferred | 2026-11-11 | Decided by the human ("AI live we skip"): no hosting, no running cost, no public-token risk |
+| D39 | Currency sub-units (revises D23) | Dollars **with cents**; all money is integer cents in the sim and game (spec 037) | 2026-11-11 | Decided by the human (inbox question 17): street-food prices like $9.50 need cents |
 
 ## OPEN
 

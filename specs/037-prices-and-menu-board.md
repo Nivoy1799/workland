@@ -6,6 +6,8 @@ owner: architect
 builder: opus
 ---
 
+> Inbox question 17 answered on 2026-11-11: cents (D39 revises D23). Build after 053 and 054; the climb catalog (052) must use the same scale.
+
 # 037: Street-food prices and a menu board
 
 ## Goal

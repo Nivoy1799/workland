@@ -1,10 +1,12 @@
 ---
 id: 058
 title: NPC rivals in the game (named shops in town, guests choose between shops, rivals react, rankings board)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 25 and 26) with the recommended defaults of its Open questions.
 
 # 058: NPC rivals
 

@@ -1,10 +1,12 @@
 ---
 id: 056
 title: Offline dish names (generate once with the spec 006 pipeline, review, ship a name file, look it up in the game)
-status: draft
+status: approved
 owner: architect
 builder: sonnet       # 056a, 056b, 056c: sonnet
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 25 and 26) with the recommended defaults of its Open questions.
 
 # 056: Offline dish names
 

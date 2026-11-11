@@ -1,10 +1,12 @@
 ---
 id: 052b
 title: Climb tuning v2 (crew scaling, menu choice, repeatable sinks, automation gate, stage 1 pace) in /sim
-status: draft
+status: approved
 owner: architect
 builder: sonnet
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 25 and 26) with the recommended defaults of its Open questions.
 
 # 052b: Climb tuning v2
 

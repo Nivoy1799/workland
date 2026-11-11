@@ -1,10 +1,12 @@
 ---
 id: 057
 title: Stage 2, the first restaurant (rent, fast-food menu, card, stock ordering, cleaning, the stage 2 gate)
-status: draft
+status: approved
 owner: architect
 builder: opus
 ---
+
+> Approved by the human on 2026-11-11 (inbox questions 25 and 26) with the recommended defaults of its Open questions.
 
 # 057: The first restaurant
 

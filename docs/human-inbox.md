@@ -70,44 +70,6 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-26. **Two more drafts: the next stages of the climb** (nothing gets built until you approve them).
-    - **057 first restaurant (stage 2).** You pay the rent goal and move into your first rented restaurant, which
-      serves fast food. It uses the same kitchen with the covers off, renamed "Your restaurant". Rent is $5,750 per
-      service. Defaults:
-      - any player may spend shop money, but must press twice to confirm;
-      - unpaid rent is owed and paid first, capped at 2 rents;
-      - 4 dishes, fries included.
-
-      Order: 052b first, then 057, then measure stage 2 and calibrate it.
-    - **058 NPC rival teams** (after 057). Named rival shops in town; guests choose between you and them, and rivals
-      cut prices or improve. A rankings board shows where you stand. No crime and no harm. Defaults:
-      - town demand stays as it is for now, so mainly larger crews will feel the rivals at first;
-      - a guest can also choose to go "elsewhere".
-
-      Rival owner names: Tobi, Mira, Lu and Rosa. Mira is also the farmer in the storyboard draft; say if one should
-      change.
-
-    Say "approve 057" and/or "approve 058". The best order is 052b, 057, 058.
-25. **Two new drafts (nothing gets built until you approve them).**
-    - **052b climb tuning v2** (/sim only). It applies the defaults from questions 22 and 24:
-      - solo and small-crew scaling, and the crew chooses its menu;
-      - repeatable costs that grow with income;
-      - stage 4 unlocked by buying automation;
-      - a stage 1 pace per crew size.
-
-      It then reruns the simulation until every crew size passes. Defaults inside it:
-      - calibrate only stage 1 to the game for now (the game is about 4x slower per guest than the sim assumes for
-        stage 2, measured once stage 2 exists);
-      - crew size = the players present when the service starts.
-    - **056 offline dish names (D38).** Names are generated once on your PC with your own key, through the gateway's
-      strict pipeline and vegan check. You review them, and they ship as a data file, with the built-in names as
-      fallback. No key goes into git. Defaults:
-      - you review every name (about 1,500); the alternative is all finished dishes plus a 10 % sample of the rest;
-      - names show on the food label only, so aiming still shows the doneness words.
-
-      Shipping real names also waits for O6 (moderation).
-
-    Say "approve 052b", "approve 056", or both.
 24. **How long stage 1 takes (spec 053, merged).** The rent goal is $34,500. Measured in the game:
     - **One cook** serves a guest about every 82 s and needs about 16 services, roughly 1.7 h. That is a bit over the
       0.75-1.5 h target.
@@ -154,12 +116,6 @@ every question has a default, and work continues on other items until you answer
     - **Crash on quit:** it is inside Direct3D 12 itself (no game code on the stack). Windows builds now start with
       D3D11 and fall back to D3D12. Default: keep it until a Unity update.
     - **FYI:** a partly shaved spit cone now stays on the spit after a restart (it used to be lost).
-17. **Spec 037 (street-food prices) conflicts with D23 "whole dollars only, no cents".** 037 wants cents (a wrap $9.50,
-    an ingredient $0.30, coins 0.10-2). I did not build it, because D23 is your decision. Options:
-    - **A (default once you answer, recommended): cents.** D23 becomes "dollars with cents; integer cents inside".
-    - **B: whole dollars.** A wrap is $9, an ingredient $1 or $2, coins $1 and $2, notes $5, $10 and $20. Small ingredients
-      are bundled. Simpler change, coarser prices.
-    Meanwhile the queue goes on with 045, then 047, 048 and 049. 037 waits for your answer.
 16. **Cooking tuning after spec 043 (defaults are in; change any number you like).**
     - **Good versus Perfect:** Good rates 0.9 of Perfect. Default: keep 0.9.
     - **Just burnt still rates well:** for about 2 s past the window, food still rates about 0.95 and still counts as an exact
@@ -255,6 +211,8 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11 evening, questions 17, 25 and 26:** all four drafts approved (052b, 056, 057, 058); prices in cents (D39
+  revises D23). Order: 037, then 052b on the new scale, then 057, then 058; 056 in parallel.
 - **2026-11-11, question 23 (players pass through each other):** no answer, so default A applies: players
   pass through each other in every build (0 corrections in the 16-player test). In dev builds `-player-collision on`
   turns blocking back on.
