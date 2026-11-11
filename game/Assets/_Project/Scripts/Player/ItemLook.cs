@@ -38,6 +38,8 @@ namespace Worktown.Game.Player
         private int _predictedHolder = NoHolder;
         private bool _predictionConfirmed;
         private float _predictionKeepUntil;
+        // Spec 044: who put the item down while it waits for its networked spot (NoHolder: not a put-down).
+        private int _putDownBy = NoHolder;
 
         /// <summary>A predicted look is drawn (pending, or confirmed and waiting for the state to catch up).</summary>
         public bool HasPrediction => _hasPrediction;
@@ -54,6 +56,7 @@ namespace Worktown.Game.Player
             _hasLastRoot = false;
             _hasPrediction = false;
             _seenHolder = syncedHolder;
+            _putDownBy = NoHolder;
         }
 
         /// <summary>Predicts the item in <paramref name="holder"/>'s hands (a pick-up).</summary>
@@ -117,6 +120,7 @@ namespace Worktown.Game.Player
             {
                 // Put down (or taken from someone): wait for the networked position before settling on it.
                 if (syncedHolder == NoHolder && !_settling) BeginSettling(hasDrawn ? drawn : root, now);
+                _putDownBy = syncedHolder == NoHolder ? _seenHolder : NoHolder; // spec 044: whose put-down lands later
                 _seenHolder = syncedHolder;
             }
 
@@ -124,6 +128,7 @@ namespace Worktown.Game.Player
             int holder = NoHolder;
             Pose goal;
             bool settleNow = false;
+            bool landed = false;
             if (_hasPrediction && _predictedKind == ItemGoalKind.Into && _predictionConfirmed && now > _predictionKeepUntil)
                 _hasPrediction = false;
             if (_hasPrediction && _predictedKind != ItemGoalKind.Hand)
@@ -146,7 +151,9 @@ namespace Worktown.Game.Player
                 else
                 {
                     kind = ItemGoalKind.Rest;
+                    bool wasSettling = _settling;
                     goal = RestGoal(root, rootMoved, hasDrawn, drawn, now, out settleNow);
+                    landed = wasSettling && !_settling && _putDownBy != NoHolder;
                 }
             }
 
@@ -156,7 +163,14 @@ namespace Worktown.Game.Player
             _hasGoal = true;
             _goalKind = kind;
             _goalHolder = holder;
-            return new ItemFrame(kind, holder, goal, begin);
+            int landedBy = NoHolder;
+            if (landed)
+            {
+                landedBy = _putDownBy;
+                _putDownBy = NoHolder;
+            }
+            if (holder != NoHolder) _putDownBy = NoHolder; // picked up again before it landed
+            return new ItemFrame(kind, holder, goal, begin, landedBy);
         }
 
         private Pose RestGoal(Pose root, bool rootMoved, bool hasDrawn, Pose drawn, float now, out bool settleNow)

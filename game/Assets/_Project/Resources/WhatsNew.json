@@ -748,6 +748,29 @@
         "Serve fries or a seitan wrap a little early (before the ring turns Good): does the guest say 'close enough'?",
         "Do the pan and the pot feel too fast or too slow now?"
       ]
+    },
+    {
+      "id": "2026-11-11-spec-044",
+      "date": "2026-11-11",
+      "title": "Feel polish 3",
+      "items": [
+        "Other players now see food fly into the pot, scraps into the trash, the bag into the bin and a plate into the sink, and hear it land, instead of it vanishing from the cook's hand",
+        "Other players' put-downs make their tock where the item lands",
+        "Station buttons and knobs sink when pressed, for everyone",
+        "Sprinting from standing reaches full speed as fast as walking does (about 0.13 s)",
+        "Tipping the fryer basket or the griddle onto a plate, and scooping from the spit's tray, show at the click",
+        "Third person: both hands on a carried delivery box, and the cloth goes round in the hand while wiping",
+        "Eat-in guests put their plate on the dish return after paying instead of walking out with it",
+        "The tutorial card sits small in the top right corner and its edge arrow is bigger",
+        "The ticket rail hangs higher and tilts towards the kitchen: the guests' order bubbles show under it, and the cards stay bright from below"
+      ],
+      "test": [
+        "With two players: put food into a pot, scraps into the trash and a plate into the sink while the other watches: does it fly in, with its sound?",
+        "Press a stove switch, the fryer's buttons and the spit's knob: do they sink? Does the other player see it?",
+        "Sprint from standing: does the start feel snappy now?",
+        "Tip the fries basket onto a plate and scoop from the spit tray: does it show at once?",
+        "From the kitchen, look at the queue: can you read the order bubbles under the rail, and the rail's cards?"
+      ]
     }
   ]
 }

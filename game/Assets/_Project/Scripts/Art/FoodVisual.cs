@@ -135,6 +135,17 @@ namespace Worktown.Game.Art
         /// more parts than shown before, the new ones drop in from <see cref="FeelSettings.DropHeight"/> above (ease-in over
         /// <see cref="FeelSettings.DropSeconds"/>), for every viewer; the first contents after a (re)join just appear.
         /// </summary>
+        /// <summary>Spec 044: the model drawn last (the last part of the contents), or null when nothing is drawn.</summary>
+        public Transform LastPart
+        {
+            get
+            {
+                for (int i = _active.Count - 1; i >= 0; i--)
+                    if (_active[i] != null && _active[i].activeInHierarchy) return _active[i].transform;
+                return null;
+            }
+        }
+
         public void ShowParts(IReadOnlyList<FoodLook> parts)
         {
             ReleaseAll();

@@ -16,6 +16,10 @@ namespace Worktown.Game.Player
         public const float CrouchSpeed = 1.25f;
         /// <summary>m/s² towards a higher target speed. Spec 025: scaled with the speeds (was 30), so starting takes as long.</summary>
         public const float Acceleration = 19f;
+        /// <summary>Spec 044: s from standing to any top speed (docs/feel.md 5: full speed in 0.1-0.15 s). Walking reaches it at
+        /// <see cref="Acceleration"/>; a faster target (sprint) accelerates harder, so a sprint start is as quick as a walk start
+        /// (was 0.26 s at the walk rate).</summary>
+        public const float StartSeconds = WalkSpeed / Acceleration;
         /// <summary>m/s² towards a lower target speed (stopping). Spec 025: scaled with the speeds (was 40).</summary>
         public const float Deceleration = 25f;
         /// <summary>Degrees per second the character turns towards its move direction.</summary>
@@ -85,8 +89,15 @@ namespace Worktown.Game.Player
         {
             current.y = 0f;
             target.y = 0f;
-            float rate = target.sqrMagnitude >= current.sqrMagnitude ? Acceleration : Deceleration;
+            float rate = target.sqrMagnitude >= current.sqrMagnitude ? AccelerationTo(target.magnitude) : Deceleration;
             return Vector3.MoveTowards(current, target, rate * delta);
+        }
+
+        /// <summary>Spec 044: m/s² towards a target speed: <see cref="Acceleration"/> up to walk speed, above it scaled so the
+        /// target is reached from standing in <see cref="StartSeconds"/> (sprint: 38 m/s², 0.13 s).</summary>
+        public static float AccelerationTo(float targetSpeed)
+        {
+            return targetSpeed > WalkSpeed ? targetSpeed / StartSeconds : Acceleration;
         }
 
         /// <summary>Turns the yaw towards the direction, at most <see cref="TurnRate"/> per second.

@@ -40,7 +40,9 @@ namespace Worktown.Game.Player
         private const float MarkerLift = 0.006f;
         /// <summary>Spec 027b: m of outline around a target, as a fraction of its size within the limits below.</summary>
         public const float OutlineWidth = 0.012f;
-        public const float OutlineMinScale = 0.03f;
+        /// <summary>Spec 044 (027b feels off: "the outline is thick on big stations"): 0.8 % (was 3 %, 3 cm on a 1 m station); a big
+        /// station now gets about <see cref="OutlineWidth"/> too.</summary>
+        public const float OutlineMinScale = 0.008f;
         public const float OutlineMaxScale = 0.25f;
         private static readonly int CullId = Shader.PropertyToID("_Cull");
         private const float GhostAlpha = 0.35f;

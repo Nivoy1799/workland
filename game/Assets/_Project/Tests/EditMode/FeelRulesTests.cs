@@ -429,6 +429,17 @@ namespace Worktown.Game.Tests
             Assert.That(stop, Is.InRange(0.08f, 0.12f), "stop " + stop);
         }
 
+        [Test]
+        public void Spec044_Sprint_ReachesFullSpeedFromStandingIn0_10To0_15s()
+        {
+            const float dt = 1f / 240f;
+            float start = TimeTo(Vector3.zero, Vector3.forward * MovementRules.SprintSpeed, dt);
+            Assert.That(start, Is.InRange(0.10f, 0.15f), "sprint start " + start + " (was 0.26 s)");
+            // From walk to sprint is quicker still, and crouching keeps the walk rate.
+            Assert.Less(TimeTo(Vector3.forward * MovementRules.WalkSpeed, Vector3.forward * MovementRules.SprintSpeed, dt), start);
+            Assert.AreEqual(MovementRules.Acceleration, MovementRules.AccelerationTo(MovementRules.CrouchSpeed));
+        }
+
         private static float TimeTo(Vector3 velocity, Vector3 target, float dt)
         {
             float t = 0f;

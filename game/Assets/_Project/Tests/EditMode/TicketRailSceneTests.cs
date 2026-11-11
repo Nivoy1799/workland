@@ -48,5 +48,66 @@ namespace Worktown.Game.Tests
                 EditorSceneManager.CloseScene(scene, true);
             }
         }
+
+        /// <summary>
+        /// Spec 044 (032 feels off): from the kitchen, the queue head's order bubble is not hidden behind the ticket rail. The lines
+        /// from the cook's eye (first person, standing at the counter, in the aisle and at the back line) and from the third-person
+        /// camera behind the cook to every corner of the bubble (2.1 to 2.4 m, 0.6 m wide) pass under the rail's board and cards
+        /// (their axis-aligned bounds, so the tilted board counts larger than it is). And the rail faces down towards the cook.
+        /// </summary>
+        [Test]
+        public void Spec044_TheOrderBubbles_AreSeenUnderTheRail_AndTheRailTiltsTowardsTheCook()
+        {
+            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            try
+            {
+                Component rail = VesselTestKit.AllOf(scene, RailType)[0];
+                Bounds railBounds = default;
+                bool any = false;
+                foreach (MeshRenderer r in rail.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    if (r.GetComponent<TextMesh>() != null) continue;
+                    if (!any) railBounds = r.bounds;
+                    else railBounds.Encapsulate(r.bounds);
+                    any = true;
+                }
+                Assert.IsTrue(any, "the rail has a board and cards");
+                GameObject head = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    Transform t = root.transform.Find("QueueHead");
+                    if (t != null) head = t.gameObject;
+                }
+                Assert.IsNotNull(head, "the queue head");
+                Vector3 face = -rail.transform.forward; // the rail's text side (TextMesh reads from -z)
+                Vector3 toKitchen = new Vector3(face.x, 0f, face.z).normalized;
+                Assert.Less(face.y, -0.25f, "the cards face down towards the cook (tilted about 20 degrees)");
+
+                var feel = Worktown.Game.Player.FeelSettings.PresetA();
+                float camUp = feel.ThirdPersonHeight + feel.ThirdPersonDistance * Mathf.Sin(feel.ThirdPersonPitch * Mathf.Deg2Rad);
+                float camBack = feel.ThirdPersonDistance * Mathf.Cos(feel.ThirdPersonPitch * Mathf.Deg2Rad);
+                Vector3 railFoot = new Vector3(head.transform.position.x, 0f, rail.transform.position.z);
+                var eyes = new List<Vector3>();
+                foreach (float cookAt in new[] { 0.8f, 1.6f, 2.6f }) // at the counter, in the aisle, at the back line (m from the rail)
+                {
+                    Vector3 feet = railFoot + toKitchen * cookAt;
+                    eyes.Add(feet + Vector3.up * Worktown.Game.Player.ViewRules.EyeHeight);
+                    eyes.Add(feet + toKitchen * camBack + Vector3.up * camUp);
+                }
+                foreach (Vector3 eye in eyes)
+                    foreach (float y in new[] { 2.1f, 2.4f })
+                        foreach (float x in new[] { -0.3f, 0f, 0.3f })
+                        {
+                            Vector3 bubble = head.transform.position + new Vector3(x, y, 0f);
+                            Vector3 d = bubble - eye;
+                            bool hit = railBounds.IntersectRay(new Ray(eye, d), out float distance) && distance < d.magnitude;
+                            Assert.IsFalse(hit, "the rail hides the bubble point " + bubble + " from " + eye);
+                        }
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, true);
+            }
+        }
     }
 }

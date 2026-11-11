@@ -21,6 +21,10 @@ namespace Worktown.Game.Shop
         /// <summary>The held food goes (despawned), or the held cookware's contents go (the cookware stays in the hands). Never moves money or stock.</summary>
         CookOutcome DiscardHeld(PickupInteractor player, out string what);
 
+        /// <summary>Spec 044: as <see cref="DiscardHeld(PickupInteractor, out string)"/>; held food flies into <paramref name="opening"/> for
+        /// the other players.</summary>
+        CookOutcome DiscardHeld(PickupInteractor player, out string what, UnityEngine.Vector3? opening);
+
         bool HoldsCloth(PickupInteractor player);
 
         bool HasSpill(int station);

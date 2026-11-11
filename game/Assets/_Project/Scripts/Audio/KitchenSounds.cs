@@ -63,6 +63,20 @@ namespace Worktown.Game.Audio
         private readonly Dictionary<StationContents, byte> _stoveFlags = new Dictionary<StationContents, byte>();
         private readonly Dictionary<VesselSteam, HeatState> _heatStates = new Dictionary<VesselSteam, HeatState>();
 
+        // Spec 044: the scene's sounds, for views without a reference (another player's put-down, a flight's landing). Client only.
+        private static KitchenSounds _active;
+
+        /// <summary>Spec 044: plays a one-shot on the scene's kitchen sounds, if there are any (none on a headless server).</summary>
+        public static void PlayOnce(SoundKey key, Vector3 position)
+        {
+            if (_active != null) _active.Play(key, position);
+        }
+
+        private void OnDestroy()
+        {
+            if (_active == this) _active = null;
+        }
+
         private void Awake()
         {
             if (Application.isBatchMode || SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
@@ -70,6 +84,7 @@ namespace Worktown.Game.Audio
                 Destroy(this);
                 return;
             }
+            _active = this;
             _catalog = new SoundCatalog();
             _oneShots = new AudioSource[OneShotSources];
             for (int i = 0; i < _oneShots.Length; i++) _oneShots[i] = CreateSource("OneShot " + i, loop: false);

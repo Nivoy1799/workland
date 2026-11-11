@@ -27,7 +27,7 @@ Players learn the cue, so the cue must be the truth.
 - Old hashes change, because the buckets move. All pinned values are re-pinned with a written reason.
 
 ## Acceptance criteria
-- [ ] AC1: `verify.sh`.
+- [x] AC1: `verify.sh`.
 - [ ] AC2: Sim tests per station:
   - the quality maximum lies inside Perfect;
   - the name boundaries equal the zone boundaries;
@@ -36,7 +36,8 @@ Players learn the cue, so the cue must be the truth.
 - [ ] AC4: `WhatsNew.json`.
 
 ## Implementation notes
-Built 2026-11-11 (builder, opus), on top of 042. Not committed. Tests: sim 400/400 (baseline 356, +44), EditMode 1182/1182
+Built 2026-11-11 (builder, opus), on top of 042. Merged into main (2026-11-11, review: approve with nits; the nits went into the
+044 round). AC1: verify.sh passed. Tests: sim 400/400 (baseline 356, +44), EditMode 1182/1182
 (baseline 1172, +10).
 
 **Design.**

@@ -560,6 +560,7 @@ namespace Worktown.Game.Net
                     if (Target is StationButton button && button.Station != null)
                     {
                         PlaySound(SoundKey.Button, button.transform.position);
+                        button.ShowPress(); // spec 044: the button sinks at the click
                         if (button.Station.Kind == StationKind.Fryer && FryerRules.TryParseBasketOption(button.Option, out _))
                             PressBasketButton(button); // spec 029b: the intent (lower or raise), then the arc at the click
                         else
@@ -639,6 +640,7 @@ namespace Worktown.Game.Net
                         bool pick = CurrentAction == InteractionAction.Take && held == null;
                         PlaySound(pick ? SoundKey.Pick : SoundKey.PlaceFood, vessel.transform.position);
                         SendUse(vessel.NetworkObject, VesselRules.ActionUse);
+                        if (CurrentAction == InteractionAction.Take) PredictTipOrScoop(vessel, held); // spec 044
                         if (CurrentAction == InteractionAction.PutInto && held != null)
                         {
                             Predict(PredictionKind.PutInto, held, vessel);
@@ -671,6 +673,31 @@ namespace Worktown.Game.Net
                     else if (Target is Pickup pickup) PickUpWithLook(pickup);
                     break;
             }
+        }
+
+        /// <summary>
+        /// Spec 044: the look of a tip or a scoop at the click (the server decides; the look goes back after the confirm timeout if
+        /// nothing changes). Holding a plate or bowl at a raised basket or a griddle spot: its food is on the plate at once and the source
+        /// is empty. At the spit's tray (empty hands or an open build): the last portion leaves the tray and a copy of it flies into the hands.
+        /// </summary>
+        private void PredictTipOrScoop(Vessel target, Pickup held)
+        {
+            float timeout = RequestTimeout();
+            if (target.Kind == VesselKind.SpitTray)
+            {
+                if (target.ContentCount == 0) return;
+                Transform part = target.LastPartModel;
+                target.PredictContents(ContentsPrediction.Scooped(target.SeenLooks), timeout);
+                if (part != null)
+                    Worktown.Game.Art.ExitFlightLook.Begin(part, new Pose(part.position, part.rotation), HandPose().position, null, Time.unscaledTime);
+                return;
+            }
+            if (held == null || !held.TryGetComponent(out Vessel plate)) return;
+            bool tips = (target.Kind == VesselKind.Basket && VesselRules.TipsFromBasket(plate.Kind))
+                        || (target.Kind == VesselKind.Griddle && VesselRules.TipsFromFixed(target.Kind, plate.Kind));
+            if (!tips || target.ContentCount == 0) return;
+            plate.PredictContents(ContentsPrediction.Tipped(plate.SeenLooks, target.SeenLooks), timeout);
+            target.PredictContents(System.Array.Empty<FoodLook>(), timeout);
         }
 
         /// <summary>Spec 027b: a pick-up request with its predicted arc into the hands and the pick sound.</summary>
@@ -2744,6 +2771,7 @@ namespace Worktown.Game.Net
                 {
                     PlaySound(holding ? SoundKey.PlaceFood : SoundKey.Pick, view.Tray.transform.position);
                     SendUse(view.Tray.NetworkObject, VesselRules.ActionUse);
+                    PredictTipOrScoop(view.Tray, FindHeldPickup()); // spec 044: the scoop's look at the key
                     return true;
                 }
             }
