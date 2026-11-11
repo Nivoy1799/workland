@@ -298,17 +298,16 @@ Tuning stopped after 3 rounds (AC12). Design findings, for the human:
    capacity-bound from S2: about 156 actions a service against about 40 guests who choose it. It misses about 47%, and
    missed guests pull stars to 2.8, below the 3.5 gate. No single demand ceiling fits both 1 player and 4-16 players
    inside the T1 bands. Review (2026-11-11): the menu model makes it worse. With fries only a solo holds 3.5-3.9
-   stars and would pa2. **Price shortcut (T4): a symptom of finding 4, not of price units.** `FAIL T4 4p average fastest balanced+plus1
+   stars and would pass; Balanced then buys every dish recipe and never drops one, average actions per guest rise from
+   6 to about 8.5, served guests fall to about 17 and stars to 2.1-3.3. Best guess: solo scaling (question 3 = on)
+   and/or letting the crew choose its menu (drop dishes it cannot keep up with).
+2. **Price shortcut (T4): a symptom of finding 4, not of price units.** `FAIL T4 4p average fastest balanced+plus1
    15.4 h >= 0.85 x median 20.0 h`. Review (2026-11-11): Plus1 is not faster in S2-S4 (16p average reaches S4 at 8.8 h
    with Match, 8.3 h with Plus1); the whole gain is inside S4 (10.0 h with Match, 2.4 h with Plus1). A higher price
    turns guests away, lowers `LastDemandActions` and passes the few-players check of the S4 gate sooner. For experts
    Plus1 is only 12 % faster. T4 also compares with the median of all finishing strategies, which the weak Minus1,
    Plus2 and Undercut strategies pull up. Best guess: fix the S4 gate (finding 4); then re-check T4, maybe against
    Match instead of the median.
-e term scales with the offset as a share of the menu's
-   average reference price. +$1 is 25% on fries ($4) in S1-S2 but about 11% on the S3+ menu, so no one weight keeps
-   Match best in every stage. Best guess: price units relative to each dish (e.g. Plus1 = +10%), or a weight per
-   stage.
 3. **Money has no use late (T7).** `FAIL T7 4p expert 880 idle-money services (in S5)` (16p expert 891). Rich S5 crews
    buy every finite item by about 25 h, and the big-job deposits ($600-1000) stay under 3x their income. 4p novices
    are also idle in S4 (833): everything is bought while the few-players check still fails. Best guess: repeatable
