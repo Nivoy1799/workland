@@ -16,6 +16,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Worktown.Gateway/Worktown.Gateway.csproj" />
+    <!-- Spec 056b: the offline name bake tool (BakeCommandTests, ReviewSheetTests, PublishCommandTests). -->
+    <ProjectReference Include="../../tools/NameBake/NameBake.csproj" />
     <!-- Tests only: the D27 drift test compares the gateway vegan word list with /sim ContentRules.
          The gateway itself never references /sim (spec 006, Open question 7). -->
     <ProjectReference Include="../../../sim/Sim.csproj" />

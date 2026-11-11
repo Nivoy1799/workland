@@ -17,6 +17,8 @@ Gateway.sln
 schemas/item_name.v1.schema.json     embedded into the build
 src/Worktown.Gateway/                the service (Program.cs and one folder per pipeline step)
 tests/Worktown.Gateway.Tests/        xunit; in-memory host with a stub upstream
+tools/NameBake/                      the offline name bake (spec 056, see "Offline names")
+offline/                             its data: reachable.v1.json, name-cache.jsonl, review.tsv (committed)
 ```
 
 ## Test
@@ -47,6 +49,51 @@ Tests need no network and no key: the upstream is `StubUpstreamHandler` at
      -d '{"itemHash":"2ab1f86227c96055d1d69a98ce1485820e94a0805096d923ef51a6b4286857d3","canonicalTree":"fry(temp=hot,time=medium;cut(shape=sticks;potato))","fallbackName":"crispy fried potato sticks","tags":["fried"]}'
    ```
    Do not paste the key or token into chat or logs.
+
+## Offline names
+
+D38: no live gateway at Early Access. A developer runs the same pipeline once, on their own
+PC, for every item the menus can produce; a human reviews the results; the approved names
+ship with the game (spec `specs/056-offline-dish-names.md`). Moderation is still the
+placeholder (O6 OPEN): real names ship only after the human's go-ahead.
+
+Files in `ai-gateway/offline/` (committed; they hold no secret, only generated text, cache
+keys and model ids):
+
+| file | what |
+|---|---|
+| `reachable.v1.json` | every reachable item (hash, tree, plain name, tags, routes), from `scripts/item-list.sh` |
+| `name-cache.jsonl` | the bake's cache, one JSON line per generated item (same cache key as the web gateway) |
+| `review.tsv` | the review sheet: `key12, routes, target, plain_name, name, description, flags, decision, note` |
+
+Steps, from the repo root (bash). The key lives only in `.env` (gitignored) or the shell;
+the bake never needs `GATEWAY_SERVICE_TOKEN`.
+
+1. `bash scripts/item-list.sh --out ai-gateway/offline/reachable.v1.json` (no key, /sim only;
+   prints the count and the set hash).
+2. `bash scripts/bake-names.sh bake --dry-run` shows how many items are cached and how many
+   would be asked (needs only `GATEWAY_MODEL`).
+3. `bash scripts/bake-names.sh bake [--limit 500]` asks for every item not cached yet, one call
+   at a time (needs `GATEWAY_UPSTREAM_BASE_URL`, `GATEWAY_UPSTREAM_API_KEY`, `GATEWAY_MODEL`).
+   It stops after `--limit` upstream misses (exit 0, run again to go on) or after 5 upstream
+   errors in a row (exit 3). It prints counts only. Repeat until nothing is pending.
+4. Review `review.tsv` in a spreadsheet or editor: set `decision` to `ok` or `no` on every row.
+   Check that the name describes the item, is vegan (D27), names no real people, brands or
+   real-world history, refers only to the game's own past (D28), and does not call a burnt or
+   raw item golden or perfect (D21). `flags` only help: `doneness` (a doneness word of the
+   plain name is missing), `same` (equals the plain name), `dup` (same name on another route),
+   `long` (over 30 chars). You may edit a name or description; publish checks it again.
+   On the next bake every `no` row is generated once more (counted in `--limit`); its old name
+   moves to `note`. Decisions and edits are kept across bakes.
+5. `bash scripts/bake-names.sh publish` writes `game/Assets/_Project/Resources/ItemNames.json`
+   from the `ok` rows that are still reachable, after checking each against the schema, the
+   vegan rule and the moderator (any failure: exit 2, nothing written). The same inputs give a
+   byte-identical file. It prints published, pending, rejected and stale counts.
+6. Commit the four files.
+
+When cooking data changes, the /sim pin test fails with "reachable set changed": rerun
+steps 1 to 6 (only new items cost money). A new prompt, schema or model changes every cache
+key, so everything is generated and reviewed again.
 
 ## Environment variables
 
