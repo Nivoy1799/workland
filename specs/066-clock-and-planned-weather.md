@@ -184,7 +184,13 @@ None to build. The clock report shows a month of weather for one seed.
 10. Forecast. [today and tomorrow are computable now; boards and the town paper show them in a later spec]
 
 ## Implementation notes
-(Builder fills this in.)
+- Tests project references the ClockReport tool (sim/Sim.Tests~/Sim.Tests.csproj, one line) so ClockReportTests can call Program.Run.
+- Records hold IReadOnlyList instead of ImmutableArray (netstandard2.1 has no System.Collections.Immutable); lists compare by reference.
+- Added public TownClock.DaySecondOf and a second WeatherPlan.For(w, IRandom, day, previousRolledStorm) overload (the counting-RNG test uses it).
+- Spans walks second by second (fine for service-length intervals).
+- Conditions: a storm-day night after 21:00 is plain night row; Rain Hour at dusk is tested with a hand-built DayWeather.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
+
+**066 review (2026-11-11):** approved with nits. Fixed: the weather salt moved to the high bits (`0x066UL << 48`), so weather and climb draws are no longer correlated (tests still green, 637). Open nits: `Spans` walks second by second (step by hour, or document a max interval); dead `Math.Max` in LightningSchedule; catalog arrays exposed as IReadOnlyList can be cast back (wrap with Array.AsReadOnly); `TownClock.At` does not validate the catalog.
