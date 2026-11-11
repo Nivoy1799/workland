@@ -150,3 +150,35 @@ fallbacks. `.verify/visual044` was the same run before the observer's flight fra
 - Not in any sheet (tests only): the button sink (12 mm, too small at the shot distances), the remote put-down tock (sound), the
   sprint start, the third-person box and wipe arms (the tours play in first person, and the observer camera does not see the stock
   run or the wipe), and the eat-in plate onto the dish return.
+
+## Follow-ups (2026-11-11)
+Branch `spec/followups-041-042-044` (builder, opus), from "Feels off / for the human" above. One verify for the 041, 042 and 044
+follow-ups.
+- **A refused tip or scoop goes back at once.** `PredictTipOrScoop` remembers its request id (spec 045) and its vessels. In
+  `ReportCook`, the refusal of that request (`ContentsPrediction.RefusalEnds`) ends the look at once
+  (`ContentsPrediction.Refused`, `Vessel.EndPredictedContents`). A yes is still left to the synced contents, and the timeout stays
+  for a lost answer. The scoop's flying copy has already landed by then and is not undone.
+- **The cloth eases to the spill.** `Pickup` blends the held cloth between the hand pose and `SpillWipeView`'s cloth pose over
+  `CleaningArtRules.ClothBlendSeconds` (0.15 s, ease-out, `ClothShare`). It blends back the same way when the wipe ends. A wipe that
+  starts or ends mid-blend starts from where the cloth is. A new holder starts in the hand. The arm reaches for the cloth during
+  the blend too (the reach fades in by itself).
+- **An emptied box flies into its slot for onlookers.** The server path allows it with no new RPC or SyncVar.
+  `SupplyService.Unpack` takes the slot's anchor (`KitchenService.UnpackInto` passes `target.Anchor`) and calls
+  `PickupService.TakeAway(player, out _, anchor, SoundKey.Unpack)` before the despawn. That is the 044 exit point, so every
+  onlooker sees the box fly into the slot and hears the unpack there (before, only the unpacker heard it). The unpacker drew its
+  own tip already (`UnpackLook`, the box hidden), so `SupplyBox.HiddenForUnpack` counts as its prediction in
+  `Pickup.OnStopClient` (no second flight). "Back to the shelf" is the slot the stock went into. A bin flight would need a
+  second point, so it was not done.
+- **Skipped (needs a new RPC or SyncVar):** none of the three items. Item 042-7's late start would need one (see spec 042).
+- Tests: new `FeelPolish3FollowUpTests` (3; the box test covers the flight rule only, the server path needs the network).
+- **Runs (041, 042 and 044 follow-ups together).** `verify.sh` PASS: EditMode 1382/1382 (baseline 1373, +9), sim 403/403, gateway
+  175/175. `RpcSurfaceTests` and `MoveDataSurfaceTests` are unchanged and green. `BuildAll` succeeded (both builds).
+  `visual-check.sh --tours look,cook,tutorial,menu --out .verify/visual-fu3`: PASS, with 0 exceptions, 0 timeouts, 0 aim
+  fallbacks and 0 native crashes. Look: 133 images. Cook: 975. Tutorial: 723 ("[Tutorial] finished"). Menu: 28. Cells:
+  - look `61-rightclick-front-west` and `64-rightclick-beside-drinks`: the right-click ghost is still on the counter tops next
+    to the dispenser, so the station block does not catch them;
+  - cook `452-cup-place-09`: the cup on the tray;
+  - cook `111-fries-tipped-onto-plate-01`: the tip;
+  - cook `193-202 unpack`;
+  - cook `292-298 wipe`.
+  The observers do not film the unpack or the wipe, so the remote box flight and the cloth blend are covered by tests only.

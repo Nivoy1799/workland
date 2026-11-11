@@ -4,7 +4,8 @@ namespace Worktown.Game.Net.Rules
     /// Spec 041, pure: one input has one meaning everywhere (docs/feel.md 8). Left click does the obvious thing with what you aim at
     /// (<see cref="InteractionRules.ActionFor"/>); holding left does the hold actions; the right click only ever puts down what you
     /// hold (on the aimed free spot, else at your feet); the wheel turns (the food on the board with the knife, else the held item's
-    /// rest rotation). Third person: left click and E act on the nearest target, the right click drops, the wheel zooms. Q is a
+    /// rest rotation). Third person: left click and E act on the nearest target, the right click drops, the wheel zooms (a hold goes
+    /// through the interactor's SqueezeHoldGate, not this router). Q is a
     /// hidden alias of the right click. The interactor routes every input through <see cref="IntentFor"/>; the server sees the same
     /// requests as before.
     /// </summary>
@@ -44,8 +45,8 @@ namespace Worktown.Game.Net.Rules
                 case HandInput.LeftClick:
                 case HandInput.KeyE:
                     return HandIntent.Act; // the nearest target, as E always did
-                case HandInput.HoldLeft:
-                    return HandIntent.Hold; // SqueezeHoldGate decides whether a hold is offered there
+                // 041 review: no HoldLeft case. A third-person hold (E or the left button) goes through the 031b SqueezeHoldGate in
+                // the interactor, never through this router, so a long press means nothing here.
                 case HandInput.RightClick:
                 case HandInput.KeyQ:
                     return holding ? HandIntent.Drop : HandIntent.None; // third person aims at no spot

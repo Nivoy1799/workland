@@ -155,7 +155,10 @@ namespace Worktown.Game.Net
         {
             base.OnStopClient();
             // Spec 044: taken out of the world into something: the viewers who did not predict it see it fly there.
-            if (_renderHooked && ExitFlightRules.ShowsFlight(ExitSound.Value != 0, _tween.HasDrawn, _look.HasPrediction))
+            // 044 follow-up: the player who unpacked a box drew its own tip into the slot (SupplyBox.HiddenForUnpack): a prediction too.
+            bool predicted = _look.HasPrediction
+                || (_isBox && TryGetComponent(out Worktown.Game.Shop.SupplyBox box) && box.HiddenForUnpack);
+            if (_renderHooked && ExitFlightRules.ShowsFlight(ExitSound.Value != 0, _tween.HasDrawn, predicted))
             {
                 _tween.Restore();
                 ExitFlightLook.Begin(transform, _tween.Drawn, ExitPoint.Value, (Worktown.Game.Audio.SoundKey)(ExitSound.Value - 1), Time.unscaledTime);
@@ -268,9 +271,41 @@ namespace Worktown.Game.Net
                 return;
             }
             visual.MarkHolding();
-            // Spec 044 (035 feels off): the cloth goes round on the spill being wiped, the arm reaches for it.
-            if (_isCloth && visual.DrawsHeldInHand && Worktown.Game.Art.SpillWipeView.TryClothFor(visual.transform.position, out Pose cloth))
-                visual.ReachRight(cloth.position);
+            // Spec 044 (035 feels off): the cloth goes round on the spill being wiped, the arm reaches for it (044 follow-up: while the
+            // cloth is on its way there or back too; the reach fades in by itself).
+            if (_isCloth && visual.DrawsHeldInHand && ClothBlend(visual, Time.unscaledTime, out _))
+                visual.ReachRight(_clothPose.position);
+        }
+
+        // 044 follow-up: the held cloth eases from the hand to the wipe pose and back (CleaningArtRules.ClothShare) instead of jumping.
+        private bool _clothOn;
+        private float _clothChanged = float.NegativeInfinity;
+        private float _clothShareAtChange;
+        private Pose _clothPose;
+
+        /// <summary>
+        /// 044 follow-up: whether the held cloth is drawn towards a wipe now, and how far (<paramref name="share"/>, 0 the hand, 1 the
+        /// spill's cloth pose in <see cref="_clothPose"/>). The wipe starting or ending starts the ease from where the cloth is.
+        /// </summary>
+        private bool ClothBlend(CharacterVisual visual, float now, out float share)
+        {
+            bool wiping = Worktown.Game.Art.SpillWipeView.TryClothFor(visual.transform.position, out Pose cloth);
+            if (wiping) _clothPose = cloth;
+            if (wiping != _clothOn)
+            {
+                _clothShareAtChange = CleaningArtRules.ClothShare(_clothOn, _clothShareAtChange, now - _clothChanged);
+                _clothOn = wiping;
+                _clothChanged = now;
+            }
+            share = CleaningArtRules.ClothShare(_clothOn, _clothShareAtChange, now - _clothChanged);
+            return share > 0f;
+        }
+
+        private void ResetClothBlend()
+        {
+            _clothOn = false;
+            _clothChanged = float.NegativeInfinity;
+            _clothShareAtChange = 0f;
         }
 
         /// <summary>The character of <paramref name="holder"/>, looked up at most every <see cref="HolderLookupSeconds"/>.</summary>
@@ -278,6 +313,7 @@ namespace Worktown.Game.Net
         {
             if (holder != _handHolderId)
             {
+                ResetClothBlend(); // 044 follow-up: a new holder starts with the cloth in the hand
                 _handHolderId = holder;
                 _handHolder = null;
                 _nextHolderLookup = 0f;
@@ -351,7 +387,9 @@ namespace Worktown.Game.Net
                     if (_isBox) pose = new Pose(visual.transform.position + Vector3.up * HoldViewRules.BoxCarryHeight
                         + frame * (Vector3.forward * HoldViewRules.BoxCarryForward), frame);
                     // Spec 044: a wiping holder's cloth is drawn going round on the spill (the same pose the dispenser drew its own cloth at).
-                    else if (_isCloth && Worktown.Game.Art.SpillWipeView.TryClothFor(visual.transform.position, out Pose cloth)) pose = cloth;
+                    // 044 follow-up: eased from the hand over CleaningArtRules.ClothBlendSeconds (and back when the wipe ends).
+                    else if (_isCloth && ClothBlend(visual, Time.unscaledTime, out float share))
+                        pose = new Pose(Vector3.Lerp(pose.position, _clothPose.position, share), Quaternion.Slerp(pose.rotation, _clothPose.rotation, share));
                     return true;
                 }
                 if (!visual.DrawsHeldInHand && visual.TryGetComponent(out HeldItemView view) && view.TryGetViewPose(this, out pose, out _viewScale))
@@ -419,6 +457,19 @@ namespace Worktown.Game.Net
             transform.SetPositionAndRotation(position, rotation);
             _serverHoldPoint = null;
             HolderClientId.Value = PickupRegistry.NoHolder;
+        }
+
+        /// <summary>
+        /// 041 review: half the size of the item's box collider in its own axes (scaled), for the turned-footprint check of a place
+        /// (PickupService.PlanPlace). Zero without a box collider (no check then).
+        /// </summary>
+        internal Vector3 ColliderHalfExtents
+        {
+            get
+            {
+                if (!(_collider is BoxCollider box)) return Vector3.zero;
+                return Vector3.Scale(box.size * 0.5f, transform.lossyScale);
+            }
         }
 
         /// <summary>Spec 020: height from the bottom of the item's collider to its pivot, so it rests on a surface.</summary>

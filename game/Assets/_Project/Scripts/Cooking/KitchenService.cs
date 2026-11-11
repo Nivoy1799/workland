@@ -251,7 +251,7 @@ namespace Worktown.Game.Cooking
             int line = Worktown.Game.Shop.StockCatalog.LineOfSlot(station.Kind, slot);
             if (line < 0) return CookOutcome.InvalidOption;
             if (contents.Line != line) return CookOutcome.WrongBox;
-            return _supply.Unpack(player, box, line, station.DisplayName);
+            return _supply.Unpack(player, box, line, station.DisplayName, target.Anchor); // 044 follow-up: onlookers see it fly into the slot
         }
 
         /// <summary>Spec 021: a burner knob (on/off) or button (fry/saute) on the stove's front.</summary>

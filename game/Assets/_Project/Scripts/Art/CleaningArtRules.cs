@@ -65,6 +65,20 @@ namespace Worktown.Game.Art
         public static float ClothSize => ClothReal * 1.15f;
         public const float ClothThickness = 0.02f;
 
+        /// <summary>044 follow-up: s the held cloth takes from the hand to the spill when a wipe starts, and back when it ends.</summary>
+        public const float ClothBlendSeconds = 0.15f;
+
+        /// <summary>
+        /// 044 follow-up: how far (0 the hand, 1 the wipe pose) the held cloth is drawn, <paramref name="elapsed"/> s after the wipe started
+        /// (<paramref name="on"/>) or ended, starting from <paramref name="shareAtChange"/> (where it was then): an ease-out over
+        /// <see cref="ClothBlendSeconds"/>, so it never jumps.
+        /// </summary>
+        public static float ClothShare(bool on, float shareAtChange, float elapsed)
+        {
+            float t = DrinkArtRules.UnderTapShare(elapsed, ClothBlendSeconds);
+            return Mathf.Lerp(Mathf.Clamp01(shareAtChange), on ? 1f : 0f, t);
+        }
+
         // ---- the looks ----
 
         /// <summary>How high the trash is drawn (local y of its top) at <paramref name="fillShare"/> 0..1.</summary>

@@ -92,6 +92,12 @@ namespace Worktown.Game.Shop
             ShowModel(false);
         }
 
+        /// <summary>
+        /// 044 follow-up, client: this client unpacked the box and drew it tipping into the slot itself (<see cref="HideForUnpack"/>), so
+        /// its despawn needs no second flight here.
+        /// </summary>
+        public bool HiddenForUnpack => _hiddenUntil >= 0f;
+
         /// <summary>Client: a refused unpack: the box shows again at once.</summary>
         public void ShowAgain()
         {
