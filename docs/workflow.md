@@ -45,8 +45,9 @@ HUMAN plays it 5 minutes ──► orchestrator merges to main the same day
 
 ## Who builds what
 
-Only Anthropic models, all through the Claude subscription. Pick the cheapest model that
-can do the job; the spec's `builder:` field says which one.
+Anthropic models through the Claude subscription, plus the free local builder (see
+"Local builder" below). Pick the cheapest option that can do the job; the spec's `builder:`
+field says which one (`local` is allowed for small, clearly specified parts).
 
 | Work | Agent | Model |
 |---|---|---|
@@ -61,6 +62,50 @@ can do the job; the spec's `builder:` field says which one.
 | Specs, architecture | architect | opus |
 | Reviews | reviewer | opus |
 | Task failed 3 times on a cheaper model | main session | opus (escalation) |
+
+### Local builder (Windows dev PC only, since 2026-11-12)
+
+Small, clearly specified implementation tasks can run on a local model instead of a
+subagent: Qwen3.8-27B (Q5) in llama-server, driven by the Claude Code CLI in headless mode.
+It reads `CLAUDE.md` and `AGENTS.md` like any agent here. It costs no subscription usage
+but is slow: about 6 tokens/s writing, about 4 minutes for a small two-file rename.
+
+**Setup.** Once per boot: `C:\llama\start-qwen.ps1` (model on port 9931, 262k context).
+`local-build.ps1` starts the router (port 4100) itself and fails fast if the model is down.
+
+**Run.** From Bash, always with `run_in_background`:
+`powershell -File C:\Users\jovin\tools\claude-router\local-build.ps1 -Task "<task card>"`
+Options: `-ReadOnly` (questions only), `-Dir <worktree>` (default: the main checkout),
+`-MaxTurns 40`. It prints the model's report and `git status` before and after; the full
+JSON goes to `local-build-last.json` next to the script.
+
+**What it can and cannot do.** Read, Grep, Glob, Edit, Write. No shell, no tests, no git,
+no Unity MCP, no web. So it never commits; the orchestrator does after review.
+
+**How the orchestrator spends its budget (Opus plans, Qwen types):**
+1. Write a task card instead of code. One card is one to three files and under ~200 changed
+   lines. It names: the goal in one sentence, the exact files, the type and method
+   signatures, the rules with their numbers, the tests to add (names and cases), and what
+   must not be touched. The more exact the card, the better the local result.
+2. Start it in the background and end the turn. The finish notice wakes you; waiting costs
+   no tokens. Never poll, never re-read the output file while it runs.
+3. Review cheaply: `git diff` of the named files only, then `scripts/verify.sh`.
+4. Red? Send one fix card with only the failing lines (no full logs). At most two local fix
+   rounds, then hand the part to the Sonnet builder (or Opus for netcode).
+5. One local run at a time: the server has one slot (`-np 1`) and one GPU. Never start two
+   in the same checkout. Parallel local runs would need separate worktrees and more slots,
+   which is not set up or measured yet (OPEN: try `-np 2 --kv-unified`).
+6. While it runs, the orchestrator can let Sonnet subagents work on other folders, but
+   nothing may touch the files on the local card until it is reviewed.
+
+**Good fits:** renames, data files (ingredients, items), small `/sim` functions with the
+tests spelled out, test files from a list of cases, doc comments. **Not for:** FishNet and
+netcode, Unity scenes or prefabs, debugging across many files, anything vague.
+
+**Note:** desktop-app sessions cannot route their own `haiku` agents to the local model
+(the app forces its own API address), so this script is the only route. Never put
+`ANTHROPIC_*` variables into user settings: a running session keeps them and its haiku
+agents and web search break until it is restarted.
 
 ## Running the builder
 
@@ -125,4 +170,6 @@ the date, a title, what is new, and what to test. The game shows the newest entr
   automatically; specs, this file and AGENTS.md carry the context.
 - Opus for architect and reviewer, sonnet for builder and tester.
 - Routine building goes to Sonnet, trivial tasks to Haiku. Opus only for specs, netcode, reviews and escalations.
+- When the local builder runs, small clear tasks go there first (free, slow). Opus writes the
+  task card and reviews the diff; see "Local builder".
 - Reviewing a diff costs far fewer tokens than writing it.
