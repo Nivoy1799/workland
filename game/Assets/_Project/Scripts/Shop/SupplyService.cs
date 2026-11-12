@@ -169,10 +169,12 @@ namespace Worktown.Game.Shop
         // Spec 062b (062a Part B review): the delivery spots lie on the worktop by the back door; they move with it when build mode moves it.
         private int[] _spotPiece;
         private Matrix4x4[] _spotLocal;
+        private Pose[] _spotScene;
 
         /// <summary>
         /// Spec 062b: each delivery spot keeps its place on the piece it lies on in the standard layout (found once: the floor piece whose
-        /// footprint holds it); when that piece stands elsewhere now, the spot goes with it. A spot whose piece is not placed (stored) stays.
+        /// footprint holds it); when that piece stands elsewhere now, the spot goes with it. 062b review: when that piece is stored, the spot
+        /// falls back to its own place by the back door, on the floor.
         /// </summary>
         private void FollowTheirPiece()
         {
@@ -182,10 +184,12 @@ namespace Worktown.Game.Shop
                 Worktown.Sim.Layout.ShopLayout standard = Worktown.Game.Layout.DefaultLayout.Load(catalog);
                 _spotPiece = new int[_deliverySpots.Length];
                 _spotLocal = new Matrix4x4[_deliverySpots.Length];
+                _spotScene = new Pose[_deliverySpots.Length];
                 for (int i = 0; i < _deliverySpots.Length; i++)
                 {
                     Transform spot = _deliverySpots[i];
                     if (spot == null) continue;
+                    _spotScene[i] = new Pose(spot.position, spot.rotation);
                     int x = Mathf.RoundToInt(spot.position.x * 1000f), z = Mathf.RoundToInt(spot.position.z * 1000f);
                     foreach (Worktown.Sim.Layout.LayoutPiece p in standard.Pieces)
                     {
@@ -202,7 +206,14 @@ namespace Worktown.Game.Shop
             for (int i = 0; i < _deliverySpots.Length; i++)
             {
                 Worktown.Game.Layout.PieceBehaviour piece = _spotPiece[i] > 0 ? Worktown.Game.Layout.LayoutRegistry.Piece(_spotPiece[i]) : null;
-                if (piece == null || _deliverySpots[i] == null) continue;
+                if (_deliverySpots[i] == null) continue;
+                if (piece == null || piece.Parked)
+                {
+                    // 062b review: the piece is stored: the fallback, the spot's own place by the back door, on the floor.
+                    Pose scene = _spotScene[i];
+                    _deliverySpots[i].SetPositionAndRotation(new Vector3(scene.position.x, 0f, scene.position.z), scene.rotation);
+                    continue;
+                }
                 Matrix4x4 world = piece.transform.localToWorldMatrix * _spotLocal[i];
                 _deliverySpots[i].SetPositionAndRotation(world.GetColumn(3), world.rotation);
             }

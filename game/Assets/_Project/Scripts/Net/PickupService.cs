@@ -5,6 +5,8 @@ using FishNet.Transporting;
 using UnityEngine;
 using Worktown.Game.Net.Rules;
 
+using Worktown.Game.Layout;
+
 namespace Worktown.Game.Net
 {
     /// <summary>
@@ -413,7 +415,29 @@ namespace Worktown.Game.Net
             if (item == null || !item.TryGetComponent(out Pickup pickup) || pickup.IsHeld) return;
             pickup.ServerPlaceAt(position, rotation);
             PlaceSurface surface = _spots.TryGetSpotOf(item.ObjectId, out int surfaceId, out _) ? SurfaceAt(surfaceId) : null;
+            if (surface == null) surface = SurfaceUnder(position);
             ItemMoved?.Invoke(item, surface);
+        }
+
+        /// <summary>062b review, server: the spot table's place of an item (its surface id and spot), when it lies on one.</summary>
+        public bool TryGetSpotOf(NetworkObject item, out int surfaceId, out int spot)
+        {
+            surfaceId = SurfaceId.None;
+            spot = -1;
+            return item != null && _spots.TryGetSpotOf(item.ObjectId, out surfaceId, out spot);
+        }
+
+        /// <summary>062b review, server: the item the spot table has on spot <paramref name="spot"/> of surface <paramref name="surfaceId"/>, or null.</summary>
+        public NetworkObject OccupantOf(int surfaceId, int spot)
+        {
+            if (!_spots.TryGetOccupant(surfaceId, spot, out int id)) return null;
+            return _networkManager.ServerManager.Objects.Spawned.TryGetValue(id, out NetworkObject item) ? item : null;
+        }
+
+        /// <summary>062b review, server: an item spawned on a spot (LayoutSpawner: the items at their homes) is entered in the spot table.</summary>
+        public void ServerNoteOnSpot(NetworkObject item, int surfaceId, int spot)
+        {
+            if (item != null) _spots.TryTake(surfaceId, spot, item.ObjectId);
         }
 
         /// <summary>Spec 062b, server: whether spot <paramref name="spot"/> of surface <paramref name="surfaceId"/> is free in the spot table and in the world.</summary>

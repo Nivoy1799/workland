@@ -206,5 +206,29 @@ rule 8 (`AttachRules`, "Attach it to a counter"), `CounterRunView` (hidden seams
 - **Follow-ups.** Part B above; ChangeLog action 5 (059 reserved it for the door) is not used yet; the taken-out piece on the pallet
   keeps its stations registered (usable while held); stored pieces lose their number ("Worktop" not "Worktop 3") when spawned again.
 
+### 062b review fixes
+Built 2026-11-12 on top of ef6cc8b.
+1. **The door sign cannot be stored** (`BuildDesk.NeverStored`: refused as Required); a test.
+2. **Tools of a stored worktop are re-homed.** `LayoutEdit` can carry the layout's new item homes (its inverse the old ones);
+   `BuildService` plans each home on the stored piece onto the nearest free worktop spot that is no other home, moves the tool there,
+   and an undo moves it back. Tests: the save round trip keeps every home on a placed piece; the undo restores the homes.
+3. **Items travel on the host.** `BuildService.Carry` starts from the piece's synced pose, not its transform; the host's client no
+   longer predicts its own move. The test drives the real `Carry` after a prediction.
+4. **One rate limit and spam kick** for both interactors: `Net/ServerRequestGate` (PickupInteractor's code moved there, not copied).
+5. **A piece taken out of storage is parked** (`PieceBehaviour.Parked`, from the synced pose over a pallet): its stations and surfaces
+   are not registered until it is placed; going back to storage moves its items off first. Heat (`StationIsOn`) is re-checked on a move
+   and an undo.
+6. A disconnect forgets the slot's history (`BuildService.ServerPlayerLeft`, tested through the service).
+7. The ghost is recomputed only when `LayoutRegistry.Version`, the held piece, its turns or its grid place change; the prompt only when
+   its words change.
+8. Items on a piece come from the spot table's surface id (the home items enter the spot table at spawn), not geometry.
+9. The clock hold is `ShopDoorRules.ClockHeld` (tested), used in both places in `CustomerService`.
+- Nits: take out skips fixed types; moves and undos use plain `Validate`; one walk grid per store; delivery spots fall back to their own
+  place (on the floor) while worktop 19 is stored; the 059 re-pin comment is back; the door is logged at the office terminal
+  (ChangeLog action 5: "Mira: closed the shop").
+- Not done: a host-side move in the build tour (the tour's host is the observer window; not cheap); the carry test covers the host case.
+- Checks: verify.sh green (EditMode 1658/1658, sim 893/893, gateway 216/216); BuildAll ok; `visual-check.sh --tours build,restaurant
+  --out .verify/visual062b2`: both ok, 0 Exception lines, 0 timeouts, 0 aim fallbacks.
+
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

@@ -25,8 +25,10 @@ namespace Worktown.Game.Office
         /// <summary>A dish on or off the next menu: the argument is its line.</summary>
         public const int DishOn = 3;
         public const int DishOff = 4;
-        /// <summary>The highest action this build draws (062b adds the door: 5).</summary>
-        public const int LastAction = DishOff;
+        /// <summary>Spec 062b: the shop's door: the argument is the new ShopDoorState.</summary>
+        public const int DoorSet = 5;
+        /// <summary>The highest action this build draws.</summary>
+        public const int LastAction = DoorSet;
 
         private const int PriceBits = 11;
 
@@ -58,6 +60,9 @@ namespace Worktown.Game.Office
 
         /// <summary>A 057 recipe row (its dish, or the drinks) on or off the next menu.</summary>
         public static uint Dish(int playerSlot, int recipeRow, bool on) => Pack(playerSlot, on ? DishOn : DishOff, Math.Max(0, recipeRow));
+
+        /// <summary>Spec 062b: the door opened, closed or set to close after the service.</summary>
+        public static uint Door(int playerSlot, Worktown.Game.Layout.ShopDoorState state) => Pack(playerSlot, DoorSet, (int)state);
 
         /// <summary><paramref name="log"/> with <paramref name="entry"/> appended, the oldest dropped past <see cref="Kept"/>.</summary>
         public static uint[] Push(IReadOnlyList<uint> log, uint entry)
@@ -95,6 +100,9 @@ namespace Worktown.Game.Office
                     return argument == 0 ? SpecialRules.NoSpecialText.ToLowerInvariant() : LineName(argument - 1) + " is the special";
                 case DishOn: return RecipeName(argument) + " on the menu next";
                 case DishOff: return RecipeName(argument) + " off the menu next";
+                case DoorSet: // spec 062b
+                    return argument == (int)Worktown.Game.Layout.ShopDoorState.Closed ? "closed the shop"
+                        : argument == (int)Worktown.Game.Layout.ShopDoorState.ClosingAfterService ? "closes after this service" : "opened the shop";
                 default: return "changed something";
             }
         }

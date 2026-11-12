@@ -7,8 +7,8 @@ namespace Worktown.Game.Layout
     /// <summary>
     /// Spec 062b, server, pure (no network, no world): the build mode's book. It holds the layout the server decides on, who holds which
     /// piece (a claim: one per player, by the player's slot), each player's undo history (UndoHistory, the last 10) and the stored pieces
-    /// taken out of the pallet. Every action is checked here against the current layout: a move is snapped (BuildSnap.Pose) and must not
-    /// add a layout problem (LayoutRules.Validate; problems the layout already had do not count); a required piece cannot be stored; an
+    /// taken out of the pallet. Every action is checked here against the current layout: a move is snapped (BuildSnap.Pose) and the new layout must
+    /// keep every rule (LayoutRules.Validate); a required piece (or the door sign) cannot be stored; an
     /// undo applies its inverse edit only if that fits now. BuildService applies what it decides to the world (spawn, move, despawn, the
     /// items that travel) and saves. Deterministic.
     /// </summary>
@@ -16,6 +16,12 @@ namespace Worktown.Game.Layout
     {
         /// <summary>A claim lapses after this long without input from its player (question 7: 60 s).</summary>
         public const double ClaimTimeoutSeconds = 60.0;
+
+        /// <summary>
+        /// 062b review: types that may move but never go into storage, though the catalog does not require them: the door sign (stored, the
+        /// shop could never be closed again, and build mode needs a closed shop).
+        /// </summary>
+        public static readonly IReadOnlyList<string> NeverStored = new[] { PieceCatalog.DoorSign };
 
         private sealed class Claim
         {
@@ -120,12 +126,18 @@ namespace Worktown.Game.Layout
         /// new one in <paramref name="problem"/>. On Ok the layout changes, the inverse goes on the player's history, the claim ends and
         /// <paramref name="applied"/> is the edit done (a Move, or a TakeOut for a piece from the pallet).
         /// </summary>
-        public BuildOutcome TryMove(byte slot, int aimXMm, int aimZMm, int turns, double now, out LayoutEdit applied, out LayoutProblem problem)
+        public BuildOutcome TryMove(byte slot, int aimXMm, int aimZMm, int turns, double now, out LayoutEdit applied, out LayoutProblem problem) =>
+            TryMove(slot, aimXMm, aimZMm, turns, false, now, out applied, out problem);
+
+        /// <summary>062b review: as above; <paramref name="stationOn"/>: its heat was turned on since the claim (refused: StationOn).</summary>
+        public BuildOutcome TryMove(byte slot, int aimXMm, int aimZMm, int turns, bool stationOn, double now, out LayoutEdit applied,
+            out LayoutProblem problem)
         {
             applied = null;
             problem = null;
             if (!_claims.TryGetValue(slot, out Claim c)) return BuildOutcome.NotHeld;
             c.LastInput = now;
+            if (stationOn) return BuildOutcome.StationOn;
             LayoutPiece piece = c.FromStorage ? Layout.StoredPiece(c.PieceId) : Layout.Piece(c.PieceId);
             if (piece == null)
             {
@@ -145,7 +157,14 @@ namespace Worktown.Game.Layout
         /// <paramref name="slot"/> puts the piece it holds on the storage pallet. A placed piece leaves the layout (refused for a required one
         /// or when its going adds a problem); a piece from the pallet just goes back (Ok, <paramref name="applied"/> null).
         /// </summary>
-        public BuildOutcome TryStore(byte slot, double now, out LayoutEdit applied, out LayoutProblem problem)
+        public BuildOutcome TryStore(byte slot, double now, out LayoutEdit applied, out LayoutProblem problem) =>
+            TryStore(slot, now, null, out applied, out problem);
+
+        /// <summary>
+        /// 062b review: as above; <paramref name="target"/> gives each item home on the stored piece its new home (a free spot on another
+        /// worktop: <see cref="Rehome"/>), so the tools come back on the next load; an undo restores the old homes.
+        /// </summary>
+        public BuildOutcome TryStore(byte slot, double now, System.Func<ItemHome, ItemHome> target, out LayoutEdit applied, out LayoutProblem problem)
         {
             applied = null;
             problem = null;
@@ -158,8 +177,10 @@ namespace Worktown.Game.Layout
             }
             LayoutPiece piece = Layout.Piece(c.PieceId);
             if (piece == null) return BuildOutcome.Unknown;
-            if (_catalog.TryGet(piece.TypeId, out PieceDef def) && def.Required) return BuildOutcome.Required;
+            if ((_catalog.TryGet(piece.TypeId, out PieceDef def) && def.Required) || NeverStored.Contains(piece.TypeId)) return BuildOutcome.Required;
             LayoutEdit edit = LayoutEdit.Store(piece.Id);
+            IReadOnlyList<ItemHome> homes = target != null ? Rehome(Layout, piece.Id, target) : null;
+            if (homes != null) edit = edit with { Homes = homes };
             BuildOutcome outcome = Apply(slot, edit, out problem);
             if (outcome != BuildOutcome.Ok) return outcome;
             _claims.Remove(slot);
@@ -176,7 +197,8 @@ namespace Worktown.Game.Layout
             pieceId = 0;
             released = 0;
             releasedFromStorage = false;
-            List<LayoutPiece> free = Layout.StoredPieces.Where(p => HolderOf(p.Id) == 0 && _catalog.Contains(p.TypeId)).ToList();
+            List<LayoutPiece> free = Layout.StoredPieces
+                .Where(p => HolderOf(p.Id) == 0 && _catalog.TryGet(p.TypeId, out PieceDef d) && d.Movable).ToList(); // 062b review: movable only
             if (free.Count == 0) return BuildOutcome.NothingStored;
             LayoutPiece chosen = free[((pick % free.Count) + free.Count) % free.Count];
             released = Release(slot, out releasedFromStorage);
@@ -189,7 +211,15 @@ namespace Worktown.Game.Layout
         /// <paramref name="slot"/> undoes its last action: its inverse edit, when it fits now (else Blocked; it stays on the history for a
         /// later try) and nobody else holds the piece (Claimed). The player's own claim on that piece is let go first.
         /// </summary>
-        public BuildOutcome TryUndo(byte slot, double now, out LayoutEdit applied, out LayoutProblem problem, out int released, out bool releasedFromStorage)
+        public BuildOutcome TryUndo(byte slot, double now, out LayoutEdit applied, out LayoutProblem problem, out int released, out bool releasedFromStorage) =>
+            TryUndo(slot, now, null, out applied, out problem, out released, out releasedFromStorage);
+
+        /// <summary>The edit an undo of <paramref name="slot"/> would apply (null: nothing to undo).</summary>
+        public LayoutEdit PeekUndo(byte slot) => _histories.TryGetValue(slot, out UndoHistory h) && h.TryPeek(out LayoutEdit e) ? e : null;
+
+        /// <summary>062b review: as above; <paramref name="stationOn"/> says whether a piece's heat is on (an undo never moves a hot piece: StationOn).</summary>
+        public BuildOutcome TryUndo(byte slot, double now, System.Func<int, bool> stationOn, out LayoutEdit applied, out LayoutProblem problem,
+            out int released, out bool releasedFromStorage)
         {
             applied = null;
             problem = null;
@@ -198,8 +228,9 @@ namespace Worktown.Game.Layout
             if (!_histories.TryGetValue(slot, out UndoHistory history) || !history.TryPeek(out LayoutEdit inverse)) return BuildOutcome.NothingToUndo;
             byte holder = HolderOf(inverse.PieceId);
             if (holder != 0 && holder != slot) return BuildOutcome.Claimed;
+            if (stationOn != null && Layout.Piece(inverse.PieceId) != null && stationOn(inverse.PieceId)) return BuildOutcome.StationOn;
             if (!inverse.TryApply(Layout, out ShopLayout result, out _)) return BuildOutcome.Blocked;
-            problem = FirstNew(Layout, result);
+            problem = FirstProblem(result);
             if (problem != null) return BuildOutcome.Blocked;
             if (holder == slot) released = Release(slot, out releasedFromStorage);
             history.TryPop(out _);
@@ -235,11 +266,34 @@ namespace Worktown.Game.Layout
         /// <summary>Question 4: the histories are cleared when the shop opens.</summary>
         public void ClearHistories() => _histories.Clear();
 
+        /// <summary>
+        /// 062b review: a player left: its claim ends (returned: the piece, and whether it came from storage) and its history goes (a later
+        /// player may get the same slot).
+        /// </summary>
+        public int ForgetSlot(byte slot, out bool fromStorage)
+        {
+            _histories.Remove(slot);
+            return Release(slot, out fromStorage);
+        }
+
+        /// <summary>
+        /// 062b review: the item homes of <paramref name="layout"/> after <paramref name="pieceId"/> is stored: each home on it becomes
+        /// <paramref name="target"/>'s answer (a home on another piece; null keeps it); null when no home lies on the piece.
+        /// </summary>
+        public static IReadOnlyList<ItemHome> Rehome(ShopLayout layout, int pieceId, System.Func<ItemHome, ItemHome> target)
+        {
+            if (layout == null || target == null || !layout.Homes.Any(h => h.PieceId == pieceId)) return null;
+            var homes = new List<ItemHome>();
+            foreach (ItemHome h in layout.Homes)
+                homes.Add(h.PieceId == pieceId ? target(h) ?? h : h);
+            return homes.AsReadOnly();
+        }
+
         private BuildOutcome Apply(byte slot, LayoutEdit edit, out LayoutProblem problem)
         {
             problem = null;
             if (!edit.TryApply(Layout, out ShopLayout result, out LayoutEdit inverse)) return BuildOutcome.Unknown;
-            problem = FirstNew(Layout, result);
+            problem = FirstProblem(result);
             if (problem != null) return BuildOutcome.Invalid;
             Layout = result;
             if (!_histories.TryGetValue(slot, out UndoHistory history)) _histories[slot] = history = new UndoHistory();
@@ -247,14 +301,11 @@ namespace Worktown.Game.Layout
             return BuildOutcome.Ok;
         }
 
-        /// <summary>The first problem of <paramref name="after"/> that <paramref name="before"/> did not have (by kind and pieces), or null.</summary>
-        public LayoutProblem FirstNew(ShopLayout before, ShopLayout after)
+        /// <summary>The first problem of <paramref name="layout"/> (LayoutRules.Validate), or null when it keeps every rule.</summary>
+        public LayoutProblem FirstProblem(ShopLayout layout)
         {
-            LayoutReport old = LayoutRules.Validate(before, _room, _catalog);
-            LayoutReport now = LayoutRules.Validate(after, _room, _catalog);
-            foreach (LayoutProblem p in now.Problems)
-                if (!old.Problems.Any(o => o.Kind == p.Kind && o.PieceId == p.PieceId && o.OtherId == p.OtherId)) return p;
-            return null;
+            LayoutReport report = LayoutRules.Validate(layout, _room, _catalog);
+            return report.IsValid ? null : report.Problems[0];
         }
 
         /// <summary>The answer byte: the outcome in the low 4 bits, a refused move's problem kind + 1 in the high 4 (0: none).</summary>

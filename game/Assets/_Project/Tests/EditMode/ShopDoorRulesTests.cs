@@ -65,7 +65,7 @@ namespace Worktown.Game.Tests
             {
                 now += dt;
                 shift.OnClock(tick, now, 0, ShopDoorRules.MayOpenService(door));
-                bool held = !shift.IsOpen && !shift.SummaryShowing && Shift.IsShiftHour(tick) && ShopDoorRules.HoldsClock(door, false);
+                bool held = ShopDoorRules.ClockHeld(door, shift.IsOpen, shift.SummaryShowing, Shift.IsShiftHour(tick)); // CustomerService's formula
                 if (!held) intoHour += dt;
                 if (intoHour < Worktown.Game.Economy.EconomyRules.SecondsPerHour) continue;
                 intoHour -= Worktown.Game.Economy.EconomyRules.SecondsPerHour;
@@ -78,6 +78,30 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(shift.OnClock(tick, now, 0, ShopDoorRules.MayOpenService(door)));
             Assert.IsTrue(shift.IsOpen, "opening starts the service at once (the clock waited at 08:00)");
             Assert.AreEqual(8, Shift.HourOf(tick));
+        }
+
+        /// <summary>062b review: the clock hold CustomerService sets after every change, in one pure function.</summary>
+        [Test]
+        public void ClockHeld_OnlyClosed_BetweenServices_AtTheShiftHour()
+        {
+            Assert.IsTrue(ShopDoorRules.ClockHeld(ShopDoorState.Closed, false, false, true));
+            Assert.IsFalse(ShopDoorRules.ClockHeld(ShopDoorState.Closed, true, false, true), "a service runs to its end");
+            Assert.IsFalse(ShopDoorRules.ClockHeld(ShopDoorState.Closed, false, true, true), "the summary's 15 s pass first");
+            Assert.IsFalse(ShopDoorRules.ClockHeld(ShopDoorState.Closed, false, false, false), "the night still passes to 08:00");
+            Assert.IsFalse(ShopDoorRules.ClockHeld(ShopDoorState.ClosingAfterService, false, false, true));
+            Assert.IsFalse(ShopDoorRules.ClockHeld(ShopDoorState.Open, false, false, true));
+        }
+
+        /// <summary>062b review: who opened or closed the shop is in the office terminal's log (ChangeLog action 5).</summary>
+        [Test]
+        public void TheDoor_IsLoggedAtTheOfficeTerminal()
+        {
+            System.Func<int, string> names = slot => slot == 2 ? "Mira" : null;
+            Assert.AreEqual(5, Worktown.Game.Office.ChangeLog.DoorSet);
+            Assert.AreEqual("Mira: closed the shop", Worktown.Game.Office.ChangeLog.Text(Worktown.Game.Office.ChangeLog.Door(2, ShopDoorState.Closed), names));
+            Assert.AreEqual("Mira: opened the shop", Worktown.Game.Office.ChangeLog.Text(Worktown.Game.Office.ChangeLog.Door(2, ShopDoorState.Open), names));
+            Assert.AreEqual("A cook: closes after this service",
+                Worktown.Game.Office.ChangeLog.Text(Worktown.Game.Office.ChangeLog.Door(7, ShopDoorState.ClosingAfterService), names));
         }
 
         [Test]

@@ -47,8 +47,8 @@ namespace Worktown.Game.Net
         private const float SpotCacheSeconds = 0.1f;
 
         // Server only: this player's request rate limit (review of spec 027b: a token bucket).
-        private readonly RequestBucket _serverBucket = new RequestBucket();
-        private readonly SpamGuard _spam = new SpamGuard(); // spec 045: kick after many TooFast replies within 10 s
+        // Spec 045 / 062b review: the rate limit and the spam kick, shared with BuildInteractor (ServerRequestGate).
+        private readonly ServerRequestGate _gate = new ServerRequestGate();
 
         [SerializeField] private Transform _holdPoint;
 
@@ -232,7 +232,7 @@ namespace Worktown.Game.Net
 
         public override void OnStartServer()
         {
-            _spam.Reset(); // spec 045: a pooled player object starts a new life
+            _gate.Reset(); // spec 045: a pooled player object starts a new life
             _service = NetworkManager.GetComponent<PickupService>();
             if (_service == null)
                 Debug.LogError("[Pickup] PickupService missing on the NetworkManager object");
@@ -3158,7 +3158,7 @@ namespace Worktown.Game.Net
         private void RequestPickup(NetworkObject target, int request)
         {
             bool limited = IsRateLimited();
-            if (_spam.Tripped) return; // spec 045: disconnected for spam
+            if (_gate.Tripped) return; // spec 045: disconnected for spam
             PickupOutcome outcome = limited ? PickupOutcome.TooFast
                 : _service != null ? _service.TryPickup(this, target) : PickupOutcome.NotFound;
             ReportResult(Owner, outcome, true, request);
@@ -3168,7 +3168,7 @@ namespace Worktown.Game.Net
         private void RequestDrop(int request)
         {
             bool limited = IsRateLimited();
-            if (_spam.Tripped) return;
+            if (_gate.Tripped) return;
             PickupOutcome outcome = limited ? PickupOutcome.TooFast
                 : _service != null ? _service.TryDrop(this) : PickupOutcome.NothingHeld;
             ReportResult(Owner, outcome, false, request);
@@ -3183,7 +3183,7 @@ namespace Worktown.Game.Net
         private void RequestPlace(int surfaceId, int spotIndex, int request)
         {
             bool limited = IsRateLimited();
-            if (_spam.Tripped) return;
+            if (_gate.Tripped) return;
             PickupOutcome outcome = limited ? PickupOutcome.TooFast
                 : _service != null ? _service.TryPlace(this, surfaceId, spotIndex) : PickupOutcome.NotFound;
             ReportPlace(Owner, outcome, request);
@@ -3212,7 +3212,7 @@ namespace Worktown.Game.Net
         private void RequestStation(int stationId, int option, int request)
         {
             bool limited = IsRateLimited();
-            if (_spam.Tripped) return;
+            if (_gate.Tripped) return;
             CookOutcome outcome = limited ? CookOutcome.TooFast
                 : _kitchen != null ? _kitchen.TryUseStation(this, stationId, option) : CookOutcome.UnknownStation;
             ReportCook(Owner, outcome, request);
@@ -3227,7 +3227,7 @@ namespace Worktown.Game.Net
         private void RequestUse(NetworkObject target, int action, int request)
         {
             bool limited = IsRateLimited();
-            if (_spam.Tripped) return;
+            if (_gate.Tripped) return;
             CookOutcome outcome = limited ? CookOutcome.TooFast
                 : _kitchen != null ? _kitchen.TryUseVessel(this, target, action) : CookOutcome.NotAVessel;
             ReportCook(Owner, outcome, request);
@@ -3280,35 +3280,8 @@ namespace Worktown.Game.Net
                 Debug.Log("[Kitchen] " + LastResult);
         }
 
-        /// <summary>
-        /// Server: refuse requests that come faster than a person can click (spam costs no validation work). Spec 019: this
-        /// also limits knife strokes. Review of spec 027b: a token bucket per player (RequestBucket: burst 2, one token per
-        /// 0.2 s), so requests sent far enough apart but arriving bunched all pass; a refused one is answered with TooFast
-        /// (one small report, the same RPCs; spec 045: with the request's echoed number). Spec 045: after
-        /// SpamGuard.MaxTooFastInWindow refusals within SpamGuard.WindowSeconds the client is disconnected (045 review: a sliding window) (a flood, not a person); the host's own player is
-        /// never kicked from its own server.
-        /// </summary>
-        private bool IsRateLimited()
-        {
-            double now = Time.unscaledTimeAsDouble;
-            bool limited = !_serverBucket.TryTake(now);
-            if (_spam.Note(limited, now))
-            {
-                NetworkConnection owner = Owner;
-                if (!SpamGuard.ShouldKick(_spam.Tripped, owner == null || !owner.IsValid || owner.IsLocalClient))
-                {
-                    _spam.Reset(); // the host's own player (or nobody): keep answering
-                }
-                else
-                {
-                    Debug.LogWarning("[Net] player " + owner.ClientId + " disconnected: " + SpamGuard.MaxTooFastInWindow
-                        + " requests in " + SpamGuard.WindowSeconds + " s came too fast (spam)");
-                    NetworkManager.ServerManager.Kick(owner, FishNet.Managing.Server.KickReason.ExcessiveData,
-                        FishNet.Managing.Logging.LoggingType.Off);
-                }
-            }
-            return limited;
-        }
+        /// <summary>Server: the request comes too fast (ServerRequestGate: the token bucket and spec 045's spam kick).</summary>
+        private bool IsRateLimited() => _gate.IsRateLimited(this);
 
         [TargetRpc]
         private void ReportResult(NetworkConnection target, PickupOutcome outcome, bool wasPickup, int request)

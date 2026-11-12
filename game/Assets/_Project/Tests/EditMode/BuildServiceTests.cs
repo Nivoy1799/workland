@@ -5,6 +5,7 @@ using UnityEngine;
 using Worktown.Game.Cooking;
 using Worktown.Game.Layout;
 using Worktown.Game.Net;
+using Worktown.Game.Save;
 using Worktown.Sim.Layout;
 
 namespace Worktown.Game.Tests
@@ -176,11 +177,12 @@ namespace Worktown.Game.Tests
         }
 
         /// <summary>
-        /// In the built scene: a worktop moved along the back line keeps its surfaces' ids and spot counts, the spots move with it, and the
-        /// carry BuildService does (the item's pose in the piece's frame) puts the knife on the same spot of the moved top.
+        /// 062b review: the real BuildService.Carry in the built scene: a worktop moved along the back line keeps its surfaces' ids and spot
+        /// counts, and the knife on it ends on the same spot of the moved top, also when the transform was already moved (a host's
+        /// prediction): the start is the piece's synced pose.
         /// </summary>
         [Test]
-        public void ItemsOnAMovedWorktop_KeepTheirSurfaceIdAndSpot()
+        public void ItemsOnAMovedWorktop_KeepTheirSurfaceIdAndSpot_EvenAfterAPrediction()
         {
             var scene = LayoutScene.Open();
             try
@@ -188,12 +190,10 @@ namespace Worktown.Game.Tests
                 ShopLayout layout = DefaultLayout.Load();
                 ItemHome home = layout.Homes.First(h => h.ItemKind == "knife");
                 PieceBehaviour worktop = LayoutRegistry.Piece(home.PieceId);
-                Assert.IsNotNull(worktop);
                 PlaceSurface top = LayoutRegistry.Surface(SurfaceId.Of(home.PieceId, home.LocalSurface));
                 int idBefore = top.Id, spots = top.SpotCount;
                 Vector3 spotBefore = top.SpotWorldPosition(home.Spot);
                 Pickup knife = Object.FindObjectsByType<Pickup>(FindObjectsSortMode.None).First(p => p.GetComponent<Knife>() != null);
-                Matrix4x4 local = worktop.transform.worldToLocalMatrix * knife.transform.localToWorldMatrix;
 
                 var desk = new BuildDesk(PieceCatalog.CreateDefault(), RoomDef.CreateDefault());
                 desk.Reset(layout);
@@ -202,17 +202,141 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(BuildOutcome.Ok, desk.TryStore(Guest, 0, out _, out _));
                 Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Guest, home.PieceId, false, 0, out _, out _));
                 Assert.AreEqual(BuildOutcome.Ok, desk.TryMove(Guest, other.XMm, other.ZMm, 0, 0, out LayoutEdit moved, out LayoutProblem p), p?.Text);
-                worktop.Configure(home.PieceId, PosePacking.Pack(moved.XMm, moved.ZMm, moved.Turns, desk.Layout.Piece(home.PieceId).LengthMm), worktop.Number);
-                Physics.SyncTransforms();
-                Matrix4x4 world = worktop.transform.localToWorldMatrix * local;
-                knife.transform.SetPositionAndRotation(world.GetColumn(3), world.rotation);
 
+                worktop.Predict(moved.XMm, moved.ZMm, moved.Turns); // the host's client moved the transform first
+                var carried = new List<Component>();
+                BuildService.Carry(worktop, desk.Layout.Piece(home.PieceId), new Component[] { knife },
+                    (item, position, rotation) => { carried.Add(item); item.transform.SetPositionAndRotation(position, rotation); });
+
+                CollectionAssert.AreEqual(new Component[] { knife }, carried);
+                Assert.AreEqual(moved.XMm, worktop.XMm, "the synced pose is the new one");
                 Assert.AreEqual(idBefore, top.Id, "the same surface id");
                 Assert.AreEqual(spots, top.SpotCount, "the same spots");
                 Vector3 spotAfter = top.SpotWorldPosition(home.Spot);
                 Assert.AreEqual(spotBefore.z, spotAfter.z, 0.05f, "along the back line");
                 Assert.Greater(Vector3.Distance(spotBefore, spotAfter), 1f, "the spot moved with the worktop");
-                Assert.Less(Vector3.ProjectOnPlane(knife.transform.position - spotAfter, Vector3.up).magnitude, 0.1f, "the knife lies on the same spot");
+                Assert.Less(Vector3.ProjectOnPlane(knife.transform.position - spotAfter, Vector3.up).magnitude, 0.02f, "the knife lies on the same spot");
+            }
+            finally
+            {
+                LayoutScene.Close(scene);
+            }
+        }
+
+        // ---- 062b review ----
+
+        [Test]
+        public void TheDoorSign_CannotBeStored()
+        {
+            BuildDesk desk = Desk();
+            int door = IdOf(desk, PieceCatalog.DoorSign);
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Host, door, false, 0, out _, out _), "it may move");
+            Assert.AreEqual(BuildOutcome.Required, desk.TryStore(Host, 0, out LayoutEdit applied, out _));
+            Assert.IsNull(applied);
+            Assert.IsNotNull(desk.Layout.Piece(door), "still placed: the shop can still be closed");
+            CollectionAssert.Contains(BuildDesk.NeverStored.ToArray(), PieceCatalog.DoorSign);
+        }
+
+        /// <summary>A stored worktop's tools get homes on another worktop, through the save file; the undo restores the old homes.</summary>
+        [Test]
+        public void AStoredWorktopsTools_AreRehomed_ThroughTheSave_AndTheUndoRestoresThem()
+        {
+            BuildDesk desk = Desk();
+            ShopLayout start = desk.Layout;
+            int knifeWorktop = start.Homes.First(h => h.ItemKind == "knife").PieceId;
+            int target = IdOf(desk, PieceCatalog.Worktop, 3);
+            int spot = 0;
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Host, knifeWorktop, false, 0, out _, out _));
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryStore(Host, 0, h => new ItemHome(h.ItemKind, target, 0, 20 + spot++), out LayoutEdit stored, out _));
+            Assert.IsNotNull(stored.Homes);
+            Assert.IsFalse(desk.Layout.Homes.Any(h => h.PieceId == knifeWorktop), "no home on a stored piece");
+            Assert.AreEqual(start.Homes.Count, desk.Layout.Homes.Count);
+
+            // Saved and loaded: every home lies on a placed piece, so the next load spawns every tool.
+            ShopSave save = ShopSaveCodecTests.Full();
+            save.layout = LayoutCodec.ToPart(desk.Layout);
+            SaveLoadResult r = ShopSaveCodec.Default.TryParse(ShopSaveCodec.Default.ToJson(save));
+            Assert.IsTrue(r.Ok, r.Error.ToString());
+            ShopLayout loaded = LayoutCodec.ToLayout(r.Save.layout, PieceCatalog.CreateDefault());
+            Assert.AreEqual(desk.Layout, loaded);
+            Assert.IsTrue(loaded.Homes.All(h => loaded.Piece(h.PieceId) != null), "every home on a placed piece");
+
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryUndo(Host, 0, out LayoutEdit undone, out _, out _, out _));
+            Assert.AreEqual(LayoutEditKind.TakeOut, undone.Kind);
+            Assert.AreEqual(start.Homes, desk.Layout.Homes, "the undo restores the homes");
+            Assert.AreEqual(start.Pieces, desk.Layout.Pieces);
+        }
+
+        [Test]
+        public void AHotStation_RefusesTheMove_AndTheUndo()
+        {
+            BuildDesk desk = Desk();
+            int fryer = IdOf(desk, PieceCatalog.Fryer);
+            LayoutPiece at = desk.Layout.Piece(fryer);
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Host, fryer, false, 0, out _, out _));
+            Assert.AreEqual(BuildOutcome.StationOn, desk.TryMove(Host, at.XMm, at.ZMm, at.Turns, true, 0, out _, out _), "turned on after the claim");
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryMove(Host, at.XMm, at.ZMm, at.Turns, false, 0, out _, out LayoutProblem p), p?.Text);
+            Assert.AreEqual(BuildOutcome.StationOn, desk.TryUndo(Host, 0, id => id == fryer, out _, out _, out _, out _));
+            Assert.AreEqual(1, desk.HistoryCount(Host));
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryUndo(Host, 0, id => false, out _, out _, out _, out _));
+        }
+
+        [Test]
+        public void TakeOut_SkipsFixedTypes()
+        {
+            var desk = new BuildDesk(PieceCatalog.CreateDefault(), RoomDef.CreateDefault());
+            ShopLayout standard = DefaultLayout.Load();
+            var bin = new LayoutPiece(standard.NextId, PieceCatalog.Bin, -2000, 13400, 3, 0, 1, 0);
+            desk.Reset(new ShopLayout(1, standard.Pieces.Where(p => p.TypeId != PieceCatalog.Bin), null, standard.Homes, standard.NextId + 1, new[] { bin }));
+            Assert.AreEqual(BuildOutcome.NothingStored, desk.TryTakeOut(Host, 0, 0, out _, out _, out _), "a stored bin never comes out");
+        }
+
+        [Test]
+        public void APlayerLeaving_ReleasesTheClaimAndForgetsTheHistory_ThroughBuildService()
+        {
+            var go = new GameObject("BuildServiceTest");
+            try
+            {
+                BuildService service = go.AddComponent<BuildService>();
+                BuildDesk desk = service.Desk;
+                desk.Reset(DefaultLayout.Load());
+                int worktop = IdOf(desk, PieceCatalog.Worktop, 3), fryer = IdOf(desk, PieceCatalog.Fryer);
+                Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Guest, worktop, false, 0, out _, out _));
+                Assert.AreEqual(BuildOutcome.Ok, desk.TryStore(Guest, 0, out _, out _));
+                Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Guest, fryer, false, 0, out _, out _));
+                Assert.AreEqual(1, desk.HistoryCount(Guest));
+                service.ServerPlayerLeft(Guest);
+                Assert.AreEqual(0, desk.HolderOf(fryer), "the claim is released");
+                Assert.AreEqual(0, desk.HistoryCount(Guest), "a later player with this slot has nothing to undo");
+                Assert.AreEqual(BuildOutcome.NothingToUndo, desk.TryUndo(Guest, 0, out _, out _, out _, out _));
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>A piece taken out of storage waits on the pallet: it is known by id, but its stations and surfaces are not usable.</summary>
+        [Test]
+        public void APieceOnThePallet_IsParked_WithoutStationsOrSurfaces()
+        {
+            var scene = LayoutScene.Open();
+            try
+            {
+                ShopLayout layout = DefaultLayout.Load();
+                LayoutPiece pallet = layout.Pieces.Single(p => p.TypeId == PieceCatalog.StoragePallet);
+                LayoutPiece stove = layout.Pieces.First(p => p.TypeId == PieceCatalog.Stove);
+                PieceBehaviour piece = LayoutRegistry.Piece(stove.Id);
+                Assert.IsFalse(piece.Parked);
+                Assert.IsNotNull(LayoutRegistry.Station(stove.Id));
+                piece.ServerSetPose(PosePacking.Pack(pallet.XMm, pallet.ZMm, 0, 0));
+                Assert.IsTrue(piece.Parked);
+                Assert.AreSame(piece, LayoutRegistry.Piece(stove.Id), "still known by id (BuildService moves it)");
+                Assert.IsNull(LayoutRegistry.Station(stove.Id), "no cooking on it");
+                Assert.IsFalse(LayoutRegistry.Surfaces.Any(s => SurfaceId.PieceOf(s.Id) == stove.Id), "nothing put on it");
+                piece.ServerSetPose(PosePacking.Pack(stove.XMm, stove.ZMm, stove.Turns, 0));
+                Assert.IsFalse(piece.Parked, "placed again: usable");
+                Assert.IsNotNull(LayoutRegistry.Station(stove.Id));
             }
             finally
             {

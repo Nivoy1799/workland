@@ -241,7 +241,7 @@ namespace Worktown.Game.Cooking
                 case StationKind.OfficeTerminal:
                     return station.TryGetComponent(out Worktown.Game.Office.OfficeTerminal office) ? office.ServerPress(player.OwnerId, option) : CookOutcome.UnknownStation;
                 // Spec 062b: the door sign opens or closes the shop (the customers' service follows it).
-                case StationKind.DoorSign: return _customers != null ? _customers.UseDoor() : CookOutcome.UnknownStation;
+                case StationKind.DoorSign: return _customers != null ? _customers.UseDoor(player.OwnerId) : CookOutcome.UnknownStation;
                 default: return CookOutcome.UnknownStation;
             }
         }

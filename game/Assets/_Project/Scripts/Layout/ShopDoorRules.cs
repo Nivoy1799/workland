@@ -36,6 +36,13 @@ namespace Worktown.Game.Layout
         /// <summary>Whether the clock stands still: closed and no service open (a service that runs ends first).</summary>
         public static bool HoldsClock(ShopDoorState state, bool serviceOpen) => state == ShopDoorState.Closed && !serviceOpen;
 
+        /// <summary>
+        /// 062b review: the server's clock hold in one place (CustomerService uses it after every change): closed, no service open, no
+        /// summary showing, and the clock at a shift hour (08:00, where the next service would open).
+        /// </summary>
+        public static bool ClockHeld(ShopDoorState state, bool serviceOpen, bool summaryShowing, bool shiftHour) =>
+            HoldsClock(state, serviceOpen) && !summaryShowing && shiftHour;
+
         /// <summary>Whether build mode may be entered: only while the shop is closed.</summary>
         public static bool AllowsBuild(ShopDoorState state) => state == ShopDoorState.Closed;
 

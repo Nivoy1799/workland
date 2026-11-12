@@ -60,6 +60,12 @@ namespace Worktown.Game.Layout
         public int Number => _number.Value;
         /// <summary>Spec 062b: the slot of the player holding it in build mode (BuildService.SlotOf), 0 when nobody does.</summary>
         public byte ClaimedBySlot => _claimedBySlot.Value;
+        /// <summary>
+        /// 062b review: the piece waits on the storage pallet (taken out of storage, held): its stations and surfaces are not registered, so
+        /// nobody cooks on it or puts things on it until it is placed. Both sides see it from the synced pose (StoragePallet.Covers).
+        /// </summary>
+        public bool Parked { get; private set; }
+
         /// <summary>Spec 062b, client: the pose shown before the server's answer (a predicted place), else none.</summary>
         public bool IsPredicted { get; private set; }
         /// <summary>The place surfaces in local order (SurfaceId's local number).</summary>
@@ -190,6 +196,10 @@ namespace Worktown.Game.Layout
             int id = PieceId;
             for (int i = 0; i < _surfaces.Length; i++)
                 if (_surfaces[i] != null) _surfaces[i].AssignId(id > 0 ? SurfaceId.Of(id, i) : SurfaceId.None, id > 0 ? id : 0);
+            bool parked = StoragePallet.Covers(this);
+            if (parked == Parked) return;
+            Parked = parked;
+            if (_registered) LayoutRegistry.Register(this); // again: with or without its stations and surfaces
         }
 
         /// <summary>A counter's colliders, tops and scaled parts take the length; its cabinet modules are laid out again (ArtSizeTable).</summary>

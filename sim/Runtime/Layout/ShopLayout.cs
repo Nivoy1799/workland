@@ -98,6 +98,9 @@ namespace Worktown.Sim.Layout
         /// <summary>The same layout with <paramref name="pieces"/> instead of its pieces (stored, homes and the next id kept).</summary>
         public ShopLayout WithPieces(IEnumerable<LayoutPiece> pieces) => new ShopLayout(Version, pieces, Stored, Homes, NextId, StoredPieces);
 
+        /// <summary>062b review: the same layout with these item homes.</summary>
+        public ShopLayout WithHomes(IEnumerable<ItemHome> homes) => new ShopLayout(Version, Pieces, Stored, homes, NextId, StoredPieces);
+
         /// <summary>Spec 062b: the same layout with these placed and stored pieces (homes and the next id kept).</summary>
         public ShopLayout With(IEnumerable<LayoutPiece> pieces, IEnumerable<int> stored, IEnumerable<LayoutPiece> storedPieces) =>
             new ShopLayout(Version, pieces, stored, Homes, NextId, storedPieces);

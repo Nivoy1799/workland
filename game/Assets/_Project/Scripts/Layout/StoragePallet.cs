@@ -13,5 +13,23 @@ namespace Worktown.Game.Layout
 
         /// <summary>Whether <paramref name="piece"/> is the pallet (or a part of it).</summary>
         public static bool Is(PieceBehaviour piece) => piece != null && piece.TypeId == Worktown.Sim.Layout.PieceCatalog.StoragePallet;
+
+        private static readonly Worktown.Sim.Layout.PieceCatalog Catalog = Worktown.Sim.Layout.PieceCatalog.CreateDefault();
+
+        /// <summary>
+        /// 062b review: whether <paramref name="piece"/>'s centre lies on a registered pallet (a stored piece taken out waits there; a placed
+        /// piece never can: the pallet's footprint is in the floor band).
+        /// </summary>
+        public static bool Covers(PieceBehaviour piece)
+        {
+            if (piece == null || Is(piece) || piece.PieceId <= 0) return false;
+            foreach (PieceBehaviour p in LayoutRegistry.Pieces)
+            {
+                if (!Is(p) || !Catalog.TryGet(p.TypeId, out Worktown.Sim.Layout.PieceDef def)) continue;
+                var at = new Worktown.Sim.Layout.LayoutPiece(p.PieceId, p.TypeId, p.XMm, p.ZMm, p.Turns, p.LengthMm, 1, 0);
+                if (def.Footprint(at).Contains(piece.XMm, piece.ZMm)) return true;
+            }
+            return false;
+        }
     }
 }

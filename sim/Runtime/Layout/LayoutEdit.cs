@@ -12,6 +12,12 @@ namespace Worktown.Sim.Layout
     /// </summary>
     public sealed record LayoutEdit(LayoutEditKind Kind, int PieceId, int XMm, int ZMm, int Turns)
     {
+        /// <summary>
+        /// 062b review: the layout's item homes after the edit (all of them), or null to keep them. A stored worktop's tools get homes on
+        /// another worktop (else they would not come back on the next load); the inverse edit carries the homes from before.
+        /// </summary>
+        public IReadOnlyList<ItemHome>? Homes { get; init; }
+
         public static LayoutEdit Move(int pieceId, int xMm, int zMm, int turns) => new LayoutEdit(LayoutEditKind.Move, pieceId, xMm, zMm, Wrap(turns));
         public static LayoutEdit Store(int pieceId) => new LayoutEdit(LayoutEditKind.Store, pieceId, 0, 0, 0);
         public static LayoutEdit TakeOut(int pieceId, int xMm, int zMm, int turns) => new LayoutEdit(LayoutEditKind.TakeOut, pieceId, xMm, zMm, Wrap(turns));
@@ -25,7 +31,17 @@ namespace Worktown.Sim.Layout
         {
             result = null!;
             inverse = null!;
-            if (layout == null) return false;
+            if (layout == null || !TryApplyPieces(layout, out result, out inverse)) return false;
+            if (Homes == null) return true;
+            result = result.WithHomes(Homes);
+            inverse = inverse with { Homes = layout.Homes };
+            return true;
+        }
+
+        private bool TryApplyPieces(ShopLayout layout, out ShopLayout result, out LayoutEdit inverse)
+        {
+            result = null!;
+            inverse = null!;
             switch (Kind)
             {
                 case LayoutEditKind.Move:

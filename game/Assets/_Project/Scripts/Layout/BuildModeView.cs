@@ -51,7 +51,10 @@ namespace Worktown.Game.Layout
         private PieceBehaviour _aimed;
         private Vector3 _aimPoint;
         private bool _aimHit;
-        private long _ghostKey = long.MinValue;
+        private int _ghostVersion = -1, _ghostPiece, _ghostTurns, _ghostAimX, _ghostAimZ;
+        private string _promptAim;
+        private bool _promptHolding, _promptPallet, _promptFits;
+        private string _promptProblem;
         private bool _ghostFits;
         private string _ghostProblem;
         private LayoutPiece _ghostPose;
@@ -138,7 +141,18 @@ namespace Worktown.Game.Layout
             if (right) Do(BuildControlRules.ActionFor(BuildInput.RightClick, holding, onPiece, onPallet), 0);
             if (wheel != 0) Do(BuildControlRules.ActionFor(BuildInput.Wheel, holding, onPiece, onPallet), wheel);
             UpdateGhost();
-            PromptText = BuildControlRules.Prompt(holding, onPiece ? BuildControlRules.NameOf(_aimed.TypeId) : null, onPallet, _ghostFits, _ghostProblem);
+            string aimType = onPiece ? _aimed.TypeId : null;
+            if (aimType != _promptAim || holding != _promptHolding || onPallet != _promptPallet || _ghostFits != _promptFits
+                || !ReferenceEquals(_ghostProblem, _promptProblem) || PromptText.Length == 0)
+            {
+                // 062b review: the prompt is built only when what it says changes.
+                _promptAim = aimType;
+                _promptHolding = holding;
+                _promptPallet = onPallet;
+                _promptFits = _ghostFits;
+                _promptProblem = _ghostProblem;
+                PromptText = BuildControlRules.Prompt(holding, aimType != null ? BuildControlRules.NameOf(aimType) : null, onPallet, _ghostFits, _ghostProblem);
+            }
         }
 
         private void TryEnter()
@@ -164,7 +178,7 @@ namespace Worktown.Game.Layout
             if (HeldPieceId != 0 || _claimWanted != 0) Send(BuildIntent.Release, 0, 0L);
             _claimWanted = 0;
             _ghost?.Hide();
-            _ghostKey = long.MinValue;
+            _ghostPose = null;
             Debug.Log("[Build] build mode off");
         }
 
@@ -187,7 +201,7 @@ namespace Worktown.Game.Layout
                     break;
                 case BuildAction.Turn:
                     _turns = BuildSnap.Turns(_turns + (wheel > 0 ? 1 : -1));
-                    _ghostKey = long.MinValue;
+                    _ghostPose = null;
                     break;
                 case BuildAction.Place:
                     Place();
@@ -209,7 +223,9 @@ namespace Worktown.Game.Layout
             PieceBehaviour held = LayoutRegistry.Piece(HeldPieceId);
             if (held == null || _ghostPose == null) return;
             int x = Mathf.RoundToInt(_aimPoint.x * 1000f), z = Mathf.RoundToInt(_aimPoint.z * 1000f);
-            if (_ghostFits) held.Predict(_ghostPose.XMm, _ghostPose.ZMm, _ghostPose.Turns); // feel.md 1: it moves at the click
+            // feel.md 1: it moves at the click. 062b review: not on the host, where the transform is the server's own (BuildService carries
+            // the items from the synced pose, and the move is applied before this frame ends anyway).
+            if (_ghostFits && !held.IsServerInitialized) held.Predict(_ghostPose.XMm, _ghostPose.ZMm, _ghostPose.Turns);
             Send(BuildIntent.Move, HeldPieceId, PosePacking.Pack(x, z, _turns, 0));
         }
 
@@ -289,9 +305,9 @@ namespace Worktown.Game.Layout
             }
         }
 
-        private static PieceBehaviour PieceAt(Vector3 point)
+        private PieceBehaviour PieceAt(Vector3 point)
         {
-            PieceCatalog catalog = PieceCatalog.CreateDefault();
+            PieceCatalog catalog = _check.Catalog; // dev aim only (the tours)
             int x = Mathf.RoundToInt(point.x * 1000f), z = Mathf.RoundToInt(point.z * 1000f);
             foreach (PieceBehaviour p in LayoutRegistry.Pieces)
             {
@@ -312,20 +328,33 @@ namespace Worktown.Game.Layout
                 _ghostProblem = null;
                 return;
             }
-            ShopLayout layout = ClientLayout(out bool fromStorage);
-            LayoutPiece piece = Record(held);
-            LayoutPiece at = BuildSnap.Pose(layout, _check.Catalog, _check.Room, piece, Mathf.RoundToInt(_aimPoint.x * 1000f),
-                Mathf.RoundToInt(_aimPoint.z * 1000f), _turns);
-            long key = PosePacking.Pack(at.XMm, at.ZMm, at.Turns, 0) ^ ((long)layout.Pieces.Count << 60);
-            if (key != _ghostKey)
+            // 062b review: the ghost is worked out again only when the layout changed (LayoutRegistry.Version: any player's move, a spawn or
+            // a despawn), the held piece, its turns or its snapped grid place changed; else nothing is built or allocated this frame. The
+            // magnet and the rules depend only on the grid place (BuildSnap.Pose snaps first), so the key is exact.
+            int aimX = Mathf.RoundToInt(_aimPoint.x * 1000f), aimZ = Mathf.RoundToInt(_aimPoint.z * 1000f);
+            if (_check.Catalog.TryGet(held.TypeId, out PieceDef heldDef))
             {
-                _ghostKey = key;
+                PointMm grid = BuildSnap.Snap(heldDef, aimX, aimZ, _turns, held.LengthMm, new PointMm(_check.Room.Floor.MinX, _check.Room.Floor.MinZ));
+                aimX = grid.X;
+                aimZ = grid.Z;
+            }
+            if (_ghostPose == null || LayoutRegistry.Version != _ghostVersion || held.PieceId != _ghostPiece || _turns != _ghostTurns
+                || aimX != _ghostAimX || aimZ != _ghostAimZ)
+            {
+                _ghostVersion = LayoutRegistry.Version;
+                _ghostPiece = held.PieceId;
+                _ghostTurns = _turns;
+                _ghostAimX = aimX;
+                _ghostAimZ = aimZ;
+                ShopLayout layout = ClientLayout(out bool fromStorage);
+                LayoutPiece piece = Record(held);
+                LayoutPiece at = BuildSnap.Pose(layout, _check.Catalog, _check.Room, piece, aimX, aimZ, _turns);
                 _ghostPose = at;
                 LayoutEdit edit = fromStorage ? LayoutEdit.TakeOut(piece.Id, at.XMm, at.ZMm, at.Turns) : LayoutEdit.Move(piece.Id, at.XMm, at.ZMm, at.Turns);
                 ShopLayout before = fromStorage ? layout.With(layout.Pieces, new[] { piece.Id }, new[] { piece }) : layout;
                 LayoutProblem problem = null;
                 bool applied = edit.TryApply(before, out ShopLayout after, out _);
-                if (applied) problem = _check.FirstNew(before, after);
+                if (applied) problem = _check.FirstProblem(after); // the same check as the server's
                 _ghostFits = applied && problem == null;
                 _ghostProblem = !applied ? "Not here" : problem != null ? problem.Text : TightAisle(after, piece.Id) ? BuildControlRules.TightAisleText : null;
             }
@@ -412,7 +441,7 @@ namespace Worktown.Game.Layout
         {
             _scriptedAim = point.HasValue;
             _scriptedPoint = point ?? Vector3.zero;
-            _ghostKey = long.MinValue;
+            _ghostPose = null;
         }
 
         public void DevLeftClick() => _scriptedLeft = true;

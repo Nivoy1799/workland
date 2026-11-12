@@ -1,7 +1,7 @@
 using FishNet.Connection;
 using FishNet.Object;
 using UnityEngine;
-using Worktown.Game.Net.Rules;
+using Worktown.Game.Net;
 
 namespace Worktown.Game.Layout
 {
@@ -13,7 +13,8 @@ namespace Worktown.Game.Layout
     /// </summary>
     public sealed class BuildInteractor : NetworkBehaviour
     {
-        private readonly RequestBucket _serverBucket = new RequestBucket();
+        // 062b review: the same rate limit and spam kick as the cooking requests (ServerRequestGate).
+        private readonly ServerRequestGate _gate = new ServerRequestGate();
         private int _nextRequest;
 
         /// <summary>Owner: a request was answered (its number, the packed answer).</summary>
@@ -21,6 +22,12 @@ namespace Worktown.Game.Layout
 
         /// <summary>The slot of this player (client id + 1; 0 before it is owned).</summary>
         public byte Slot => BuildService.SlotOf(Owner);
+
+        public override void OnStartServer()
+        {
+            base.OnStartServer();
+            _gate.Reset(); // a pooled player object starts a new life
+        }
 
         public override void OnStartClient()
         {
@@ -40,7 +47,8 @@ namespace Worktown.Game.Layout
         [ServerRpc]
         private void RequestBuild(BuildIntent intent, int request)
         {
-            bool tooFast = !_serverBucket.TryTake(Time.unscaledTimeAsDouble);
+            bool tooFast = _gate.IsRateLimited(this);
+            if (_gate.Tripped) return; // disconnected for spam
             BuildService service = BuildService.Find();
             byte answer = service != null ? service.Handle(this, intent, tooFast)
                 : BuildDesk.Pack(BuildOutcome.NotBuilding, null);

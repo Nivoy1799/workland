@@ -70,6 +70,21 @@ namespace Worktown.Sim.Tests.Layout
             Assert.False(LayoutEdit.Move(1, 0, 0, 0).TryApply(null!, out _, out _));
         }
 
+        /// <summary>062b review: an edit may carry the layout's new item homes; its inverse carries the old ones.</summary>
+        [Fact]
+        public void AnEditsHomes_ApplyAndComeBackWithTheInverse()
+        {
+            var moved = new[] { new ItemHome("knife", 1, 0, 2) };
+            LayoutEdit store = LayoutEdit.Store(2) with { Homes = moved };
+            Assert.True(store.TryApply(Start(), out ShopLayout stored, out LayoutEdit inverse));
+            Assert.Equal(moved, stored.Homes);
+            Assert.Equal(Start().Homes, inverse.Homes);
+            Assert.True(inverse.TryApply(stored, out ShopLayout back, out _));
+            Assert.Equal(Start(), back);
+            Assert.True(LayoutEdit.Move(1, 0, 0, 0).TryApply(Start(), out _, out LayoutEdit plain));
+            Assert.Null(plain.Homes); // an edit without homes keeps them
+        }
+
         [Fact]
         public void StoredRecords_FollowTheStoredIds()
         {

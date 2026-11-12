@@ -239,7 +239,10 @@ namespace Worktown.Game.Npc
         /// services; closing goes back to open; closed opens the shop and starts the next service at once (the guests' route is rebuilt
         /// from the layout first: build mode may have changed it).
         /// </summary>
-        public CookOutcome UseDoor()
+        public CookOutcome UseDoor() => UseDoor(-1);
+
+        /// <summary>062b review: as above; the press is logged at the office terminal under <paramref name="player"/> (ChangeLog action 5).</summary>
+        public CookOutcome UseDoor(int player)
         {
             Worktown.Game.Layout.ShopDoor door = Worktown.Game.Layout.ShopDoor.Current;
             if (door == null || !door.IsServerInitialized) return CookOutcome.UnknownStation;
@@ -247,6 +250,9 @@ namespace Worktown.Game.Npc
             Worktown.Game.Layout.ShopDoorState after = Worktown.Game.Layout.ShopDoorRules.Next(before, _shift.IsOpen, true);
             door.ServerSet(after);
             if (_feed != null) _feed.ServerAdd(Worktown.Game.Layout.ShopDoorRules.FeedLine(after));
+            Worktown.Game.Office.OfficeTerminal office = Worktown.Game.Office.OfficeTerminal.Find();
+            if (office != null && office.IsServerInitialized)
+                office.ServerAddLog(Worktown.Game.Office.ChangeLog.Door(Worktown.Game.Office.ChangeLog.SlotOf(player), after));
             return CookOutcome.Ok;
         }
 
@@ -254,7 +260,7 @@ namespace Worktown.Game.Npc
         {
             if (_networkManager == null || !_networkManager.IsServerStarted || _economy == null) return;
             bool closed = after == Worktown.Game.Layout.ShopDoorState.Closed;
-            _economy.ClockHeld = closed && !_shift.IsOpen && !_shift.SummaryShowing && Shift.IsShiftHour(_economy.Tick);
+            _economy.ClockHeld = Worktown.Game.Layout.ShopDoorRules.ClockHeld(after, _shift.IsOpen, _shift.SummaryShowing, Shift.IsShiftHour(_economy.Tick));
             if (before != Worktown.Game.Layout.ShopDoorState.Closed || closed) return;
             // Opened from closed: the route from the layout as it is now, then the next service at once (the clock waited at 08:00).
             if (_layoutSpawner != null && _layoutSpawner.Current != null) OnLayoutSpawned(_layoutSpawner.Current);
@@ -375,8 +381,8 @@ namespace Worktown.Game.Npc
             }
             // Spec 062b: while closed (no service, no summary left, the clock at the shift's start) no hour passes: no demand, no upkeep,
             // no rent.
-            _economy.ClockHeld = !_shift.IsOpen && !_shift.SummaryShowing && Shift.IsShiftHour(_economy.Tick)
-                && Worktown.Game.Layout.ShopDoorRules.HoldsClock(Worktown.Game.Layout.ShopDoor.Now, false);
+            _economy.ClockHeld = Worktown.Game.Layout.ShopDoorRules.ClockHeld(Worktown.Game.Layout.ShopDoor.Now, _shift.IsOpen,
+                _shift.SummaryShowing, Shift.IsShiftHour(_economy.Tick));
             Flow.HygienePercent = Hygiene; // spec 035: reviews notice a dirty shop
             // Spec 053: the card terminal is closed at the food corner (cash only).
             Flow.Desk.AcceptsCard = Worktown.Game.Climb.ShopStageRules.IsOpen(ShopStageNow, StationKind.Register, RegisterRules.CardOption);

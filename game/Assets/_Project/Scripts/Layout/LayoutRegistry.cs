@@ -55,6 +55,11 @@ namespace Worktown.Game.Layout
                 Debug.LogWarning("[Layout] piece id " + piece.PieceId + " registered twice (" + known.name + ", " + piece.name + "); the newer one wins");
             Remove(piece.PieceId);
             PiecesById[piece.PieceId] = piece;
+            if (piece.Parked)
+            {
+                Changed(); // 062b review: a piece on the storage pallet: known by id, its stations and surfaces not usable
+                return;
+            }
             foreach (PlaceSurface surface in piece.Surfaces)
                 if (surface != null && surface.Id >= 0 && surface.gameObject.activeSelf) SurfacesById[surface.Id] = surface;
             Station station = piece.Station;

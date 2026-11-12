@@ -104,6 +104,8 @@ namespace Worktown.Game.Layout
                 item.name = ItemName(home.ItemKind, chosen, home);
                 _networkManager.ServerManager.Spawn(item);
                 _spawnedItems.Add(item);
+                // 062b review: the item is in the spot table from the start, so build mode knows what lies on a piece.
+                if (TryGetComponent(out PickupService pickups)) pickups.ServerNoteOnSpot(item, surface.Id, home.Spot);
                 items++;
             }
             Debug.Log("[Layout] spawned " + pieces + " pieces and " + items + " items");
