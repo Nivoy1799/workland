@@ -156,6 +156,11 @@ namespace Worktown.Game.Tests
                             CheckOfficeTerminal(station, catalog); // spec 059: a new piece too
                             continue;
                         }
+                        if (station.Kind == StationKind.DoorSign)
+                        {
+                            CheckDoorSign(station, catalog); // spec 062b: a new piece too
+                            continue;
+                        }
                         int index = station.Id - 1; // spec 062a: the default layout's station ids are the old indices + 1
                         Assert.AreEqual(kinds[index], station.Kind, station.name);
                         bool stock = StockLayout.IsStock(station.Kind);
@@ -217,7 +222,7 @@ namespace Worktown.Game.Tests
                         if (stock) Assert.AreEqual(box.bounds.size.y, b.size.y, 0.01f, station.name + " cabinet as high as its body");
                     }
                 }
-                Assert.AreEqual(20, count, "the twelve before, (spec 035) the dish return, the sink, the trash can and the bin, (spec 036) the spit, (spec 037) the menu board, (spec 057) the goal board, (spec 059) the office terminal");
+                Assert.AreEqual(21, count, "the twelve before, (spec 035) the dish return, the sink, the trash can and the bin, (spec 036) the spit, (spec 037) the menu board, (spec 057) the goal board, (spec 059) the office terminal, (spec 062b) the door sign");
             }
             finally { LayoutScene.Close(scene); }
         }
@@ -239,6 +244,24 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(catalog.TryGet(ArtCatalogRules.StationKey(station.Kind), out GameObject expectedPrefab));
             Assert.AreSame(expectedPrefab, PrefabUtility.GetCorrespondingObjectFromSource(visual.gameObject));
             Assert.AreEqual(Worktown.Game.Climb.GoalBoardRules.RowCount, station.SlotCount, "one slot per row");
+        }
+
+        /// <summary>Spec 062b: the door sign hangs on the right side wall by the front (x 14.785, z 12.80, facing the aisle), with its catalog art.</summary>
+        private static void CheckDoorSign(Station station, ArtCatalog catalog)
+        {
+            Transform body = station.transform.Find("Body");
+            Assert.IsNotNull(body, "the door sign's Body");
+            Assert.AreEqual(Vector3.zero, body.localPosition);
+            var box = body.GetComponent<BoxCollider>();
+            Assert.AreEqual(Vector3.one, box.size);
+            Assert.AreEqual(new Vector3(ArtSizeTable.DoorSignWidth, ArtSizeTable.DoorSignHeight, ArtSizeTable.DoorSignDepth), body.localScale);
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(14.785f, ArtSizeTable.DoorSignCentreHeight, 12.80f), box.bounds.center), 0.001f, "the door sign moved");
+            Transform visual = station.transform.Find("Art_" + ArtCatalogRules.StationKey(station.Kind));
+            Assert.IsNotNull(visual, "the door sign has no catalog visual");
+            Assert.IsTrue(catalog.TryGet(ArtCatalogRules.StationKey(station.Kind), out GameObject expectedPrefab));
+            Assert.AreSame(expectedPrefab, PrefabUtility.GetCorrespondingObjectFromSource(visual.gameObject));
+            Assert.AreEqual(1, station.SlotCount, "one slot: the press");
+            Assert.IsNotNull(station.GetComponentInParent<Worktown.Game.Layout.ShopDoor>(), "its synced state");
         }
 
         /// <summary>Spec 059: the office terminal hangs on the back wall over the end worktop (x 14.15, z 14.91), with its catalog art.</summary>

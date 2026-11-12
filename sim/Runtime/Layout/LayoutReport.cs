@@ -5,14 +5,16 @@ using System.Linq;
 namespace Worktown.Sim.Layout
 {
     /// <summary>
-    /// Spec 062a: what <see cref="LayoutRules.Validate"/> found: the <see cref="Problems"/> in a stable order (by rule, then by piece id,
-    /// then by the other piece's id). Valid when there are none. Immutable; two reports are equal when their problems are.
+    /// Spec 062a: what <see cref="LayoutRules.Validate"/> found: the <see cref="Problems"/> in a stable order (by kind, which follows the
+    /// rules, then by piece id, then by the other piece's id; problems equal in all three keep the order they were found in). Valid when there are none. Immutable; two reports are equal when their problems are.
     /// </summary>
     public sealed class LayoutReport : IEquatable<LayoutReport>
     {
         public LayoutReport(IEnumerable<LayoutProblem>? problems)
         {
-            Problems = (problems ?? Array.Empty<LayoutProblem>()).Where(p => p != null).ToList().AsReadOnly();
+            // Spec 062b (062a Part B review): sorted as the summary says, stably (LINQ's OrderBy keeps the rules' order on ties).
+            Problems = (problems ?? Array.Empty<LayoutProblem>()).Where(p => p != null)
+                .OrderBy(p => (int)p.Kind).ThenBy(p => p.PieceId).ThenBy(p => p.OtherId).ToList().AsReadOnly();
         }
 
         public IReadOnlyList<LayoutProblem> Problems { get; }

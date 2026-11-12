@@ -82,6 +82,28 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(walk.All(p => p.z * 1000f <= RoomDef.CreateDefault().GuestArea.MaxZ), "guests stay in the guest area");
         }
 
+        /// <summary>Spec 062b (062a Part B review): a guest leaving from its queue slot gets its own way out, round the block.</summary>
+        [Test]
+        public void LeavingFromAQueueSlot_GetsItsOwnPath()
+        {
+            ShopLayout standard = DefaultLayout.Load();
+            NpcRoute plain = DefaultRoute(standard);
+            Vector3 slot = plain.QueueHead + plain.QueueDirection * 2f;
+            CollectionAssert.IsEmpty(plain.LeaveFrom(slot), "a straight way out in the default kitchen");
+            var block = new LayoutPiece(standard.NextId, PieceCatalog.Bin, 18000, 11100, 0, 0, 1, 0);
+            NpcRoute route = DefaultRoute(standard.WithPieces(standard.Pieces.Concat(new[] { block })));
+            IReadOnlyList<Vector3> fromSlot = route.LeaveFrom(slot);
+            Assert.IsNotEmpty(fromSlot, "corners round the block");
+            Assert.IsTrue(PieceCatalog.CreateDefault().TryGet(PieceCatalog.Bin, out PieceDef def));
+            RectMm rect = def.Footprint(block);
+            var walk = new List<Vector3> { slot };
+            walk.AddRange(fromSlot);
+            walk.Add(route.Entry);
+            for (int i = 1; i < walk.Count; i++)
+                Assert.IsFalse(SegmentHitsRect(walk[i - 1], walk[i], rect), "leg " + i + " crosses the block");
+            Assert.AreEqual(route.LeaveVia, route.LeaveFrom(new Vector3(-50f, 0f, -50f)), "off the grid: the pay head's way");
+        }
+
         [Test]
         public void NoServingCounter_GivesNoRoute()
         {

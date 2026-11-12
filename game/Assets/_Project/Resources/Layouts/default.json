@@ -290,6 +290,26 @@
             "lengthMm": 0,
             "tier": 1,
             "paidCents": 0
+        },
+        {
+            "id": 30,
+            "type": "door_sign",
+            "xMm": 14785,
+            "zMm": 12800,
+            "turns": 1,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 31,
+            "type": "storage_pallet",
+            "xMm": -900,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
         }
     ],
     "stored": [],
@@ -349,5 +369,5 @@
             "spot": 3
         }
     ],
-    "nextId": 30
+    "nextId": 32
 }

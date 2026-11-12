@@ -28,6 +28,14 @@ namespace Worktown.Game.Layout
         [SerializeField] private ServeFeed _feed;
 
         private readonly List<NetworkObject> _spawnedPieces = new List<NetworkObject>();
+        // Spec 062b (062a review follow-up): the items spawned at their homes, so a second ServerBegin despawns them before it spawns new ones.
+        private readonly List<NetworkObject> _spawnedItems = new List<NetworkObject>();
+
+        private void Awake()
+        {
+            // Spec 062b: build mode's server side lives next to the spawner (it moves, spawns and despawns the pieces).
+            if (GetComponent<BuildService>() == null) gameObject.AddComponent<BuildService>();
+        }
         private readonly PieceCatalog _catalog = PieceCatalog.CreateDefault();
         private readonly RoomDef _room = RoomDef.CreateDefault();
 
@@ -43,8 +51,8 @@ namespace Worktown.Game.Layout
 
         /// <summary>
         /// Server: spawns <paramref name="layout"/> (null: the default) and its items. Returns the layout in the world. Any pieces this
-        /// spawner put there before are despawned first; the items it spawned are not tracked yet (the KitchenService owns them once
-        /// spawned; spec 062b, which moves pieces while a game runs, has to decide what happens to them).
+        /// spawner put there before are despawned first, and so are the items it spawned at their homes (spec 062b) unless a player holds
+        /// one (that one stays in the hands; the KitchenService owns the items once spawned).
         /// </summary>
         public ShopLayout ServerBegin(ShopLayout layout)
         {
@@ -64,6 +72,7 @@ namespace Worktown.Game.Layout
                 string line = FeedLineFor(reset);
                 if (_feed != null && line != null) _feed.ServerAdd(line);
             }
+            DespawnItems();
             DespawnPieces();
             Current = chosen;
             int pieces = 0, items = 0;
@@ -94,6 +103,9 @@ namespace Worktown.Game.Layout
                 item.transform.SetPositionAndRotation(pose.position, pose.rotation);
                 item.name = ItemName(home.ItemKind, chosen, home);
                 _networkManager.ServerManager.Spawn(item);
+                _spawnedItems.Add(item);
+                // 062b review: the item is in the spot table from the start, so build mode knows what lies on a piece.
+                if (TryGetComponent(out PickupService pickups)) pickups.ServerNoteOnSpot(item, surface.Id, home.Spot);
                 items++;
             }
             Debug.Log("[Layout] spawned " + pieces + " pieces and " + items + " items");
@@ -149,6 +161,59 @@ namespace Worktown.Game.Layout
 
         /// <summary>Spec 062a, pure: the serve feed's line after a layout was chosen (null when the saved one was used).</summary>
         public static string FeedLineFor(bool reset) => reset ? ResetLine : null;
+
+        /// <summary>Spec 062b, server: the layout in the world after a build action (BuildService); the save captures it.</summary>
+        public void ServerSetCurrent(ShopLayout layout)
+        {
+            if (layout != null) Current = layout;
+        }
+
+        /// <summary>
+        /// Spec 062b, server: spawns one piece of <paramref name="piece"/>'s type at <paramref name="xMm"/>, <paramref name="zMm"/> with
+        /// <paramref name="turns"/> (a stored piece taken out, or put back by an undo). Returns it, or null without a prefab.
+        /// </summary>
+        public PieceBehaviour ServerSpawnPiece(LayoutPiece piece, int xMm, int zMm, int turns, int number)
+        {
+            if (piece == null || _networkManager == null || !_networkManager.IsServerStarted) return null;
+            PieceBehaviour prefab = _prefabs != null ? _prefabs.Piece(piece.TypeId) : null;
+            if (prefab == null) return null;
+            NetworkObject nob = Instantiate(prefab.gameObject).GetComponent<NetworkObject>();
+            PieceBehaviour behaviour = nob.GetComponent<PieceBehaviour>();
+            behaviour.Configure(piece.Id, PosePacking.Pack(xMm, zMm, turns, piece.LengthMm), number);
+            nob.name = prefab.name + " " + piece.Id;
+            _networkManager.ServerManager.Spawn(nob);
+            _spawnedPieces.Add(nob);
+            return behaviour;
+        }
+
+        /// <summary>Spec 062b, server: despawns the spawned piece with id <paramref name="pieceId"/> (stored). False when none.</summary>
+        public bool ServerDespawnPiece(int pieceId)
+        {
+            for (int i = _spawnedPieces.Count - 1; i >= 0; i--)
+            {
+                NetworkObject nob = _spawnedPieces[i];
+                if (nob == null || !nob.TryGetComponent(out PieceBehaviour piece) || piece.PieceId != pieceId) continue;
+                _spawnedPieces.RemoveAt(i);
+                if (nob.IsSpawned) _networkManager.ServerManager.Despawn(nob);
+                return true;
+            }
+            return false;
+        }
+
+        private void DespawnItems()
+        {
+            foreach (NetworkObject item in _spawnedItems)
+            {
+                if (item == null || !item.IsSpawned) continue;
+                if (item.TryGetComponent(out Pickup pickup) && pickup.IsHeld)
+                {
+                    Debug.Log("[Layout] " + item.name + " stays: a player holds it");
+                    continue;
+                }
+                _networkManager.ServerManager.Despawn(item);
+            }
+            _spawnedItems.Clear();
+        }
 
         private void DespawnPieces()
         {

@@ -43,6 +43,8 @@ namespace Worktown.Game.Layout
         private readonly SyncVar<int> _pieceId = new SyncVar<int>();
         private readonly SyncVar<long> _posePacked = new SyncVar<long>();
         private readonly SyncVar<byte> _number = new SyncVar<byte>();
+        // Spec 062b: the slot (client id + 1) of the player who holds this piece in build mode; 0: nobody.
+        private readonly SyncVar<byte> _claimedBySlot = new SyncVar<byte>();
 
         private readonly List<GameObject> _modules = new List<GameObject>();
         private List<(Transform Target, string Name)> _markedNames;
@@ -56,6 +58,16 @@ namespace Worktown.Game.Layout
         public long PosePacked => _posePacked.Value;
         /// <summary>The number in its names when its type is placed more than once (0: none).</summary>
         public int Number => _number.Value;
+        /// <summary>Spec 062b: the slot of the player holding it in build mode (BuildService.SlotOf), 0 when nobody does.</summary>
+        public byte ClaimedBySlot => _claimedBySlot.Value;
+        /// <summary>
+        /// 062b review: the piece waits on the storage pallet (taken out of storage, held): its stations and surfaces are not registered, so
+        /// nobody cooks on it or puts things on it until it is placed. Both sides see it from the synced pose (StoragePallet.Covers).
+        /// </summary>
+        public bool Parked { get; private set; }
+
+        /// <summary>Spec 062b, client: the pose shown before the server's answer (a predicted place), else none.</summary>
+        public bool IsPredicted { get; private set; }
         /// <summary>The place surfaces in local order (SurfaceId's local number).</summary>
         public IReadOnlyList<PlaceSurface> Surfaces => _surfaces;
         public IReadOnlyList<Station> Stations => _stations;
@@ -74,6 +86,47 @@ namespace Worktown.Game.Layout
             _pieceId.Value = pieceId;
             _posePacked.Value = posePacked;
             _number.Value = (byte)Mathf.Clamp(number, 0, 255);
+            Apply();
+        }
+
+        private void Awake()
+        {
+            // Spec 062b: a moved piece (build mode) moves on every client when its pose changes; the aim caches look again.
+            _posePacked.OnChange += (_, __, asServer) =>
+            {
+                if (asServer || IsServerInitialized || PieceId <= 0) return;
+                IsPredicted = false;
+                Apply();
+                LayoutRegistry.Touch();
+            };
+        }
+
+        /// <summary>Spec 062b, server: the piece's new pose (build mode); applied at once, sent to every client.</summary>
+        public void ServerSetPose(long posePacked)
+        {
+            _posePacked.Value = posePacked;
+            Apply();
+            LayoutRegistry.Touch();
+        }
+
+        /// <summary>Spec 062b, server: who holds the piece in build mode (0: nobody).</summary>
+        public void ServerSetClaim(byte slot) => _claimedBySlot.Value = slot;
+
+        /// <summary>
+        /// Spec 062b, client: shows the piece at a pose before the server answers (feel.md 1: it moves at the click); <see cref="EndPrediction"/>
+        /// puts it back at its synced pose when the server refused.
+        /// </summary>
+        public void Predict(int xMm, int zMm, int turns)
+        {
+            IsPredicted = true;
+            transform.SetPositionAndRotation(new Vector3(xMm / 1000f, transform.position.y, zMm / 1000f), Quaternion.Euler(0f, PosePacking.Yaw(turns), 0f));
+        }
+
+        /// <summary>Spec 062b, client: back to the synced pose (a refused place).</summary>
+        public void EndPrediction()
+        {
+            if (!IsPredicted) return;
+            IsPredicted = false;
             Apply();
         }
 
@@ -124,6 +177,11 @@ namespace Worktown.Game.Layout
             if (PieceId <= 0) return;
             _registered = true;
             LayoutRegistry.Register(this);
+            // 062b re-review: a late joiner may get a piece waiting on the pallet before the pallet: once the pallet registers, every
+            // registered piece looks again whether it is parked.
+            if (StoragePallet.Is(this))
+                foreach (PieceBehaviour p in new List<PieceBehaviour>(LayoutRegistry.Pieces))
+                    if (p != null && p != this) p.RefreshParked();
         }
 
         private void Unregister()
@@ -143,6 +201,16 @@ namespace Worktown.Game.Layout
             int id = PieceId;
             for (int i = 0; i < _surfaces.Length; i++)
                 if (_surfaces[i] != null) _surfaces[i].AssignId(id > 0 ? SurfaceId.Of(id, i) : SurfaceId.None, id > 0 ? id : 0);
+            RefreshParked();
+        }
+
+        /// <summary>062b review: whether it waits on a pallet now; registered again (with or without its stations and surfaces) when that changed.</summary>
+        public void RefreshParked()
+        {
+            bool parked = StoragePallet.Covers(this);
+            if (parked == Parked) return;
+            Parked = parked;
+            if (_registered) LayoutRegistry.Register(this);
         }
 
         /// <summary>A counter's colliders, tops and scaled parts take the length; its cabinet modules are laid out again (ArtSizeTable).</summary>

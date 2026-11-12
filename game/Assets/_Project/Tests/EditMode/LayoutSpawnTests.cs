@@ -22,7 +22,7 @@ namespace Worktown.Game.Tests
         public void EveryPieceOfTheDefault_SpawnsAndRegisters_StationIdIsThePieceId()
         {
             ShopLayout layout = DefaultLayout.Load();
-            Assert.AreEqual(29, layout.Pieces.Count); // spec 057: the goal board; spec 059: the office terminal
+            Assert.AreEqual(31, layout.Pieces.Count); // spec 057: the goal board; spec 059: the office terminal; spec 062b: the door sign, the pallet
             Scene scene = LayoutScene.Open(layout);
             try
             {

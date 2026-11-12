@@ -289,6 +289,7 @@ GameObject:
   - component: {fileID: 8460783080002282875}
   - component: {fileID: 4119733508252766766}
   - component: {fileID: 2833841830571119682}
+  - component: {fileID: 8309972204036574006}
   m_Layer: 9
   m_Name: Player
   m_TagString: Player
@@ -617,6 +618,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2f9cdf0d905a6c04bbe9f3a724c9b27d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Player.WorldLabelFade
+--- !u!114 &8309972204036574006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9204124324090065605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 15e75158cc8f0e043894b14bab87c7cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Worktown.Game::Worktown.Game.Layout.BuildInteractor
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 4028595615018297922}
+  _networkObjectCache: {fileID: 0}
 --- !u!1001 &6305728986886136479
 PrefabInstance:
   m_ObjectHideFlags: 0

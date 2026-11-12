@@ -23,6 +23,9 @@ namespace Worktown.Game.Player
         private bool _jumpPressed;
         private bool _togglePressed;
         private bool _clipboardPressed;
+        private bool _buildPressed;
+        private bool _undoPressed;
+        private bool _leavePressed;
         private int _uiOpenCount;
         private int _lastUiClosedFrame = -1;
 
@@ -86,6 +89,22 @@ namespace Worktown.Game.Player
         /// <summary>Spec 059: the pocket clipboard's key (fixed until spec 048 binds it).</summary>
         public const Key ClipboardKey = Key.J;
 
+        /// <summary>Spec 062b: true once per B press (build mode on or off); false while a menu is open. Read once per frame.</summary>
+        public bool ConsumeBuildToggle() => Consume(ref _buildPressed);
+
+        /// <summary>Spec 062b: true once per Ctrl+Z (undo the last build action); false while a menu is open.</summary>
+        public bool ConsumeUndo() => Consume(ref _undoPressed);
+
+        /// <summary>Spec 062b: true once per Esc press (leave build mode); false while a menu is open.</summary>
+        public bool ConsumeLeave() => Consume(ref _leavePressed);
+
+        private bool Consume(ref bool pressed)
+        {
+            bool was = pressed;
+            pressed = false;
+            return _active && was && !IsUiOpen;
+        }
+
         /// <summary>Spec 011: menus call this when they open (true) and close (false).</summary>
         public void SetUiOpen(bool open)
         {
@@ -142,6 +161,13 @@ namespace Worktown.Game.Player
             if (Keyboard.current != null && Keyboard.current[ClipboardKey].wasPressedThisFrame) _clipboardPressed = true; // spec 059
 
             Keyboard keyboard = Keyboard.current;
+            // Spec 062b: B toggles build mode, Ctrl+Z undoes, Esc leaves it (fixed keys for now; 048's rebinding later).
+            if (keyboard != null && CaptureGate.GameKeysLive(IsUiOpen, UI.SettingsView.AnyOpen))
+            {
+                if (keyboard.bKey.wasPressedThisFrame) _buildPressed = true;
+                if (keyboard.zKey.wasPressedThisFrame && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed)) _undoPressed = true;
+                if (keyboard.escapeKey.wasPressedThisFrame) _leavePressed = true;
+            }
 
             bool escOrAlt = keyboard != null && (keyboard.escapeKey.wasPressedThisFrame || keyboard.leftAltKey.wasPressedThisFrame);
             // Follow-up 2026-11-11 (spec 048): not the Esc that just closed the settings over the shop (that close locked it again).

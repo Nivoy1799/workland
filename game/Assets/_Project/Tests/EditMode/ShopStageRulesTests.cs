@@ -26,7 +26,8 @@ namespace Worktown.Game.Tests
             { StationKind.Fryer, StationKind.PlateShelf, StationKind.Counter, StationKind.TrashCan, StationKind.Bin,
                 StationKind.MenuBoard, // spec 037: the fries' price is set at the food corner too
                 StationKind.GoalBoard, // spec 057: open at every stage (GoalBoardRules refuses by itself)
-                StationKind.OfficeTerminal }; // spec 059: open at every stage (its apps refuse by themselves)
+                StationKind.OfficeTerminal, // spec 059: open at every stage (its apps refuse by themselves)
+                StationKind.DoorSign }; // spec 062b: the shop can be closed at every stage
 
         private static readonly StationKind[] Closed =
         {

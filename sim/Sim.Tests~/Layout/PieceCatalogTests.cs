@@ -17,6 +17,7 @@ namespace Worktown.Sim.Tests.Layout
                 PieceCatalog.PlateShelf, PieceCatalog.Sink, PieceCatalog.Worktop, PieceCatalog.FrontCounter, PieceCatalog.ServingCounter,
                 PieceCatalog.RegisterModule, PieceCatalog.DispenserModule, PieceCatalog.SpitModule, PieceCatalog.DishReturnModule, PieceCatalog.Trash,
                 PieceCatalog.Terminal, PieceCatalog.MenuBoard, PieceCatalog.Bin,
+                PieceCatalog.StoragePallet, // spec 062b: the pallet where stored pieces wait
             };
             foreach (string t in today.Concat(PieceCatalog.ReservedTypes)) Assert.True(c.Contains(t), t);
             Assert.Equal(today.Length + PieceCatalog.ReservedTypes.Count, c.Rows.Count);
@@ -42,6 +43,13 @@ namespace Worktown.Sim.Tests.Layout
             Assert.True(c.TryGet(PieceCatalog.FrontCounter, out PieceDef front));
             Assert.True(front.HasLength && front.HasGuestSide);
             Assert.All(c.Rows.Where(r => r.TypeId != PieceCatalog.Worktop && r.TypeId != PieceCatalog.FrontCounter), r => Assert.False(r.HasLength, r.TypeId));
+            // Spec 062b: the pallet stays in the yard; the door sign is a station; only the dry shelf and the fridge are tall.
+            Assert.True(c.TryGet(PieceCatalog.StoragePallet, out PieceDef pallet));
+            Assert.Equal(PieceMount.Yard, pallet.Mount);
+            Assert.False(pallet.Movable || pallet.Required);
+            Assert.True(c.TryGet(PieceCatalog.DoorSign, out PieceDef sign));
+            Assert.True(sign.HasStation);
+            Assert.Equal(new[] { PieceCatalog.Fridge, PieceCatalog.ShelfDry }, c.Rows.Where(r => r.Tall).Select(r => r.TypeId));
             Assert.False(c.TryGet("sofa", out _));
             Assert.False(c.Contains("sofa"));
         }

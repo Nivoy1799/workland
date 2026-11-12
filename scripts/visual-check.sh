@@ -5,7 +5,7 @@
 # numbers to names). The tour client starts first and the observer second, so another window has focus while
 # the tour runs: the tour moves through its intents, not simulated keys.
 #
-#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu,corner,restaurant] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
+#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu,corner,restaurant,build] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
 #
 #   corner (spec 053): one window, its own host: from the title screen (-tour corner, no mode flag) New shop, the food corner with its
 #                  covers and goal line, a closed station's refusal, two fries guests paid in cash, the service summary with the goal,
@@ -16,6 +16,10 @@
 #                  (the covers gone), buy the falafel wrap, a terminal order, the next service with the wrap on the menu, the summary
 #                  with the rent and the gate line, Close the shop, Continue at stage 2. Spec 059: at the office terminal the fries $0.50
 #                  dearer and the wrap the special (before the next service), a locked service refused, Results page 1 after it, the clipboard.
+#
+#   build (spec 062b): the tour client and the observer host (started closed: -tour-build); the client enters build mode, stores a
+#                  worktop on the pallet, moves another into its place, takes the stored one out, undoes once, shows a refused place,
+#                  leaves build mode and opens the shop at the door sign; a guest walks the rebuilt route to the queue.
 #
 #   menu (spec 047): the tour window starts on the title screen (-tour menu, no -connect) and joins the observer window (-host -observe
 #                  menu) through Join by address; the host kicks it; it then opens its own shop (the open kitchen, no save: follow-up
@@ -77,6 +81,7 @@ timeout_for() {
     tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)
     menu) echo 360 ;; # spec 047: title, join by address, lobby, kick, own shop
     corner) echo 720 ;; # spec 053: new shop, two fries guests, the service end, close, continue
+    build) echo 600 ;; # spec 062b: build mode, then the shop opens and a guest comes
     restaurant) echo 900 ;; # spec 057: continue, rent, move, a recipe, a stage 2 service, close, continue; spec 059: the office terminal and the clipboard
     *) echo 420 ;;
   esac
@@ -135,7 +140,7 @@ failed=0
 report=()
 IFS=',' read -r -a tour_list <<< "$TOURS"
 for tour in "${tour_list[@]}"; do
-  case "$tour" in look|walk|cook|tutorial|menu|corner|restaurant) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  case "$tour" in look|walk|cook|tutorial|menu|corner|restaurant|build) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
   if [ "$tour" = "menu" ] && [ "$SERVER" != "local" ]; then echo "the menu tour needs --server local (its host is the observer window)" >&2; failed=1; continue; fi
   rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer" "${OUT:?}/${tour:?}-native-crash"
   rm -f "${OUT:?}/${tour:?}-tour.crash.log" "${OUT:?}/${tour:?}-observer.crash.log"
@@ -176,6 +181,8 @@ for tour in "${tour_list[@]}"; do
   if [ "$tour" = "cook" ]; then host_extra=(-tour-orders); fi
   # Spec 038: the tutorial host has the tour's stock and trash set-up and the tutorial's calm guests (its scripted orders come first).
   if [ "$tour" = "tutorial" ]; then host_extra=(-tour-orders -tutorial); fi
+  # Spec 062b: the build tour's host starts with the shop closed (no service, the clock waits) until the tour opens it.
+  if [ "$tour" = "build" ]; then host_extra=(-tour-build); fi
   observer_pid=""
   if [ "$tour" = "corner" ] || [ "$tour" = "restaurant" ]; then
     : # spec 053 (057): no second window (the tour hosts its own shop on the port)

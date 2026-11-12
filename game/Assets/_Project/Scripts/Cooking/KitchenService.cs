@@ -240,6 +240,8 @@ namespace Worktown.Game.Cooking
                 // Spec 059: a row button of the office terminal (Office.TerminalOptions: app, row, action); the terminal decides and logs who.
                 case StationKind.OfficeTerminal:
                     return station.TryGetComponent(out Worktown.Game.Office.OfficeTerminal office) ? office.ServerPress(player.OwnerId, option) : CookOutcome.UnknownStation;
+                // Spec 062b: the door sign opens or closes the shop (the customers' service follows it).
+                case StationKind.DoorSign: return _customers != null ? _customers.UseDoor(player.OwnerId) : CookOutcome.UnknownStation;
                 default: return CookOutcome.UnknownStation;
             }
         }
@@ -1213,6 +1215,27 @@ namespace Worktown.Game.Cooking
             // 030 review: one preview per food for the label and the title.
             IReadOnlyList<string> names = _kitchen.ContentNamesAndTitle(id, vessel.Kind, tick, rate, out string title);
             vessel.ServerSet(names, _kitchen.ContentLooks(id, vessel.Kind, tick, rate), title, mode);
+        }
+
+        /// <summary>
+        /// Spec 062b, server: whether station <paramref name="stationId"/> has heat on (a burner of a stove, the fryer's or the griddle's
+        /// power, the spit's knob): build mode refuses to pick such a piece up ("Turn it off first").
+        /// </summary>
+        public bool StationIsOn(int stationId)
+        {
+            Station station = StationOf(stationId);
+            if (station == null) return false;
+            switch (station.Kind)
+            {
+                case StationKind.Stove:
+                    for (int b = 0; b < StationRules.BurnersPerStove; b++)
+                        if (_burnerSurface.TryGetValue(BurnerKey(stationId, b), out int burnerId) && _kitchen.BurnerOf(burnerId).IsOn) return true;
+                    return false;
+                case StationKind.Fryer: return _kitchen.FryerIsOn(stationId);
+                case StationKind.Griddle: return _kitchen.GriddleIsOn(stationId);
+                case StationKind.Spit: return Spits.IsSpit(stationId) && Spits.LevelOf(stationId) != Worktown.Sim.Cooking.Spit.Off;
+                default: return false;
+            }
         }
 
         /// <summary>Server: the stove's knob and button lights (two bits per burner).</summary>

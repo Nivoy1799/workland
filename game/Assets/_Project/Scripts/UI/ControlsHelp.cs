@@ -23,6 +23,8 @@ namespace Worktown.Game.UI
             "{Players}: who is in the shop (invite friends, kick, leave the shop)", // spec 047
             // Spec 059: the clipboard's key (fixed until 048 binds it), named from the one place that reads it.
             Worktown.Game.Player.PlayerInputReader.ClipboardKey + ": the pocket clipboard (today's menu, the goal, the last service)",
+            "B (shop closed): build mode: left click picks a piece up, right click places it, the wheel turns it", // spec 062b
+            "Ctrl+Z: undo your last build action   Esc or B: leave build mode", // spec 062b
             "Gamepad: RT = left click, LT = right click, Y = turn",
         };
 

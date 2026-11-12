@@ -157,6 +157,7 @@ namespace Worktown.Game.Shop
                 _used = new bool[n];
             }
             if (!_room.TryPeekWaiting(out _)) return;
+            FollowTheirPiece();
             for (int i = 0; i < n; i++)
                 _occupied[i] = _deliverySpots[i] == null || PickupService.IsSpotOccupied(_deliverySpots[i].position, _probe);
             _spawnBox ??= SpawnBox;
@@ -164,6 +165,59 @@ namespace Worktown.Game.Shop
         }
 
         private System.Func<BoxContents, int, int> _spawnBox;
+
+        // Spec 062b (062a Part B review): the delivery spots lie on the worktop by the back door; they move with it when build mode moves it.
+        private int[] _spotPiece;
+        private Matrix4x4[] _spotLocal;
+        private Pose[] _spotScene;
+
+        /// <summary>
+        /// Spec 062b: each delivery spot keeps its place on the piece it lies on in the standard layout (found once: the floor piece whose
+        /// footprint holds it); when that piece stands elsewhere now, the spot goes with it. 062b review: when that piece is stored, the spot
+        /// falls back to its own place by the back door, on the floor.
+        /// </summary>
+        private void FollowTheirPiece()
+        {
+            if (_spotPiece == null)
+            {
+                var catalog = Worktown.Sim.Layout.PieceCatalog.CreateDefault();
+                Worktown.Sim.Layout.ShopLayout standard = Worktown.Game.Layout.DefaultLayout.Load(catalog);
+                _spotPiece = new int[_deliverySpots.Length];
+                _spotLocal = new Matrix4x4[_deliverySpots.Length];
+                _spotScene = new Pose[_deliverySpots.Length];
+                for (int i = 0; i < _deliverySpots.Length; i++)
+                {
+                    Transform spot = _deliverySpots[i];
+                    if (spot == null) continue;
+                    _spotScene[i] = new Pose(spot.position, spot.rotation);
+                    int x = Mathf.RoundToInt(spot.position.x * 1000f), z = Mathf.RoundToInt(spot.position.z * 1000f);
+                    foreach (Worktown.Sim.Layout.LayoutPiece p in standard.Pieces)
+                    {
+                        if (!catalog.TryGet(p.TypeId, out Worktown.Sim.Layout.PieceDef def) || Worktown.Sim.Layout.LayoutRules.Band(def.Mount) != 0
+                            || !def.Footprint(p).Contains(x, z)) continue;
+                        Matrix4x4 home = Matrix4x4.TRS(new Vector3(p.XMm / 1000f, 0f, p.ZMm / 1000f),
+                            Quaternion.Euler(0f, Worktown.Game.Layout.PosePacking.Yaw(p.Turns), 0f), Vector3.one);
+                        _spotPiece[i] = p.Id;
+                        _spotLocal[i] = home.inverse * spot.localToWorldMatrix;
+                        break;
+                    }
+                }
+            }
+            for (int i = 0; i < _deliverySpots.Length; i++)
+            {
+                Worktown.Game.Layout.PieceBehaviour piece = _spotPiece[i] > 0 ? Worktown.Game.Layout.LayoutRegistry.Piece(_spotPiece[i]) : null;
+                if (_deliverySpots[i] == null) continue;
+                if (piece == null || piece.Parked)
+                {
+                    // 062b review: the piece is stored: the fallback, the spot's own place by the back door, on the floor.
+                    Pose scene = _spotScene[i];
+                    _deliverySpots[i].SetPositionAndRotation(new Vector3(scene.position.x, 0f, scene.position.z), scene.rotation);
+                    continue;
+                }
+                Matrix4x4 world = piece.transform.localToWorldMatrix * _spotLocal[i];
+                _deliverySpots[i].SetPositionAndRotation(world.GetColumn(3), world.rotation);
+            }
+        }
 
         private int SpawnBox(BoxContents box, int s)
         {

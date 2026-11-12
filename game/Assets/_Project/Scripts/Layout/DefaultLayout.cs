@@ -46,6 +46,7 @@ namespace Worktown.Game.Layout
 
             var pieces = new List<LayoutPiece>(saved.Pieces);
             var stored = new List<int>(saved.Stored);
+            var records = new List<LayoutPiece>(saved.StoredPieces); // spec 062b: a stored piece keeps its record (type, length, pose)
             int next = saved.NextId;
             foreach (string type in wanted)
             {
@@ -68,6 +69,7 @@ namespace Worktown.Game.Layout
                 else
                 {
                     stored.Add(added.Id);
+                    records.Add(added);
                     notes?.Add("stored " + type + " as piece " + added.Id + " (its place is taken)");
                 }
             }
@@ -81,7 +83,7 @@ namespace Worktown.Game.Layout
                     foreach (LayoutPiece p in pieces) if (p.Id == h.PieceId) { onSaved = p; break; }
                     if (onStandard != null && onSaved != null && onSaved.TypeId == onStandard.TypeId) homes.Add(h);
                 }
-            return new ShopLayout(saved.Version, pieces, stored, homes, next);
+            return new ShopLayout(saved.Version, pieces, stored, homes, next, records);
         }
 
         private static bool IsFree(LayoutPiece piece, PieceDef def, List<LayoutPiece> placed, PieceCatalog catalog)
@@ -89,13 +91,10 @@ namespace Worktown.Game.Layout
             RectMm mine = def.Footprint(piece);
             foreach (LayoutPiece other in placed)
             {
-                if (!catalog.TryGet(other.TypeId, out PieceDef otherDef) || Band(otherDef.Mount) != Band(def.Mount)) continue;
+                if (!catalog.TryGet(other.TypeId, out PieceDef otherDef) || LayoutRules.Band(otherDef.Mount) != LayoutRules.Band(def.Mount)) continue;
                 if (mine.Intersects(otherDef.Footprint(other))) return false;
             }
             return true;
         }
-
-        /// <summary>Spec 062a rule 2's bands: floor and counter-line pieces together, wall pieces, overhead pieces (the yard is the floor's).</summary>
-        public static int Band(PieceMount mount) => LayoutRules.Band(mount);
     }
 }

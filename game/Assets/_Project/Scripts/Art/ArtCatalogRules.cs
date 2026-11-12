@@ -50,6 +50,7 @@ namespace Worktown.Game.Art
                 case StationKind.MenuBoard: return ArtKey.StationMenuBoard; // spec 037
                 case StationKind.GoalBoard: return ArtKey.StationGoalBoard; // spec 057
                 case StationKind.OfficeTerminal: return ArtKey.StationOfficeTerminal; // spec 059
+                case StationKind.DoorSign: return ArtKey.StationDoorSign; // spec 062b
                 default: throw new System.ArgumentOutOfRangeException(nameof(kind), kind, "no art key for station kind");
             }
         }

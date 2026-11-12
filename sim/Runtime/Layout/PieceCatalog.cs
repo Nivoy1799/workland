@@ -34,8 +34,10 @@ namespace Worktown.Sim.Layout
         public const string Bin = "bin";
         /// <summary>Reserved for spec 057 (not in the default layout).</summary>
         public const string GoalBoard = "goal_board";
-        /// <summary>Reserved for spec 062b.</summary>
+        /// <summary>Reserved for spec 062b: the shop's open or closed sign (a station: a press opens or closes the shop).</summary>
         public const string DoorSign = "door_sign";
+        /// <summary>Spec 062b: the pallet in the yard by the back door where stored pieces wait (fixed, not required).</summary>
+        public const string StoragePallet = "storage_pallet";
         /// <summary>Reserved for spec 059.</summary>
         public const string OfficeTerminal = "office_terminal";
 
@@ -86,8 +88,9 @@ namespace Worktown.Sim.Layout
         public static PieceCatalog CreateDefault() => new PieceCatalog(new[]
         {
             //          type id           width depth mount              counter guest  station required movable minLen maxLen
-            new PieceDef(ShelfDry,         1200,  500, PieceMount.InLine,   false, false, true,  true,  true,  0,    0),
-            new PieceDef(Fridge,           1200,  620, PieceMount.InLine,   false, false, true,  true,  true,  0,    0),
+            // Spec 062b: the dry shelf and the fridge are 1.8 m tall (ArtSizeTable.StockHeight): nobody reaches over them (rule 4).
+            new PieceDef(ShelfDry,         1200,  500, PieceMount.InLine,   false, false, true,  true,  true,  0,    0, Tall: true),
+            new PieceDef(Fridge,           1200,  620, PieceMount.InLine,   false, false, true,  true,  true,  0,    0, Tall: true),
             new PieceDef(Stove,            1200, 1200, PieceMount.InLine,   false, false, true,  false, true,  0,    0),
             new PieceDef(Fryer,             800, 1200, PieceMount.InLine,   false, false, true,  false, true,  0,    0),
             new PieceDef(Griddle,          1020, 1200, PieceMount.InLine,   false, false, true,  false, true,  0,    0),
@@ -109,8 +112,12 @@ namespace Worktown.Sim.Layout
             // Spec 062a Part B: the goal board is a station (pressed in first person), so rule 4 checks a cook reaches it; 20 mm deep like the
             // terminal (its panel is 18 mm), so it fits between the back line and the wall.
             new PieceDef(GoalBoard,         800,   20, PieceMount.Wall,     false, false, true,  false, true,  0,    0),
-            new PieceDef(DoorSign,          400,   30, PieceMount.Wall,     false, false, false, false, true,  0,    0),
+            // Spec 062b: the door sign is a station (pressed to open or close the shop), so rule 4 checks a cook reaches it.
+            new PieceDef(DoorSign,          400,   30, PieceMount.Wall,     false, false, true,  false, true,  0,    0),
             new PieceDef(OfficeTerminal,   1000,   20, PieceMount.Wall,     false, false, true,  false, true,  0,    0),
+            // Spec 062b: where stored pieces wait. In the yard by the back door, fixed (a Yard row: rule 1 keeps it outside the floor; the spec's
+            // sketch said Floor, but the room has no free floor by the back door).
+            new PieceDef(StoragePallet,    1200, 1000, PieceMount.Yard,     false, false, false, false, false, 0,    0),
         });
     }
 }

@@ -5,8 +5,8 @@ using System.Linq;
 namespace Worktown.Sim.Layout
 {
     /// <summary>
-    /// Spec 062a: a shop's furniture as data: the placed <see cref="Pieces"/> (ascending id), the <see cref="Stored"/> piece ids (reserved
-    /// for spec 062b: bought or picked up, not placed), the cookware's and tools' <see cref="Homes"/> and the next free piece id
+    /// Spec 062a: a shop's furniture as data: the placed <see cref="Pieces"/> (ascending id), the <see cref="Stored"/> piece ids (spec
+    /// 062b: owned, not placed, waiting on the storage pallet; <see cref="StoredPieces"/> their records), the cookware's and tools' <see cref="Homes"/> and the next free piece id
     /// (<see cref="NextId"/>, never reused). Immutable: the constructor copies its inputs and sorts the pieces by id. Two layouts are equal
     /// when all their parts are (<see cref="Equals(ShopLayout)"/>).
     /// </summary>
@@ -18,10 +18,30 @@ namespace Worktown.Sim.Layout
         public const int MaxPieceId = (1 << 24) - 1;
 
         public ShopLayout(int version, IEnumerable<LayoutPiece> pieces, IEnumerable<int> stored, IEnumerable<ItemHome> homes, int nextId)
+            : this(version, pieces, stored, homes, nextId, null)
+        {
+        }
+
+        /// <summary>
+        /// Spec 062b: with the stored pieces' records (<paramref name="storedPieces"/>: type, length, tier and the pose they had when they
+        /// were stored). <see cref="Stored"/> is <paramref name="stored"/>'s ids followed by any record's id not among them; a stored id
+        /// without a record (an older save) is kept but cannot be taken out.
+        /// </summary>
+        public ShopLayout(int version, IEnumerable<LayoutPiece> pieces, IEnumerable<int> stored, IEnumerable<ItemHome> homes, int nextId,
+            IEnumerable<LayoutPiece>? storedPieces)
         {
             Version = version;
             Pieces = (pieces ?? Array.Empty<LayoutPiece>()).Where(p => p != null).OrderBy(p => p.Id).ToList().AsReadOnly();
-            Stored = (stored ?? Array.Empty<int>()).ToList().AsReadOnly();
+            var ids = (stored ?? Array.Empty<int>()).ToList();
+            var records = new List<LayoutPiece>();
+            foreach (LayoutPiece p in storedPieces ?? Array.Empty<LayoutPiece>())
+            {
+                if (p == null || records.Any(r => r.Id == p.Id)) continue;
+                records.Add(p);
+                if (!ids.Contains(p.Id)) ids.Add(p.Id);
+            }
+            Stored = ids.AsReadOnly();
+            StoredPieces = records.OrderBy(p => Stored.ToList().IndexOf(p.Id)).ToList().AsReadOnly();
             Homes = (homes ?? Array.Empty<ItemHome>()).Where(h => h != null).ToList().AsReadOnly();
             int highest = 0;
             foreach (LayoutPiece p in Pieces) highest = Math.Max(highest, p.Id);
@@ -32,6 +52,8 @@ namespace Worktown.Sim.Layout
         public int Version { get; }
         public IReadOnlyList<LayoutPiece> Pieces { get; }
         public IReadOnlyList<int> Stored { get; }
+        /// <summary>Spec 062b: the records of the stored pieces that have one, in <see cref="Stored"/>'s order.</summary>
+        public IReadOnlyList<LayoutPiece> StoredPieces { get; }
         public IReadOnlyList<ItemHome> Homes { get; }
         /// <summary>The id the next new piece gets: at least one above every id in use.</summary>
         public int NextId { get; }
@@ -40,6 +62,14 @@ namespace Worktown.Sim.Layout
         public LayoutPiece? Piece(int id)
         {
             foreach (LayoutPiece p in Pieces)
+                if (p.Id == id) return p;
+            return null;
+        }
+
+        /// <summary>Spec 062b: the stored piece with id <paramref name="id"/> (its record), or null.</summary>
+        public LayoutPiece? StoredPiece(int id)
+        {
+            foreach (LayoutPiece p in StoredPieces)
                 if (p.Id == id) return p;
             return null;
         }
@@ -66,14 +96,21 @@ namespace Worktown.Sim.Layout
         }
 
         /// <summary>The same layout with <paramref name="pieces"/> instead of its pieces (stored, homes and the next id kept).</summary>
-        public ShopLayout WithPieces(IEnumerable<LayoutPiece> pieces) => new ShopLayout(Version, pieces, Stored, Homes, NextId);
+        public ShopLayout WithPieces(IEnumerable<LayoutPiece> pieces) => new ShopLayout(Version, pieces, Stored, Homes, NextId, StoredPieces);
+
+        /// <summary>062b review: the same layout with these item homes.</summary>
+        public ShopLayout WithHomes(IEnumerable<ItemHome> homes) => new ShopLayout(Version, Pieces, Stored, homes, NextId, StoredPieces);
+
+        /// <summary>Spec 062b: the same layout with these placed and stored pieces (homes and the next id kept).</summary>
+        public ShopLayout With(IEnumerable<LayoutPiece> pieces, IEnumerable<int> stored, IEnumerable<LayoutPiece> storedPieces) =>
+            new ShopLayout(Version, pieces, stored, Homes, NextId, storedPieces);
 
         public bool Equals(ShopLayout? other)
         {
             if (other is null) return false;
             if (ReferenceEquals(this, other)) return true;
             return Version == other.Version && NextId == other.NextId && Pieces.SequenceEqual(other.Pieces)
-                && Stored.SequenceEqual(other.Stored) && Homes.SequenceEqual(other.Homes);
+                && Stored.SequenceEqual(other.Stored) && StoredPieces.SequenceEqual(other.StoredPieces) && Homes.SequenceEqual(other.Homes);
         }
 
         public override bool Equals(object? obj) => obj is ShopLayout other && Equals(other);

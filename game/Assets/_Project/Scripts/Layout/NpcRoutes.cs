@@ -44,8 +44,15 @@ namespace Worktown.Game.Layout
             Vector3 firstTarget = arrive.Count > 0 ? arrive[0] : World(head);
             Vector3 look = firstTarget - entry;
             float yaw = look.sqrMagnitude > 0.000001f ? Mathf.Repeat(Mathf.Atan2(look.x, look.z) * Mathf.Rad2Deg, 360f) : 0f;
+            // Spec 062b (062a Part B review): a guest leaving from elsewhere (its queue slot) gets its own path from where it stands.
+            PointMm exit = room.GuestEntry;
+            System.Func<Vector3, IReadOnlyList<Vector3>> leaveFrom = start =>
+            {
+                GridPath path = GridPath.Find(guests, new PointMm(Mathf.RoundToInt(start.x * 1000f), Mathf.RoundToInt(start.z * 1000f)), exit);
+                return path.Found ? Between(path) : leave;
+            };
             return new NpcRoute(entry, yaw, World(head), queueDirection, queueFacing, World(pay), payDirection, arrive, leave,
-                inWay.Found && outWay.Found);
+                inWay.Found && outWay.Found, leaveFrom);
         }
 
         /// <summary>The point <see cref="QueueGapMm"/> in front of a piece's guest side, in the middle of its width.</summary>

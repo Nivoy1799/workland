@@ -182,6 +182,9 @@ namespace Worktown.Game.Office
 
         private void OnMenuToggled(int player, int recipeRow, bool on) => AddLog(ChangeLog.Dish(ChangeLog.SlotOf(player), recipeRow, on));
 
+        /// <summary>Spec 062b, server: an entry from elsewhere (the door sign: who opened or closed the shop).</summary>
+        public void ServerAddLog(uint entry) => AddLog(entry);
+
         private void AddLog(uint entry)
         {
             _log = ChangeLog.Push(_log, entry);

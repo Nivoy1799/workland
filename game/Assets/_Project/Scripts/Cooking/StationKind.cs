@@ -58,6 +58,8 @@ namespace Worktown.Game.Cooking
         GoalBoard,
         /// <summary>Spec 059: the office terminal in the back office: its screen's tabs, page buttons and row buttons are its slots; a row
         /// button sends Office.TerminalOptions (app, row, action) as the option; Office.OfficeTerminal decides.</summary>
-        OfficeTerminal
+        OfficeTerminal,
+        /// <summary>Spec 062b: the door sign by the front: a press opens or closes the shop (Layout.ShopDoorRules; its one slot is option 0).</summary>
+        DoorSign
     }
 }

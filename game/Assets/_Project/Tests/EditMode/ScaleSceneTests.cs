@@ -64,6 +64,7 @@ namespace Worktown.Game.Tests
                     bool board = station.Kind == StationKind.MenuBoard; // spec 037: a board hanging above the front counter
                     bool goal = station.Kind == StationKind.GoalBoard; // spec 057: a board hanging on the back wall
                     bool office = station.Kind == StationKind.OfficeTerminal; // spec 059: a screen hanging on the back wall
+                    bool door = station.Kind == StationKind.DoorSign; // spec 062b: a sign hanging on the side wall
                     bool cleaning = Worktown.Game.Shop.CleaningRules.IsCleaningStation(station.Kind); // spec 035
                     bool spit = station.Kind == StationKind.Spit; // spec 036: on the front counter too
                     bool onCounter = register || drinks || station.Kind == StationKind.DishReturn || spit;
@@ -71,7 +72,8 @@ namespace Worktown.Game.Tests
                         : terminal ? TerminalArtRules.CentreHeight - TerminalArtRules.Height * 0.5f
                         : board ? MenuBoardArtRules.CentreHeight - MenuBoardArtRules.Height * 0.5f
                         : goal ? GoalBoardArtRules.CentreHeight - GoalBoardArtRules.Height * 0.5f
-                        : office ? OfficeTerminalArtRules.CentreHeight - OfficeTerminalArtRules.Height * 0.5f : 0f;
+                        : office ? OfficeTerminalArtRules.CentreHeight - OfficeTerminalArtRules.Height * 0.5f
+                        : door ? ArtSizeTable.DoorSignCentreHeight - ArtSizeTable.DoorSignHeight * 0.5f : 0f;
                     float expected = station.Kind == StationKind.Counter ? ArtSizeTable.ServingCounterHeight
                         : register ? floor + RegisterArtRules.Height
                         : drinks ? floor + DrinkArtRules.Height
@@ -80,6 +82,7 @@ namespace Worktown.Game.Tests
                         : board ? floor + MenuBoardArtRules.Height
                         : goal ? floor + GoalBoardArtRules.Height
                         : office ? floor + OfficeTerminalArtRules.Height
+                        : door ? floor + ArtSizeTable.DoorSignHeight
                         : cleaning ? floor + CleaningArtRules.SizeOf(station.Kind).y
                         : StockLayout.IsStock(station.Kind) ? ArtSizeTable.StockHeight : ArtSizeTable.WorktopHeight;
                     Assert.AreEqual(expected, FurnitureTop(station), HeightTolerance, station.name + " furniture top");

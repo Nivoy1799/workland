@@ -42,9 +42,10 @@ namespace Worktown.Game.Tests
             // Spec 054b re-pin: 6, the collision mode byte, the soft separation and MoveData.ViewTick.
             // Spec 057 re-pin: 7, ShopStage's restaurant fields and the goal board, a new spawned station piece.
             // Spec 059 re-pin: 8, OfficeTerminal's fields and the office terminal, a new spawned station piece (its presses on RequestStation).
-            Assert.AreEqual(8, ProtocolSurface.Revision, "054, the 053 review, spec 037, spec 062a, spec 054b, spec 057, then spec 059 changed the wire (bump on every wire change)");
+            // Spec 062b re-pin: 9, build mode's request and answer, the door's state, the piece's claim, two new spawned pieces.
+            Assert.AreEqual(9, ProtocolSurface.Revision, "054, the 053 review, spec 037, spec 062a, spec 054b, spec 057, spec 059, then spec 062b changed the wire (bump on every wire change)");
             List<string> lines = ProtocolSurface.Lines(Game);
-            Assert.AreEqual(1, lines.Count(l => l == "revision 8"));
+            Assert.AreEqual(1, lines.Count(l => l == "revision 9"));
             Assert.AreEqual(1, lines.Count(l => l.StartsWith("revision ", StringComparison.Ordinal)));
             List<string> before = lines.Where(l => !l.StartsWith("revision ", StringComparison.Ordinal)).ToList();
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before), BuildHash.Compute("0.1.0", lines), "a build without the revision is refused");

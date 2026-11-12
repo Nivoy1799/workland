@@ -27,6 +27,8 @@ namespace Worktown.Game.Dev
         public const string CookTour = "cook";
         /// <summary>Spec 038: the first-shift tutorial walked through the cook tour's steps; its client and host run with -tutorial.</summary>
         public const string TutorialTour = "tutorial";
+        /// <summary>Spec 062b: build mode (its host starts closed: -tour-build): store, move, take out, undo, a refused place, open the shop.</summary>
+        public const string BuildTour = "build";
 
         /// <summary>Act names the runner knows.</summary>
         public const string ActPickUpPan = "pick-up-pan";
@@ -42,6 +44,8 @@ namespace Worktown.Game.Dev
         public const string ActNormalMotion = "normal-motion";
         /// <summary>Spec 039: the knife put down and picked up on the new tops, the tools at home, a tomato walked over (PlaceAnywhereSequence).</summary>
         public const string ActPlaceAnywhere = "place-anywhere";
+        /// <summary>Spec 062b: build mode's steps (BuildTourRunner).</summary>
+        public const string ActBuild = "build";
         public const float SlowMotionScale = 4f;
         /// <summary>Spec 027b: seconds of frames around one click.</summary>
         public const float ClickFramesSeconds = 1f;
@@ -74,11 +78,11 @@ namespace Worktown.Game.Dev
         /// <summary>The observer's player counts as at its spot within this distance.</summary>
         public const float ObserverSpotDistance = 0.6f;
 
-        public static readonly IReadOnlyList<string> Names = new[] { LookTour, WalkTour, CookTour, TutorialTour };
+        public static readonly IReadOnlyList<string> Names = new[] { LookTour, WalkTour, CookTour, TutorialTour, BuildTour };
         public static readonly IReadOnlyList<string> Acts = new[]
         {
             ActPickUpPan, ActPutPanBack, ActCook, ActTutorial, ActPickUpPanFrames, ActPutPanBackFrames, ActSlowMotion, ActNormalMotion,
-            ActPlaceAnywhere,
+            ActPlaceAnywhere, ActBuild,
         };
 
         public static bool IsKnown(string name) => TryGet(name, out _);
@@ -92,6 +96,7 @@ namespace Worktown.Game.Dev
                 case WalkTour: tour = BuildWalk(); return true;
                 case CookTour: tour = BuildCook(); return true;
                 case TutorialTour: tour = BuildTutorial(); return true;
+                case BuildTour: tour = BuildBuild(); return true;
                 default: tour = null; return false;
             }
         }
@@ -346,6 +351,22 @@ namespace Worktown.Game.Dev
                 TourStep.View(ViewMode.FirstPerson),
             };
         }
+
+        /// <summary>
+        /// Spec 062b: the build tour: the observer films the kitchen from the street (its fixed camera across the front counter at the back
+        /// line); the tour player runs build mode's steps (BuildTourRunner) and opens the shop; a guest walks the rebuilt route.
+        /// </summary>
+        private static Tour BuildBuild()
+        {
+            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), Park, TourStep.WaitObserver(), TourStep.Act(ActBuild) };
+            var route = new List<Vector3>
+            {
+                new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(BuildObserverX, 0f, 7.8f)
+            };
+            return new Tour(BuildTour, steps, route, 0f, true, new Vector3(BuildObserverX, 2.6f, 9.0f), 0f, -16f, 4f, 420f);
+        }
+
+        private const float BuildObserverX = 7.4f; // the build tour's observer: across the counter from the back line's middle
 
         /// <summary>
         /// Spec 038: the tutorial tour: the cook tour's observer, and the tour player walks the tutorial's steps (Dev/TutorialSequence: the

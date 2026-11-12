@@ -55,6 +55,10 @@ MonoBehaviour:
     Prefab: {fileID: 4685417788306155817, guid: 8e66eb2a582705449b4817224cb67cad, type: 3}
   - TypeId: office_terminal
     Prefab: {fileID: 2208056896798606813, guid: 405c7a8c1fbfc1142b112365b54dd3b8, type: 3}
+  - TypeId: door_sign
+    Prefab: {fileID: 2228402524810606641, guid: cb15fefa3029c1b4aab66adb4bdac53a, type: 3}
+  - TypeId: storage_pallet
+    Prefab: {fileID: 177927672139035758, guid: 8b686d28530f25444807c439c54c48a5, type: 3}
   _items:
   - Kind: board
     Prefab: {fileID: 121300522431551966, guid: 5ab649aa09caa0343b6be6bc814128d3, type: 3}

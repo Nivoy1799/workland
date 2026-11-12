@@ -156,7 +156,92 @@ AC10 play-test; answer or accept the open questions.
 7. Claim timeout. [60 s without input]
 
 ## Implementation notes
-(Builder fills this in.)
+Built by the Opus builder on 2026-11-12 as **Part A** of the brief's split (move and turn with validation, undo, the save; the door,
+store and take out, the magnet), on spec/062b-build-mode after merging main with 059 (Revision 8, save v5). **Part B is not built**:
+rule 8 (`AttachRules`, "Attach it to a counter"), `CounterRunView` (hidden seams), AC5's seeded-generator coverage test, and AC8's
+"fries from the moved fryer are served" (the tour serves no dish).
+
+- **Wire (Revision 9, 059 took 8).** `BuildInteractor.RequestBuild(BuildIntent, int)` and `BuildAnswer(conn, int, byte)` (the byte
+  packs the outcome and a refused move's problem kind, `BuildDesk.Pack`), `ShopDoor.State`, `PieceBehaviour._claimedBySlot`. The
+  player prefab gains `BuildInteractor` as its **last** behaviour (the others keep their indexes); door_sign and storage_pallet are
+  new spawned pieces (DefaultPrefabObjects: main's order plus those two). A piece's `PosePacked` now changes while spawned (clients
+  re-apply on change). Slot = client id + 1.
+- **Server.** `BuildService` (added at runtime by `LayoutSpawner.Awake`, no scene change) gates every intent (rate limit, door
+  Closed, stage 0 or 2+, empty hands) and asks the pure `BuildDesk` (claims, `BuildSnap.Pose`, "no new problem" validation: problems
+  the layout already had do not count, store, take out, per-player `UndoHistory`, 60 s lapse). An undo that no longer fits is
+  refused **and kept** on the history (a later try can work). Opening the shop releases every claim, clears the histories and saves
+  once (`SaveTrigger.LayoutChanged`) if the layout changed.
+- **Items travel.** Items lying on a moved piece keep their pose in the piece's frame (`PickupService.ServerCarry`: same surface id
+  and spot). Loose floor items under the new footprint go to the nearest free walk-grid cell. A stored piece's items go to the
+  nearest free worktop spot (`ServerPutOnSpot`), else the floor. Held items are never touched.
+- **Store and take out (deviation).** Stored pieces are despawned; `ShopLayout` gains `StoredPieces` (records: type, length, the
+  pose they were stored from) because 062a's `Stored` ids lost the type. A taken-out piece spawns on the pallet, claimed, until it
+  is placed (or stored again / released: back into storage). The wheel on the pallet picks the n-th stored piece (the client cannot
+  see the stored list: no synced list, to keep AC7's lines).
+- **Pallet (deviation).** `storage_pallet` is a **Yard** row (the spec said Floor): the room has no free floor by the back door and
+  rule 1 keeps floor pieces inside. At (-0.9, 14.3) in the yard. The door sign is on the right side wall near the front at
+  (14.785, 12.80), facing the kitchen; `door_sign` is now `HasStation` (rule 4 checks it). Both added to default.json (ids 30, 31,
+  nextId 32) and to older saves by **save v6** (`V5ToV6`, `AddedInV6`).
+- **Snap.** Grid from the room's floor corner; a footprint poking out by at most one step is pushed back flush; wall pieces snap to
+  the wall; the magnet joins runs with `CounterRuns.JoinGapMm` = 50 (the default kitchen keeps 20-40 mm between modules, so its back
+  line and front counter are one run each). Without the magnet nothing in the off-grid default could be moved back into line.
+- **Clock.** `EconomyService.ClockHeld` (new, set by `CustomerService` from the door) stops the hours while closed at 08:00;
+  `Shift.OnClock(..., mayOpen)` opens no shift while Closed. The tour host starts Closed with `-tour-build` (dev builds only).
+- **062a review items.** Rule 4: a wall or overhead station is unreachable over a `Tall` floor piece (new `PieceDef.Tall`, the fridge
+  and the dry shelf). `LayoutReport` sorts by kind, piece, other (stable). `WalkGrid` refuses over 1M cells. `DefaultLayout.Band`
+  removed. `ServerBegin` tracks its items and despawns them on a re-begin (held ones stay). `NpcRoute.LeaveFrom(start)`: each
+  leaving guest gets its own grid path. The delivery spots follow the piece they lie on (`SupplyService`).
+- **Client.** `BuildModeView` (added to the owner by `BuildInteractor`): B / Esc / Ctrl+Z (fixed keys in `PlayerInputReader`), the
+  camera-centre aim, the ghost (`BuildGhost` over `PlacementGhost`, Mint / Terracotta with the reason, "Tight aisle" under 1.2 m),
+  the predicted move with a jump back and the nope sound on refusal. Prompts and refusals are IMGUI stand-ins until the HUD pass.
+  `PickupInteractor` idles in build mode. The door sign is pressed like the goal board (first person) or with E.
+- **Outside the listed files (same folders):** `EconomyService`, `KitchenService` (`StationIsOn`, the door press), `StationKind`,
+  `StationRules`, `ShopStageRules`, `InteractionRules`, `SupplyService`, `PickupService`, `ShopSave`, `SaveMigrations`, the art key and
+  catalog builder (the door sign's graybox), `GrayboxSceneBuilder` (one line), Dev `TourRules`/`TourRunner`.
+- **Checks (2026-11-12).** verify.sh green: EditMode 1650/1650, sim 892/892, gateway 216/216. BuildAll ok. `visual-check.sh --tours
+  look,cook,restaurant,build --out .verify/visual062b`: all ok, 0 Exception lines, 0 crash entries, 0 timeouts, 0 aim fallbacks; every
+  host "[Layout] spawned 31 pieces and 9 items". Build tour cells: 03 the worktop by stove 2 stored, 04 the Mint ghost of the other
+  worktop there, 05 it moved with its board and knife on it, 06-07 the stored one taken out to the fridge side, 08 the undo, 09 the
+  Terracotta ghost in the aisle ("Too close to the front counter: aisles need 0.9 m"), 10 the door opened, 11 a guest at the queue.
+- **Follow-ups.** Part B above; ChangeLog action 5 (059 reserved it for the door) is not used yet; the taken-out piece on the pallet
+  keeps its stations registered (usable while held); stored pieces lose their number ("Worktop" not "Worktop 3") when spawned again.
+
+### 062b review fixes
+Built 2026-11-12 on top of ef6cc8b.
+1. **The door sign cannot be stored** (`BuildDesk.NeverStored`: refused as Required); a test.
+2. **Tools of a stored worktop are re-homed.** `LayoutEdit` can carry the layout's new item homes (its inverse the old ones);
+   `BuildService` plans each home on the stored piece onto the nearest free worktop spot that is no other home, moves the tool there,
+   and an undo moves it back. Tests: the save round trip keeps every home on a placed piece; the undo restores the homes.
+3. **Items travel on the host.** `BuildService.Carry` starts from the piece's synced pose, not its transform; the host's client no
+   longer predicts its own move. The test drives the real `Carry` after a prediction.
+4. **One rate limit and spam kick** for both interactors: `Net/ServerRequestGate` (PickupInteractor's code moved there, not copied).
+5. **A piece taken out of storage is parked** (`PieceBehaviour.Parked`, from the synced pose over a pallet): its stations and surfaces
+   are not registered until it is placed; going back to storage moves its items off first. Heat (`StationIsOn`) is re-checked on a move
+   and an undo.
+6. A disconnect forgets the slot's history (`BuildService.ServerPlayerLeft`, tested through the service).
+7. The ghost is recomputed only when `LayoutRegistry.Version`, the held piece, its turns or its grid place change; the prompt only when
+   its words change.
+8. Items on a piece come from the spot table's surface id (the home items enter the spot table at spawn), not geometry.
+9. The clock hold is `ShopDoorRules.ClockHeld` (tested), used in both places in `CustomerService`.
+- Nits: take out skips fixed types; moves and undos use plain `Validate`; one walk grid per store; delivery spots fall back to their own
+  place (on the floor) while worktop 19 is stored; the 059 re-pin comment is back; the door is logged at the office terminal
+  (ChangeLog action 5: "Mira: closed the shop").
+- Not done: a host-side move in the build tour (the tour's host is the observer window; not cheap); the carry test covers the host case.
+- Checks: verify.sh green (EditMode 1658/1658, sim 893/893, gateway 216/216); BuildAll ok; `visual-check.sh --tours build,restaurant
+  --out .verify/visual062b2`: both ok, 0 Exception lines, 0 timeouts, 0 aim fallbacks.
+
+### 062b re-review fixes
+Built 2026-11-12 on top of 083baab.
+1. **Undo restores only its own homes.** A `LayoutEdit` carries `HomeChange` pairs (old, new), not the whole homes list; applying
+   replaces only the old homes still there, and the inverse swaps back only the changes that were made. The desk hands the world
+   the changes really made. Test: A stores one worktop, B another, A undoes: B's tools stay homed on a placed worktop.
+2. **Delivery boxes travel again.** `BuildService.OnPiece` (pure): spot-table items by their surface id, items not in the table
+   (delivery boxes) by the old footprint check. Tested.
+- Nits: a tool moves only when it is the home's kind (`KindOf`); `PeekUndo` and the `UseDoor()` overload are gone; `PlanHome` and
+  `MoveTools` (one function for a store and for its undo) are static and tested in the built scene; when the pallet registers on a
+  late joiner, every piece looks again whether it is parked.
+- Checks: verify.sh green (EditMode 1661/1661, sim 893/893, gateway 216/216); BuildAll ok; `visual-check.sh --tours build --out
+  .verify/visual062b3`: ok, 0 Exception lines, 0 timeouts ("Store piece 22 ... 2 item homes moved").
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

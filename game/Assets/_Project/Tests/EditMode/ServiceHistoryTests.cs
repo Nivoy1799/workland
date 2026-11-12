@@ -69,7 +69,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual("falafel_wrap", r.Save.office.special);
             Assert.AreEqual(Menu.FalafelWrap, SpecialRules.FromLineId(r.Save.office.special));
             CollectionAssert.AreEqual(history, SaveService.RecordsOf(r.Save.office));
-            Assert.AreEqual(5, r.Save.formatVersion);
+            Assert.AreEqual(6, r.Save.formatVersion); // spec 062b: v6
         }
 
         [Test]
@@ -99,10 +99,10 @@ namespace Worktown.Game.Tests
             ShopLayout without = standard.WithPieces(standard.Pieces.Where(p => p.TypeId != PieceCatalog.OfficeTerminal).ToList());
             v4.layout = LayoutCodec.ToPart(without);
             v4.office = new ShopSave.OfficePart { special = "falafel_wrap", history = new[] { new ShopSave.RecordPart { day = 3 } } };
-            string json = ShopSaveCodec.Default.ToJson(v4).Replace("\"formatVersion\": 5", "\"formatVersion\": 4");
+            string json = ShopSaveCodec.Default.ToJson(v4).Replace("\"formatVersion\": 6", "\"formatVersion\": 4");
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(json);
             Assert.IsTrue(r.Ok, r.Error.ToString());
-            Assert.AreEqual(5, r.Save.formatVersion);
+            Assert.AreEqual(6, r.Save.formatVersion); // spec 062b: v6
             Assert.AreEqual(string.Empty, r.Save.office.special, "a version 4 save had no office part: the empty defaults");
             CollectionAssert.IsEmpty(r.Save.office.history);
             ShopSave.PiecePart office = r.Save.layout.pieces.Single(p => p.type == PieceCatalog.OfficeTerminal);
@@ -110,15 +110,15 @@ namespace Worktown.Game.Tests
             Assert.AreEqual((model.XMm, model.ZMm), (office.xMm, office.zMm), "at its default place (free)");
             Assert.AreEqual(without.NextId, office.id, "a new id");
             CollectionAssert.AreEqual(new[] { PieceCatalog.OfficeTerminal }, SaveMigrations.AddedInV5.ToArray());
-            Assert.AreEqual(5, ShopSaveCodec.Default.Version);
+            Assert.AreEqual(6, ShopSaveCodec.Default.Version); // spec 062b: v6
         }
 
         [Test]
         public void Version99_IsNewer()
         {
-            string json = ShopSaveCodec.Default.ToJson(ShopSaveCodecTests.Full()).Replace("\"formatVersion\": 5", "\"formatVersion\": 99");
+            string json = ShopSaveCodec.Default.ToJson(ShopSaveCodecTests.Full()).Replace("\"formatVersion\": 6", "\"formatVersion\": 99");
             Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(json).Error);
-            string v6 = ShopSaveCodec.Default.ToJson(ShopSaveCodecTests.Full()).Replace("\"formatVersion\": 5", "\"formatVersion\": 6");
+            string v6 = ShopSaveCodec.Default.ToJson(ShopSaveCodecTests.Full()).Replace("\"formatVersion\": 6", "\"formatVersion\": 7");
             Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(v6).Error);
             Assert.IsNotNull(JsonUtility.FromJson<ShopSave>("{}").office, "a part that always exists");
         }

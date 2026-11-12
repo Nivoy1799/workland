@@ -232,6 +232,8 @@ namespace Worktown.Game.Tests
             Assert.AreSame(text, ControlsHelp.Text(defaults), "built once");
             foreach (string word in new[] { "V: first", "WASD: walk", "Left Shift: run", "C: sneak", "Space: jump", "Tab: who" })
                 StringAssert.Contains(word, text);
+            foreach (string word in new[] { "B (shop closed): build mode", "Ctrl+Z: undo" }) // spec 062b AC11
+                StringAssert.Contains(word, text);
         }
 
         [Test]
