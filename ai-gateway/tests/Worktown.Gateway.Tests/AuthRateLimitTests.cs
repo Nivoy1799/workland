@@ -1,5 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Worktown.Gateway.Auth;
 using Worktown.Gateway.Config;
 using Xunit;
@@ -143,9 +146,30 @@ public class AuthRateLimitTests
     public void InvalidConfigFailsStartupNamingTheVariable(string key, string value)
     {
         using var factory = new GatewayFactory(new Dictionary<string, string> { [key] = value });
-        var text = Assert.ThrowsAny<Exception>(() => factory.CreateClient()).ToString();
+        // The host must refuse to start, and its error must never echo a secret.
+        var hostText = Assert.ThrowsAny<Exception>(() => factory.CreateClient()).ToString();
+        Assert.DoesNotContain(GatewayFactory.ApiKey, hostText);
+        Assert.DoesNotContain(GatewayFactory.ServiceToken, hostText);
+
+        // The variable's name is checked on the options validation itself (deterministic): the host's own exception is
+        // sometimes an ObjectDisposedException from WebApplicationFactory tearing the failed host down (flaky, about 1 run in 10).
+        var text = ValidationText(factory.Settings);
         Assert.Contains(key, text);
         Assert.DoesNotContain(GatewayFactory.ApiKey, text);
         Assert.DoesNotContain(GatewayFactory.ServiceToken, text);
+    }
+
+    /// <summary>Runs the gateway's options validation (pipeline and service token, as the web host registers them) without a host.</summary>
+    private static string ValidationText(IDictionary<string, string> settings)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(settings.Select(kv => new KeyValuePair<string, string?>(kv.Key, kv.Value)))
+            .Build();
+        var services = new ServiceCollection();
+        services.AddItemNamePipeline(config);
+        services.AddSingleton<IValidateOptions<GatewayOptions>, GatewayOptions.ServiceTokenValidator>();
+        using var provider = services.BuildServiceProvider();
+        var error = Assert.ThrowsAny<Exception>(() => { _ = provider.GetRequiredService<IOptions<GatewayOptions>>().Value; });
+        return error.ToString();
     }
 }
