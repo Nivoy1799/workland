@@ -37,11 +37,11 @@ namespace Worktown.Game.Shop
         [SerializeField] private NetworkObject _dirtyDishPrefab;
         [Tooltip("A full trash bag (a pickup with a TrashBag); registered in DefaultPrefabObjects.")]
         [SerializeField] private NetworkObject _trashBagPrefab;
-        [Tooltip("The stations whose byte this service publishes.")]
-        [SerializeField] private Station _plateShelf;
-        [SerializeField] private Station _dishReturn;
-        [SerializeField] private Station _sink;
-        [SerializeField] private Station _trashCan;
+        // The stations whose byte this service publishes (spec 062a: the first of each kind in the LayoutRegistry).
+        private static Station PlateShelf => Worktown.Game.Layout.LayoutRegistry.First(StationKind.PlateShelf);
+        private static Station DishReturn => Worktown.Game.Layout.LayoutRegistry.First(StationKind.DishReturn);
+        private static Station SinkStation => Worktown.Game.Layout.LayoutRegistry.First(StationKind.Sink);
+        private static Station TrashCan => Worktown.Game.Layout.LayoutRegistry.First(StationKind.TrashCan);
 
         private const float LostCheckInterval = 0.5f;
 
@@ -143,10 +143,11 @@ namespace Worktown.Game.Shop
         /// <summary>Sends the bytes (each only sends a change).</summary>
         private void Publish()
         {
-            SetByte(_plateShelf, CleaningRules.CountByte(_room.Dishes.Clean));
-            SetByte(_dishReturn, CleaningRules.CountByte(_room.Dishes.AtReturn));
-            SetByte(_sink, CleaningRules.SinkByte(_room.Dishes.InBasin, _sink != null && _room.IsHeld(_sink.Index, CleaningRules.HoldScrub)));
-            SetByte(_trashCan, CleaningRules.CountByte(_room.TrashFill));
+            SetByte(PlateShelf, CleaningRules.CountByte(_room.Dishes.Clean));
+            SetByte(DishReturn, CleaningRules.CountByte(_room.Dishes.AtReturn));
+            Station sink = SinkStation;
+            SetByte(sink, CleaningRules.SinkByte(_room.Dishes.InBasin, sink != null && _room.IsHeld(sink.Id, CleaningRules.HoldScrub)));
+            SetByte(TrashCan, CleaningRules.CountByte(_room.TrashFill));
             if (_hygiene != null) _hygiene.ServerSet(_room.Hygiene);
         }
 
@@ -277,22 +278,22 @@ namespace Worktown.Game.Shop
 
         private CookOutcome StartScrub(PickupInteractor player, Station sink)
         {
-            bool busy = _room.IsHeld(sink.Index, CleaningRules.HoldScrub, out int owner, out _) && owner != player.OwnerId;
-            bool mine = _room.IsHeld(sink.Index, CleaningRules.HoldScrub, out owner, out _) && owner == player.OwnerId;
+            bool busy = _room.IsHeld(sink.Id, CleaningRules.HoldScrub, out int owner, out _) && owner != player.OwnerId;
+            bool mine = _room.IsHeld(sink.Id, CleaningRules.HoldScrub, out owner, out _) && owner == player.OwnerId;
             if (!mine)
             {
                 CookOutcome can = CleaningRules.CanScrub(_pickups.TryGetHeld(player, out _), _room.Dishes.InBasin, busy);
                 if (can != CookOutcome.Ok) return can;
             }
-            CookOutcome pressed = _room.Press(sink.Index, CleaningRules.HoldScrub, player.OwnerId, Tick); // 031b: a re-press keeps its start
-            if (pressed == CookOutcome.Ok) _holders[CleaningRoom.KeyOf(sink.Index, CleaningRules.HoldScrub)] = player;
+            CookOutcome pressed = _room.Press(sink.Id, CleaningRules.HoldScrub, player.OwnerId, Tick); // 031b: a re-press keeps its start
+            if (pressed == CookOutcome.Ok) _holders[CleaningRoom.KeyOf(sink.Id, CleaningRules.HoldScrub)] = player;
             return pressed;
         }
 
         private CookOutcome StopScrub(PickupInteractor player, Station sink)
         {
-            long key = CleaningRoom.KeyOf(sink.Index, CleaningRules.HoldScrub);
-            CookOutcome released = _room.Release(sink.Index, CleaningRules.HoldScrub, player.OwnerId, Tick, TickRate, out bool done);
+            long key = CleaningRoom.KeyOf(sink.Id, CleaningRules.HoldScrub);
+            CookOutcome released = _room.Release(sink.Id, CleaningRules.HoldScrub, player.OwnerId, Tick, TickRate, out bool done);
             if (_room.OwnerOf(key) < 0) _holders.Remove(key);
             if (released == CookOutcome.Ok && done) FinishScrub(player);
             return released;
@@ -372,24 +373,24 @@ namespace Worktown.Game.Shop
         public CookOutcome Wipe(PickupInteractor player, Station dispenser, int option)
         {
             if (player == null || dispenser == null || _kitchen == null) return CookOutcome.UnknownStation;
-            long key = CleaningRoom.KeyOf(dispenser.Index, CleaningRules.HoldWipe);
+            long key = CleaningRoom.KeyOf(dispenser.Id, CleaningRules.HoldWipe);
             CookOutcome outcome;
             if (option == CleaningRules.WipeStartOption)
             {
                 bool mine = _room.OwnerOf(key) == player.OwnerId;
                 outcome = mine ? CookOutcome.Ok
-                    : CleaningRules.CanWipe(_kitchen.HoldsCloth(player), _kitchen.HasSpill(dispenser.Index), _room.OwnerOf(key) >= 0);
-                if (outcome == CookOutcome.Ok) outcome = _room.Press(dispenser.Index, CleaningRules.HoldWipe, player.OwnerId, Tick);
+                    : CleaningRules.CanWipe(_kitchen.HoldsCloth(player), _kitchen.HasSpill(dispenser.Id), _room.OwnerOf(key) >= 0);
+                if (outcome == CookOutcome.Ok) outcome = _room.Press(dispenser.Id, CleaningRules.HoldWipe, player.OwnerId, Tick);
                 if (outcome == CookOutcome.Ok) _holders[key] = player;
             }
             else if (option == CleaningRules.WipeStopOption)
             {
-                outcome = _room.Release(dispenser.Index, CleaningRules.HoldWipe, player.OwnerId, Tick, TickRate, out bool done);
+                outcome = _room.Release(dispenser.Id, CleaningRules.HoldWipe, player.OwnerId, Tick, TickRate, out bool done);
                 if (_room.OwnerOf(key) < 0) _holders.Remove(key);
-                if (outcome == CookOutcome.Ok && done) FinishWipe(player, dispenser.Index);
+                if (outcome == CookOutcome.Ok && done) FinishWipe(player, dispenser.Id);
             }
             else outcome = CookOutcome.InvalidOption;
-            _kitchen.RefreshDispenser(dispenser.Index);
+            _kitchen.RefreshDispenser(dispenser.Id);
             return outcome;
         }
 

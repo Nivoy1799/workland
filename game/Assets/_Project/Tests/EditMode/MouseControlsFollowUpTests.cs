@@ -13,7 +13,7 @@ namespace Worktown.Game.Tests
     /// </summary>
     public class MouseControlsFollowUpTests
     {
-        private const int Surface = 2;
+        private const int Surface = (1 << Worktown.Game.Layout.SurfaceId.LocalBits) | 2; // spec 062a: a surface id (piece 1, local 2)
 
         [Test]
         public void RightClickRay_StopsAtAStationsBody_ButNotAtItsOwnTopOrAtCookware()
@@ -103,7 +103,7 @@ namespace Worktown.Game.Tests
                 go.transform.SetPositionAndRotation(new Vector3(2f, 0f, 3f), Quaternion.Euler(0f, 30f, 0f));
                 var surface = go.AddComponent<PlaceSurface>();
                 var so = new UnityEditor.SerializedObject(surface);
-                so.FindProperty("_index").intValue = Surface;
+                TestPieces.Attach(go, surface, Surface); // spec 062a: the surface is part of a piece
                 so.FindProperty("_size").vector2Value = new Vector2(1f, 0.6f); // 4 columns, 2 rows
                 so.FindProperty("_topY").floatValue = 0.9f;
                 so.ApplyModifiedPropertiesWithoutUndo();
@@ -166,7 +166,7 @@ namespace Worktown.Game.Tests
             {
                 var surface = go.AddComponent<PlaceSurface>();
                 var so = new UnityEditor.SerializedObject(surface);
-                so.FindProperty("_index").intValue = Surface;
+                TestPieces.Attach(go, surface, Surface); // spec 062a: the surface is part of a piece
                 so.FindProperty("_size").vector2Value = new Vector2(1f, 0.6f); // 4 columns, 2 rows
                 so.FindProperty("_topY").floatValue = 0.9f;
                 so.ApplyModifiedPropertiesWithoutUndo();

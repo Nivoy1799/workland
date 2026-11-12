@@ -9,8 +9,8 @@ namespace Worktown.Game.Tests
     /// <summary>
     /// Review of spec 027c: the serve feed's synced surface is pinned like FoodLookSurfaceTests pins Food and Vessel. ServeFeed
     /// syncs exactly two members (the feed lines and the last reward), and ServeReward has exactly the five fields the
-    /// reward moment shows (serial, counter, stars, paid, tip), no float and no quality (D21). By reflection, so this test
-    /// assembly needs no FishNet reference.
+    /// reward moment shows (serial, counter, stars, paid, tip), no float and no quality (D21). By reflection, so the
+    /// test does not depend on FishNet's types.
     /// </summary>
     public class ServeSurfaceTests
     {

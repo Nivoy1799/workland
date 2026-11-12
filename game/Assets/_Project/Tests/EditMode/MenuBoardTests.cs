@@ -328,7 +328,7 @@ namespace Worktown.Game.Tests
                 + "\"stats\":{\"guestsServed\":17,\"guestsMissed\":1,\"starSum\":70,\"bestServiceEarned\":2876}}";
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(v1);
             Assert.IsTrue(r.Ok, r.Error.ToString());
-            Assert.AreEqual(2, r.Save.formatVersion);
+            Assert.AreEqual(3, r.Save.formatVersion); // spec 062a: then v2 to v3 (the layout)
             Assert.AreEqual(15000, r.Save.money.balance, "$17,250 of the old scale is $150.00: half the $300.00 goal, as before ($34,500)");
             Assert.AreEqual(20000, r.Save.money.earnedTotal);
             Assert.AreEqual(7500, r.Save.money.spentTotal);
@@ -378,14 +378,14 @@ namespace Worktown.Game.Tests
                 "sync Worktown.Game.Shop.MenuBoard.Selected:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>",
             }, lines.Where(l => l.Contains("Worktown.Game.Shop.MenuBoard.")).ToList(), "no RPC: two synced fields");
             Assert.Contains("sync Worktown.Game.Shop.Register.Tray:FishNet.Object.Synchronizing.SyncVar`1<System.UInt16>", lines);
-            Assert.Contains("revision 5", lines); // spec 054b bumped it (the collision mode byte)
+            Assert.Contains("revision 6", lines); // spec 062a, then spec 054b: Revision + 1 each
             Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
         }
 
         [Test]
         public void BuiltScene_HasTheMenuBoard_AboveTheCounter_WiredToTheEconomy()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<Component> boards = VesselTestKit.AllOf(scene, typeof(MenuBoard));
@@ -395,10 +395,10 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(MenuBoardRules.OptionCount, station.SlotCount);
                 Assert.IsNotNull(boards[0].GetComponent<MenuBoardView>());
                 List<Component> economies = VesselTestKit.AllOf(scene, typeof(EconomyService));
-                Assert.AreSame(boards[0], new SerializedObject(economies[0]).FindProperty("_menuBoard").objectReferenceValue);
-                List<Component> kitchens = VesselTestKit.AllOf(scene, typeof(KitchenService));
-                SerializedProperty list = new SerializedObject(kitchens[0]).FindProperty("_stations");
-                Assert.AreSame(station, list.GetArrayElementAtIndex(station.Index).objectReferenceValue, "the board is station " + station.Index);
+                Assert.AreEqual(1, economies.Count);
+                // Spec 062a: the economy and the kitchen find the board in the LayoutRegistry (it is a spawned piece, no scene reference).
+                Assert.AreSame(station, Worktown.Game.Layout.LayoutRegistry.First(StationKind.MenuBoard), "the economy's menu board");
+                Assert.AreSame(station, Worktown.Game.Layout.LayoutRegistry.Station(station.Id), "the board is station " + station.Id);
                 Station serving = VesselTestKit.AllOf(scene, typeof(Station)).Cast<Station>().Single(s => s.Kind == StationKind.Counter);
                 for (int option = 0; option < MenuBoardRules.OptionCount; option++)
                 {
@@ -412,7 +412,7 @@ namespace Worktown.Game.Tests
             }
             finally
             {
-                EditorSceneManager.CloseScene(scene, true);
+                LayoutScene.Close(scene);
             }
         }
 

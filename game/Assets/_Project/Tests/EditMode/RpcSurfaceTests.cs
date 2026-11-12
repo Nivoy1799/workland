@@ -11,7 +11,7 @@ namespace Worktown.Game.Tests
     /// <summary>
     /// Spec 016 AC5: no cooking ServerRpc sends a temperature, a time, an amount, a text or an item from
     /// the client. Clients send intents (station index, option), the server decides. Found by attribute
-    /// name, so this test assembly needs no FishNet reference.
+    /// name, so it does not depend on FishNet's types.
     /// </summary>
     public class RpcSurfaceTests
     {

@@ -70,19 +70,17 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
-29. **Art direction v2, from your Blender session** (the Blender session reports that you confirmed S3, P1 and wear
-    following the revival there; say "yes" here and I fold it into docs/art-direction.md) (docs/art-direction-v2.md at a7ce5cd; it goes with question 28).
-    When approved, it replaces the look sections of docs/art-direction.md. Scale (D29), characters (D30) and motion
-    (D31) stay. Its proposals:
-    - **shapes S3:** soft inside, streamline outside;
-    - **palette P1** with a contrast fix, plus light, neon, Low Ring and Dome colours (this revises D32);
-    - **wear follows the revival:** rough at level 0, lived-in at level 3, never spotless;
-    - the four revival looks as swap lists, and light moods;
-    - no outline shader in the game: the ink lines are concept art only;
-    - next in the lab: the same street at levels 0 to 3, side by side.
+30. **The Dome is a little too small (spec 064, merged).** An oval of 770 x 640 m cannot hold the corners of the
+    640 x 480 m play area; the corners stick out through the glass. Options:
+    - **A (default for now in the simulation):** 930 x 770 m. It fits, but leaves a wide strip of about 145 m between
+      the town edge and the glass.
+    - **B (recommended):** a "superellipse" foot of about 810 x 620 m, an oval with fuller corners. It still looks
+      organic, because the round crown carries the shape.
+    - **D (your Blender session's idea):** keep the planned 770 x 640 m oval and round off the play area's corners.
+      They hold only hills, the canyon and the lake, with no pitches or places, so nothing is lost, and the strip to
+      the glass stays the smallest.
 
-    Default: approve with S3, P1 and wear following the revival. You can answer here or in the Blender session; I
-    merge it together with the town plan.
+    All of them keep the bulkhead, the water gate and the tunnel door in the wall.
 27. **Do good reviews unlock extra dishes?** The old spec 037 said: "the better your shop's rating, the more dishes you
     may put on the menu over the days". But the food corner (stage 1) has exactly one dish, fries, and new dishes come
     with the next stage (spec 057: 4 dishes in your first restaurant). So the question is how new dishes arrive:
@@ -211,6 +209,7 @@ every question has a default, and work continues on other items until you answer
   picking things up, and write here which one feels better (or just "A" / "B"). No explanation needed.
 
 ## Answered
+- **2026-11-11, question 29 (art direction v2):** confirmed S3, P1 and wear following the revival (D49-D51); folded into docs/art-direction.md.
 - **2026-11-11 night, question 28 (town plan):** approved "for now, a good starting point" (D41-D47), with the plan's
   defaults for its own open questions; your framing (climate change, vegan out of need, the collapse, exploring outside
   later) is in docs/town-story.md. Question 23 reversed: players block each other (D48, spec 054b).

@@ -21,10 +21,10 @@ namespace Worktown.Game.Npc
         // a snack Sage, a drink SoftBlue, an unknown wish Cream.
         // Spec 026: label colours by mood from the palette.
         private static readonly Color TicketColor = Palette.Cream;
-        private static readonly Color HappyColor = Palette.Sage;
+        private static readonly Color HappyColor = Palette.Ground;
         private static readonly Color OkColor = Palette.Mustard;
         private static readonly Color UnhappyColor = Palette.Terracotta;
-        private static readonly Color MissedColor = Palette.Steel;
+        private static readonly Color MissedColor = Palette.Chrome;
         /// <summary>Spec 024: how far the character's colours are pulled towards the wish colour (0 = none).</summary>
         public const float TintStrength = 0.4f;
         /// <summary>Spec 027a: how fast a customer at its slot turns to face the counter (degrees per second).</summary>
@@ -235,8 +235,8 @@ namespace Worktown.Game.Npc
             switch (wish)
             {
                 case "meal": return Palette.Mustard;
-                case "snack": return Palette.Sage;
-                case "drink": return Palette.SoftBlue;
+                case "snack": return Palette.Ground;
+                case "drink": return Palette.Sky;
                 default: return Palette.Cream;
             }
         }

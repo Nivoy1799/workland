@@ -1,0 +1,333 @@
+{
+    "version": 1,
+    "pieces": [
+        {
+            "id": 1,
+            "type": "shelf_dry",
+            "xMm": 2360,
+            "zMm": 14650,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 2,
+            "type": "fridge",
+            "xMm": 3600,
+            "zMm": 14590,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 3,
+            "type": "stove",
+            "xMm": 7480,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 4,
+            "type": "stove",
+            "xMm": 8720,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 5,
+            "type": "serving_counter",
+            "xMm": 11640,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 6,
+            "type": "plate_shelf",
+            "xMm": 11640,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 7,
+            "type": "fryer",
+            "xMm": 6440,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 8,
+            "type": "griddle",
+            "xMm": 5490,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 9,
+            "type": "assembly",
+            "xMm": 10550,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 10,
+            "type": "register_module",
+            "xMm": 12790,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 11,
+            "type": "dispenser_module",
+            "xMm": 10490,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 12,
+            "type": "terminal",
+            "xMm": 1110,
+            "zMm": 14910,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 13,
+            "type": "dish_return_module",
+            "xMm": 13790,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 14,
+            "type": "sink",
+            "xMm": 12880,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 15,
+            "type": "trash",
+            "xMm": 760,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 16,
+            "type": "bin",
+            "xMm": -2000,
+            "zMm": 13400,
+            "turns": 3,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 17,
+            "type": "spit_module",
+            "xMm": 8100,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 18,
+            "type": "menu_board",
+            "xMm": 12215,
+            "zMm": 12100,
+            "turns": 2,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 19,
+            "type": "worktop",
+            "xMm": 1110,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 1260,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 20,
+            "type": "worktop",
+            "xMm": 4590,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 740,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 21,
+            "type": "worktop",
+            "xMm": 14150,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 1260,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 22,
+            "type": "worktop",
+            "xMm": 9710,
+            "zMm": 14300,
+            "turns": 0,
+            "lengthMm": 740,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 23,
+            "type": "front_counter",
+            "xMm": 4420,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 6760,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 24,
+            "type": "front_counter",
+            "xMm": 9225,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 1650,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 25,
+            "type": "front_counter",
+            "xMm": 13390,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 160,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 26,
+            "type": "front_counter",
+            "xMm": 14445,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 670,
+            "tier": 1,
+            "paidCents": 0
+        },
+        {
+            "id": 27,
+            "type": "front_counter",
+            "xMm": 10975,
+            "zMm": 11850,
+            "turns": 2,
+            "lengthMm": 90,
+            "tier": 1,
+            "paidCents": 0
+        }
+    ],
+    "stored": [],
+    "homes": [
+        {
+            "item": "bowl",
+            "piece": 21,
+            "local": 0,
+            "spot": 6
+        },
+        {
+            "item": "board",
+            "piece": 20,
+            "local": 0,
+            "spot": 4
+        },
+        {
+            "item": "knife",
+            "piece": 20,
+            "local": 0,
+            "spot": 11
+        },
+        {
+            "item": "pan",
+            "piece": 3,
+            "local": 1,
+            "spot": 0
+        },
+        {
+            "item": "plate",
+            "piece": 22,
+            "local": 0,
+            "spot": 3
+        },
+        {
+            "item": "plate",
+            "piece": 22,
+            "local": 0,
+            "spot": 5
+        },
+        {
+            "item": "pot",
+            "piece": 4,
+            "local": 1,
+            "spot": 0
+        },
+        {
+            "item": "spatula",
+            "piece": 8,
+            "local": 0,
+            "spot": 7
+        },
+        {
+            "item": "cloth",
+            "piece": 14,
+            "local": 0,
+            "spot": 3
+        }
+    ],
+    "nextId": 28
+}

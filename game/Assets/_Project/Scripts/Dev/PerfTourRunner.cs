@@ -107,7 +107,7 @@ namespace Worktown.Game.Dev
             yield return new WaitForSecondsRealtime(SettleSeconds);
 
             var stations = new List<Station>(FindObjectsByType<Station>(FindObjectsSortMode.None));
-            stations.Sort((a, b) => a.Index.CompareTo(b.Index));
+            stations.Sort((a, b) => a.Id.CompareTo(b.Id));
             Vector3 centre = Vector3.zero;
             foreach (Station s in stations) centre += s.transform.position;
             if (stations.Count > 0) centre /= stations.Count;
@@ -131,7 +131,7 @@ namespace Worktown.Game.Dev
                 _measuring = false;
                 players = _net.IsServerStarted ? _net.ServerManager.Clients.Count : 0;
                 PerfStats.Summary sum = PerfStats.Summarize(_frames, _gc);
-                lines.Add(PerfStats.Line(station.DisplayName, station.Kind.ToString(), station.Index, players, sum));
+                lines.Add(PerfStats.Line(station.DisplayName, station.Kind.ToString(), station.Id, players, sum));
                 Debug.Log("[Perf] station " + (i + 1) + "/" + stations.Count + " " + station.DisplayName + ": avg " + sum.AvgMs.ToString("0.00")
                     + " ms, p95 " + sum.P95Ms.ToString("0.00") + ", p99 " + sum.P99Ms.ToString("0.00") + ", GC "
                     + sum.GcBytesPerFrame.ToString("0") + " B/frame, " + sum.Frames + " frames");

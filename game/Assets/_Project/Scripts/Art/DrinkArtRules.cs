@@ -95,7 +95,7 @@ namespace Worktown.Game.Art
                 case 0: return Palette.FoodLemonade;
                 case 1: return Palette.FoodIcedTea;
                 case 2: return Palette.FoodSoda;
-                default: return Palette.SoftBlue;
+                default: return Palette.Sky;
             }
         }
 

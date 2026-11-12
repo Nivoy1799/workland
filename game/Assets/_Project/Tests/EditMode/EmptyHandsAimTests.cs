@@ -37,7 +37,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void EmptyHands_AtThePlateShelfCentre_TakeAPlate()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 Component picked = AimFromTheAisle(scene, "Plates front", out Component withFullHands);
@@ -48,13 +48,13 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(InteractionAction.Take,
                     InteractionRules.ActionFor(Held.Nothing, AimTarget.CleaningStation(StationKind.PlateShelf, 0, 3, true)), "take a plate");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]
         public void EmptyHands_AtTheSinkFront_GetTheSinksAction()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 Component picked = AimFromTheAisle(scene, "Sink front", out Component withFullHands);
@@ -67,7 +67,7 @@ namespace Worktown.Game.Tests
                     InteractionRules.ActionFor(Held.Nothing, AimTarget.CleaningStation(StationKind.Sink, option, CleaningRules.SinkByte(1, false), true)),
                     "a dirty plate in the sink: hold to scrub");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         /// <summary>
@@ -102,12 +102,12 @@ namespace Worktown.Game.Tests
                 {
                     case AimHitClass.Surface:
                         var surface = (PlaceSurface)source;
-                        hits.Add(AimHit.Spot(h.distance, surface.SpotWorldPosition(0), surface.Index, 0));
+                        hits.Add(AimHit.Spot(h.distance, surface.SpotWorldPosition(0), surface.Id, 0));
                         sources.Add(surface);
                         break;
                     case AimHitClass.Button:
                         var button = (StationButton)source;
-                        hits.Add(AimHit.Button(h.distance, button.Station.transform.position, button.Station.Index, button.Option));
+                        hits.Add(AimHit.Button(h.distance, button.Station.transform.position, button.Station.Id, button.Option));
                         sources.Add(button.Station);
                         break;
                     case AimHitClass.Station:

@@ -49,10 +49,17 @@ namespace Worktown.Game.Npc
         [SerializeField] private Vector3 _queueFacing = Vector3.zero;
         [Tooltip("Spec 022: the ticket rail above the counter (orders and shift numbers for every client).")]
         [SerializeField] private TicketRailView _rail;
-        [Tooltip("Spec 032: the register's synced state (the head payer and the change tray).")]
-        [SerializeField] private Register _register;
-        [Tooltip("Spec 032: the register's station (its index for the reward moment over it).")]
-        [SerializeField] private Station _registerStation;
+        // Spec 032: the register's station (its id for the reward moment over it) and its synced state (the head payer and the change
+        // tray); spec 062a: the first register in the LayoutRegistry.
+        private static Station RegisterStation => Worktown.Game.Layout.LayoutRegistry.First(StationKind.Register);
+        private static Register RegisterNow
+        {
+            get
+            {
+                Station station = RegisterStation;
+                return station != null ? station.GetComponent<Register>() : null;
+            }
+        }
         [Tooltip("Spec 032: where the first paying guest stands, in front of the register.")]
         [SerializeField] private Transform _payHead;
         [Tooltip("Spec 032: the line of paying guests runs this way from the pay spot.")]
@@ -539,7 +546,7 @@ namespace Worktown.Game.Npc
 
             public void Reward(int stars, long paid, long tip)
             {
-                if (_s._feed != null) _s._feed.ServerReward(_s._registerStation != null ? _s._registerStation.Index : 0, stars, paid, tip);
+                if (_s._feed != null) _s._feed.ServerReward(RegisterStation != null ? RegisterStation.Id : 0, stars, paid, tip);
             }
 
             public void Log(string line) => Debug.Log(line);
@@ -779,9 +786,10 @@ namespace Worktown.Game.Npc
         /// <summary>Spec 032: the register's head payer and tray for every client.</summary>
         private void PublishRegister()
         {
-            if (_register == null || !_register.IsSpawned) return;
+            Register register = RegisterNow;
+            if (register == null || !register.IsSpawned) return;
             RegisterPayment head = Flow.Desk.Head;
-            _register.ServerSet(RegisterRules.PackPayment(head != null, head != null && head.Card, head != null ? head.ChangeDue : 0),
+            register.ServerSet(RegisterRules.PackPayment(head != null, head != null && head.Card, head != null ? head.ChangeDue : 0),
                 head != null ? head.Tray : 0);
         }
     }

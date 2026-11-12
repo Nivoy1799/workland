@@ -12,7 +12,7 @@ namespace Worktown.Game.Tests
     /// </summary>
     public class PlaceServiceTests
     {
-        private const int Surface = 2;
+        private const int Surface = (1 << Worktown.Game.Layout.SurfaceId.LocalBits) | 2; // spec 062a: a surface id (piece 1, local 2)
         private const int SpotCount = 8;
         private const int Knife = 40;
         private const int Potato = 41;
@@ -101,7 +101,7 @@ namespace Worktown.Game.Tests
                 go.transform.SetPositionAndRotation(new Vector3(2f, 0f, 3f), Quaternion.Euler(0f, 30f, 0f));
                 var surface = go.AddComponent<PlaceSurface>();
                 var so = new UnityEditor.SerializedObject(surface);
-                so.FindProperty("_index").intValue = Surface;
+                TestPieces.Attach(go, surface, Surface); // spec 062a: the surface is part of a piece
                 so.FindProperty("_size").vector2Value = new Vector2(1f, 0.6f);
                 so.FindProperty("_topY").floatValue = 0.9f;
                 so.ApplyModifiedPropertiesWithoutUndo();

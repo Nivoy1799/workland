@@ -220,8 +220,8 @@ namespace Worktown.Game.Editor
         /// </summary>
         private static readonly (string Material, string Palette)[] FurnitureRecolours =
         {
-            ("wood", nameof(Palette.WoodLight)), ("woodDark", nameof(Palette.WoodDark)), ("metal", nameof(Palette.Steel)),
-            ("metalMedium", nameof(Palette.Steel)), ("metalDark", nameof(Palette.Charcoal)), ("carpetWhite", nameof(Palette.Cream))
+            ("wood", nameof(Palette.WoodLight)), ("woodDark", nameof(Palette.WoodDark)), ("metal", nameof(Palette.Chrome)),
+            ("metalMedium", nameof(Palette.Chrome)), ("metalDark", nameof(Palette.Charcoal)), ("carpetWhite", nameof(Palette.Cream))
         };
 
         private static Def Character(ArtKey key, string skin) =>
@@ -929,8 +929,8 @@ namespace Worktown.Game.Editor
             {
                 const float d = StockArt.FridgeDepth;
                 Material shell = GrayboxMaterial("Fridge", Palette.Cream);
-                Material inside = GrayboxMaterial("FridgeInside", Palette.SoftBlue);
-                Material steel = GrayboxMaterial("Steel", Palette.Steel);
+                Material inside = GrayboxMaterial("FridgeInside", Palette.Sky);
+                Material steel = GrayboxMaterial("Steel", Palette.Chrome);
                 Material seam = GrayboxMaterial("Seam", Palette.Charcoal);
                 float open = StockArt.FridgeDrawerTop, header = StockArt.FridgeHeaderBottom;
                 Box(cabinet, "Back", new Vector3(0f, h * 0.5f, -d * 0.5f + t * 0.5f), new Vector3(w, h, t), shell);
@@ -996,8 +996,8 @@ namespace Worktown.Game.Editor
         {
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
-            Material steel = GrayboxMaterial("Steel", Palette.Steel);
-            Material panel = GrayboxMaterial("FryerPanel", Palette.Shade(Palette.Steel, 0.78f));
+            Material steel = GrayboxMaterial("Steel", Palette.Chrome);
+            Material panel = GrayboxMaterial("FryerPanel", Palette.Shade(Palette.Chrome, 0.78f));
             Material oil = GrayboxMaterial("FryerOil", Color.Lerp(Palette.Mustard, Palette.WoodDark, 0.4f));
             Material dark = GrayboxMaterial("FryerDark", Palette.Charcoal);
             const float w = FryerArt.Width, d = FryerArt.Depth, h = FryerArt.Height, floor = FryerArt.WellFloor;
@@ -1039,9 +1039,9 @@ namespace Worktown.Game.Editor
         {
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
-            Material steel = GrayboxMaterial("Steel", Palette.Steel);
-            Material panel = GrayboxMaterial("FryerPanel", Palette.Shade(Palette.Steel, 0.78f));
-            Material plate = GrayboxMaterial("GriddlePlate", Color.Lerp(Palette.Charcoal, Palette.Steel, 0.3f));
+            Material steel = GrayboxMaterial("Steel", Palette.Chrome);
+            Material panel = GrayboxMaterial("FryerPanel", Palette.Shade(Palette.Chrome, 0.78f));
+            Material plate = GrayboxMaterial("GriddlePlate", Color.Lerp(Palette.Charcoal, Palette.Chrome, 0.3f));
             Material dark = GrayboxMaterial("FryerDark", Palette.Charcoal);
             const float w = GriddleArtRules.Width, d = GriddleArtRules.Depth, h = GriddleArtRules.PlateTop, t = GriddleArtRules.PlateThickness;
             float Z(float stationZ) => -stationZ; // the wrapper's front is +Z
@@ -1073,7 +1073,7 @@ namespace Worktown.Game.Editor
             Material wood = GrayboxMaterial("AssemblyWood", Palette.WoodLight);
             Material dark = GrayboxMaterial("AssemblyWoodDark", Palette.WoodDark);
             Material board = GrayboxMaterial("AssemblyBoard", Palette.Shade(Palette.WoodLight, 0.88f));
-            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            Material steel = GrayboxMaterial("Steel", Palette.Chrome);
             const float w = AssemblyArtRules.Width, d = AssemblyArtRules.Depth, h = AssemblyArtRules.Top;
             const float slab = 0.03f;
             float Z(float stationZ) => -stationZ; // the wrapper's front is +Z (turned half way round: x mirrors too)
@@ -1142,7 +1142,7 @@ namespace Worktown.Game.Editor
             Material drawer = GrayboxMaterial("RegisterDrawer", Palette.WoodDark);
             Material mat = GrayboxMaterial("RegisterMat", Palette.WoodLight);
             Material back = GrayboxMaterial("RegisterBack", Palette.Terracotta);
-            Material give = GrayboxMaterial("RegisterGive", Palette.Sage);
+            Material give = GrayboxMaterial("RegisterGive", Palette.Ground);
             Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
             Box(model, "Body", F(RegisterArtRules.BodyCentre), RegisterArtRules.BodySize, body);
             Quaternion lean = Quaternion.Euler(25f, 0f, 0f); // mirrored: leans back from the +Z front
@@ -1171,7 +1171,7 @@ namespace Worktown.Game.Editor
         {
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
-            Material steel = GrayboxMaterial("DrinkBody", Palette.Steel);
+            Material steel = GrayboxMaterial("DrinkBody", Palette.Chrome);
             Material cap = GrayboxMaterial("DrinkCap", Palette.DeepBlue);
             Material tray = GrayboxMaterial("DrinkTray", Palette.Charcoal);
             Material spout = GrayboxMaterial("DrinkSpout", Palette.Charcoal);
@@ -1211,8 +1211,8 @@ namespace Worktown.Game.Editor
             model.transform.SetParent(parent, false);
             Material wood = GrayboxMaterial("SinkWood", Palette.WoodLight);
             Material dark = GrayboxMaterial("SinkDoor", Palette.WoodDark);
-            Material steel = GrayboxMaterial("Steel", Palette.Steel);
-            Material inner = GrayboxMaterial("SinkInner", Palette.Shade(Palette.Steel, 0.72f));
+            Material steel = GrayboxMaterial("Steel", Palette.Chrome);
+            Material inner = GrayboxMaterial("SinkInner", Palette.Shade(Palette.Chrome, 0.72f));
             Vector3 F(float x, float y, float z) => new Vector3(-x, y, -z);
             const float w = CleaningArtRules.SinkWidth, d = CleaningArtRules.SinkDepth, slab = 0.04f;
             float h = CleaningArtRules.SinkHeight;
@@ -1282,9 +1282,9 @@ namespace Worktown.Game.Editor
         {
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
-            Material steel = GrayboxMaterial("Steel", Palette.Steel);
+            Material steel = GrayboxMaterial("Steel", Palette.Chrome);
             Material rim = GrayboxMaterial("TrashRim", Palette.Charcoal);
-            Material lid = GrayboxMaterial("TrashLid", Palette.Shade(Palette.Steel, 0.85f));
+            Material lid = GrayboxMaterial("TrashLid", Palette.Shade(Palette.Chrome, 0.85f));
             Vector3 F(float x, float y, float z) => new Vector3(-x, y, -z);
             const float w = CleaningArtRules.TrashWidth, d = CleaningArtRules.TrashDepth, t = 0.02f, lidT = 0.02f;
             const float h = CleaningArtRules.TrashHeight - lidT; // the walls; the lid on them makes the can's height
@@ -1372,7 +1372,7 @@ namespace Worktown.Game.Editor
         {
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
-            Material wire = GrayboxMaterial("Wire", Palette.Steel);
+            Material wire = GrayboxMaterial("Wire", Palette.Chrome);
             Material grip = GrayboxMaterial("Grip", Palette.Charcoal);
             const float bw = FryerArt.BasketWidth, bl = FryerArt.BasketLength, bh = FryerArt.BasketHeight, t = FryerArt.WireThickness;
             foreach (float y in new[] { t * 0.5f, bh - t * 0.5f })
@@ -1420,7 +1420,7 @@ namespace Worktown.Game.Editor
         {
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
-            Material steel = GrayboxMaterial("SpitSteel", Palette.Steel);
+            Material steel = GrayboxMaterial("SpitSteel", Palette.Chrome);
             Material frame = GrayboxMaterial("SpitFrame", Palette.Charcoal);
             Vector3 F(Vector3 station) => new Vector3(-station.x, station.y, -station.z); // the wrapper's front is +Z (x mirrors too)
             Box(model, "Base", F(SpitArtRules.BaseCentre), SpitArtRules.BaseSize, steel);

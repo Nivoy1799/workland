@@ -31,8 +31,8 @@ namespace Worktown.Game.Player
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         // Spec 026: palette colours (the guide keeps Interact for the highlight; using a station glows sage, refused grey).
         public static readonly Color TakeColor = Palette.Interact;
-        public static readonly Color UseColor = Palette.Sage;
-        public static readonly Color RefuseColor = Palette.Steel;
+        public static readonly Color UseColor = Palette.Ground;
+        public static readonly Color RefuseColor = Palette.Chrome;
         private const float TintAmount = 0.35f;
         private const float Brighten = 1.15f;
         private const float EmissionAmount = 0.35f;

@@ -56,21 +56,21 @@ namespace Worktown.Game.Editor
         private const string FoodPrefabPath = Root + "/Prefabs/Food.prefab";
         private const string PingMarkerPrefabPath = Root + "/Prefabs/PingMarker.prefab";
         private const string CustomerPrefabPath = Root + "/Prefabs/Customer.prefab";
-        private const string KnifePrefabPath = Root + "/Prefabs/Knife.prefab";
-        private const string SpatulaPrefabPath = Root + "/Prefabs/Spatula.prefab"; // spec 030
+        internal const string KnifePrefabPath = Root + "/Prefabs/Knife.prefab";
+        internal const string SpatulaPrefabPath = Root + "/Prefabs/Spatula.prefab"; // spec 030
         private const string DeliveryBoxPrefabPath = Root + "/Prefabs/DeliveryBox.prefab"; // spec 034
         private const string DirtyDishPrefabPath = Root + "/Prefabs/DirtyDish.prefab"; // spec 035
         private const string TrashBagPrefabPath = Root + "/Prefabs/TrashBag.prefab";
-        private const string WipeClothPrefabPath = Root + "/Prefabs/WipeCloth.prefab";
+        internal const string WipeClothPrefabPath = Root + "/Prefabs/WipeCloth.prefab";
         private const string StoveButtonMaterialPath = Root + "/Settings/StoveButton.mat";
         // Spec 019: the knife's pickup collider (long side along Z, like its model).
         private static readonly Vector3 KnifeColliderSize = new Vector3(0.12f, 0.08f, 0.345f); // spec 026: the 0.345 m knife
-        private const float StationWidth = ArtCatalogBuilder.FitXZ; // the station footprint, also the worktop depth
+        internal const float StationWidth = ArtCatalogBuilder.FitXZ; // the station footprint, also the worktop depth
         private const float WorktopGapMargin = 0.02f;
         /// <summary>Spec 026: name prefix of the cabinet modules under a worktop ("Module 1", "Module 2", ...).</summary>
         public const string WorktopModuleName = "Module";
         private const string SteamMaterialPath = Root + "/Settings/Steam.mat";
-        private const string WorktopMaterialPath = Root + "/Settings/Worktop.mat";
+        internal const string WorktopMaterialPath = Root + "/Settings/Worktop.mat";
         private const string PlaceMarkerMaterialPath = Root + "/Settings/PlaceMarker.mat";
         private const float FoodSize = 0.4f;
         // Spec 027a (docs/feel.md 6): the shop floor plan. A back line along the back wall (z KitchenZ, fronts facing -z),
@@ -130,7 +130,7 @@ namespace Worktown.Game.Editor
         /// <summary>Spec 027a: clear floor between the back line's bodies and the front counter (feel.md 6: at least 1.2 m).</summary>
         private const float AisleWidth = 1.5f; // orchestrator: the top of the range, so two cooks (0.3 m controllers) pass each other
         /// <summary>Spec 027a (orchestrator): the front counter and the serving counter are 0.7 m deep (stations are 1.2 m).</summary>
-        private const float CounterDepth = 0.7f;
+        internal const float CounterDepth = 0.7f;
         private const float FrontCounterZ = KitchenZ - StationWidth * 0.5f - AisleWidth - CounterDepth * 0.5f;
         private const float AisleZ = KitchenZ - (StationWidth + AisleWidth) * 0.5f;
         /// <summary>Spec 027a: the guests' queue line, this far in front of the front counter's street side.</summary>
@@ -147,7 +147,7 @@ namespace Worktown.Game.Editor
         /// cabinet doors) on their local +z, so they are turned half way round to put it on the station's front (local -z,
         /// where the buttons and the label are). Until now the cook saw the backs ("buttons are on the back").
         /// </summary>
-        private static readonly Quaternion ArtFrontRotation = Quaternion.Euler(0f, 180f, 0f);
+        internal static readonly Quaternion ArtFrontRotation = Quaternion.Euler(0f, 180f, 0f);
         // Spec 021: burners on the stove top (local x, z), one spot each; the stove top behind them is a place surface.
         private static readonly float[] BurnerX = { -0.3f, 0.3f };
         private const float BurnerZ = -0.12f;
@@ -215,6 +215,9 @@ namespace Worktown.Game.Editor
             CreateTrashBagPrefab();
             CreateWipeClothPrefab();
             List<NetworkObject> vesselPrefabs = CreateVesselPrefabs(builtCatalog); // spec 021
+            // Spec 062a: the kitchen's pieces (stations, worktops, the front counter) are prefabs the LayoutSpawner spawns; built in a
+            // scene of their own before the FishNet refresh below registers them.
+            PiecePrefabBuilder.Build();
             // Overwritten prefabs lose their AssetPathHash, and FishNet's import hook only hashes
             // newly added entries. A full refresh re-hashes every prefab in DefaultPrefabObjects.
             AssetDatabase.SaveAssets();
@@ -505,10 +508,6 @@ namespace Worktown.Game.Editor
             pay.transform.position = new Vector3(RegisterX, 0f, QueueZ);
             SetField(service, "_payHead", pay.transform);
             SetField(service, "_payDirection", Vector3.right);
-            Register register = UnityEngine.Object.FindFirstObjectByType<Register>();
-            if (register == null) throw new InvalidOperationException("the register is missing");
-            SetField(service, "_register", register);
-            SetField(service, "_registerStation", register.GetComponent<Station>());
             ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
             if (feed == null) throw new InvalidOperationException("the serve feed is missing");
             SetField(service, "_feed", feed);
@@ -558,19 +557,31 @@ namespace Worktown.Game.Editor
             SetField(ledgerNob, "_isGlobal", true);
             SetField(networkManager.GetComponent<EconomyService>(), "_ledger", ledgerObject.AddComponent<ShopLedger>());
 
+            // Spec 062a: the layout's spawner (the save picks the layout; SaveService calls it when a game begins). The closed covers are
+            // part of the piece prefabs (PiecePrefabBuilder).
+            var spawner = networkManager.gameObject.AddComponent<Worktown.Game.Layout.LayoutSpawner>();
+            SetField(spawner, "_networkManager", networkManager);
+            SetField(spawner, "_prefabs", AssetDatabase.LoadAssetAtPath<Worktown.Game.Layout.PiecePrefabs>(PiecePrefabBuilder.PrefabsAssetPath));
+            SetField(spawner, "_feed", feed);
+            SetField(save, "_layout", spawner);
+        }
+
+        /// <summary>
+        /// Spec 053 (spec 062a: run by PiecePrefabBuilder on the kitchen it cuts into pieces): a closed cover on every station the food
+        /// corner keeps closed, sized over what rests on it (<paramref name="renderers"/>).
+        /// </summary>
+        internal static int CreateClosedCovers(IEnumerable<Station> stations, Renderer[] renderers)
+        {
             // Follow-up 2026-11-11 evening: a calm Sage cloth (Plaster read as grey) and a small Cream sign card with Ink text.
-            Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Sage);
+            Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Ground);
             Material card = CreateMaterial(ClosedSignMaterialPath, Palette.Cream);
-            Renderer[] sceneRenderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
             int covers = 0;
-            var stations = new List<Station>(UnityEngine.Object.FindObjectsByType<Station>(FindObjectsSortMode.None));
-            stations.Sort((a, b) => a.Index.CompareTo(b.Index));
             foreach (Station station in stations)
             {
                 if (ShopStageRules.IsStationOpen(ShopStageRules.FoodCorner, station.Kind)) continue;
-                if (CreateClosedCover(station, cloth, card, sceneRenderers)) covers++;
+                if (CreateClosedCover(station, cloth, card, renderers)) covers++;
             }
-            Debug.Log("[Graybox] food corner: " + covers + " closed covers");
+            return covers;
         }
 
         /// <summary>
@@ -829,7 +840,7 @@ namespace Worktown.Game.Editor
 
         private const string VesselPrefabFolder = Root + "/Prefabs";
 
-        private static string VesselPrefabPath(VesselKind kind) => VesselPrefabFolder + "/" + kind + ".prefab";
+        internal static string VesselPrefabPath(VesselKind kind) => VesselPrefabFolder + "/" + kind + ".prefab";
 
         /// <summary>
         /// Spec 021: how deep contents sit in each kind of cookware (fraction of its height), part scale and radius.
@@ -960,7 +971,7 @@ namespace Worktown.Game.Editor
         /// handle (Pickup.IsHandleTool) lies with its handle straight into the aisle (ToolRest.Home); the server keeps this pose as
         /// the tool's home, so a lost one comes back the same way.
         /// </summary>
-        private static GameObject PlaceOnSpot(NetworkObject prefab, PlaceSurface surface, int spot, string name)
+        internal static GameObject PlaceOnSpot(NetworkObject prefab, PlaceSurface surface, int spot, string name)
         {
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab.gameObject);
             instance.name = name;
@@ -1024,7 +1035,6 @@ namespace Worktown.Game.Editor
             SetStaticRecursive(root);
 
             var surface = root.AddComponent<PlaceSurface>();
-            SetField(surface, "_index", index);
             SetField(surface, "_size", new Vector2(width, StationWidth));
             SetField(surface, "_topY", height);
             return surface;
@@ -1039,7 +1049,7 @@ namespace Worktown.Game.Editor
         /// <summary>Spec 039: the plate shelf's stack in its back-left corner (station x, z), so the rest of its top takes items.</summary>
         private static readonly Vector2 PlateStackSpot = new Vector2(-0.3f, 0.3f);
         /// <summary>Spec 039: the front counter's cook half (m, from the aisle edge) takes items; the guest half does not (Q1).</summary>
-        private const float CookSideDepth = CounterDepth * 0.5f;
+        internal const float CookSideDepth = CounterDepth * 0.5f;
         /// <summary>Spec 039: a front counter top keeps this far from what stands on the counter (m).</summary>
         private const float CounterTopMargin = WorktopGapMargin;
         /// <summary>Spec 039: a gap narrower than this between two things on the front counter gets no top (PlaceCoverage.Rim covers it).</summary>
@@ -1133,7 +1143,7 @@ namespace Worktown.Game.Editor
         /// still picks the nearest cook-side spot. Items rest on the counter top (1.05 m). A child of the run, so it is turned like it
         /// (a pan's handle and a tool's rest face the cook).
         /// </summary>
-        private static PlaceSurface CreateCounterTop(Transform run, string name, float minX, float maxX, int index)
+        internal static PlaceSurface CreateCounterTop(Transform run, string name, float minX, float maxX, int index)
         {
             float height = ArtSizeTable.ServingCounterHeight;
             float width = maxX - minX;
@@ -1146,7 +1156,6 @@ namespace Worktown.Game.Editor
             box.center = new Vector3(0f, height + 0.005f - 0.01f, guestward);
             go.isStatic = true;
             var surface = go.AddComponent<PlaceSurface>();
-            SetField(surface, "_index", index);
             SetField(surface, "_size", new Vector2(width, CookSideDepth));
             SetField(surface, "_topY", height);
             return surface;
@@ -1168,7 +1177,6 @@ namespace Worktown.Game.Editor
             box.center = new Vector3(0f, colliderTop - 0.01f, 0f);
             go.isStatic = true;
             var surface = go.AddComponent<PlaceSurface>();
-            SetField(surface, "_index", index);
             SetField(surface, "_size", size);
             SetField(surface, "_topY", top);
             return surface;
@@ -1209,7 +1217,7 @@ namespace Worktown.Game.Editor
                 AssetDatabase.CreateAsset(material, PlaceMarkerMaterialPath);
             }
             else if (material.shader != shader) material.shader = shader;
-            material.SetColor("_BaseColor", Palette.WithAlpha(Palette.Sage, 0.45f)); // spec 026: the "use" colour
+            material.SetColor("_BaseColor", Palette.WithAlpha(Palette.Ground, 0.45f)); // spec 026: the "use" colour
             material.SetFloat("_Surface", 1f); // transparent
             material.SetFloat("_Blend", 0f);   // alpha
             material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -1490,7 +1498,6 @@ namespace Worktown.Game.Editor
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(RegisterX, top + h * 0.5f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.Register);
             SetField(station, "_displayName", RegisterName);
             SetField(station, "_ingredientIndex", -1);
@@ -1614,7 +1621,6 @@ namespace Worktown.Game.Editor
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(MenuBoardX, MenuBoardArtRules.CentreHeight, MenuBoardZ), Quaternion.Euler(0f, 180f, 0f));
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.MenuBoard);
             SetField(station, "_displayName", MenuBoardName);
             SetField(station, "_ingredientIndex", -1);
@@ -1708,7 +1714,6 @@ namespace Worktown.Game.Editor
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(DrinkDispenserX, top + h * 0.5f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.DrinkDispenser);
             SetField(station, "_displayName", DrinkDispenserName);
             SetField(station, "_ingredientIndex", -1);
@@ -1734,7 +1739,7 @@ namespace Worktown.Game.Editor
             root.AddComponent<StationContents>();
             var dispenserView = root.AddComponent<DrinkDispenserView>();
             SetField(dispenserView, "_dispenser", station);
-            SetField(dispenserView, "_puddleMaterial", CreateMaterial(Root + "/Settings/DrinkSpill.mat", Palette.SoftBlue));
+            SetField(dispenserView, "_puddleMaterial", CreateMaterial(Root + "/Settings/DrinkSpill.mat", Palette.Sky));
 
             Material stream = CreateMaterial(Root + "/Settings/DrinkStream.mat", Palette.Cream);
             Material lidMaterial = CreateMaterial(Root + "/Settings/DrinkLid.mat", Palette.Cream);
@@ -1846,11 +1851,9 @@ namespace Worktown.Game.Editor
                 box.center = new Vector3(0f, -0.005f, 0f);
                 go.isStatic = true;
                 var surface = go.AddComponent<PlaceSurface>();
-                SetField(surface, "_index", surfaces.Count);
                 SetField(surface, "_size", new Vector2(CupSpotSize, CupSpotSize));
                 SetField(surface, "_topY", 0f);
                 SetField(surface, "_isCupSpot", true);
-                SetField(surface, "_dispenserIndex", dispenser.Index);
                 SetField(surface, "_tap", tap);
                 surfaces.Add(surface);
             }
@@ -1885,7 +1888,6 @@ namespace Worktown.Game.Editor
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(SpitX, top + h * 0.5f, SpitZ), Quaternion.Euler(0f, 180f, 0f));
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.Spit);
             SetField(station, "_displayName", SpitName);
             SetField(station, "_ingredientIndex", -1);
@@ -1923,7 +1925,7 @@ namespace Worktown.Game.Editor
             plate.transform.SetParent(root.transform, false);
             plate.transform.localPosition = SpitArtRules.FrontPlateCentre + down;
             plate.transform.localScale = SpitArtRules.FrontPlateSize;
-            plate.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Steel);
+            plate.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Chrome);
 
             // The panel's glowing face.
             Material glowMaterial = CreateMaterial(Root + "/Settings/SpitGlow.mat", Palette.Charcoal);
@@ -1984,7 +1986,7 @@ namespace Worktown.Game.Editor
             blade.transform.SetParent(knife.transform, false);
             blade.transform.localPosition = new Vector3(0.1f, 0f, 0f);
             blade.transform.localScale = new Vector3(0.2f, 0.035f, 0.004f);
-            blade.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitKnife.mat", Palette.Steel);
+            blade.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitKnife.mat", Palette.Chrome);
             GameObject handle = GameObject.CreatePrimitive(PrimitiveType.Cube);
             handle.name = "Handle";
             UnityEngine.Object.DestroyImmediate(handle.GetComponent<Collider>());
@@ -2044,7 +2046,7 @@ namespace Worktown.Game.Editor
                 pan.transform.SetParent(root.transform, false);
                 pan.transform.localPosition = new Vector3(0f, -SpitArtRules.TraySize.y * 0.5f, 0f);
                 pan.transform.localScale = SpitArtRules.TraySize;
-                pan.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Steel);
+                pan.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Chrome);
                 food = anchor.AddComponent<FoodVisual>();
                 SetField(food, "_catalog", catalog);
                 SetField(food, "_partScale", 0.6f);
@@ -2200,7 +2202,6 @@ namespace Worktown.Game.Editor
             box.center = new Vector3(0f, top + 0.005f - 0.01f, 0f);
             go.isStatic = true;
             var surface = go.AddComponent<PlaceSurface>();
-            SetField(surface, "_index", index);
             SetField(surface, "_size", size);
             SetField(surface, "_topY", top);
             return surface;
@@ -2295,7 +2296,33 @@ namespace Worktown.Game.Editor
         private static void CreateKitchen(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab, NetworkObject spatulaPrefab,
             List<NetworkObject> vesselPrefabs, ArtCatalog catalog, NetworkObject boxPrefab)
         {
+            // Spec 062a: the stations, worktops and the front counter are layout pieces (PiecePrefabBuilder, LayoutSpawner); the scene keeps
+            // the room shell (the walls, the back door and its delivery spots) and the services.
             var parent = new GameObject("Kitchen");
+            CreateShopWalls(parent.transform);
+            Transform[] deliverySpots = CreateBackDoor(parent.transform); // spec 034
+            var clothPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(WipeClothPrefabPath).GetComponent<NetworkObject>();
+            CreateKitchenServices(networkManager, foodPrefab, knifePrefab, spatulaPrefab, vesselPrefabs, boxPrefab, deliverySpots, clothPrefab);
+        }
+
+        /// <summary>Spec 062a: what <see cref="BuildKitchenParts"/> made (the stations and place surfaces in the builder's old order).</summary>
+        internal sealed class KitchenParts
+        {
+            public List<Station> Stations;
+            public List<PlaceSurface> Surfaces;
+            public Transform[] FrontRuns;
+            public List<GameObject> Items = new List<GameObject>();
+        }
+
+        /// <summary>
+        /// Spec 062a: today's kitchen (spec 027a: the shop floor plan, see the constants), built under <paramref name="parent"/> as the
+        /// builder always did, for PiecePrefabBuilder to cut into piece prefabs: the stock, the worktops, the stoves, the fryer, the griddle,
+        /// the assembly board, the counter and the front counter with what stands on it, the cleaning stations, the menu board; the place
+        /// surfaces in their old order; the cookware and tools on their home spots (for the closed covers' size).
+        /// </summary>
+        internal static KitchenParts BuildKitchenParts(ArtCatalog catalog, Transform parent, List<NetworkObject> vesselPrefabs, NetworkObject knifePrefab,
+            NetworkObject spatulaPrefab)
+        {
             var stations = new List<Station>();
             // Spec 028b: every ingredient in one slot of the dry shelf or the fridge, both against the back wall next to prep.
             Station dryShelf = CreateStation(catalog, parent.transform, stations.Count, StationKind.Shelf, StockShelfName, StockShelfX,
@@ -2306,7 +2333,7 @@ namespace Worktown.Game.Editor
                 StockZ(StationKind.Fridge), 0f, CreateMaterial(Root + "/Settings/Station_Fridge.mat", Palette.Cream), 0);
             CreateStockSlots(catalog, fridge);
             stations.Add(fridge);
-            Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Steel);
+            Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Chrome);
             Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, KitchenZ, 0f, stoveMat, 0);
             stations.Add(stoveA);
             Station stoveB = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 2", StoveBX, KitchenZ, 0f, stoveMat, 0);
@@ -2384,9 +2411,6 @@ namespace Worktown.Game.Editor
             CreatePlaceAnywhereTops(surfaces, frontRuns, stoveA, stoveB, fryer, assembly, sink, shelf);
             // Spec 042: a cup spot under each tap of the drink dispenser (appended, so no earlier index moves).
             CreateCupSpots(surfaces, drinks);
-            CreateShopWalls(parent.transform);
-            Transform[] deliverySpots = CreateBackDoor(parent.transform); // spec 034
-            SetField(networkManager.GetComponent<PickupService>(), "_surfaces", surfaces);
             foreach (Station stove in new[] { stoveA, stoveB })
             {
                 stove.gameObject.AddComponent<NetworkObject>();
@@ -2405,7 +2429,9 @@ namespace Worktown.Game.Editor
             BuildAssembly(catalog, assembly, parent.transform);
 
             // Spec 021: the cookware lying on top at the start (each one's home spot, where a lost one comes back).
+            var parts = new KitchenParts { Stations = stations, Surfaces = surfaces, FrontRuns = frontRuns };
             NetworkObject Prefab(VesselKind kind) => vesselPrefabs.Find(p => p.GetComponent<Vessel>().Kind == kind);
+            void PlaceOnSpot(NetworkObject prefab, PlaceSurface surface, int spot, string name) => parts.Items.Add(GrayboxSceneBuilder.PlaceOnSpot(prefab, surface, spot, name));
             // Spec 027a: the board and the knife on the prep run, the plates next to the plate shelf, the bowl after it.
             // Spec 028b: the board at the prep run's stock end (about 1 m from the fridge, 2.2 m from the shelf).
             // Spec 030: the prep run is one board wide: the board in its middle at the front, the knife behind it on the right.
@@ -2421,7 +2447,13 @@ namespace Worktown.Game.Editor
             // Spec 035: the wipe cloth's home on the sink's drainboard (where a lost one comes back).
             var clothPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(WipeClothPrefabPath).GetComponent<NetworkObject>();
             PlaceOnSpot(clothPrefab, last, SpotNear(last, 0.1f, 0.2f), "Wipe cloth");
+            return parts;
+        }
 
+        /// <summary>Spec 007/009/034/035 (spec 062a: split from the kitchen): the services next to the NetworkManager and their global objects.</summary>
+        private static void CreateKitchenServices(NetworkManager networkManager, NetworkObject foodPrefab, NetworkObject knifePrefab,
+            NetworkObject spatulaPrefab, List<NetworkObject> vesselPrefabs, NetworkObject boxPrefab, Transform[] deliverySpots, NetworkObject clothPrefab)
+        {
             new GameObject("KitchenSounds").AddComponent<KitchenSounds>(); // spec 023, client only
 
             var feedObject = new GameObject("ServeFeed");
@@ -2435,7 +2467,6 @@ namespace Worktown.Game.Editor
             SetField(kitchen, "_pickups", networkManager.GetComponent<PickupService>());
             SetField(kitchen, "_foodPrefab", foodPrefab);
             SetField(kitchen, "_feed", feed);
-            SetField(kitchen, "_stations", stations);
             SetField(kitchen, "_knifePrefab", knifePrefab); // spec 019: replaces a lost knife
             SetField(kitchen, "_spatulaPrefab", spatulaPrefab); // spec 030: replaces a lost spatula
             SetField(kitchen, "_vesselPrefabs", vesselPrefabs); // spec 021: respawns and the plate shelf
@@ -2448,7 +2479,6 @@ namespace Worktown.Game.Editor
             var economy = networkManager.gameObject.AddComponent<EconomyService>();
             SetField(economy, "_networkManager", networkManager);
             SetField(economy, "_board", board);
-            SetField(economy, "_menuBoard", UnityEngine.Object.FindFirstObjectByType<MenuBoard>()); // spec 037
             SetField(kitchen, "_economy", economy);
 
             // Spec 034: the shop's stock counts (global, like the feed: one byte per stock line) and the supply service (orders,
@@ -2480,10 +2510,6 @@ namespace Worktown.Game.Editor
             SetField(cleaning, "_hygiene", hygiene);
             SetField(cleaning, "_dirtyDishPrefab", AssetDatabase.LoadAssetAtPath<GameObject>(DirtyDishPrefabPath).GetComponent<NetworkObject>());
             SetField(cleaning, "_trashBagPrefab", AssetDatabase.LoadAssetAtPath<GameObject>(TrashBagPrefabPath).GetComponent<NetworkObject>());
-            SetField(cleaning, "_plateShelf", shelf);
-            SetField(cleaning, "_dishReturn", dishReturn);
-            SetField(cleaning, "_sink", sink);
-            SetField(cleaning, "_trashCan", trash);
             SetField(kitchen, "_cleaning", cleaning);
             SetField(kitchen, "_clothPrefab", clothPrefab);
         }
@@ -2616,7 +2642,7 @@ namespace Worktown.Game.Editor
             cloth.transform.SetParent(root.transform, false);
             cloth.transform.localScale = new Vector3(s, t, s * 0.7f);
             cloth.transform.localPosition = new Vector3(0f, t * 0.5f, 0f);
-            cloth.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/WipeCloth.mat", Palette.SoftBlue);
+            cloth.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/WipeCloth.mat", Palette.Sky);
             GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
             stripe.name = "Stripe";
             UnityEngine.Object.DestroyImmediate(stripe.GetComponent<Collider>());
@@ -2664,7 +2690,7 @@ namespace Worktown.Game.Editor
             float top = CleaningArtRules.SinkHeight - rootY;
             Vector3 c = CleaningArtRules.BasinCentre;
             Vector2 size = CleaningArtRules.BasinSize;
-            Material steel = CreateMaterial(Root + "/Settings/SinkFaucet.mat", Palette.Steel);
+            Material steel = CreateMaterial(Root + "/Settings/SinkFaucet.mat", Palette.Chrome);
             var faucet = new GameObject(FaucetName);
             faucet.transform.SetParent(sink.transform, false);
             FramePart(faucet.transform, "Neck", new Vector3(c.x, top + 0.14f, c.z + size.y * 0.5f + 0.06f), new Vector3(0.035f, 0.28f, 0.035f), steel);
@@ -2686,7 +2712,7 @@ namespace Worktown.Game.Editor
             UnityEngine.Object.DestroyImmediate(surface.GetComponent<Collider>());
             surface.transform.SetParent(basin.transform, false);
             surface.transform.localScale = new Vector3(size.x * 0.96f, 0.001f, size.y * 0.96f);
-            surface.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SinkWater.mat", Palette.SoftBlue);
+            surface.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SinkWater.mat", Palette.Sky);
             surface.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             float plate = PlateHeight(catalog);
@@ -2736,7 +2762,6 @@ namespace Worktown.Game.Editor
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(DishReturnX, top + h * 0.5f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.DishReturn);
             SetField(station, "_displayName", DishReturnName);
             SetField(station, "_ingredientIndex", -1);
@@ -2808,7 +2833,6 @@ namespace Worktown.Game.Editor
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(TrashX, h * 0.5f, FrontCounterZ), Quaternion.Euler(0f, 180f, 0f));
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.TrashCan);
             SetField(station, "_displayName", TrashName);
             SetField(station, "_ingredientIndex", -1);
@@ -2880,7 +2904,6 @@ namespace Worktown.Game.Editor
             root.transform.SetParent(parent, false);
             root.transform.SetPositionAndRotation(new Vector3(BinX, h * 0.5f, BinZ), Quaternion.Euler(0f, -90f, 0f)); // its front (local -z) faces +x
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.Bin);
             SetField(station, "_displayName", BinName);
             SetField(station, "_ingredientIndex", -1);
@@ -2939,7 +2962,6 @@ namespace Worktown.Game.Editor
             root.transform.SetPositionAndRotation(new Vector3(TerminalX, TerminalArtRules.CentreHeight, wallFace - TerminalArtRules.Depth * 0.5f),
                 Quaternion.identity);
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)StationKind.Terminal);
             SetField(station, "_displayName", TerminalName);
             SetField(station, "_ingredientIndex", -1);
@@ -2962,7 +2984,7 @@ namespace Worktown.Game.Editor
             sign.text = "Orders · deliveries at the back door";
 
             Material rowMaterial = CreateMaterial(Root + "/Settings/TerminalRow.mat", Palette.Charcoal);
-            Material buttonMaterial = CreateMaterial(Root + "/Settings/TerminalButton.mat", Palette.SoftBlue);
+            Material buttonMaterial = CreateMaterial(Root + "/Settings/TerminalButton.mat", Palette.Sky);
             TextMesh header = CreateLabel(root.transform, TerminalArtRules.HeaderCentre, 48, 0.0085f);
             header.name = "Header";
             header.anchor = TextAnchor.MiddleCenter;
@@ -3111,7 +3133,6 @@ namespace Worktown.Game.Editor
                 PlaceSurface burner = CreateTopSurface(stove, "Burner " + b, new Vector2(BurnerX[b], BurnerZ),
                     new Vector2(BurnerSize, BurnerSize), surfaces.Count);
                 SetField(burner, "_isBurner", true);
-                SetField(burner, "_stoveIndex", stove.Index);
                 SetField(burner, "_burner", b);
                 surfaces.Add(burner);
                 burners[b] = burner;
@@ -3376,7 +3397,6 @@ namespace Worktown.Game.Editor
             label.text = price.Length > 0 ? shortName + "\n" + price.Trim() : shortName;
 
             var station = root.AddComponent<Station>();
-            SetField(station, "_index", index);
             SetField(station, "_kind", (int)kind);
             SetField(station, "_displayName", displayName);
             SetField(station, "_ingredientIndex", ingredientIndex);
@@ -3656,7 +3676,7 @@ namespace Worktown.Game.Editor
             return b;
         }
 
-        private static void SetStaticRecursive(GameObject root)
+        internal static void SetStaticRecursive(GameObject root)
         {
             foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
                 t.gameObject.isStatic = true;
@@ -3877,7 +3897,7 @@ namespace Worktown.Game.Editor
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
         }
 
-        private static Material CreateMaterial(string path, Color color)
+        internal static Material CreateMaterial(string path, Color color)
         {
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (material == null)
@@ -3908,7 +3928,7 @@ namespace Worktown.Game.Editor
             return material;
         }
 
-        private static void EnsureFolder(string path)
+        internal static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path)) return;
             int slash = path.LastIndexOf('/');
@@ -3927,7 +3947,7 @@ namespace Worktown.Game.Editor
         }
 
         /// <summary>Sets a serialized private field through SerializedObject so Unity records it.</summary>
-        private static void SetField(UnityEngine.Object target, string field, object value)
+        internal static void SetField(UnityEngine.Object target, string field, object value)
         {
             var so = new SerializedObject(target);
             SerializedProperty prop = so.FindProperty(field);

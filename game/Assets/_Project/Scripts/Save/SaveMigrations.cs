@@ -6,7 +6,8 @@ namespace Worktown.Game.Save
     /// <summary>
     /// Spec 053: the ordered steps that bring an older save up to this build's format: step (n, f) turns a version n save into a version
     /// n + 1 one. They run in order, each once, up to <see cref="Latest"/>. Spec 037 (inbox question 17, D39): this build's steps are
-    /// <see cref="Current"/>, one step: <see cref="V1ToV2"/>, money from the old scale's whole dollars to cents. Immutable once built.
+    /// <see cref="Current"/>: <see cref="V1ToV2"/>, money from the old scale's whole dollars to cents; spec 062a: <see cref="V2ToV3"/>, the
+    /// kitchen's layout (the default one). Immutable once built.
     /// </summary>
     public sealed class SaveMigrations
     {
@@ -18,8 +19,19 @@ namespace Worktown.Game.Save
         /// <summary>No steps (format version 1), for tests of the mechanism.</summary>
         public static readonly SaveMigrations None = new SaveMigrations(Array.Empty<(int, Func<ShopSave, ShopSave>)>());
 
-        /// <summary>Spec 037: this build's steps (format version 2).</summary>
-        public static readonly SaveMigrations Current = new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2) });
+        /// <summary>Spec 037: this build's steps (spec 062a: format version 3).</summary>
+        public static readonly SaveMigrations Current = new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2), (2, V2ToV3) });
+
+        /// <summary>
+        /// Spec 062a, v2 to v3: a version 2 save has no layout part; it gets the default layout (Resources/Layouts/default.json), the
+        /// kitchen every v2 game played in.
+        /// </summary>
+        public static ShopSave V2ToV3(ShopSave save)
+        {
+            if (save == null) throw new ArgumentNullException(nameof(save));
+            save.layout = Worktown.Game.Layout.DefaultLayout.Part() ?? new ShopSave.LayoutPart();
+            return save;
+        }
 
         /// <summary>
         /// Spec 037: a version 1 save's money was the old scale's whole dollars, 115 of which made one dollar of spec 052's climb (053: the

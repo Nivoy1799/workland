@@ -301,7 +301,7 @@ namespace Worktown.Game.Dev
                     Func<IEnumerator> placeFrames = name == TourRules.ActPutPanBackFrames
                         ? BeforeClick("pan-ghost" + SlowSuffix, "pan-place" + SlowSuffix) : null;
                     yield return _actor.Use("put the pan back", home.SpotWorldPosition(0), InteractionAction.Place,
-                        () => _actor.Interactor.DevSendPlace(home.Index, 0), placeFrames);
+                        () => _actor.Interactor.DevSendPlace(home.Id, 0), placeFrames);
                     break;
                 default:
                     _actor.CountTimeout("unknown act '" + name + "'");

@@ -5,7 +5,7 @@ using Worktown.Game.Cooking;
 
 namespace Worktown.Game.Tests
 {
-    /// <summary>Spec 045: a server restart puts the scene plates back at their start spots (SceneStartSpots, used by KitchenService).</summary>
+    /// <summary>Spec 045: a server restart puts the scene plates back at their start spots (SceneStartSpots; spec 062a: no longer used by KitchenService, the plates are spawned at their homes).</summary>
     public class SceneStartSpotsTests
     {
         private sealed class Plate

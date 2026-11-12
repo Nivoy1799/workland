@@ -24,8 +24,8 @@ namespace Worktown.Game.Economy
         [SerializeField] private MarketBoard _board;
         [Tooltip("Spec 053 review: the one synced shop balance (a global scene object).")]
         [SerializeField] private ShopLedger _ledger;
-        [Tooltip("Spec 037: the menu board's synced prices (a scene object above the counter).")]
-        [SerializeField] private Worktown.Game.Shop.MenuBoard _menuBoard;
+        // Spec 037: the menu board's synced prices; spec 062a: a layout piece (the first menu board in the LayoutRegistry).
+        private int _menuLayoutVersion = -1;
 
         /// <summary>Spec 037: spec 052's guest-choice weights (the climb catalog's), for the menu board's demand and tips.</summary>
         private static readonly Worktown.Sim.Climb.ChoiceWeights Weights = Worktown.Sim.Climb.ClimbCatalog.CreateDefault().Weights;
@@ -73,10 +73,21 @@ namespace Worktown.Game.Economy
             return string.Join(", ", parts);
         }
 
+        /// <summary>Spec 062a: the menu board the prices go to: the first menu board station's in the LayoutRegistry, or null.</summary>
+        private static Worktown.Game.Shop.MenuBoard MenuBoardNow
+        {
+            get
+            {
+                Worktown.Game.Cooking.Station station = Worktown.Game.Layout.LayoutRegistry.First(Worktown.Game.Cooking.StationKind.MenuBoard);
+                return station != null ? station.GetComponent<Worktown.Game.Shop.MenuBoard>() : null;
+            }
+        }
+
         private void PublishMenu()
         {
-            if (_menuBoard == null) _menuBoard = FindFirstObjectByType<Worktown.Game.Shop.MenuBoard>();
-            if (_menuBoard != null) _menuBoard.ServerSet(_menu.Prices, _menu.Selected);
+            _menuLayoutVersion = Worktown.Game.Layout.LayoutRegistry.Version;
+            Worktown.Game.Shop.MenuBoard board = MenuBoardNow;
+            if (board != null && board.IsSpawned) board.ServerSet(_menu.Prices, _menu.Selected);
         }
 
         private void Awake()
@@ -177,6 +188,7 @@ namespace Worktown.Game.Economy
         private void Update()
         {
             if (!_networkManager.IsServerStarted) return;
+            if (_menuLayoutVersion != Worktown.Game.Layout.LayoutRegistry.Version) PublishMenu(); // spec 062a: a menu board was spawned
             _secondsIntoHour += Time.deltaTime;
             if (_secondsIntoHour < EconomyRules.SecondsPerHour)
             {

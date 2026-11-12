@@ -71,29 +71,15 @@ namespace Worktown.Sim.Tests.Climb
         [Fact]
         public void GatePurchaseAndConditions()
         {
-            CrewSetup setup = T.Setup();
             Assert.Equal("lease", ClimbPolicy.GatePurchase(C, T.State())!.Id);
             Assert.Null(ClimbPolicy.GatePurchase(C, T.State(ClimbStage.FoodCorner, 0, "lease")));
-            Assert.True(ClimbPolicy.GateConditionsMet(C, T.State(), setup)); // stage 1: only the purchase
+            Assert.True(ClimbPolicy.GateConditionsMet(C, T.State())); // stage 1: only the purchase
             ClimbState two = T.State(ClimbStage.FirstRestaurant, 0, "booth_kit") with { RecentStars = new[] { 40, 40 } };
-            Assert.True(ClimbPolicy.GateConditionsMet(C, two, setup));
-            Assert.False(ClimbPolicy.GateConditionsMet(C, two with { RecentStars = new[] { 40 } }, setup)); // window of 2
-            Assert.False(ClimbPolicy.GateConditionsMet(C, two with { RecentStars = new[] { 20, 30 } }, setup)); // 2.5 < 3.0 stars
-            Assert.False(ClimbPolicy.GateConditionsMet(C, two with { Owned = new string[0] }, setup)); // one extra channel needed
-            Assert.False(ClimbPolicy.GateConditionsMet(C, T.State(ClimbStage.BeyondKitchen), setup)); // no stage 6
-        }
-
-        [Fact]
-        public void FewPlayersCheckUsesTwoPlayersPlusStaff()
-        {
-            CrewSetup five = T.Setup(5);
-            ClimbState s = T.State(ClimbStage.ServiceMix) with { RecentStars = new[] { 40 } };
-            // 2 players x 60 actions, mistakes 62 permille: serves 900 permille of up to 125 demand actions.
-            Assert.True(ClimbPolicy.FewPlayersOk(C, s with { LastDemandActions = 125 }, five));
-            Assert.False(ClimbPolicy.FewPlayersOk(C, s with { LastDemandActions = 126 }, five));
-            Assert.True(ClimbPolicy.FewPlayersOk(C, s with { LastDemandActions = 126, Owned = new[] { "helper" } }, five));
-            Assert.False(ClimbPolicy.GateConditionsMet(C, s with { LastDemandActions = 126 }, five));
-            Assert.True(ClimbPolicy.GateConditionsMet(C, s with { LastDemandActions = 100 }, five));
+            Assert.True(ClimbPolicy.GateConditionsMet(C, two));
+            Assert.False(ClimbPolicy.GateConditionsMet(C, two with { RecentStars = new[] { 40 } })); // window of 2
+            Assert.False(ClimbPolicy.GateConditionsMet(C, two with { RecentStars = new[] { 20, 30 } })); // 2.5 < 3.0 stars
+            Assert.False(ClimbPolicy.GateConditionsMet(C, two with { Owned = new string[0] })); // one extra channel needed
+            Assert.False(ClimbPolicy.GateConditionsMet(C, T.State(ClimbStage.BeyondKitchen))); // no stage 6
         }
 
         [Fact]
@@ -199,6 +185,7 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(840, next.EnteredSeconds(ClimbStage.FirstRestaurant));
             Assert.Empty(next.RecentStars);
             Assert.Equal(400, next.Reputation);
+            Assert.Empty(ClimbPolicy.EnterNextStage(C, s with { RecentMissed = new[] { 500 } }).RecentMissed); // 052b review: a new menu history
             ClimbState five = T.State(ClimbStage.BeyondKitchen);
             Assert.Same(five, ClimbPolicy.EnterNextStage(C, five)); // a stage is never lost or passed beyond 5
         }

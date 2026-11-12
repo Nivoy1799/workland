@@ -12,8 +12,8 @@ namespace Worktown.Game.Art
     {
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-        private static readonly Color On = Palette.Sage;
-        private static readonly Color Off = Palette.Shade(Palette.Brick, 0.6f);
+        private static readonly Color On = Palette.Ground;
+        private static readonly Color Off = Palette.Shade(Palette.WoodDark, 0.6f);
         private static readonly Color Lowered = Palette.Mustard;
         private static readonly Color Raised = Palette.Charcoal; // dark on the steel front, so the button reads
 

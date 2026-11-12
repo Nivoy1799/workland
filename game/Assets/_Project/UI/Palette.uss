@@ -1,19 +1,27 @@
-/* Spec 026 (D32): the warm muted palette of docs/art-direction.md, section 5, as USS variables.
+/* Spec 026 (D32), revised by D49 (palette P1): the palette of docs/art-direction.md, section 5, as USS variables.
    The same names as Art/Palette.cs; no other stylesheet may hold a colour value (PaletteTests). */
 :root {
-    --wt-cream: #F2E6D0;
-    --wt-plaster: #E4D5BC;
-    --wt-wood-light: #C8A27A;
+    --wt-cream: #F3E9D2;
+    --wt-plaster: #E2EADD;
+    --wt-wall-out: #F1E6CF;
+    --wt-mint: #8CC5AC;
+    --wt-teal: #4F9A85;
+    --wt-teal-dark: #2F6E5E;
+    --wt-mustard: #E3AE45;
+    --wt-orange: #E58436;
+    --wt-salmon: #E8957A;
+    --wt-sky: #9CC3D5;
+    --wt-deep-blue: #4E6E8E;
+    --wt-terracotta: #C9734F;
+    --wt-wood-light: #B98B5E;
     --wt-wood-dark: #8A5A3B;
-    --wt-terracotta: #C8664A;
-    --wt-brick: #A4503C;
-    --wt-mustard: #D9A441;
-    --wt-sage: #8FA77E;
-    --wt-leaf: #5E7F4F;
-    --wt-soft-blue: #7FA3B8;
-    --wt-deep-blue: #3F5F78;
-    --wt-steel: #9AA0A3;
+    --wt-chrome: #C9CDD0;
     --wt-charcoal: #3A3532;
+    --wt-leaf: #5E8F4F;
+    --wt-plant: #3F6B3A;
+    --wt-ground: #9DB585;
+    --wt-pavement: #D8CDB8;
+    --wt-road: #6F6A66;
     --wt-ink: #2A2624;
     --wt-panel: rgba(46, 42, 39, 0.85);
     --wt-interact: #F5D27A;

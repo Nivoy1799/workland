@@ -58,5 +58,45 @@ namespace Worktown.Sim.Tests.Climb
             Assert.Equal(750, ClimbReport.ShareOfRivals(run, ClimbStage.FoodCorner));
             Assert.Equal(0, ClimbReport.ShareOfRivals(run, ClimbStage.FirstRestaurant));
         }
+
+        [Fact]
+        public void InfoLinesGameNumbersAndTheCrewTablePrintButInfoIsNotCounted() // spec 052b AC9, AC10
+        {
+            var runs = new[] { Run(1), Run(4) };
+            var checks = ClimbEvaluation.Evaluate(runs, ClimbTargets.Default);
+            var info = new[] { new TargetCheck("T4m", false, "4p average fastest x 1.0 h >= 0.85 x median 2.0 h (2/2 finish)") };
+            var rows = new[]
+            {
+                new GameNumbersRow(1, 550, 250, 137, 4100, 2, 100, 300, 1200, 16400, 5, 5),
+                new GameNumbersRow(4, 1000, 1000, 1000, 30000, 8, 500, 2500, 5000, 120000, 9, 9),
+            };
+            string[] lines = ClimbReport.Format(runs, checks, info, rows).TrimEnd('\n').Split('\n');
+            string infoLine = Assert.Single(lines, l => l.StartsWith("INFO "));
+            Assert.Equal("INFO T4m 4p average fastest x 1.0 h >= 0.85 x median 2.0 h (2/2 finish) (would fail)", infoLine);
+            Assert.True(System.Array.IndexOf(lines, infoLine) > System.Array.IndexOf(lines, "== 4 players =="));
+            Assert.Contains(lines, l => l.StartsWith("== GAME NUMBERS"));
+            Assert.Contains(lines, l => l.StartsWith("1        0.55   0.25x   0.137x $41.00"));
+            Assert.Contains(lines, l => l.StartsWith("== crew sizes (D40"));
+            Assert.Contains(lines, l => l.StartsWith("crew (D40): h 1, demand 1x, goal 1x"));
+            Assert.Equal($"RESULT: PASS ({checks.Count}/{checks.Count})", lines.Last()); // the failing INFO line does not count
+        }
+
+        [Fact]
+        public void TheScaleIsReadFromTheRuns() // 037 review: no separate money-scale argument
+        {
+            ClimbRun dollars = T.Run(4, "average", ClimbStrategy.Reference, 1, T.Good, (i, st, r) => T.Svc(i, st, net: 100, upkeep: 10));
+            ClimbRun cents = new ClimbRun(dollars.Setup, dollars.HorizonSeconds,
+                dollars.Services.Select(s => s with { Revenue = s.Revenue * 100, Upkeep = s.Upkeep * 100 }).ToList(), dollars.Final, 100);
+            string Net(ClimbRun r) => ClimbReport.Format(new[] { r }, new TargetCheck[0]).Split('\n').First(l => l.StartsWith("average  S2"));
+            Assert.Equal(Net(dollars), Net(cents));
+        }
+
+        [Fact]
+        public void FormatMoneyPrintsDollarsAndCents()
+        {
+            Assert.Equal("$41.10", ClimbReport.FormatMoney(4110));
+            Assert.Equal("$0.05", ClimbReport.FormatMoney(5));
+            Assert.Equal("-$1.25", ClimbReport.FormatMoney(-125));
+        }
     }
 }

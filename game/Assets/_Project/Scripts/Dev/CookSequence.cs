@@ -72,7 +72,7 @@ namespace Worktown.Game.Dev
                 if (s.IsBurner && Vector3.Distance(s.SpotWorldPosition(0), pot.transform.position) <= 0.2f) potBurner = s;
             StationButton potSwitch = null;
             foreach (StationButton b in UnityEngine.Object.FindObjectsByType<StationButton>(FindObjectsSortMode.None))
-                if (potBurner != null && b.Station != null && b.Station.Index == potBurner.StoveIndex
+                if (potBurner != null && b.Station != null && b.Station.Id == potBurner.StovePieceId
                     && b.Option == StationRules.StoveOption(potBurner.Burner, StationRules.StoveSwitch)) potSwitch = b;
             if (freeBurner == null || stoveTop == null || potSwitch == null)
             {
@@ -115,7 +115,7 @@ namespace Worktown.Game.Dev
             yield return actor.LevelView();
             yield return actor.WalkTo(atB, false, false);
             Vector3 burnerSpot = freeBurner.SpotWorldPosition(0);
-            yield return actor.Use("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => me.DevSendPlace(freeBurner.Index, 0),
+            yield return actor.Use("put the pan on the free burner", burnerSpot, InteractionAction.Place, () => me.DevSendPlace(freeBurner.Id, 0),
                 capture?.Before("pan-ghost-on-burner", "pan-place", frames));
             Debug.Log("[Demo] the pan is on the burner (" + Time.time.ToString("0.0") + " s)");
             if (shot != null) yield return shot("pan-on-burner");
@@ -127,7 +127,7 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(atB, false, false);
             int nextToPan = PlaceSpots.NearestFree(stoveTop.Size, stoveTop.ToTopPlane(burnerSpot), null);
             yield return actor.Use("put the potato on the stove top next to the pan", stoveTop.SpotWorldPosition(nextToPan),
-                InteractionAction.Place, () => me.DevSendPlace(stoveTop.Index, nextToPan), capture?.Before("potato-aims-next-to-pan", null, 0f));
+                InteractionAction.Place, () => me.DevSendPlace(stoveTop.Id, nextToPan), capture?.Before("potato-aims-next-to-pan", null, 0f));
             Debug.Log("[Demo] potato next to the pan (" + Time.time.ToString("0.0") + " s)");
             if (shot != null) yield return shot("potato-next-to-pan");
 
@@ -148,7 +148,7 @@ namespace Worktown.Game.Dev
                 if (shot != null) yield return shot(id + "-in-pot");
             }
             yield return actor.Use("switch the pot's burner on", potSwitch.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(potSwitch.Station.Index, potSwitch.Option));
+                () => me.DevSendStation(potSwitch.Station.Id, potSwitch.Option));
             Debug.Log("[Demo] cookware demo done (" + Time.time.ToString("0.0") + " s): pot holds " + pot.ContentCount + " ingredients");
             Vector3 between = (pan.transform.position + pot.transform.position) * 0.5f + Vector3.up * 0.1f;
             if (shot == null)
@@ -174,7 +174,7 @@ namespace Worktown.Game.Dev
             yield return actor.Use("put the potato into the pan", ContentPoint(pan), InteractionAction.PutInto,
                 () => me.DevSendUse(panObject, VesselRules.ActionUse));
             yield return actor.Use("switch the pan's burner on", panSwitch.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(panSwitch.Station.Index, panSwitch.Option));
+                () => me.DevSendStation(panSwitch.Station.Id, panSwitch.Option));
             float start = Time.unscaledTime;
             Debug.Log("[Demo] the pan's burner is on (" + Time.time.ToString("0.0") + " s)");
             // A little above the two, so neither ring sits on the view centre (it would hide there in first person).
@@ -219,7 +219,7 @@ namespace Worktown.Game.Dev
             // The station's pivot is its centre: aim at the middle of its top.
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
             yield return actor.Use("serve it at the counter", counterTop, InteractionAction.Sell,
-                () => me.DevSendStation(counter.Index, 0), capture.Before("serve-aim", "serve-reward", RewardFramesSeconds));
+                () => me.DevSendStation(counter.Id, 0), capture.Before("serve-aim", "serve-reward", RewardFramesSeconds));
             yield return shot("served");
             yield return PayAtRegister(actor, capture, laneZ, "potato"); // spec 032: whoever got it pays
 
@@ -264,7 +264,7 @@ namespace Worktown.Game.Dev
             {
                 till.TryGetSlot(Worktown.Game.Shop.RegisterRules.CardOption, out StockSlot terminal);
                 yield return actor.Use("pay by card", terminal.Anchor, InteractionAction.Pay,
-                    () => me.DevSendStation(till.Index, Worktown.Game.Shop.RegisterRules.CardOption),
+                    () => me.DevSendStation(till.Id, Worktown.Game.Shop.RegisterRules.CardOption),
                     capture.Before(prefix + "-card-aim", prefix + "-card-paid", RewardFramesSeconds));
             }
             else
@@ -275,7 +275,7 @@ namespace Worktown.Game.Dev
                 {
                     int option = IndexOfCoin(coin);
                     till.TryGetSlot(option, out StockSlot slot);
-                    yield return actor.Use("give " + Worktown.Game.Economy.EconomyRules.Money(coin), slot.Anchor, InteractionAction.Pay, () => me.DevSendStation(till.Index, option),
+                    yield return actor.Use("give " + Worktown.Game.Economy.EconomyRules.Money(coin), slot.Anchor, InteractionAction.Pay, () => me.DevSendStation(till.Id, option),
                         capture.Before(prefix + "-give-" + coin + "-aim", first ? prefix + "-coin-" + coin : null, frames));
                     first = false;
                 }
@@ -283,7 +283,7 @@ namespace Worktown.Game.Dev
                     + (view != null ? view.DisplayText : "?") + "'");
                 till.TryGetSlot(Worktown.Game.Shop.RegisterRules.GiveChangeOption, out StockSlot give);
                 yield return actor.Use("hand over the change", give.Anchor, InteractionAction.Pay,
-                    () => me.DevSendStation(till.Index, Worktown.Game.Shop.RegisterRules.GiveChangeOption),
+                    () => me.DevSendStation(till.Id, Worktown.Game.Shop.RegisterRules.GiveChangeOption),
                     capture.Before(prefix + "-handover-aim", prefix + "-paid", RewardFramesSeconds));
             }
             yield return capture.Shot(prefix + "-after-paying");
@@ -350,7 +350,7 @@ namespace Worktown.Game.Dev
             int version = board.Version;
             PickupInteractor me = actor.Interactor;
             yield return actor.Use(Worktown.Game.Shop.MenuBoardRules.ButtonWords(option), slot.Anchor, InteractionAction.Press,
-                () => me.DevSendStation(station.Index, option));
+                () => me.DevSendStation(station.Id, option));
             float until = Time.unscaledTime + 2f;
             while (board.Version == version && Time.unscaledTime < until) yield return null;
         }
@@ -453,7 +453,7 @@ namespace Worktown.Game.Dev
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(slot.Anchor.x, 0f, laneZ), false, false);
             yield return capture.Shot("cucumber-fridge");
-            yield return actor.Use("take a cucumber", slot.Anchor, InteractionAction.Buy, () => me.DevSendStation(slot.Station.Index, slot.Option),
+            yield return actor.Use("take a cucumber", slot.Anchor, InteractionAction.Buy, () => me.DevSendStation(slot.Station.Id, slot.Option),
                 capture.Before("cucumber-slot-highlight", "cucumber-take", TourRules.ClickFramesSeconds));
             yield return capture.Shot("cucumber-in-hand");
             if (!me.IsHoldingSomething() || !HeldName(me).Contains("cucumber"))
@@ -512,7 +512,7 @@ namespace Worktown.Game.Dev
             {
                 int spot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
                 yield return actor.Use("put the knife back", prep.SpotWorldPosition(spot), InteractionAction.Place,
-                    () => me.DevSendPlace(prep.Index, spot));
+                    () => me.DevSendPlace(prep.Id, spot));
             }
         }
 
@@ -609,7 +609,7 @@ namespace Worktown.Game.Dev
             {
                 int spot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
                 yield return actor.Use("put the knife back", prep.SpotWorldPosition(spot), InteractionAction.Place,
-                    () => me.DevSendPlace(prep.Index, spot));
+                    () => me.DevSendPlace(prep.Id, spot));
             }
             yield return actor.Use("take the sticks", ContentPoint(board), InteractionAction.Take, () => me.DevSendUse(boardObject, VesselRules.ActionUse));
 
@@ -618,11 +618,11 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(atFryer, false, false);
             yield return capture.Shot("fryer");
             yield return actor.Use("switch the fryer on", power.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(fryer.Index, FryerRules.PowerOption), capture.Before("fryer-power-aim", null, 0f));
+                () => me.DevSendStation(fryer.Id, FryerRules.PowerOption), capture.Before("fryer-power-aim", null, 0f));
             yield return actor.Use("put the sticks into the basket", ContentPoint(basket), InteractionAction.PutInto,
                 () => me.DevSendUse(basketObject, VesselRules.ActionUse), capture.Before("basket-aim", "basket-in", frames));
             yield return actor.Use("lower the basket", lower.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(fryer.Index, FryerRules.LowerOption(0)), capture.Before("basket-button-aim", "basket-lower", frames));
+                () => me.DevSendStation(fryer.Id, FryerRules.LowerOption(0)), capture.Before("basket-button-aim", "basket-lower", frames));
             float start = Time.unscaledTime;
             Debug.Log("[Demo] fries: the basket is down (" + Time.time.ToString("0.0") + " s)");
             yield return actor.AimAt(ContentPoint(basket) + Vector3.up * WatchAbove, 0.8f);
@@ -659,7 +659,7 @@ namespace Worktown.Game.Dev
             }
             if (!shaken || basket.Zone != HeatZone.Perfect) actor.CountTimeout("cook: the basket did not reach Perfect with a shake (" + basket.Zone + ")");
             yield return actor.Use("raise the basket", lower.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(fryer.Index, FryerRules.RaiseOption(0)), capture.Before("raise-aim", "basket-raise", frames));
+                () => me.DevSendStation(fryer.Id, FryerRules.RaiseOption(0)), capture.Before("raise-aim", "basket-raise", frames));
             yield return actor.AimAt(ContentPoint(basket), 0.2f);
             if (capture.Frames != null) yield return capture.Frames("drain-drips", DrainFramesSeconds);
             float drainStart = Time.unscaledTime;
@@ -686,7 +686,7 @@ namespace Worktown.Game.Dev
             LogOrders();
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
             yield return actor.Use("serve the fries at the counter", counterTop, InteractionAction.Sell,
-                () => me.DevSendStation(counter.Index, 0), capture.Before("fries-serve-aim", "fries-served", RewardFramesSeconds));
+                () => me.DevSendStation(counter.Id, 0), capture.Before("fries-serve-aim", "fries-served", RewardFramesSeconds));
             ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
             yield return new WaitForSecondsRealtime(0.5f);
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
@@ -766,7 +766,7 @@ namespace Worktown.Game.Dev
             yield return actor.Use("put the falafel mix into the basket", ContentPoint(basket), InteractionAction.PutInto,
                 () => me.DevSendUse(basketObject, VesselRules.ActionUse));
             yield return actor.Use("lower the basket", lower.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(fryer.Index, FryerRules.LowerOption(0)));
+                () => me.DevSendStation(fryer.Id, FryerRules.LowerOption(0)));
             float start = Time.unscaledTime;
             yield return actor.AimAt(ContentPoint(basket) + Vector3.up * WatchAbove, 0.8f);
             float nextShot = 0f;
@@ -784,7 +784,7 @@ namespace Worktown.Game.Dev
             if (basket.Zone != HeatZone.Perfect) actor.CountTimeout("cook: the falafel did not reach Perfect (" + basket.Zone + ")");
             yield return new WaitForSecondsRealtime(1f);
             yield return actor.Use("raise the basket", lower.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(fryer.Index, FryerRules.RaiseOption(0)));
+                () => me.DevSendStation(fryer.Id, FryerRules.RaiseOption(0)));
             float drainStart = Time.unscaledTime;
             while (FryerRules.StateOf(basket.Mode.Value) != BasketState.Raised && Time.unscaledTime - drainStart < 5f) yield return null;
             yield return actor.Use("take the falafel", ContentPoint(basket), InteractionAction.Take, () => me.DevSendUse(basketObject, VesselRules.ActionUse));
@@ -813,7 +813,7 @@ namespace Worktown.Game.Dev
             {
                 int knifeSpot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
                 yield return actor.Use("put the knife back", prep.SpotWorldPosition(knifeSpot), InteractionAction.Place,
-                    () => me.DevSendPlace(prep.Index, knifeSpot));
+                    () => me.DevSendPlace(prep.Id, knifeSpot));
             }
             yield return actor.Use("take the lettuce slices", ContentPoint(cutting), InteractionAction.Take,
                 () => me.DevSendUse(cuttingObject, VesselRules.ActionUse));
@@ -846,7 +846,7 @@ namespace Worktown.Game.Dev
                 () => me.DevSendUse(spotObject, VesselRules.ActionFold), capture.Before("fold-aim", "fold", frames));
             yield return StackShot(actor, capture, spot, "folded");
             yield return actor.Use("wrap it in paper", paper.Anchor, InteractionAction.Pack,
-                () => me.DevSendStation(board.Index, BuildRules.PackagingOption(BuildRules.Paper)), capture.Before("paper-aim", "paper", frames));
+                () => me.DevSendStation(board.Id, BuildRules.PackagingOption(BuildRules.Paper)), capture.Before("paper-aim", "paper", frames));
             yield return StackShot(actor, capture, spot, "wrapped");
             Debug.Log("[Demo] wrap: the board holds '" + spot.Title.Value + "', mode " + spot.Mode.Value);
 
@@ -863,7 +863,7 @@ namespace Worktown.Game.Dev
             LogOrders();
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
             yield return actor.Use("serve the falafel wrap at the counter", counterTop, InteractionAction.Sell,
-                () => me.DevSendStation(counter.Index, 0), capture.Before("wrap-serve-aim", "wrap-served", RewardFramesSeconds));
+                () => me.DevSendStation(counter.Id, 0), capture.Before("wrap-serve-aim", "wrap-served", RewardFramesSeconds));
             ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
             yield return new WaitForSecondsRealtime(0.5f);
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
@@ -950,13 +950,13 @@ namespace Worktown.Game.Dev
             yield return capture.Shot("spit-bare");
             Debug.Log("[Demo] spit: '" + InteractionRules.PromptFor(me.CurrentHeld, me.CurrentAim) + "'");
             yield return actor.Use("load a seitan cone", cone.Anchor, InteractionAction.Load,
-                () => me.DevSendStation(spit.Index, SpitRules.LoadOption), capture.Before("cone-aim", "cone-load", frames));
+                () => me.DevSendStation(spit.Id, SpitRules.LoadOption), capture.Before("cone-aim", "cone-load", frames));
             float until = Time.unscaledTime + 3f;
             while (!SpitRules.HasCone(StationFlags(spit)) && Time.unscaledTime < until) yield return null;
             if (!SpitRules.HasCone(StationFlags(spit))) actor.CountTimeout("cook: no cone on the spit");
             for (int i = 0; i < 2; i++)
                 yield return actor.Use("turn the spit's knob", knob.transform.position, InteractionAction.Press,
-                    () => me.DevSendStation(spit.Index, SpitRules.KnobOption), i == 1 ? capture.Before("knob-aim", "knob-high", frames) : null);
+                    () => me.DevSendStation(spit.Id, SpitRules.KnobOption), i == 1 ? capture.Before("knob-aim", "knob-high", frames) : null);
             float heated = Time.unscaledTime;
             Debug.Log("[Demo] spit: heat " + SpitRules.LevelName(SpitRules.LevelOf(StationFlags(spit))) + ", cone " + SpitRules.PortionsOf(coneVessel.Mode.Value)
                 + " portions, '" + coneVessel.Title.Value + "'");
@@ -1036,7 +1036,7 @@ namespace Worktown.Game.Dev
                 yield return actor.WalkTo(new Vector3(knifeHome.x, 0f, laneZ), false, false);
                 int knifeSpot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
                 yield return actor.Use("put the knife back", prep.SpotWorldPosition(knifeSpot), InteractionAction.Place,
-                    () => me.DevSendPlace(prep.Index, knifeSpot));
+                    () => me.DevSendPlace(prep.Id, knifeSpot));
             }
             yield return actor.LevelView();
             yield return actor.WalkTo(atBoard, false, false);
@@ -1075,14 +1075,14 @@ namespace Worktown.Game.Dev
             while ((me.DevSqueezeBusy || spot.ContentCount < 4) && Time.unscaledTime - letGo < 3f) yield return null;
             yield return actor.Use("fold the wrap", ContentPoint(spot), InteractionAction.Fold, () => me.DevSendUse(spotObject, VesselRules.ActionFold));
             yield return actor.Use("wrap it in paper", paper.Anchor, InteractionAction.Pack,
-                () => me.DevSendStation(board.Index, BuildRules.PackagingOption(BuildRules.Paper)));
+                () => me.DevSendStation(board.Id, BuildRules.PackagingOption(BuildRules.Paper)));
             yield return StackShot(actor, capture, spot, "spit-wrap-wrapped");
             yield return actor.Use("take the seitan wrap", ContentPoint(spot), InteractionAction.Take, () => me.DevSendUse(spotObject, VesselRules.ActionUse));
             yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
             LogOrders();
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
             yield return actor.Use("serve the seitan wrap at the counter", counterTop, InteractionAction.Sell,
-                () => me.DevSendStation(counter.Index, 0), capture.Before("spit-wrap-serve-aim", "spit-wrap-served", RewardFramesSeconds));
+                () => me.DevSendStation(counter.Id, 0), capture.Before("spit-wrap-serve-aim", "spit-wrap-served", RewardFramesSeconds));
             ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
             yield return new WaitForSecondsRealtime(0.5f);
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
@@ -1183,7 +1183,7 @@ namespace Worktown.Game.Dev
             // Spec 042: the cup onto the lemonade tap's tray (a left click with the ghost); it snaps under the spout.
             Vector3 onTray = spot.SpotWorldPosition(0) + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight * 0.5f);
             yield return actor.Use("put the cup under the lemonade tap", onTray, InteractionAction.Place,
-                () => me.DevSendPlace(spot.Index, 0), capture.Before("cup-place-aim", "cup-place", frames), viaInput: true);
+                () => me.DevSendPlace(spot.Id, 0), capture.Before("cup-place-aim", "cup-place", frames), viaInput: true);
             until = Time.unscaledTime + 3f;
             while (!OnSpot(cup, spot) && Time.unscaledTime < until) yield return null;
             if (!OnSpot(cup, spot)) actor.CountTimeout("cook: the cup is not on the lemonade tap's tray");
@@ -1205,7 +1205,7 @@ namespace Worktown.Game.Dev
             actor.Intents.View = Worktown.Game.Player.ViewMode.FirstPerson;
             yield return actor.LevelView();
             yield return actor.Use("put the cup back under the lemonade tap", onTray, InteractionAction.Place,
-                () => me.DevSendPlace(spot.Index, 0), null, viaInput: true);
+                () => me.DevSendPlace(spot.Id, 0), null, viaInput: true);
             until = Time.unscaledTime + 3f;
             while (!OnSpot(cup, spot) && Time.unscaledTime < until) yield return null;
             if (!OnSpot(cup, spot)) actor.CountTimeout("cook: the cup is not back on the lemonade tap's tray");
@@ -1256,7 +1256,7 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(new Vector3(counter.transform.position.x, 0f, laneZ), false, false);
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
             yield return actor.Use("serve the lemonade at the counter", counterTop, InteractionAction.Sell,
-                () => me.DevSendStation(counter.Index, 0), capture.Before("lemonade-serve-aim", "lemonade-served", RewardFramesSeconds));
+                () => me.DevSendStation(counter.Id, 0), capture.Before("lemonade-serve-aim", "lemonade-served", RewardFramesSeconds));
             ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
             yield return new WaitForSecondsRealtime(0.5f);
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
@@ -1270,7 +1270,7 @@ namespace Worktown.Game.Dev
         {
             if (dispenser == null) return null;
             foreach (PlaceSurface s in UnityEngine.Object.FindObjectsByType<PlaceSurface>(FindObjectsSortMode.None))
-                if (s.IsCupSpot && s.DispenserIndex == dispenser.Index && s.CupTap == tap) return s;
+                if (s.IsCupSpot && s.DispenserPieceId == dispenser.Id && s.CupTap == tap) return s;
             return null;
         }
 
@@ -1345,7 +1345,7 @@ namespace Worktown.Game.Dev
             if (ByteOf(ret) == 0) actor.CountTimeout("cook: no dirty plate came back (the eat-in guest)");
             yield return actor.AimAt(stack.Anchor, 1f);
             yield return capture.Shot("dish-return");
-            yield return actor.Use("take a dirty plate", stack.Anchor, InteractionAction.Take, () => me.DevSendStation(ret.Index, 0),
+            yield return actor.Use("take a dirty plate", stack.Anchor, InteractionAction.Take, () => me.DevSendStation(ret.Id, 0),
                 capture.Before("dirty-aim", "dirty-take", frames));
             until = Time.unscaledTime + 3f;
             while (!Holds<Worktown.Game.Shop.DirtyDish>(me) && Time.unscaledTime < until) yield return null;
@@ -1355,7 +1355,7 @@ namespace Worktown.Game.Dev
             LogHold(me, "dirty plate");
             yield return actor.WalkTo(new Vector3(sink.transform.position.x, 0f, laneZ), false, false);
             yield return actor.Use("put the plate in the sink", basin.Anchor, InteractionAction.Wash,
-                () => me.DevSendStation(sink.Index, Worktown.Game.Shop.CleaningRules.SinkPutOption), capture.Before("wash-aim", "wash", frames));
+                () => me.DevSendStation(sink.Id, Worktown.Game.Shop.CleaningRules.SinkPutOption), capture.Before("wash-aim", "wash", frames));
             until = Time.unscaledTime + 3f;
             while (Worktown.Game.Shop.CleaningRules.BasinOf(ByteOf(sink)) == 0 && Time.unscaledTime < until) yield return null;
             yield return capture.WaitForFrames();
@@ -1387,7 +1387,7 @@ namespace Worktown.Game.Dev
             if (spillSpot != null)
             {
                 Vector3 tray = spillSpot.SpotWorldPosition(0) + Vector3.up * (Worktown.Game.Art.DrinkArtRules.CupHeight * 0.5f);
-                yield return actor.Use("put the cup under the lemonade tap", tray, InteractionAction.Place, () => me.DevSendPlace(spillSpot.Index, 0),
+                yield return actor.Use("put the cup under the lemonade tap", tray, InteractionAction.Place, () => me.DevSendPlace(spillSpot.Id, 0),
                     null, viaInput: true);
                 until = Time.unscaledTime + 3f;
                 while (!OnSpot(overfilled, spillSpot) && Time.unscaledTime < until) yield return null;
@@ -1420,14 +1420,14 @@ namespace Worktown.Game.Dev
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(trash.transform.position.x + 0.25f, 0f, laneZ), false, false);
             yield return actor.Use("throw the cup away", can.Anchor + Vector3.up * 0.3f, InteractionAction.Discard,
-                () => me.DevSendStation(trash.Index, Worktown.Game.Shop.CleaningRules.TrashOption), capture.Before("discard-aim", "discard", frames));
+                () => me.DevSendStation(trash.Id, Worktown.Game.Shop.CleaningRules.TrashOption), capture.Before("discard-aim", "discard", frames));
             until = Time.unscaledTime + 3f;
             while (!Worktown.Sim.Economy.HygieneRules.IsTrashFull(ByteOf(trash)) && Time.unscaledTime < until) yield return null;
             yield return capture.WaitForFrames();
             yield return actor.AimAt(can.Anchor, 1f);
             yield return capture.Shot("trash-full");
             Debug.Log("[Demo] cleaning: the trash is " + (Worktown.Sim.Economy.HygieneRules.IsTrashFull(ByteOf(trash)) ? "full" : "not full") + ": " + CleaningText());
-            yield return actor.Use("take the bag out", can.Anchor, InteractionAction.Take, () => me.DevSendStation(trash.Index, Worktown.Game.Shop.CleaningRules.TrashOption),
+            yield return actor.Use("take the bag out", can.Anchor, InteractionAction.Take, () => me.DevSendStation(trash.Id, Worktown.Game.Shop.CleaningRules.TrashOption),
                 capture.Before("bag-aim", "bag-take", frames));
             until = Time.unscaledTime + 3f;
             while (!Holds<Worktown.Game.Shop.TrashBag>(me) && Time.unscaledTime < until) yield return null;
@@ -1440,7 +1440,7 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(outside, false, false);
             Vector3 binTop = bin.transform.position + Vector3.up * (Worktown.Game.Art.CleaningArtRules.BinHeight * 0.5f);
             yield return actor.Use("throw the bag in the bin", binTop, InteractionAction.Discard,
-                () => me.DevSendStation(bin.Index, Worktown.Game.Shop.CleaningRules.BinOption), capture.Before("bin-aim", "bin", frames));
+                () => me.DevSendStation(bin.Id, Worktown.Game.Shop.CleaningRules.BinOption), capture.Before("bin-aim", "bin", frames));
             until = Time.unscaledTime + 3f;
             while (Holds<Worktown.Game.Shop.TrashBag>(me) && Time.unscaledTime < until) yield return null;
             if (Holds<Worktown.Game.Shop.TrashBag>(me)) actor.CountTimeout("cook: the bag is still in the hands");
@@ -1484,7 +1484,7 @@ namespace Worktown.Game.Dev
             {
                 int spot = PlaceSpots.NearestFree(drain.Size, drain.ToTopPlane(clothHome), null);
                 yield return actor.Use("put the cloth back", drain.SpotWorldPosition(spot), InteractionAction.Place,
-                    () => me.DevSendPlace(drain.Index, spot), null);
+                    () => me.DevSendPlace(drain.Id, spot), null);
             }
             yield return actor.LevelView();
             yield return new WaitForSecondsRealtime(6f); // all clean: the meter climbs
@@ -1530,7 +1530,7 @@ namespace Worktown.Game.Dev
             yield return StackShot(actor, capture, spot, "box-stack");
             yield return capture.WaitForFrames();
             yield return actor.Use("put it into a box", box.Anchor, InteractionAction.Pack,
-                () => me.DevSendStation(board.Index, BuildRules.PackagingOption(BuildRules.Box)), capture.Before("box-aim", "box", frames));
+                () => me.DevSendStation(board.Id, BuildRules.PackagingOption(BuildRules.Box)), capture.Before("box-aim", "box", frames));
             yield return capture.WaitForFrames();
             yield return StackShot(actor, capture, spot, "boxed");
             Debug.Log("[Demo] box: the board holds '" + spot.Title.Value + "', mode " + spot.Mode.Value);
@@ -1633,7 +1633,7 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(atGriddle, false, false);
             int plateSpot = PlaceSpots.NearestFree(deck.Size, new Vector2(-0.375f, -0.125f), null);
             yield return actor.Use("put the plate on the griddle's deck", deck.SpotWorldPosition(plateSpot), InteractionAction.Place,
-                () => me.DevSendPlace(deck.Index, plateSpot));
+                () => me.DevSendPlace(deck.Id, plateSpot));
             yield return capture.Shot("griddle");
 
             // A whole paprika and a whole mushroom from the dry shelf onto the deck (staged; they go on the griddle after the seitan).
@@ -1645,7 +1645,7 @@ namespace Worktown.Game.Dev
                 int deckSpot = PlaceSpots.NearestFree(deck.Size, new Vector2(-0.125f + 0.25f * staged.Count, -0.125f), null);
                 staged.Add(deck.SpotWorldPosition(deckSpot));
                 yield return actor.Use("put the " + slot.IngredientId + " on the griddle's deck", deck.SpotWorldPosition(deckSpot), InteractionAction.Place,
-                    () => me.DevSendPlace(deck.Index, deckSpot));
+                    () => me.DevSendPlace(deck.Id, deckSpot));
             }
 
             // Seitan strips: the fridge, the board, the knife (two strokes, a turn, a stroke), the knife back.
@@ -1666,7 +1666,7 @@ namespace Worktown.Game.Dev
             if (prep != null)
             {
                 int spot = PlaceSpots.NearestFree(prep.Size, prep.ToTopPlane(knifeHome), null);
-                yield return actor.Use("put the knife back", prep.SpotWorldPosition(spot), InteractionAction.Place, () => me.DevSendPlace(prep.Index, spot));
+                yield return actor.Use("put the knife back", prep.SpotWorldPosition(spot), InteractionAction.Place, () => me.DevSendPlace(prep.Id, spot));
             }
             yield return actor.Use("take the seitan sticks", ContentPoint(board), InteractionAction.Take, () => me.DevSendUse(boardObject, VesselRules.ActionUse));
             yield return actor.LevelView();
@@ -1675,7 +1675,7 @@ namespace Worktown.Game.Dev
             // The griddle on, the seitan strips on spot 0, then the staged paprika and mushroom on spots 1 and 2 (a few seconds
             // apart, so their flips and takes do not all fall on the same moment).
             yield return actor.Use("switch the griddle on", knob.transform.position, InteractionAction.Press,
-                () => me.DevSendStation(griddle.Index, GriddleRules.PowerOption), capture.Before("griddle-knob-aim", null, 0f));
+                () => me.DevSendStation(griddle.Id, GriddleRules.PowerOption), capture.Before("griddle-knob-aim", null, 0f));
             NetworkObject spot0 = spots[0].NetworkObject;
             yield return actor.Use("put the seitan strips on the griddle", ContentPoint(spots[0]), InteractionAction.PutInto,
                 () => me.DevSendUse(spot0, VesselRules.ActionUse), capture.Before("griddle-put-aim", null, 0f));
@@ -1735,7 +1735,7 @@ namespace Worktown.Game.Dev
             // The spatula back on the deck, the plate up; each item slides onto the plate when its second side is Perfect.
             int spatulaSpot = PlaceSpots.NearestFree(deck.Size, new Vector2(0.375f, 0.125f), null);
             yield return actor.Use("put the spatula back", deck.SpotWorldPosition(spatulaSpot), InteractionAction.Place,
-                () => me.DevSendPlace(deck.Index, spatulaSpot));
+                () => me.DevSendPlace(deck.Id, spatulaSpot));
             yield return actor.Use("pick up the plate from the deck", ContentPoint(plate), InteractionAction.PickUp, () => me.DevSendPickup(plateObject));
             yield return actor.AimAt(watch, 0.3f);
             while (Time.unscaledTime - start < GrillWait && !(taken[0] && taken[1] && taken[2]))
@@ -1772,7 +1772,7 @@ namespace Worktown.Game.Dev
             LogOrders();
             Vector3 counterTop = counter.transform.position + Vector3.up * (Worktown.Game.Art.ArtSizeTable.ServingCounterHeight * 0.5f - 0.02f);
             yield return actor.Use("serve the grilled veggies at the counter", counterTop, InteractionAction.Sell,
-                () => me.DevSendStation(counter.Index, 0), capture.Before("veggies-serve-aim", "veggies-served", RewardFramesSeconds));
+                () => me.DevSendStation(counter.Id, 0), capture.Before("veggies-serve-aim", "veggies-served", RewardFramesSeconds));
             ServeFeed feed = UnityEngine.Object.FindFirstObjectByType<ServeFeed>();
             yield return new WaitForSecondsRealtime(0.5f);
             string latest = feed != null && feed.Entries.Count > 0 ? feed.Entries[0] : "?";
@@ -1811,7 +1811,7 @@ namespace Worktown.Game.Dev
             PickupInteractor me = actor.Interactor;
             StockSlot tomato = FindSlot(Worktown.Game.Shop.SupplyService.TourLine);
             Station terminal = FindStation(StationKind.Terminal);
-            PlaceSurface landing = SurfaceUnder(new Vector3(1.6f, 0.9f, 14.5f));
+            PlaceSurface landing = Worktown.Game.Layout.LayoutQuery.Surface(Worktown.Sim.Layout.PieceCatalog.Worktop, 1, "Worktop"); // spec 062a: the first worktop, by the staff gap
             if (tomato == null || terminal == null || landing == null)
             {
                 actor.CountTimeout("stock: the tomato slot, the terminal or the landing worktop missing");
@@ -1845,7 +1845,7 @@ namespace Worktown.Game.Dev
             yield return actor.LevelView();
             yield return actor.WalkTo(new Vector3(landing.SpotWorldPosition(spot).x + 0.3f, 0f, laneZ), false, false);
             yield return actor.Use("put the tomato down on the landing worktop", landing.SpotWorldPosition(spot), InteractionAction.Place,
-                () => me.DevSendPlace(landing.Index, spot));
+                () => me.DevSendPlace(landing.Id, spot));
 
             // The terminal: page on and back (the client's own page), then order one pack of tomatoes.
             int line = Worktown.Game.Shop.StockCatalog.IndexOf(Worktown.Game.Shop.SupplyService.TourLine);
@@ -2050,7 +2050,7 @@ namespace Worktown.Game.Dev
         private static StationButton SwitchOf(PlaceSurface burner)
         {
             foreach (StationButton b in UnityEngine.Object.FindObjectsByType<StationButton>(FindObjectsSortMode.None))
-                if (burner != null && b.Station != null && b.Station.Index == burner.StoveIndex
+                if (burner != null && b.Station != null && b.Station.Id == burner.StovePieceId
                     && b.Option == StationRules.StoveOption(burner.Burner, StationRules.StoveSwitch)) return b;
             return null;
         }
@@ -2065,7 +2065,7 @@ namespace Worktown.Game.Dev
             yield return actor.WalkTo(new Vector3(actor.Position.x, 0f, laneZ), false, false);
             yield return actor.WalkTo(new Vector3(slot.Anchor.x + 1f, 0f, laneZ), false, false);
             yield return actor.Use(what, slot.Anchor, InteractionAction.Buy,
-                () => actor.Interactor.DevSendStation(slot.Station.Index, slot.Option), beforeClick);
+                () => actor.Interactor.DevSendStation(slot.Station.Id, slot.Option), beforeClick);
             if (!actor.Interactor.IsHoldingSomething() || !HeldName(actor.Interactor).Contains(slot.IngredientId.Replace('_', ' ')))
                 Debug.LogWarning("[Demo] " + what + ": the hands hold '" + HeldName(actor.Interactor) + "'");
             yield return actor.LevelView();

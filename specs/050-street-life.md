@@ -8,6 +8,14 @@ builder: opus
 
 # 050: Street life and world storytelling (DRAFT, not decided)
 
+> **Partly superseded by the Haven Nine specs (2026-11-11).** Signs and posters, the museum and statue texts, the
+> short exclamations and robot lines move to **070** (story in the world). Street robots as part of the town's look
+> (slumped or working) and people density move to **068** (revival looks). Location, footfall and walking times are
+> **064**. What stays here: the food printer moment, the coin ritual, the rankings board's flip-letter dressing, rival
+> stall fans and pennants (058 builds the working board and fronts), the start cart, and ambient moving robots
+> (sweepers, carriers, delivery capsules). The setting is now docs/town-plan.md and docs/town-story.md (D41), not
+> the clean-utopia draft of docs/setting.md.
+
 ## Goal
 Make the setting (docs/setting.md, draft) understandable without dialogue, as storyboarded in
 docs/storyboard-first-minutes.md. Waits for the setting to be decided (D37) and for spec 040's models.

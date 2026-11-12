@@ -166,8 +166,9 @@ namespace Worktown.Game.Tests
             codec.TryParse(JsonUtility.ToJson(v2));
             CollectionAssert.AreEqual(new[] { "2->3" }, ran, "a version 2 save skips the first step");
             Assert.Throws<ArgumentException>(() => new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (2, s => s) }), "steps start at 1");
-            Assert.AreEqual(2, ShopSaveCodec.Default.Version, "spec 037 re-pin: this build has one step (v1 to v2, cents)");
-            Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(codec.ToJson(Full())).Error, "a v3 save is newer here");
+            Assert.AreEqual(3, ShopSaveCodec.Default.Version, "spec 062a re-pin: this build has two steps (v1 to v2, cents; v2 to v3, the layout)");
+            string v4 = codec.ToJson(Full()).Replace("\"formatVersion\": 3", "\"formatVersion\": 4");
+            Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(v4).Error, "a v4 save is newer here");
         }
 
         [Test]

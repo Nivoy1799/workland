@@ -11,7 +11,7 @@ namespace Worktown.Game.Tests
 {
     /// <summary>
     /// Spec 022: the generated scene has the ticket rail above the counter (six cards, no colliders), wired to the
-    /// customer service, and the UI has the shift summary panel. Network types are found by name (no FishNet reference).
+    /// customer service, and the UI has the shift summary panel. Network types are found by name.
     /// </summary>
     public class TicketRailSceneTests
     {
@@ -23,7 +23,7 @@ namespace Worktown.Game.Tests
         public void BuiltScene_HasTheTicketRail_AboveTheCounter_WiredToTheCustomers()
         {
             Assert.IsNotNull(RailType);
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 List<Component> rails = VesselTestKit.AllOf(scene, RailType);
@@ -45,7 +45,7 @@ namespace Worktown.Game.Tests
             }
             finally
             {
-                EditorSceneManager.CloseScene(scene, true);
+                LayoutScene.Close(scene);
             }
         }
 
@@ -58,7 +58,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void Spec044_TheOrderBubbles_AreSeenUnderTheRail_AndTheRailTiltsTowardsTheCook()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 Component rail = VesselTestKit.AllOf(scene, RailType)[0];
@@ -106,7 +106,7 @@ namespace Worktown.Game.Tests
             }
             finally
             {
-                EditorSceneManager.CloseScene(scene, true);
+                LayoutScene.Close(scene);
             }
         }
     }

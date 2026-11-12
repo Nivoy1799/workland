@@ -44,7 +44,8 @@ namespace Worktown.Game.Tutorial
         /// <summary>Finds the objects (at most once a second while one is missing).</summary>
         public void Refresh(float now)
         {
-            if (_found && _board != null && _assembly != null && _fryer != null && _counter != null && _baskets[0] != null && _lemonadeSpot != null)
+            if (_found && _layoutVersion == Worktown.Game.Layout.LayoutRegistry.Version && _board != null && _assembly != null && _fryer != null
+                && _counter != null && _baskets[0] != null && _lemonadeSpot != null)
                 return;
             if (now < _nextLookup) return;
             _nextLookup = now + 1f;
@@ -95,9 +96,12 @@ namespace Worktown.Game.Tutorial
             }
             _knife = Object.FindFirstObjectByType<Knife>();
             foreach (Worktown.Game.Net.PlaceSurface spot in Object.FindObjectsByType<Worktown.Game.Net.PlaceSurface>(FindObjectsSortMode.None))
-                if (spot.IsCupSpot && spot.CupTap == 0 && (_drinks == null || spot.DispenserIndex == _drinks.Index)) _lemonadeSpot = spot;
+                if (spot.IsCupSpot && spot.CupTap == 0 && (_drinks == null || spot.DispenserPieceId == _drinks.Id)) _lemonadeSpot = spot;
             _found = true;
+            _layoutVersion = Worktown.Game.Layout.LayoutRegistry.Version; // spec 062a: a layout change finds them again
         }
+
+        private int _layoutVersion = -1;
 
         /// <summary>The object to light up for <paramref name="target"/> (null: none or not found). <paramref name="basket"/>: the basket in use.</summary>
         public Component Resolve(TutorialTarget target, int basket, Vector3 player)

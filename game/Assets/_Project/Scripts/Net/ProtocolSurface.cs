@@ -29,12 +29,14 @@ namespace Worktown.Game.Net
         /// (one ShopLedger balance instead of a Wallet SyncVar per player; players pass through each other by default). 4: spec 037 (D39:
         /// every money value on the wire is cents, not whole dollars: the ShopLedger balance, the goal, the register's change due and its
         /// tray (now a ushort), the reward's and the shift's money, the menu board's prices; the reflection sees the new types, not the unit).
-        /// 5: spec 054b (D48: SessionPhysics.PlayerCollision is a mode byte, soft by default, and the soft separation changes how every
-        /// player moves on the server and in the owner's prediction, so an older build would mispredict every contact; option (a):
-        /// MoveData gains ViewTick, a struct field the lines do not list).
+        /// 5: spec 062a (the kitchen is spawned layout pieces: RequestPlace's surface is a stable surface id, piece id &lt;&lt; 6 | local, not an
+        /// index; RequestStation's station and every station number on the wire, such as the reward's counter, is a piece id; the stations
+        /// and their nested objects are spawned prefabs, no longer scene objects; the same parameter types, so the reflection cannot see it).
+        /// 6: spec 054b on top of 062a (D48: SessionPhysics.PlayerCollision is a mode byte, soft by default; the soft separation changes how
+        /// every player moves on the server and in the owner's prediction; MoveData gains ViewTick, a struct field the lines do not list).
         /// Every wire change bumps it (docs/architecture.md).
         /// </summary>
-        public const int Revision = 5;
+        public const int Revision = 6;
 
         /// <summary>The line that carries <see cref="Revision"/>.</summary>
         public static string RevisionLine => "revision " + Revision;

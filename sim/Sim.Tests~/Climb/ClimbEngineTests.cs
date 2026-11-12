@@ -122,7 +122,8 @@ namespace Worktown.Sim.Tests.Climb
                 for (int seed = 1; seed <= 5; seed++)
                 {
                     ClimbRun run = d.Run(new CrewSetup(players, "average", ClimbStrategy.Reference, (ulong)seed), 2 * 3600);
-                    nets.AddRange(run.Services.Where(x => x.Stage == ClimbStage.FoodCorner).Select(x => x.Net));
+                    // Spec 052b (D40): a crew of 16 has 4x the guests and a 4x goal, so it is compared in progress (reference money).
+                    nets.AddRange(run.Services.Where(x => x.Stage == ClimbStage.FoodCorner).Select(x => x.NetReference));
                 }
                 return ClimbEvaluation.Median(nets);
             }
@@ -184,7 +185,7 @@ namespace Worktown.Sim.Tests.Climb
             Assert.True(r.Served > 0);
             (s, r) = T.Engine.RunService(s, setup);
             Assert.Null(r.BigJobId); // both on cooldown
-            (_, r) = T.Engine.RunService(s with { ServiceIndex = 4, Balance = 1000 }, setup);
+            (_, r) = T.Engine.RunService(s with { ServiceIndex = 4, Balance = 1000, LastNet = 0 }, setup); // 052b review: the job must beat the last normal net
             Assert.Equal("contest", r.BigJobId);
         }
 

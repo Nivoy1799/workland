@@ -102,7 +102,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void BuiltScene_WorktopsShowTheCabinet_AndKeepTheirColliders()
         {
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 int worktops = 0;
@@ -129,7 +129,7 @@ namespace Worktown.Game.Tests
                 }
                 Assert.AreEqual(4, worktops); // spec 035: the bowl's worktop after the plate shelf is the sink (its drainboard)
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
         }
 
         [Test]

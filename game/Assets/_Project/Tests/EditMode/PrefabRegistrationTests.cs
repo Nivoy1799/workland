@@ -33,7 +33,7 @@ namespace Worktown.Game.Tests
                 if (prefab != null) registered.Add(AssetDatabase.GetAssetPath(prefab));
             }
 
-            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Additive);
+            Scene scene = LayoutScene.Open();
             try
             {
                 KitchenService kitchen = null;
@@ -100,7 +100,52 @@ namespace Worktown.Game.Tests
                 Assert.IsNotNull(kitchen.GetType().GetField("_cleaning", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     .GetValue(kitchen), "the kitchen's plates are counted by the cleaning service");
             }
-            finally { EditorSceneManager.CloseScene(scene, true); }
+            finally { LayoutScene.Close(scene); }
+        }
+
+        /// <summary>
+        /// 062a review: the LayoutSpawner spawns every piece and every item at its home from PiecePrefabs; each of those prefabs is in
+        /// DefaultPrefabObjects (a client that did not know a piece could not spawn the kitchen), and the scene's spawner uses that table.
+        /// </summary>
+        [Test]
+        public void EveryPieceAndHomeItemTheLayoutSpawns_IsRegisteredWithFishNet()
+        {
+            var registered = new HashSet<string>();
+            Object asset = AssetDatabase.LoadMainAssetAtPath(DefaultPrefabsPath);
+            SerializedProperty list = new SerializedObject(asset).FindProperty("_prefabs");
+            for (int i = 0; i < list.arraySize; i++)
+            {
+                Object prefab = list.GetArrayElementAtIndex(i).objectReferenceValue;
+                if (prefab != null) registered.Add(AssetDatabase.GetAssetPath(prefab));
+            }
+            Worktown.Game.Layout.PiecePrefabs prefabs = LayoutScene.Prefabs;
+            Assert.AreEqual(19, prefabs.PieceEntries.Length, "one prefab per piece type of the default layout");
+            foreach (Worktown.Game.Layout.PiecePrefabs.PieceEntry e in prefabs.PieceEntries)
+            {
+                Assert.IsNotNull(e.Prefab, e.TypeId);
+                string path = AssetDatabase.GetAssetPath(e.Prefab);
+                Assert.IsTrue(registered.Contains(path), e.TypeId + " (" + path + ") is not in " + DefaultPrefabsPath);
+            }
+            Assert.AreEqual(8, prefabs.ItemEntries.Length, "board, pan, pot, plate, bowl, knife, spatula, cloth");
+            foreach (Worktown.Game.Layout.PiecePrefabs.ItemEntry e in prefabs.ItemEntries)
+            {
+                Assert.IsNotNull(e.Prefab, e.Kind);
+                string path = AssetDatabase.GetAssetPath(e.Prefab);
+                Assert.IsTrue(registered.Contains(path), e.Kind + " (" + path + ") is not in " + DefaultPrefabsPath);
+            }
+
+            Scene scene = LayoutScene.Open();
+            try
+            {
+                Worktown.Game.Layout.LayoutSpawner spawner = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                    if (spawner == null) spawner = root.GetComponentInChildren<Worktown.Game.Layout.LayoutSpawner>(true);
+                Assert.IsNotNull(spawner, "no LayoutSpawner in the scene");
+                Assert.AreSame(prefabs, spawner.Prefabs, "the scene's spawner uses the table");
+                Assert.AreSame(spawner, new SerializedObject(Object.FindFirstObjectByType<Worktown.Game.Save.SaveService>()).FindProperty("_layout").objectReferenceValue,
+                    "the save service begins the layout");
+            }
+            finally { LayoutScene.Close(scene); }
         }
     }
 }

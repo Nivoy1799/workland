@@ -75,7 +75,7 @@ namespace Worktown.Game.Art
             if (_puddleMaterial != null) _puddle.sharedMaterial = _puddleMaterial;
             _puddle.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             var block = new MaterialPropertyBlock();
-            block.SetColor(BaseColorId, Palette.SoftBlue);
+            block.SetColor(BaseColorId, Palette.Sky);
             _puddle.SetPropertyBlock(block);
             _puddle.enabled = false;
             _fullScale = puddle.transform.localScale;

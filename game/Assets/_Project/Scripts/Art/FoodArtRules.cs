@@ -36,7 +36,7 @@ namespace Worktown.Game.Art
         /// <summary>The ingredient colour; Steel grey for an unknown ingredient.</summary>
         public static Color IngredientColor(byte ingredient)
         {
-            return ingredient < IngredientColors.Length ? IngredientColors[ingredient] : Palette.Steel;
+            return ingredient < IngredientColors.Length ? IngredientColors[ingredient] : Palette.Chrome;
         }
 
         /// <summary>

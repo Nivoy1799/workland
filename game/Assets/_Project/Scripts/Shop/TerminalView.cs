@@ -118,7 +118,7 @@ namespace Worktown.Game.Shop
         public bool Answer(int request, bool ok)
         {
             if (request != _request || _flashRow < 0) return false;
-            Flash(_flashRow, ok ? Palette.Sage : Palette.Terracotta);
+            Flash(_flashRow, ok ? Palette.Ground : Palette.Terracotta);
             return true;
         }
 
