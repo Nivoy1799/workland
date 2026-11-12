@@ -166,7 +166,8 @@ Both UIs stay, as open question 2 says for prices; the office log records change
 - Special: scripted guests (tutorial, tours) keep their orders. A special off the current menu does nothing until it is on again.
 - AC10: no separate `office` tour (it would need a new `LaunchArgs` tour id and a stage 2 fixture). The restaurant tour got the steps:
   fries +$0.50 at the terminal (board shows it), wrap the special, a locked service refused, Results page 1 after the next service,
-  the clipboard. Its timeout is now 900 s.
+  the clipboard. The tour's own limit (`RestaurantTourRunner.WholeLimit`) is now 780 s (was 600); the script's outer timeout for
+  the tour (`visual-check.sh`) is 900 s (was 720), kept 120 s above it as before so the tour fails itself first.
 
 **Out-of-scope touches (glue the spec's design needs):** `CookOutcome` (+`AlwaysOn`, `ComesLater`, `NotOnMenu`) and their HUD texts;
 `ShopStageRules` (the terminal is open at every stage); `PickupInteractor` (aim words, click: tabs and pages stay local);
@@ -183,6 +184,14 @@ one entry; the other graybox churn the builder makes (palette drift) was reverte
 `visual-check.sh --tours look,restaurant,menu --out .verify/visual059` PASS, 0 Exception lines (restaurant: 20 shots, the office
 steps 11-13 and 16-17). Seen in the shots: the terminal's text is small and the tour's office shots sit behind the shift summary
 (the tour visits during it); the art pass sizes the screen. Follow-up: the log shows the roster's name as it comes.
+
+**Merge with main (062a part B), review fixes.** Main kept Revision 7 and save v4, so 059 keeps 8 and v5. Merge consequence (one
+line in /sim, approved by the orchestrator): `sim/Sim.Tests~/Layout/LayoutRulesTests.cs` expects 29 default pieces (the office
+terminal), was 28; the layout rules accept the terminal's place. Review fixes: the clipboard builds its GUI content and height once per
+change (no allocation per OnGUI); the terminal fails closed (`UnknownStation`) while the economy or the stage is missing and hooks only
+when both are there; the synced history and log change by RemoveAt(0) and Add; the codec's clamp notes compare against the non-null
+parts; the F1 line names `PlayerInputReader.ClipboardKey`. Checks after the merge and fixes: verify.sh PASS (EditMode 1628/1628, sim
+870/870), BuildAll OK, `visual-check.sh --tours restaurant --out .verify/visual059b` PASS, 0 Exception lines.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

@@ -35,6 +35,9 @@ namespace Worktown.Game.Office
         private readonly List<ServiceRecord> _history = new List<ServiceRecord>();
         private GUIStyle _paper;
         private Texture2D _paperTexture;
+        // 059 review: the overlay's content and height are built once per change (Rebuild), never per OnGUI call.
+        private readonly GUIContent _content = new GUIContent(string.Empty);
+        private Rect _rect;
 
         /// <summary>Whether the clipboard is shown now.</summary>
         public bool IsOpen { get; private set; }
@@ -108,29 +111,35 @@ namespace Worktown.Game.Office
             lines.Add(string.Empty);
             lines.Add(ClipboardRules.CloseHint(PlayerInputReader.ClipboardKey.ToString()));
             _text = ResultsRules.Join(lines);
+            EnsurePaper();
+            _content.text = ClipboardRules.Title + "\n\n" + _text;
+            float height = Mathf.Min(Screen.height - 2f * Margin, _paper.CalcHeight(_content, Width) + 4f);
+            _rect = new Rect(Screen.width - Width - Margin, Margin + 60f, Width, height);
+        }
+
+        /// <summary>The paper style (its own font and background, so it needs no OnGUI skin).</summary>
+        private void EnsurePaper()
+        {
+            if (_paper != null) return;
+            _paperTexture = new Texture2D(1, 1);
+            _paperTexture.SetPixel(0, 0, Palette.Cream);
+            _paperTexture.Apply();
+            _paper = new GUIStyle
+            {
+                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"),
+                alignment = TextAnchor.UpperLeft,
+                fontSize = 15,
+                wordWrap = true,
+                padding = new RectOffset(14, 14, 12, 12),
+            };
+            _paper.normal.background = _paperTexture;
+            _paper.normal.textColor = Palette.Ink;
         }
 
         private void OnGUI()
         {
-            if (!IsOpen || _text.Length == 0 || Me == null) return;
-            if (_paper == null)
-            {
-                _paperTexture = new Texture2D(1, 1);
-                _paperTexture.SetPixel(0, 0, Palette.Cream);
-                _paperTexture.Apply();
-                _paper = new GUIStyle(GUI.skin.box)
-                {
-                    alignment = TextAnchor.UpperLeft,
-                    fontSize = 15,
-                    wordWrap = true,
-                    padding = new RectOffset(14, 14, 12, 12),
-                };
-                _paper.normal.background = _paperTexture;
-                _paper.normal.textColor = Palette.Ink;
-            }
-            var content = new GUIContent(ClipboardRules.Title + "\n\n" + _text);
-            float height = Mathf.Min(Screen.height - 2f * Margin, _paper.CalcHeight(content, Width) + 4f);
-            GUI.Box(new Rect(Screen.width - Width - Margin, Margin + 60f, Width, height), content, _paper);
+            if (!IsOpen || _text.Length == 0 || _paper == null || Me == null) return;
+            GUI.Box(_rect, _content, _paper); // built in Rebuild (059 review: no allocation or layout per OnGUI call)
         }
 
         private void OnDestroy()

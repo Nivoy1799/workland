@@ -75,14 +75,20 @@ namespace Worktown.Game.Office
 
         private void OnDestroy() => Unhook();
 
-        private void Hook()
+        /// <summary>
+        /// Finds the economy and the stage and listens to their changes (the log). 059 review: true only when both are there; a later press
+        /// tries again (nothing is hooked half).
+        /// </summary>
+        private bool Hook()
         {
-            if (_hooked) return;
+            if (_hooked) return true;
             if (_economy == null) _economy = FindFirstObjectByType<EconomyService>(); // the tests set them offline
             if (_stage == null) _stage = ShopStage.Find();
-            if (_economy != null) _economy.Menu.PriceStepped += OnPriceStepped;
-            if (_stage != null) _stage.MenuToggled += OnMenuToggled;
+            if (_economy == null || _stage == null) return false;
+            _economy.Menu.PriceStepped += OnPriceStepped;
+            _stage.MenuToggled += OnMenuToggled;
             _hooked = true;
+            return true;
         }
 
         private void Unhook()
@@ -122,9 +128,9 @@ namespace Worktown.Game.Office
         public CookOutcome ServerPress(int player, int option)
         {
             if (!TerminalOptions.TryUnpack(option, out TerminalApp app, out int row, out int action)) return CookOutcome.InvalidOption;
-            if (!_hooked) Hook();
-            ClimbCatalog climb = _stage != null ? _stage.Climb : FoodCornerRules.DefaultClimb;
-            byte stage = _stage != null ? _stage.ServerStage : ShopStageRules.OpenKitchen;
+            if (!Hook()) return CookOutcome.UnknownStation; // 059 review: fail closed without the economy or the stage
+            ClimbCatalog climb = _stage.Climb;
+            byte stage = _stage.ServerStage;
             switch (app)
             {
                 case TerminalApp.Menu: return PressMenu(player, stage, climb, row, action);
@@ -186,23 +192,33 @@ namespace Worktown.Game.Office
         {
             if (!ServerUp) return;
             if (Special.Value != _special) Special.Value = _special;
-            if (!Same(History, _history))
-            {
-                History.Clear();
-                foreach (ServiceRecord r in _history) History.Add(r);
-            }
-            if (!Same(Log, _log))
-            {
-                Log.Clear();
-                foreach (uint e in _log) Log.Add(e);
-            }
+            SyncTo(History, _history);
+            SyncTo(Log, _log);
             Version++;
         }
 
-        private static bool Same<T>(IReadOnlyList<T> synced, T[] values) where T : IEquatable<T>
+        /// <summary>
+        /// 059 review: brings a synced list to <paramref name="values"/> with the fewest operations: the usual change (the oldest entries
+        /// dropped, new ones appended) is RemoveAt(0) and Add; anything else (a game begins) is written anew.
+        /// </summary>
+        private static void SyncTo<T>(SyncList<T> synced, T[] values) where T : IEquatable<T>
         {
-            if (synced.Count != values.Length) return false;
-            for (int i = 0; i < values.Length; i++) if (!synced[i].Equals(values[i])) return false;
+            for (int drop = 0; drop <= synced.Count; drop++)
+            {
+                int kept = synced.Count - drop;
+                if (kept > values.Length || !SameRun(synced, drop, values, kept)) continue;
+                for (int i = 0; i < drop; i++) synced.RemoveAt(0);
+                for (int i = kept; i < values.Length; i++) synced.Add(values[i]);
+                return;
+            }
+            synced.Clear();
+            foreach (T v in values) synced.Add(v);
+        }
+
+        /// <summary>Whether <paramref name="synced"/> from <paramref name="from"/> on equals the first <paramref name="count"/> of <paramref name="values"/>.</summary>
+        private static bool SameRun<T>(SyncList<T> synced, int from, T[] values, int count) where T : IEquatable<T>
+        {
+            for (int i = 0; i < count; i++) if (!synced[from + i].Equals(values[i])) return false;
             return true;
         }
     }

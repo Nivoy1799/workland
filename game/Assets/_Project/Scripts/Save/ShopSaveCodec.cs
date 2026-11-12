@@ -239,16 +239,14 @@ namespace Worktown.Game.Save
                 s.office.special = string.Empty;
             }
             Worktown.Game.Office.ServiceRecord[] records = SaveService.RecordsOf(s.office);
-            int given = 0;
-            foreach (ShopSave.RecordPart p in s.office.history) if (p != null) given++;
-            if (given > records.Length) notes.Add("office history " + given + " records -> the newest " + records.Length);
+            // 059 review: compare with the non-null parts only (RecordsOf skips nulls), so each note names the right record.
+            var given = new List<ShopSave.RecordPart>();
+            foreach (ShopSave.RecordPart p in s.office.history) if (p != null) given.Add(p);
+            if (given.Count > records.Length) notes.Add("office history " + given.Count + " records -> the newest " + records.Length);
             ShopSave.RecordPart[] parts = SaveService.PartsOf(records);
-            int skip = s.office.history.Length - parts.Length;
+            int skip = given.Count - parts.Length;
             for (int i = 0; i < parts.Length; i++)
-            {
-                ShopSave.RecordPart was = i + skip >= 0 && i + skip < s.office.history.Length ? s.office.history[i + skip] : null;
-                if (was != null && !SaveService.SameRecord(was, parts[i])) notes.Add("office history day " + was.day + " clamped");
-            }
+                if (!SaveService.SameRecord(given[i + skip], parts[i])) notes.Add("office history day " + given[i + skip].day + " clamped");
             s.office.history = parts;
         }
 

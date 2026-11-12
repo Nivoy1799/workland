@@ -41,6 +41,22 @@ namespace Worktown.Game.Tests
         private static int Row(byte stage, byte owned, int line) => MenuAppRules.Lines(stage, Climb, owned).ToList().IndexOf(line);
 
         [Test]
+        public void WithoutTheEconomyOrTheStage_ThePressFailsClosed()
+        {
+            var go = new GameObject("Lonely office terminal");
+            try
+            {
+                var office = go.AddComponent<OfficeTerminal>();
+                if (Object.FindFirstObjectByType<Worktown.Game.Economy.EconomyService>() != null || ShopStage.Find() != null)
+                    Assert.Inconclusive("another test left an economy or a stage in the scene");
+                Assert.AreEqual(CookOutcome.UnknownStation, office.ServerPress(1, TerminalOptions.Pack(TerminalApp.Menu, 0, TerminalOptions.Plus)));
+                Assert.AreEqual(CookOutcome.UnknownStation, office.ServerPress(1, TerminalOptions.Pack(TerminalApp.Services, 0, TerminalOptions.Press)));
+                Assert.AreEqual(CookOutcome.InvalidOption, office.ServerPress(1, -1), "a bad option is still refused first");
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
         public void TheRows_AreWhatTheStageMaySell()
         {
             CollectionAssert.AreEqual(MenuBoardRules.VisibleLines(ShopStageRules.OpenKitchen).ToArray(),
