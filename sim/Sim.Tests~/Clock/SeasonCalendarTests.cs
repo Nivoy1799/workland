@@ -60,5 +60,9 @@ namespace Worktown.Sim.Tests.Clock
                 Assert.Equal(before, WeatherPlan.For(w, 3UL, d));
             }
         }
+
+        [Fact]
+        public void DefaultFestivals_CannotBeCastToAnArray() =>
+            Assert.False(SeasonCalendar.CreateDefault().Festivals is FestivalDef[]);
     }
 }

@@ -53,5 +53,9 @@ namespace Worktown.Sim.Tests.Clock
             Assert.Equal(0, c.PhaseIndexAtMinute(5 * 60));
             Assert.Equal(2, c.PhaseIndexAtMinute(20 * 60));
         }
+
+        [Fact]
+        public void DefaultPhases_CannotBeCastToAnArray() =>
+            Assert.False(ClockCatalog.CreateDefault().Phases is PhaseDef[]);
     }
 }

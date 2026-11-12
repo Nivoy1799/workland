@@ -11,13 +11,13 @@ namespace Worktown.Sim.Clock
         public static ClockCatalog CreateDefault()
         {
             return new ClockCatalog(
-                new[]
+                Array.AsReadOnly(new[]
                 {
                     new PhaseDef(DayPhase.Dawn, 180, 5 * 60, 120),
                     new PhaseDef(DayPhase.Day, 1440, 7 * 60, 720),
                     new PhaseDef(DayPhase.Dusk, 180, 19 * 60, 120),
                     new PhaseDef(DayPhase.Night, 600, 21 * 60, 480),
-                },
+                }),
                 2400,
                 300);
         }

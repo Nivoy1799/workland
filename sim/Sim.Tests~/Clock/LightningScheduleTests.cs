@@ -36,5 +36,26 @@ namespace Worktown.Sim.Tests.Clock
             Assert.Empty(LightningSchedule.Strikes(normal, C));
             Assert.Empty(LightningSchedule.Strikes(panel, C));
         }
+
+        [Fact]
+        public void GapsStayWithinTheDrawRange()
+        {
+            int stormDays = 0;
+            for (long d = 1; d <= 300; d++)
+            {
+                DayWeather w = WeatherPlan.For(W, 2UL, d);
+                if (w.Kind != DayKind.Storm) continue;
+                stormDays++;
+                var strikes = LightningSchedule.Strikes(w, C);
+                Assert.NotEmpty(strikes);
+                for (int i = 1; i < strikes.Count; i++)
+                {
+                    int gap = strikes[i] - strikes[i - 1];
+                    Assert.True(gap >= LightningSchedule.GapFromSeconds);
+                    Assert.True(gap < LightningSchedule.GapToSecondsExclusive);
+                }
+            }
+            Assert.True(stormDays > 0);
+        }
     }
 }
