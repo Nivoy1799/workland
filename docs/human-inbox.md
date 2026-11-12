@@ -70,6 +70,12 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+31. **Please play-test: players block each other (spec 054b, merged).** You can no longer walk through a friend.
+    Bumping into one slides you around them, and a sprint shoves them aside. Visible jumps when bumping are about 9x
+    rarer than with hard blocking (3.5 against 31.7 per minute in the 16-player test), but the few that remain are
+    still about 20 cm. Try it with a friend. To compare in a dev build, use `-player-collision soft` (the default),
+    `hard` or `off` (pass-through). If it feels bad, the next step is a shorter server input queue, measured on two
+    real PCs.
 30. **The Dome is a little too small (spec 064, merged).** An oval of 770 x 640 m cannot hold the corners of the
     640 x 480 m play area; the corners stick out through the glass. Options:
     - **A (default for now in the simulation):** 930 x 770 m. It fits, but leaves a wide strip of about 145 m between
