@@ -316,13 +316,37 @@ namespace Worktown.Game.Dev
         /// </summary>
         private static Tour BuildCook()
         {
-            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), Park, TourStep.WaitObserver(), TourStep.Act(ActCook) };
+            var steps = new List<TourStep> { TourStep.View(ViewMode.FirstPerson), Park, TourStep.WaitObserver() };
+            steps.AddRange(BumpSteps());
+            steps.Add(TourStep.Act(ActCook));
             var route = new List<Vector3>
             {
-                new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(3.2f, 0f, 7.8f)
+                new Vector3(ObserverExitX, 0f, AisleZ), new Vector3(ObserverExitX, 0f, 7.8f), new Vector3(CookObserverX, 0f, CookObserverZ)
             };
             return new Tour(CookTour, steps, route, 0f, true, new Vector3(3.2f, 2.1f, 9.3f), 12f, -12f, 6f, 1140f); // spec 030: + the griddle; spec 031: + the wrap; spec 032: + the register; spec 033: + the lemonade; spec 034: + the stock run
         }
+        private const float CookObserverX = 3.2f; // the cook tour observer's spot (its player stands here, its camera films the kitchen)
+        private const float CookObserverZ = 7.8f;
+        /// <summary>Spec 054b: how far beside the observer's centre the bump walk passes (m): a little off, so the walker slides round.</summary>
+        public const float BumpOffset = 0.05f;
+
+        /// <summary>
+        /// Spec 054b (D48), tours only: the tour player walks straight into the observer's standing player, 5 cm off its centre, in third
+        /// person, and slides round it (soft player blocking), then walks back past it and parks again. The tour sheet shows it as bump-NN.
+        /// The route is the look tour's open floor south of the front counter.
+        /// </summary>
+        public static List<TourStep> BumpSteps()
+        {
+            float z = CookObserverZ + BumpOffset;
+            return new List<TourStep>
+            {
+                TourStep.WalkTo(ParkX, 9f), TourStep.WalkTo(CookObserverX - 2.3f, z), TourStep.View(ViewMode.ThirdPerson),
+                TourStep.Look(90f, -15f), TourStep.Frames("bump", 4f, FrameInterval), TourStep.WalkTo(CookObserverX + 2.3f, z),
+                TourStep.Wait(0.5f), TourStep.WalkTo(CookObserverX - 2.3f, z), TourStep.WalkTo(ParkX, 9f), Park,
+                TourStep.View(ViewMode.FirstPerson),
+            };
+        }
+
         /// <summary>
         /// Spec 038: the tutorial tour: the cook tour's observer, and the tour player walks the tutorial's steps (Dev/TutorialSequence: the
         /// fries, the wrap with its lemonade, the payments, the wash, the order, the spit), a shot of every card and its highlight.

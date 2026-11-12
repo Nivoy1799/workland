@@ -13,6 +13,10 @@
 #   --host-arg  one more argument for the host; repeat it (spec 049: --host-arg -perf-tour --host-arg path).
 #   --net-stats  spec 054: the host runs with -net-stats (FishNet's per-packet statistics; allocates, so never a perf baseline);
 #               the summary adds pid_<type>_bps_avg and its share, and the top obj_<name>_bps_avg.
+#   spec 054b: the summary also has the correction smoothing: owner_shift_* (a reconcile moved the own current position more than
+#               5 cm: count per minute, p50/p95/max in cm before smoothing) and owner_vis_cm_* (how far the drawn body moves in the
+#               next tick because of each, after smoothing), and owner_visible_corrections_per_min (ticks it moves more than 5 cm).
+#               A/B: --host-arg -player-collision --host-arg soft|hard|off.
 #   --kbps-budget AVG,WORST  spec 054: KB/s per client (KB = 1000 bytes), the FishNet payload a bot received: the average and the
 #               worst second. Prints BANDWIDTH: PASS|FAIL and exits 4 when either is over (a process that ended early still exits 1).
 #
@@ -41,7 +45,7 @@ while [ $# -gt 0 ]; do
     --host-arg) HOST_EXTRA+=("${2?--host-arg needs a value}"); shift 2 ;;
     --net-stats) NET_STATS=1; shift ;;
     --kbps-budget) KBPS_BUDGET="${2:?--kbps-budget needs AVG,WORST in KB/s}"; shift 2 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -144,6 +148,9 @@ perl -e '
   my (@perBotAvg, @perBotMax, @rtt, @wireAvg, @wireMax, @jitter, @corrPerMin);
   my ($teleports, $reconciles, $feelSeconds) = (0, 0, 0);
   my %sizeBins; my ($sizeOver, $sizeMax) = (0, 0);
+  # Spec 054b: the correction smoothing per bot, before (owner_shift_cm_*) and after (owner_vis_cm_*), and the counts per minute.
+  my %smooth = (shift => { bins => {}, over => 0, max => 0 }, vis => { bins => {}, over => 0, max => 0 });
+  my (@shiftsPerMin, @visiblePerMin);
   my $connectedBots = 0;
   for my $n (1 .. $bots) {
     my @b = rows("$out/bot$n.jsonl");
@@ -166,7 +173,17 @@ perl -e '
     for my $r (@b) {
       for (keys %$r) { $sizeBins{$1} += $r->{$_} if /^owner_corr_cm_le_([0-9.]+)$/; $sizeOver += $r->{$_} if /^owner_corr_cm_gt_/; }
       $sizeMax = $r->{owner_corr_cm_max} if ($r->{owner_corr_cm_max} // 0) > $sizeMax;
+      for my $k (qw(shift vis)) {
+        my $m = $smooth{$k};
+        for (keys %$r) { $m->{bins}{$1} += $r->{$_} if /^owner_${k}_cm_le_([0-9.]+)$/; $m->{over} += $r->{$_} if /^owner_${k}_cm_gt_/; }
+        $m->{max} = $r->{"owner_${k}_cm_max"} if ($r->{"owner_${k}_cm_max"} // 0) > $m->{max};
+      }
     }
+    my ($shifts, $visible) = (0, 0);
+    $shifts += $_->{owner_shifts} // 0 for @b;
+    $visible += $_->{owner_visible_corrections} // 0 for @b;
+    push @shiftsPerMin, $shifts / (@b / 60);
+    push @visiblePerMin, $visible / (@b / 60);
   }
   # The p50 and p95 size over all corrections of all bots, linear inside a bin (the first bin starts at the 5 cm threshold, the
   # open last bin ends at the largest correction).
@@ -177,6 +194,16 @@ perl -e '
     for my $e (@edges) { my $n = $sizeBins{$e}; if ($n && $seen + $n >= $want) { return $low + ($e - $low) * ($want - $seen) / $n } $seen += $n; $low = $e; }
     return $sizeOver ? $low + ($sizeMax - $low) * ($want - $seen) / $sizeOver : $low;
   };
+  # Spec 054b: the same for the smoothing bins; their first bin starts at 0 cm (a visible move can be tiny).
+  my $binAt = sub {
+    my ($m, $q) = @_; my @e = sort { $a <=> $b } keys %{$m->{bins}};
+    my $count = $m->{over}; $count += $m->{bins}{$_} for @e; return (0, 0) unless $count;
+    my ($want, $seen, $low) = ($q * $count, 0, 0);
+    for my $x (@e) { my $n = $m->{bins}{$x}; if ($n && $seen + $n >= $want) { return ($count, $low + ($x - $low) * ($want - $seen) / $n) } $seen += $n; $low = $x; }
+    return ($count, $m->{over} ? $low + ($m->{max} - $low) * ($want - $seen) / $m->{over} : $low);
+  };
+  my ($shiftCount, $shiftP50) = $binAt->($smooth{shift}, 0.5); my (undef, $shiftP95) = $binAt->($smooth{shift}, 0.95);
+  my (undef, $visP50) = $binAt->($smooth{vis}, 0.5); my (undef, $visP95) = $binAt->($smooth{vis}, 0.95);
   # Spec 054: the per-packet buckets (-net-stats): the average per second per client over the hold (a missing field is 0),
   # the share of each bucket of all pid_ buckets, and the objects.
   my (%pid, %obj);
@@ -203,6 +230,10 @@ perl -e '
     owner_reconciles_per_s => ($feelSeconds ? $reconciles / $feelSeconds : 0),
     owner_corr_count => $sizeCount, owner_corr_cm_p50 => $sizeAt->(0.5), owner_corr_cm_p95 => $sizeAt->(0.95),
     owner_corr_cm_max => $sizeMax,
+    owner_shifts_per_min => avg(@shiftsPerMin), owner_shift_count => $shiftCount, owner_shift_cm_p50 => $shiftP50,
+    owner_shift_cm_p95 => $shiftP95, owner_shift_cm_max => $smooth{shift}{max},
+    owner_vis_cm_p50 => $visP50, owner_vis_cm_p95 => $visP95, owner_vis_cm_max => $smooth{vis}{max},
+    owner_visible_corrections_per_min => avg(@visiblePerMin),
   );
   if (@h && %pid) {
     $s{"pid_${_}_bps_avg"} = $pid{$_} / @h for keys %pid;

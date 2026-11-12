@@ -378,7 +378,7 @@ namespace Worktown.Game.Tests
                 "sync Worktown.Game.Shop.MenuBoard.Selected:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>",
             }, lines.Where(l => l.Contains("Worktown.Game.Shop.MenuBoard.")).ToList(), "no RPC: two synced fields");
             Assert.Contains("sync Worktown.Game.Shop.Register.Tray:FishNet.Object.Synchronizing.SyncVar`1<System.UInt16>", lines);
-            Assert.Contains("revision 4", lines);
+            Assert.Contains("revision 5", lines); // spec 054b bumped it (the collision mode byte)
             Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
         }
 

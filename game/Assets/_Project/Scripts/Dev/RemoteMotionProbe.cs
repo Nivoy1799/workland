@@ -55,9 +55,22 @@ namespace Worktown.Game.Dev
             fields.Add(new KeyValuePair<string, double>("owner_corr_cm_max", maxCm));
             for (int i = 0; i < _bins.Length; i++)
                 if (_bins[i] > 0) fields.Add(new KeyValuePair<string, double>(RemoteMotionStats.BinName(i), _bins[i]));
+            // Spec 054b: the correction smoothing, before (shift) and after (vis); bins written only when not empty.
+            _stats.TakeSmoothing(_shiftBins, _visibleBins, out int shifts, out int visibleOver, out float shiftMax, out float visibleMax);
+            fields.Add(new KeyValuePair<string, double>("owner_shifts", shifts));
+            fields.Add(new KeyValuePair<string, double>("owner_visible_corrections", visibleOver));
+            fields.Add(new KeyValuePair<string, double>("owner_shift_cm_max", shiftMax));
+            fields.Add(new KeyValuePair<string, double>("owner_vis_cm_max", visibleMax));
+            for (int i = 0; i < _shiftBins.Length; i++)
+            {
+                if (_shiftBins[i] > 0) fields.Add(new KeyValuePair<string, double>(RemoteMotionStats.SmoothBinName("owner_shift", i), _shiftBins[i]));
+                if (_visibleBins[i] > 0) fields.Add(new KeyValuePair<string, double>(RemoteMotionStats.SmoothBinName("owner_vis", i), _visibleBins[i]));
+            }
         }
 
         private readonly int[] _bins = new int[RemoteMotionStats.CorrectionBinEdgesCm.Count + 1];
+        private readonly int[] _shiftBins = new int[RemoteMotionStats.SmoothBinEdgesCm.Count + 1];
+        private readonly int[] _visibleBins = new int[RemoteMotionStats.SmoothBinEdgesCm.Count + 1];
 
         public void Dispose() => Watch(null);
 
@@ -80,18 +93,22 @@ namespace Worktown.Game.Dev
             {
                 _own.DevOwnerTicked -= OnOwnerTicked;
                 _own.DevOwnerReconciled -= OnOwnerReconciled;
+                _own.DevOwnerSmoothed -= OnOwnerSmoothed;
             }
             _own = own;
             if (_own != null)
             {
                 _own.DevOwnerTicked += OnOwnerTicked;
                 _own.DevOwnerReconciled += OnOwnerReconciled;
+                _own.DevOwnerSmoothed += OnOwnerSmoothed;
             }
         }
 
         private void OnOwnerTicked(uint tick, Vector3 position) => _stats.RecordPredicted(tick, position.x, position.y, position.z);
 
         private void OnOwnerReconciled(uint tick, Vector3 position) => _stats.CheckReconcile(tick, position.x, position.y, position.z);
+
+        private void OnOwnerSmoothed(float shiftMeters, float visibleMeters) => _stats.RecordSmoothed(shiftMeters, visibleMeters);
     }
 }
 #endif
