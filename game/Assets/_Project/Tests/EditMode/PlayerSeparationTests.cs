@@ -120,6 +120,69 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
+        public void TheViewTick_FeedsOnlyTheSoftPush_TheFloorAndTheDeepPushUseRealPositions()
+        {
+            // PlayerSeparation.Separate is what PlayerController runs on the server (seen = the history at the input's view tick).
+            Vector3 self = Vector3.zero;
+            Vector3 step = new Vector3(0.1f, 0f, 0f); // walking east
+            int[] ids = { 2 };
+            // Claimed view far away, but the other really stands 0.48 m ahead: the floor (and the deep push) still stop the walker.
+            Vector3 blocked = PlayerSeparation.Separate(self, step, 1, new[] { new Vector3(3f, 0f, 0f) }, new[] { new Vector3(0.48f, 0f, 0f) },
+                ids, 0, 1, Dt);
+            Vector3 otherClaim = PlayerSeparation.Separate(self, step, 1, new[] { new Vector3(-3f, 0f, 1f) }, new[] { new Vector3(0.48f, 0f, 0f) },
+                ids, 0, 1, Dt);
+            Assert.AreEqual(blocked, otherClaim, "really deep in contact, the claimed view changes nothing");
+            Assert.GreaterOrEqual(0.48f - blocked.x, PlayerSeparation.MinDistance, "a forged view cannot walk anyone through a player");
+            Vector3 atTheFloor = PlayerSeparation.Separate(self, step, 1, new[] { new Vector3(3f, 0f, 0f) }, new[] { new Vector3(0.46f, 0f, 0f) },
+                ids, 0, 1, Dt);
+            Assert.LessOrEqual(atTheFloor.x, 0f, "at the floor no step towards the real position");
+            // Claimed view right ahead, but the other really is far away: only the soft push follows the claim, capped, and away from it.
+            Vector3 pushed = PlayerSeparation.Separate(self, Vector3.zero, 1, new[] { new Vector3(0.55f, 0f, 0f) }, new[] { new Vector3(5f, 0f, 0f) },
+                ids, 0, 1, Dt);
+            Assert.Less(pushed.x, 0f, "the soft push follows where the player saw the other");
+            Assert.LessOrEqual(pushed.magnitude, PlayerSeparation.MaxPushSpeed * Dt + 1e-6f);
+            // The same arrays from an offset (the owner's per-tick ring).
+            Vector3[] ring = { new Vector3(9f, 0f, 9f), new Vector3(0.48f, 0f, 0f) };
+            Assert.AreEqual(blocked.x, PlayerSeparation.Separate(self, step, 1, ring, ring, new[] { 7, 2 }, 1, 1, Dt).x, 1e-6f, "index 1 only");
+        }
+
+        [Test]
+        public void TheSummedPush_IsCapped_NoCrowdShove()
+        {
+            // Three players crowd one from the same side: the pushes add up to more than MaxPushSpeed, the sum is capped.
+            Vector3 self = Vector3.zero;
+            Vector3[] others = { new Vector3(0.3f, 0f, 0f), new Vector3(0.3f, 0f, 0.1f), new Vector3(0.3f, 0f, -0.1f) };
+            Vector3 step = PlayerSeparation.Separate(self, Vector3.zero, 1, others, others, new[] { 2, 3, 4 }, 0, 3, Dt);
+            Assert.AreEqual(PlayerSeparation.MaxPushSpeed * Dt, step.magnitude, 1e-5f, "one full push, not three");
+            Assert.Less(step.x, 0f, "away from the crowd");
+            Assert.AreEqual(Vector3.zero, PlayerSeparation.CapPush(Vector3.zero));
+            Assert.AreEqual(new Vector3(1f, 0f, 0f), PlayerSeparation.CapPush(new Vector3(1f, 0f, 0f)), "under the cap: unchanged");
+        }
+
+        [Test]
+        public void AWalker_CannotSqueezeBetweenTwoStandingPlayers()
+        {
+            // Two players stand 0.6 m apart (centres); a walker aims straight at the gap between them: three players, one floor each.
+            Vector3 walker = new Vector3(-2f, 0f, 0f);
+            Vector3[] standing = { new Vector3(0f, 0f, 0.3f), new Vector3(0f, 0f, -0.3f) };
+            int[] ids = { 2, 3 };
+            float closest = float.MaxValue;
+            for (int tick = 0; tick < 90; tick++)
+            {
+                walker += PlayerSeparation.Separate(walker, new Vector3(MovementSpeed.Walk * Dt, 0f, 0f), 1, standing, standing, ids, 0, 2, Dt);
+                for (int k = 0; k < 2; k++)
+                {
+                    Vector3[] seenByK = { walker, standing[1 - k] };
+                    standing[k] += PlayerSeparation.Separate(standing[k], Vector3.zero, ids[k], seenByK, seenByK, new[] { 1, ids[1 - k] }, 0, 2, Dt);
+                }
+                foreach (Vector3 s in standing) closest = Mathf.Min(closest, Flat(walker, s));
+            }
+            Assert.GreaterOrEqual(closest, PlayerSeparation.MinDistance - MovementSpeed.Walk * Dt, "the floor holds against both");
+            Assert.IsTrue(walker.x < standing[0].x || walker.x < standing[1].x || Mathf.Abs(standing[0].z - standing[1].z) > PlayerSeparation.ContactDistance,
+                "the walker only gets through once the two have been pushed a body apart");
+        }
+
+        [Test]
         public void ADeepRealOverlap_PushesAtFullStrength_FromTheRealPosition()
         {
             Vector3 self = Vector3.zero;

@@ -135,11 +135,13 @@ namespace Worktown.Game.Net
 
         // Spec 054b design 2 (the owner on a client): where the other players were drawn at each recent live tick, so a replay of that
         // tick pushes against the same positions as its live run did (not against where they are drawn now, a few ticks later).
-        private const int MaxOthers = 63;
+        private const int MaxOthers = 15; // a full game is 16 players (D36)
         private Vector3[] _seenAt;
         private int[] _seenId;
         private readonly int[] _seenCount = new int[DrawnRing];
         private readonly uint[] _seenTick = new uint[DrawnRing];
+        private Vector3[] _scratchSeen, _scratchReal;
+        private int[] _scratchIds;
 
         public bool IsCrouched => IsOwner || IsServerStarted ? _crouched : CrouchedForOthers.Value;
 
@@ -302,7 +304,8 @@ namespace Worktown.Game.Net
                 _drawnAt[slot] = drawn;
                 _drawnTick[slot] = tick;
             }
-            Vector3 local = transform.InverseTransformPoint(drawn);
+            // The tracker's own local pose plus the offset (in the root's frame): the drawn body is where the tracker would be, moved by it.
+            Vector3 local = _trackerBase.Position + transform.InverseTransformVector(drawn - transform.position);
             _tracker.TrySetGraphicalTrackerLocalProperties(new TransformProperties(local, _trackerBase.Rotation, _trackerBase.Scale));
         }
 
@@ -404,18 +407,22 @@ namespace Worktown.Game.Net
         /// </summary>
         private Vector3 Separate(Vector3 step, float delta, uint tick, bool replayed, uint viewTick)
         {
-            if (IsServerStarted) return SeparateAsServer(step, delta, viewTick);
+            Vector3 self = transform.position;
+            if (IsServerStarted)
+            {
+                uint now = TimeManager.LocalTick;
+                uint at = LagCompensation.ServerViewTick(now, viewTick);
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                DevCountViewDelay(now, viewTick, at);
+#endif
+                int n = GatherSpawned(at < now ? at : (uint?)null);
+                return PlayerSeparation.Separate(self, step, ObjectId, _scratchSeen, _scratchReal, _scratchIds, 0, n, delta);
+            }
             int slot = (int)(tick % DrawnRing);
             int count = SmoothsOwnCorrections ? SeenOthers(slot, tick, replayed) : -1;
-            if (count < 0) return SeparateFromSpawned(step, delta);
-            Vector3 self = transform.position;
-            int selfId = ObjectId;
-            int first = slot * MaxOthers;
-            Vector3 push = Vector3.zero;
-            for (int i = 0; i < count; i++) push += PlayerSeparation.ContactPush(self, _seenAt[first + i], _seenAt[first + i], selfId, _seenId[first + i]);
-            step += push * delta;
-            for (int i = 0; i < count; i++) step = PlayerSeparation.Block(self, step, _seenAt[first + i], selfId, _seenId[first + i]);
-            return step;
+            if (count >= 0) return PlayerSeparation.Separate(self, step, ObjectId, _seenAt, _seenAt, _seenId, slot * MaxOthers, count, delta);
+            int drawn = GatherSpawned(null); // a replayed tick never recorded: the drawn positions of now
+            return PlayerSeparation.Separate(self, step, ObjectId, _scratchSeen, _scratchReal, _scratchIds, 0, drawn, delta);
         }
 
         /// <summary>The owner's other players for this tick in the ring: recorded now at a live tick, read back at a replayed one.
@@ -442,38 +449,34 @@ namespace Worktown.Game.Net
             return count;
         }
 
-        /// <summary>Spec 054b option (a): the server's separation for one input: pushes from the others where its sender drew them,
-        /// clamped to LagCompensation.MaxViewTicks back; the floor against where they really are.</summary>
-        private Vector3 SeparateAsServer(Vector3 step, float delta, uint viewTick)
+        /// <summary>Every other spawned player into the scratch arrays: where it really is, and where it was seen: its history at
+        /// <paramref name="seenAt"/> (option (a), the server) or, without a tick or a recorded position, where it is.</summary>
+        private int GatherSpawned(uint? seenAt)
         {
-            uint now = TimeManager.LocalTick;
-            uint at = LagCompensation.ServerViewTick(now, viewTick);
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
-            DevCountViewDelay(now, viewTick, at);
-#endif
-            Vector3 self = transform.position;
-            int selfId = ObjectId;
-            Vector3 push = Vector3.zero;
+            if (_scratchReal == null || _scratchReal.Length < Spawned.Count)
+            {
+                int size = Mathf.Max(Spawned.Count, MaxOthers + 1);
+                _scratchSeen = new Vector3[size];
+                _scratchReal = new Vector3[size];
+                _scratchIds = new int[size];
+            }
+            int count = 0;
             for (int i = 0; i < Spawned.Count; i++)
             {
                 PlayerController other = Spawned[i];
                 if (other == this || other == null || !other.IsSpawned) continue;
-                Vector3 seen = at < now && other._history.TryGet(at, out Vector3 past) ? past : other.transform.position;
-                push += PlayerSeparation.ContactPush(self, seen, other.transform.position, selfId, other.ObjectId);
+                Vector3 real = other.transform.position;
+                _scratchReal[count] = real;
+                _scratchSeen[count] = seenAt.HasValue && other._history.TryGet(seenAt.Value, out Vector3 past) ? past : real;
+                _scratchIds[count] = other.ObjectId;
+                count++;
             }
-            step += push * delta;
-            for (int i = 0; i < Spawned.Count; i++)
-            {
-                PlayerController other = Spawned[i];
-                if (other == this || other == null || !other.IsSpawned) continue;
-                step = PlayerSeparation.Block(self, step, other.transform.position, selfId, other.ObjectId);
-            }
-            return step;
+            return count;
         }
 
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
         // Spec 054b option (a), dev builds, read only: how far back the clients' view ticks reach on the server, logged every 30 s
-        // (host.log "[Net] view delay"), so a load test shows whether the 300 ms clamp is hit.
+        // (host.log "[Net] view delay"), so a load test shows whether the clamp (LagCompensation.MaxViewTicks: 20 ticks, about 667 ms) is hit.
         private static readonly int[] DevDelays = new int[LagCompensation.HistoryTicks];
         private static int _devClamped, _devNow;
         private static uint _devNextLog;
@@ -498,27 +501,6 @@ namespace Worktown.Game.Net
             _devNow = 0;
         }
 #endif
-
-        private Vector3 SeparateFromSpawned(Vector3 step, float delta)
-        {
-            Vector3 self = transform.position;
-            int selfId = ObjectId;
-            Vector3 push = Vector3.zero;
-            for (int i = 0; i < Spawned.Count; i++)
-            {
-                PlayerController other = Spawned[i];
-                if (other == this || other == null || !other.IsSpawned) continue;
-                push += PlayerSeparation.ContactPush(self, other.transform.position, other.transform.position, selfId, other.ObjectId);
-            }
-            step += push * delta;
-            for (int i = 0; i < Spawned.Count; i++)
-            {
-                PlayerController other = Spawned[i];
-                if (other == this || other == null || !other.IsSpawned) continue;
-                step = PlayerSeparation.Block(self, step, other.transform.position, selfId, other.ObjectId);
-            }
-            return step;
-        }
 
         [Reconcile]
         private void PerformReconcile(StateData sd, Channel channel = Channel.Unreliable)

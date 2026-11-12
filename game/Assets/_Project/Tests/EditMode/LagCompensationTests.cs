@@ -129,7 +129,7 @@ namespace Worktown.Game.Tests
         {
             // Both hold walk straight into each other: nothing to slide along, so they stand pressed at the floor (bodies 15 cm into
             // each other) for as long as they push. The only case the half-second bound above leaves out; they never pass.
-            foreach (int delay in new[] { 0, 9 })
+            foreach (int delay in new[] { 0, 9, 20 })
             {
                 LongestDeepOverlap(new Vector3(-2f, 0f, 0f), new Vector3(2f, 0f, 0f), new Vector3(2.5f, 0f, 0f), new Vector3(-2.5f, 0f, 0f),
                     delay, delay, 3f, out float closest);

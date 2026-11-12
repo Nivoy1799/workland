@@ -117,6 +117,27 @@ namespace Worktown.Game.Net.Rules
         }
 
         /// <summary>
+        /// Spec 054b review: one tick of the separation against <paramref name="count"/> other players, from index <paramref name="first"/>
+        /// of the arrays: every <see cref="ContactPush"/> (from where the player saw each, <paramref name="seen"/>, and where each really
+        /// is, <paramref name="real"/>) summed and the sum capped at <see cref="MaxPushSpeed"/> (no crowd shove, and no claimed view can
+        /// add up a bigger push), then the no-pass-through floor (<see cref="Block"/>) against each real position. The server passes the
+        /// history at the input's view tick as seen; the owner's prediction passes its drawn positions as both. Deterministic.
+        /// </summary>
+        public static Vector3 Separate(Vector3 self, Vector3 step, int selfId, Vector3[] seen, Vector3[] real, int[] ids, int first, int count,
+            float dt)
+        {
+            Vector3 push = Vector3.zero;
+            for (int i = first; i < first + count; i++) push += ContactPush(self, seen[i], real[i], selfId, ids[i]);
+            step += CapPush(push) * dt;
+            for (int i = first; i < first + count; i++) step = Block(self, step, real[i], selfId, ids[i]);
+            return step;
+        }
+
+        /// <summary>A summed push no faster than <see cref="MaxPushSpeed"/>, its direction kept.</summary>
+        public static Vector3 CapPush(Vector3 push) =>
+            push.sqrMagnitude > MaxPushSpeed * MaxPushSpeed ? push.normalized * MaxPushSpeed : push;
+
+        /// <summary>
         /// Spec 054b design 4 (display only): where to draw a remote player so it never overlaps the own drawn body by more than
         /// <see cref="MaxDrawnOverlap"/>; pushed out along the line between the two, height unchanged. Far enough away: unchanged.
         /// </summary>

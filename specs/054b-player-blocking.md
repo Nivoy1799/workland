@@ -155,3 +155,13 @@ them along at about 1.25 m/s. A sprinter shoves at about 2 m/s and cannot get cl
 correct mostly as smooth drift (blended), with an occasional snap after a hitch.
 
 **Accepted by the netcode owner (2026-11-12):** AC4 target not met. Soft + lag-compensated push (MaxViewTicks 20) cuts visible jumps over 5 cm from 31.7 (hard) to 3.5 per minute (15 bots) and 2.8 (4 bots); the p95 of the remaining jumps stays at about 19-23 cm, largely from the test rig's server input queue (view delay 8-15 ticks even with 4 bots). Merged as the default because the human wants players to block (D48). AC6, the human's feel test, is the final judge. Compare with `-player-collision soft|hard|off` in dev builds. Follow-up idea if it feels bad: shorten FishNet's server input queue, then re-measure on two real PCs.
+
+**Review fixes (APPROVE WITH NITS, 2026-11-12; after merging main: Revision 6 = 062a + 054b).**
+- `PlayerSeparation.Separate` is the one pure push-then-floor rule; the owner, the server and the fallback all call it. The summed
+  push is capped at `MaxPushSpeed` on both sides. That stops crowd shoves, and a forged ViewTick cannot add up a bigger push.
+- A test runs that rule to show that ViewTick feeds only the soft push: the floor and the deep push use real positions.
+- `PlaceTracker` uses the tracker's own base position plus the offset in the root's frame. `MaxOthers` is 15 (16 players, D36).
+- New tests: a walker cannot squeeze between two standing players (three-player floor), the summed-push cap, and the dead-centre
+  pressing case at a delay of 20 ticks.
+- **Host view:** the display clamp (design 4) runs only on clients. On the host the other players are drawn where they really are,
+  so at the floor (two players pressing dead centre) the host sees bodies up to about 15 cm into its own.
