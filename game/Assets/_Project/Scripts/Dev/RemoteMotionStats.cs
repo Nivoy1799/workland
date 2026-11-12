@@ -85,6 +85,69 @@ namespace Worktown.Game.Dev
             _sizeMaxCm = 0f;
         }
 
+        /// <summary>
+        /// Spec 054b: the correction smoothing (PlayerController.DevOwnerSmoothed). A shift is a tick whose reconcile and replay moved the
+        /// own current position by more than <see cref="CorrectionMeters"/>; it is binned by its length (before smoothing) and by how far
+        /// the drawn body moves in the next tick because of it (after smoothing: CorrectionBlend). Bins with these upper edges (cm), the
+        /// last bin is everything above the last edge; field names <c>owner_shift_cm_le_*</c> and <c>owner_vis_cm_le_*</c>.
+        /// </summary>
+        public static readonly IReadOnlyList<float> SmoothBinEdgesCm =
+            Array.AsReadOnly(new[] { 0.5f, 1f, 2f, 3f, 4f, 5f, 6f, 8f, 10f, 13f, 16f, 20f, 25f, 32f, 40f, 50f, 65f, 80f, 100f, 150f });
+        private readonly int[] _shiftBins = new int[SmoothBinEdgesCm.Count + 1];
+        private readonly int[] _visibleBins = new int[SmoothBinEdgesCm.Count + 1];
+        private int _shifts;
+        private int _visibleOver;
+        private float _shiftMaxCm;
+        private float _visibleMaxCm;
+
+        /// <summary>The field name of a smoothing bin: <paramref name="prefix"/> (owner_shift or owner_vis) + _cm_le_EDGE or _cm_gt_LAST.</summary>
+        public static string SmoothBinName(string prefix, int bin) => bin < SmoothBinEdgesCm.Count
+            ? prefix + "_cm_le_" + SmoothBinEdgesCm[bin].ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : prefix + "_cm_gt_" + SmoothBinEdgesCm[SmoothBinEdgesCm.Count - 1].ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        /// <summary>The smoothing bin of <paramref name="cm"/>.</summary>
+        public static int SmoothBinOf(float cm)
+        {
+            for (int i = 0; i < SmoothBinEdgesCm.Count; i++)
+                if (cm <= SmoothBinEdgesCm[i]) return i;
+            return SmoothBinEdgesCm.Count;
+        }
+
+        /// <summary>A reconcile moved the own position by <paramref name="shiftMeters"/>; the drawn body moves <paramref name="visibleMeters"/>
+        /// in the next tick because of it. Counted as a shift above <see cref="CorrectionMeters"/>; any tick whose visible move is above
+        /// <see cref="CorrectionMeters"/> counts as a visible correction.</summary>
+        public void RecordSmoothed(float shiftMeters, float visibleMeters)
+        {
+            if (visibleMeters > CorrectionMeters) _visibleOver++;
+            if (shiftMeters <= CorrectionMeters) return;
+            _shifts++;
+            float shiftCm = shiftMeters * 100f, visibleCm = visibleMeters * 100f;
+            _shiftBins[SmoothBinOf(shiftCm)]++;
+            _visibleBins[SmoothBinOf(visibleCm)]++;
+            if (shiftCm > _shiftMaxCm) _shiftMaxCm = shiftCm;
+            if (visibleCm > _visibleMaxCm) _visibleMaxCm = visibleCm;
+        }
+
+        /// <summary>The window's smoothing numbers (bins into arrays of <see cref="SmoothBinEdgesCm"/>.Count + 1), then a new window.</summary>
+        public void TakeSmoothing(int[] shiftBins, int[] visibleBins, out int shifts, out int visibleOver, out float shiftMaxCm, out float visibleMaxCm)
+        {
+            for (int i = 0; i < _shiftBins.Length; i++)
+            {
+                if (shiftBins != null && i < shiftBins.Length) shiftBins[i] = _shiftBins[i];
+                if (visibleBins != null && i < visibleBins.Length) visibleBins[i] = _visibleBins[i];
+                _shiftBins[i] = 0;
+                _visibleBins[i] = 0;
+            }
+            shifts = _shifts;
+            visibleOver = _visibleOver;
+            shiftMaxCm = _shiftMaxCm;
+            visibleMaxCm = _visibleMaxCm;
+            _shifts = 0;
+            _visibleOver = 0;
+            _shiftMaxCm = 0f;
+            _visibleMaxCm = 0f;
+        }
+
         /// <summary>Remote players tracked now.</summary>
         public int Tracked => _tracks.Count;
 

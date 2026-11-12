@@ -63,11 +63,11 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 054 (dev builds): <c>-remote-hz 30|15</c>, how often the host sends other players' positions (NetRateRules;
         /// 0 = not given: <see cref="NetRateRules.DefaultRemoteHz"/>). For the human's A/B (docs/feel.md 9). Needs <c>-host</c> or <c>-server</c>.</summary>
         public int RemoteHz { get; private set; }
-        /// <summary>Spec 054 (experiment, dev builds): <c>-player-collision on|off</c>; off: players walk through each other, on the
-        /// server and in every client's prediction alike (the host decides, SessionPhysics.PlayersCollide). 053 review (inbox question
-        /// 23): default off, players pass through each other; <c>on</c> is the A/B.
-        /// Needs <c>-host</c> or <c>-server</c>.</summary>
-        public bool PlayerCollision { get; private set; } = false;
+        /// <summary>Spec 054b (D48, dev builds): <c>-player-collision soft|hard|off</c>, how players meet, on the server and in every
+        /// client's prediction alike (the host decides, SessionPhysics.PlayerCollision). Default <see cref="PlayerCollisionMode.Soft"/>
+        /// (players block each other softly); <c>hard</c> (rigid capsules) and <c>off</c> (pass-through) are the A/B. Release builds
+        /// always use soft. Needs <c>-host</c> or <c>-server</c>.</summary>
+        public PlayerCollisionMode PlayerCollision { get; private set; } = PlayerCollisionMode.Soft;
         /// <summary>Spec 054: true when <c>-player-collision</c> was given.</summary>
         public bool PlayerCollisionGiven { get; private set; }
         /// <summary>Spec 053: <c>-new-shop</c>, host a new food corner with its own save file and skip the title screen.</summary>
@@ -204,10 +204,11 @@ namespace Worktown.Game.Net.Rules
                         result.NetStats = true;
                         break;
                     case "-player-collision":
-                        if (i + 1 >= args.Count || (args[i + 1] != "on" && args[i + 1] != "off"))
-                            return Fail("-player-collision needs on or off");
-                        result.PlayerCollision = args[++i] == "on";
+                        if (i + 1 >= args.Count || !TryCollisionMode(args[i + 1], out PlayerCollisionMode collision))
+                            return Fail("-player-collision needs soft, hard or off");
+                        result.PlayerCollision = collision;
                         result.PlayerCollisionGiven = true;
+                        i++;
                         break;
                     case "-remote-hz":
                         if (i + 1 >= args.Count || !int.TryParse(args[i + 1], out int hz) || !NetRateRules.IsRemoteHz(hz))
@@ -263,6 +264,18 @@ namespace Worktown.Game.Net.Rules
         private static LaunchArgs Fail(string error)
         {
             return new LaunchArgs { Mode = LaunchMode.Menu, Error = error };
+        }
+
+        /// <summary>Spec 054b: the value of <c>-player-collision</c> (soft, hard or off; nothing else).</summary>
+        public static bool TryCollisionMode(string value, out PlayerCollisionMode mode)
+        {
+            switch (value)
+            {
+                case "soft": mode = PlayerCollisionMode.Soft; return true;
+                case "hard": mode = PlayerCollisionMode.Hard; return true;
+                case "off": mode = PlayerCollisionMode.Off; return true;
+                default: mode = PlayerCollisionMode.Soft; return false;
+            }
         }
 
         /// <summary>Splits "host" or "host:port". IPv6 literals are not supported here.</summary>

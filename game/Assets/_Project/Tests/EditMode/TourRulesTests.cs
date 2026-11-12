@@ -258,5 +258,27 @@ namespace Worktown.Game.Tests
             Assert.Throws<System.ArgumentNullException>(() => TourRules.FrameSteps(null));
             Assert.AreEqual(0, TourRules.FrameSteps(Get(TourRules.LookTour)).Count);
         }
+
+        [Test]
+        public void CookTour_WalksIntoTheObserver_AndFilmsItInThirdPerson()
+        {
+            // Spec 054b (D48): one walk of the cook tour passes the observer's standing player BumpOffset off its centre, filmed as bump.
+            Tour tour = Get(TourRules.CookTour);
+            List<TourStep> steps = tour.Steps.ToList();
+            int frames = steps.FindIndex(st => st.Kind == TourStepKind.Frames && st.Name == "bump");
+            Assert.GreaterOrEqual(frames, 0, "a bump frame sequence");
+            int act = steps.FindIndex(st => st.Kind == TourStepKind.Act);
+            Assert.Less(frames, act, "before the cooking starts");
+            TourStep from = steps.Take(frames).Last(st => st.Kind == TourStepKind.WalkTo);
+            TourStep to = steps.Skip(frames).First(st => st.Kind == TourStepKind.WalkTo);
+            Vector3 spot = tour.ObserverSpot;
+            Vector3 a = new Vector3(from.Point.x, 0f, from.Point.z), b = new Vector3(to.Point.x, 0f, to.Point.z), o = new Vector3(spot.x, 0f, spot.z);
+            float t = Vector3.Dot(o - a, b - a) / (b - a).sqrMagnitude;
+            Assert.That(t, Is.InRange(0.2f, 0.8f), "the observer stands along the walk, not at its end");
+            float miss = Vector3.Distance(a + (b - a) * t, o);
+            Assert.AreEqual(TourRules.BumpOffset, miss, 1e-3f, "straight into it, a little off the centre so it slides round");
+            Assert.IsTrue(steps.Take(frames).Any(st => st.Kind == TourStepKind.View && st.ViewMode == ViewMode.ThirdPerson), "seen from behind");
+            Assert.AreEqual(ViewMode.FirstPerson, steps.Take(act).Last(st => st.Kind == TourStepKind.View).ViewMode, "first person again for the cooking");
+        }
     }
 }

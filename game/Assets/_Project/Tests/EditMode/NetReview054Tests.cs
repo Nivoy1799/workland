@@ -39,29 +39,38 @@ namespace Worktown.Game.Tests
         {
             // Spec 037 re-pin: 4, money on the wire is cents (D39), which no reflected line shows.
             // Spec 062a re-pin: 5, the surface and station numbers on the wire are stable ids (the same int parameters).
-            Assert.AreEqual(5, ProtocolSurface.Revision, "054, the 053 review, spec 037, then spec 062a changed the wire (bump on every wire change)");
+            // Spec 054b re-pin: 6, the collision mode byte, the soft separation and MoveData.ViewTick.
+            Assert.AreEqual(6, ProtocolSurface.Revision, "054, the 053 review, spec 037, spec 062a, then spec 054b changed the wire (bump on every wire change)");
             List<string> lines = ProtocolSurface.Lines(Game);
-            Assert.AreEqual(1, lines.Count(l => l == "revision 5"));
+            Assert.AreEqual(1, lines.Count(l => l == "revision 6"));
             Assert.AreEqual(1, lines.Count(l => l.StartsWith("revision ", StringComparison.Ordinal)));
             List<string> before = lines.Where(l => !l.StartsWith("revision ", StringComparison.Ordinal)).ToList();
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before), BuildHash.Compute("0.1.0", lines), "a build without the revision is refused");
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 1")), BuildHash.Compute("0.1.0", lines));
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 2")), BuildHash.Compute("0.1.0", lines), "a 054 build is refused");
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 3")), BuildHash.Compute("0.1.0", lines), "a whole-dollar build is refused");
+            Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 4")), BuildHash.Compute("0.1.0", lines), "a pass-through build is refused");
+            Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 5")), BuildHash.Compute("0.1.0", lines), "a 062a build without 054b is refused");
         }
 
         [Test]
         public void TheCollisionRule_IsOneSessionField_NotOnEveryPlayer()
         {
             List<string> lines = ProtocolSurface.Lines(Game);
-            Assert.Contains("sync Worktown.Game.Net.SessionPhysics.PlayersCollide:FishNet.Object.Synchronizing.SyncVar`1<System.Boolean>", lines);
+            // Spec 054b: the rule is one mode byte (PlayerCollisionMode), the session's only synced field.
+            Assert.Contains("sync Worktown.Game.Net.SessionPhysics.PlayerCollision:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>", lines);
+            Assert.AreEqual(1, lines.Count(l => l.StartsWith("sync Worktown.Game.Net.SessionPhysics.", StringComparison.Ordinal)));
             Assert.IsFalse(lines.Any(l => l.StartsWith("sync Worktown.Game.Net.PlayerController.CollidesWithPlayers", StringComparison.Ordinal)));
             Assert.IsFalse(lines.Any(l => l.Contains("SessionPhysics") && l.Contains("Rpc")), "no RPC on the session object");
-            // 053 review (inbox question 23, default A): players pass through each other by default; -player-collision on is the A/B.
+            // Spec 054b (D48, replaces the 053 review's pass-through default): players block each other softly by default;
+            // -player-collision hard|off is the A/B.
             Type session = typeof(NetBootstrap).Assembly.GetType("Worktown.Game.Net.SessionPhysics");
-            Assert.AreEqual(false, session.GetField("DefaultCollide").GetRawConstantValue(), "pass-through by default");
-            Assert.IsFalse(LaunchArgs.Parse(new[] { "-host" }).PlayerCollision);
-            Assert.IsTrue(LaunchArgs.Parse(new[] { "-host", "-player-collision", "on" }).PlayerCollision);
+            Assert.AreEqual((byte)PlayerCollisionMode.Soft, Convert.ToByte(session.GetField("DefaultMode").GetRawConstantValue()), "soft by default");
+            Assert.AreEqual(PlayerCollisionMode.Soft, LaunchArgs.Parse(new[] { "-host" }).PlayerCollision);
+            Assert.AreEqual(PlayerCollisionMode.Hard, LaunchArgs.Parse(new[] { "-host", "-player-collision", "hard" }).PlayerCollision);
+            Assert.AreEqual((byte)0, (byte)PlayerCollisionMode.Off, "the wire values are pinned");
+            Assert.AreEqual((byte)1, (byte)PlayerCollisionMode.Hard);
+            Assert.AreEqual((byte)2, (byte)PlayerCollisionMode.Soft);
         }
 
         [Test]
