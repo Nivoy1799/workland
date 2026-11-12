@@ -8,7 +8,7 @@ using Worktown.Sim.Layout;
 
 namespace Worktown.Game.Tests
 {
-    /// <summary>Spec 062a AC8: the save's layout part (format version 3), its migration from version 2 and its codec.</summary>
+    /// <summary>Spec 062a AC8: the save's layout part (format version 3), its migration from version 2, its codec and (Part B) the fallback of a layout that breaks a rule.</summary>
     public class LayoutSaveTests
     {
         private const string Id = "0123456789abcdef0123456789abcdef";
@@ -60,6 +60,36 @@ namespace Worktown.Game.Tests
                 PieceCatalog.CreateDefault(), LayoutScene.Prefabs, out bool reset, out _);
             Assert.IsFalse(reset, "an unknown type does not reset the layout");
             Assert.IsNotNull(chosen.Piece(90), "and stays in it for the next save");
+        }
+
+        /// <summary>Spec 062a AC8 (Part B): a saved layout that breaks a rule (here the fryer pushed into the griddle) is replaced by the standard one, with the feed line.</summary>
+        [Test]
+        public void AnOverlappingLayout_FallsBack_WithTheFeedLine()
+        {
+            PieceCatalog catalog = PieceCatalog.CreateDefault();
+            ShopLayout standard = DefaultLayout.Load();
+            LayoutPiece griddle = standard.Pieces.Single(p => p.TypeId == PieceCatalog.Griddle);
+            ShopLayout overlapping = standard.WithPieces(standard.Pieces.Select(p => p.TypeId == PieceCatalog.Fryer ? p with { XMm = griddle.XMm + 300 } : p));
+            ShopSave save = ShopSaveCodecTests.Full();
+            save.layout = LayoutCodec.ToPart(overlapping);
+            SaveLoadResult r = ShopSaveCodec.Default.TryParse(ShopSaveCodec.Default.ToJson(save));
+            Assert.IsTrue(r.Ok, r.Error.ToString());
+            ShopLayout loaded = LayoutCodec.ToLayout(r.Save.layout, catalog);
+            Assert.AreEqual(overlapping, loaded, "the codec keeps it as it is; the spawner decides");
+            ShopLayout chosen = LayoutSpawner.Choose(loaded, standard, catalog, LayoutScene.Prefabs, out bool reset, out List<string> notes);
+            Assert.IsTrue(reset, string.Join(", ", notes));
+            Assert.AreSame(standard, chosen);
+            StringAssert.Contains("rule: Overlap", string.Join(", ", notes));
+            StringAssert.Contains("The fryer overlaps the griddle", string.Join(", ", notes));
+            Assert.AreEqual("The kitchen was reset to the standard layout", LayoutSpawner.FeedLineFor(reset));
+            Assert.AreEqual(LayoutSpawner.ResetLine, LayoutSpawner.FeedLineFor(true));
+
+            // The standard layout itself, saved and loaded, is used as it is (no feed line).
+            save.layout = LayoutCodec.ToPart(standard);
+            ShopLayout again = LayoutCodec.ToLayout(ShopSaveCodec.Default.TryParse(ShopSaveCodec.Default.ToJson(save)).Save.layout, catalog);
+            Assert.AreEqual(standard, LayoutSpawner.Choose(again, standard, catalog, LayoutScene.Prefabs, out reset, out notes));
+            Assert.IsFalse(reset, string.Join(", ", notes));
+            Assert.IsNull(LayoutSpawner.FeedLineFor(reset));
         }
 
         [Test]

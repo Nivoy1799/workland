@@ -12,11 +12,12 @@ namespace Worktown.Game.Layout
     /// <summary>
     /// Spec 062a: puts a <see cref="ShopLayout"/> into the world. Server (<see cref="ServerBegin"/>, called by SaveService when a game
     /// begins, before the first player and before a shift opens): the layout is checked (every piece type known, the required pieces there;
-    /// DefaultLayout.Backfill adds a missing one), an unusable one is replaced by the default (logged, and the feed line
-    /// <see cref="ResetLine"/>); then every piece is spawned in ascending id (its id, pose and number set before the spawn, so a late
+    /// DefaultLayout.Backfill adds a missing one; spec 062a Part B: LayoutRules.Validate in the default room), an unusable one is replaced by
+    /// the default (logged, and the feed line <see cref="ResetLine"/>); then every piece is spawned in ascending id (its id, pose and number set before the spawn, so a late
     /// joiner gets them in the spawn payload; nested NetworkObjects such as the fryer baskets spawn with their piece) and then the items at
     /// their homes (as the builder's PlaceOnSpot did). Offline (<see cref="InstantiateOffline"/>): the same objects without the network,
-    /// for the Editor and the tests. Lives next to the NetworkManager.
+    /// for the Editor and the tests. Lives next to the NetworkManager. <see cref="Spawned"/> tells the CustomerService (on the same object),
+    /// which builds the guests' route from the layout (NpcRoutes).
     /// </summary>
     public sealed class LayoutSpawner : MonoBehaviour
     {
@@ -28,11 +29,17 @@ namespace Worktown.Game.Layout
 
         private readonly List<NetworkObject> _spawnedPieces = new List<NetworkObject>();
         private readonly PieceCatalog _catalog = PieceCatalog.CreateDefault();
+        private readonly RoomDef _room = RoomDef.CreateDefault();
+
+        /// <summary>Spec 062a, server: raised after a layout was spawned, with it.</summary>
+        public event System.Action<ShopLayout> Spawned;
 
         /// <summary>Server: the layout in the world (null before a game began).</summary>
         public ShopLayout Current { get; private set; }
         public PiecePrefabs Prefabs => _prefabs;
         public PieceCatalog Catalog => _catalog;
+        /// <summary>Spec 062a: the fixed shell the layouts stand in (the rules' and the guests' routes' room).</summary>
+        public RoomDef Room => _room;
 
         /// <summary>
         /// Server: spawns <paramref name="layout"/> (null: the default) and its items. Returns the layout in the world. Any pieces this
@@ -47,14 +54,15 @@ namespace Worktown.Game.Layout
                 return null;
             }
             ShopLayout standard = DefaultLayout.Load(_catalog);
-            ShopLayout chosen = Choose(layout, standard, _catalog, _prefabs, out bool reset, out List<string> notes);
+            ShopLayout chosen = Choose(layout, standard, _catalog, _room, _prefabs, out bool reset, out List<string> notes);
             foreach (string note in notes) Debug.Log("[Layout] " + note);
             if (reset)
             {
                 // The bad layout is logged, not kept (the next save writes the standard one).
                 Debug.LogWarning("[Layout] the saved layout could not be used (" + string.Join("; ", notes) + "); the standard layout is spawned. "
                     + "The rejected layout: " + JsonUtility.ToJson(LayoutCodec.ToPart(layout)));
-                if (_feed != null) _feed.ServerAdd(ResetLine);
+                string line = FeedLineFor(reset);
+                if (_feed != null && line != null) _feed.ServerAdd(line);
             }
             DespawnPieces();
             Current = chosen;
@@ -89,6 +97,8 @@ namespace Worktown.Game.Layout
                 items++;
             }
             Debug.Log("[Layout] spawned " + pieces + " pieces and " + items + " items");
+            try { Spawned?.Invoke(chosen); }
+            catch (System.Exception e) { Debug.LogException(e); }
             return chosen;
         }
 
@@ -98,7 +108,15 @@ namespace Worktown.Game.Layout
         /// (<paramref name="reset"/>). Unknown types stay in the layout (and in the save) but are not spawned.
         /// </summary>
         public static ShopLayout Choose(ShopLayout layout, ShopLayout standard, PieceCatalog catalog, PiecePrefabs prefabs, out bool reset,
-            out List<string> notes)
+            out List<string> notes) => Choose(layout, standard, catalog, RoomDef.CreateDefault(), prefabs, out reset, out notes);
+
+        /// <summary>
+        /// Spec 062a Part B: as above, and a layout that breaks a rule of LayoutRules.Validate in <paramref name="room"/> (an overlap, a
+        /// blocked aisle, an unreachable station, ...) is replaced by the standard one too; each problem is a note. No repair is tried
+        /// (question 6).
+        /// </summary>
+        public static ShopLayout Choose(ShopLayout layout, ShopLayout standard, PieceCatalog catalog, RoomDef room, PiecePrefabs prefabs,
+            out bool reset, out List<string> notes)
         {
             notes = new List<string>();
             reset = false;
@@ -117,8 +135,20 @@ namespace Worktown.Game.Layout
                         notes.Add("no prefab for " + p.TypeId);
                         reset = true;
                     }
+            if (!reset && room != null)
+            {
+                LayoutReport report = LayoutRules.Validate(filled, room, catalog);
+                if (!report.IsValid)
+                {
+                    foreach (string line in report.Lines()) notes.Add("rule: " + line);
+                    reset = true;
+                }
+            }
             return reset ? standard : filled;
         }
+
+        /// <summary>Spec 062a, pure: the serve feed's line after a layout was chosen (null when the saved one was used).</summary>
+        public static string FeedLineFor(bool reset) => reset ? ResetLine : null;
 
         private void DespawnPieces()
         {
