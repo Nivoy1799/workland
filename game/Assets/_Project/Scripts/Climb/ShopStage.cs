@@ -464,15 +464,50 @@ namespace Worktown.Game.Climb
                     Debug.Log("[Stage] player " + player + " bought " + recipe.Id + " for " + EconomyRules.Money(cost) + "; next menu " + _menuNext);
                     return CookOutcome.Ok;
                 case GoalBoardAction.Toggle:
-                    _menuNext = GoalBoardRules.Toggled(_menuNext, row - 1);
-                    Push();
-                    bool on = RestaurantMenu.Has(_menuNext, row - 1);
-                    if (_feed != null) _feed.ServerAdd(GoalBoardRules.ToggledText(GoalBoardRules.DishName(recipe), on));
-                    Debug.Log("[Stage] player " + player + " turned " + recipe.Id + (on ? " on" : " off") + "; next menu " + _menuNext);
+                    Toggle(player, row - 1, recipe);
                     return CookOutcome.Ok;
                 default:
                     return CookOutcome.Ok;
             }
+        }
+
+        /// <summary>
+        /// Spec 059, server: the 057 recipe toggle from the office terminal's Menu app by player <paramref name="player"/>: owned recipe row
+        /// <paramref name="recipeRow"/> on or off the next service's menu, by the same rules as the goal board's press (GoalBoardRules.Decide:
+        /// the fries stay on, the menu holds MaxDishes, a change applies at the next service start). Only a toggle: buying stays at the goal
+        /// board (its two presses). A row that is not owned is refused (NotOnMenu).
+        /// </summary>
+        public CookOutcome ServerToggleRecipe(int player, int recipeRow)
+        {
+            if (_economy == null) return CookOutcome.UnknownStation;
+            IReadOnlyList<PurchaseDef> recipes = RestaurantRules.Recipes(_climb);
+            int count = Math.Min(GoalBoardRules.RowCount - 1, recipes.Count);
+            if (recipeRow < 0 || recipeRow >= count) return CookOutcome.InvalidOption;
+            if (_stage < ShopStageRules.FirstRestaurant) return CookOutcome.AlwaysOn;
+            if (!RestaurantMenu.Has(_owned, recipeRow)) return CookOutcome.NotOnMenu;
+            var state = new GoalBoardRules.State(_stage, _economy.ShopBalance, _goal, _movePending, _owned, _menuNext, _rentOwed,
+                RestaurantRules.RentReserve(EconomyData, _climb));
+            CookOutcome outcome = GoalBoardRules.Decide(state, recipeRow + 1, count, 0L, RestaurantRules.MaxDishes(_climb), out GoalBoardAction action);
+            if (outcome != CookOutcome.Ok) return outcome;
+            if (action != GoalBoardAction.Toggle) return CookOutcome.InvalidOption;
+            _confirm.Disarm(player); // like a toggle press at the board
+            Toggle(player, recipeRow, recipes[recipeRow]);
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 059, server: a recipe went on or off the next menu: the player, the recipe row and whether it is on now (the office log).</summary>
+        public event Action<int, int, bool> MenuToggled;
+
+        /// <summary>057's toggle, shared by the goal board and the office terminal (spec 059: one way to switch a dish).</summary>
+        private void Toggle(int player, int recipeRow, PurchaseDef recipe)
+        {
+            _menuNext = GoalBoardRules.Toggled(_menuNext, recipeRow);
+            Push();
+            bool on = RestaurantMenu.Has(_menuNext, recipeRow);
+            if (_feed != null) _feed.ServerAdd(GoalBoardRules.ToggledText(GoalBoardRules.DishName(recipe), on));
+            Debug.Log("[Stage] player " + player + " turned " + recipe.Id + (on ? " on" : " off") + "; next menu " + _menuNext);
+            try { MenuToggled?.Invoke(player, recipeRow, on); }
+            catch (Exception e) { Debug.LogException(e); }
         }
     }
 }

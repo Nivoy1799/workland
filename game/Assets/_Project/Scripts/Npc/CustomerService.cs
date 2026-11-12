@@ -83,6 +83,15 @@ namespace Worktown.Game.Npc
             Shift.DayOf(_economy != null ? _economy.Tick : 0));
         /// <summary>Spec 053, server: the last closed service's numbers.</summary>
         public ShiftSummary LastSummary => _shift.Last;
+        /// <summary>Spec 059, server: the last closed service as the office terminal records it (its guests, sales per dish, waits).</summary>
+        public Worktown.Game.Office.ServiceRecord LastRecord { get; private set; }
+
+        // Spec 059: this service's tally for the office terminal: the guests that joined (the join ordinal, which also picks every 4th
+        // guest for the special), what was handed over per result line, and the waits of the served dishes.
+        private int _joinOrdinal;
+        private readonly int[] _sold = new int[Worktown.Game.Office.ResultsRules.SoldLines];
+        private long _waitTenthsSum;
+        private int _waitCount;
 
         /// <summary>Spec 053: the shop's stage now (the open kitchen without a stage object).</summary>
         private byte ShopStageNow => _shopStage != null ? _shopStage.StageNow : Worktown.Game.Climb.ShopStageRules.OpenKitchen;
@@ -248,6 +257,7 @@ namespace Worktown.Game.Npc
             _tab.Clear();
             _linePayees.Clear();
             _synced = false;
+            ResetTally(); // spec 059
             _serverStartedAt = -1f;
             _tutorial.NewGame(); // spec 038: a new game scripts its first guests again
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
@@ -309,6 +319,7 @@ namespace Worktown.Game.Npc
                 return;
             }
             if (!wasOpen && _shift.IsOpen) Debug.Log("[Customers] shift of day " + _shift.Day + " opens");
+            if (!wasOpen && _shift.IsOpen) ResetTally(); // spec 059
             // Spec 053: the service's start moment (the food corner's stock drop) comes before the first guests walk in.
             if (!wasOpen && _shift.IsOpen) Raise(ServiceOpened, "opened");
             Sync();
@@ -342,8 +353,50 @@ namespace Worktown.Game.Npc
                 + EconomyRules.Money(sum.Earned) + " (tips " + EconomyRules.Money(sum.Tips) + "), stars "
                 + ShiftSummary.StarsText(sum.AverageStarsTenths) + ", reviews " + sum.Reviews + " (" + ShiftSummary.StarsText(sum.AverageReviewTenths)
                 + "), missed " + sum.Missed + " (patience " + sum.MissedPatience + ", gone " + sum.MissedGone + ", closed " + sum.MissedClosed + ")");
+            LastRecord = RecordOf(sum); // spec 059: before the listeners (the save writes the office's history)
             PublishRegister();
             Raise(ServiceClosed, "closed"); // spec 053: the pitch fee, the goal, the autosave
+        }
+
+        /// <summary>Spec 059: a new service's tally starts empty.</summary>
+        private void ResetTally()
+        {
+            _joinOrdinal = 0;
+            System.Array.Clear(_sold, 0, _sold.Length);
+            _waitTenthsSum = 0;
+            _waitCount = 0;
+        }
+
+        /// <summary>Spec 059: a line handed over: its result line, and for a dish the guest's wait.</summary>
+        private void Tally(GuestPick pick)
+        {
+            _sold[Worktown.Game.Office.ResultsRules.SoldLineOf(pick.Dish, pick.IsDrink)]++;
+            if (pick.IsDrink) return;
+            _waitTenthsSum += System.Math.Max(0, pick.WaitedTenths);
+            _waitCount++;
+        }
+
+        /// <summary>Spec 059: the closed service's record: its day, guests, money, stars (GateRules), mean wait (whole seconds) and sales.</summary>
+        private Worktown.Game.Office.ServiceRecord RecordOf(ShiftSummary sum) =>
+            Worktown.Game.Office.ServiceRecord.Of((int)System.Math.Min(int.MaxValue, _shift.LastDay), _joinOrdinal, sum.Served, sum.Missed, sum.Earned,
+                sum.Tips, Worktown.Game.Climb.GateRules.ServiceStarsTenths(sum),
+                _waitCount > 0 ? (int)((_waitTenthsSum + _waitCount * 5L) / (_waitCount * 10L)) : -1, _sold);
+
+        /// <summary>
+        /// Spec 059: the special of the day on a joining guest's order (Office.SpecialRules: an off-menu draw and every 4th guest take it);
+        /// no special, the food corner or a special off the menu leave the order as it is.
+        /// </summary>
+        private GuestOrder ApplySpecial(byte drawnDish, GuestOrder order, ref MenuDish dish)
+        {
+            Worktown.Game.Office.OfficeTerminal office = Worktown.Game.Office.OfficeTerminal.Find();
+            byte special = office != null ? office.ServerSpecial : Menu.None;
+            if (special == Menu.None) return order;
+            byte stage = ShopStageNow;
+            IReadOnlyList<byte> onMenu = Worktown.Game.Office.SpecialRules.MenuDishes(stage, MenuNow, null);
+            byte before = dish.Id;
+            GuestOrder after = Worktown.Game.Office.SpecialRules.Apply(stage, special, onMenu, drawnDish, _joinOrdinal, order, ref dish);
+            if (dish.Id != before) Debug.Log("[Customers] guest " + _joinOrdinal + " takes the special: " + dish.Name);
+            return after;
         }
 
         /// <summary>Spec 053: a market sends guests when it has a dish, and (stage 1) only the stage's dish's market.</summary>
@@ -448,6 +501,7 @@ namespace Worktown.Game.Npc
             if (payee == null || _queue.IndexOf(pick.CustomerId) < 0) return false;
             // 033 review: a line this guest already got is refused (nothing changes); the counter's fallback pays it at once.
             if (_tab.IsDuplicate(pick)) return false;
+            Tally(pick); // spec 059
             // Spec 033: one line of the order: on the tab (the commit point for a line) until the last one comes; then one pick for all.
             if (!_tab.Serve(pick, payee.OwnerId, GuestTab.LineBill(pick, simPayout), out GuestPick whole, out long bill))
             {
@@ -650,8 +704,16 @@ namespace Worktown.Game.Npc
 #endif
                 if (_lastTutorialScripted) eatIn = _tutorial.Orders.LastEatIn; // spec 038
                 // Spec 053: the draws above stay the same (same seed, same count); stage 1 overrides the results: fries, to go, cash.
+                byte drawnDish = dish.Id; // spec 059: the special looks at what was drawn
                 // Spec 057: at stage 2 the menu frozen at the service start decides (the drawn dish if it is on it, the drink only when drinks are on).
                 order = Worktown.Game.Climb.FoodCornerRules.StageOrder(ShopStageNow, MenuNow, null, order, ref dish, ref drink, ref eatIn);
+                _joinOrdinal++;
+                bool scriptedGuest = _lastTutorialScripted;
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                scriptedGuest |= _tourOrders != null && _tourOrders.LastScripted;
+#endif
+                // Spec 059: the special of the day (none: every order exactly as before); scripted guests (the tutorial, the tours) keep theirs.
+                if (!scriptedGuest) order = ApplySpecial(drawnDish, order, ref dish);
                 RecipeTemplate template = dish.Template != null ? RecipeTemplates.ById(dish.Template) : null;
                 byte modifiers = OrderModifiers.Pack(template, order.Modifiers);
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_customerPrefab, true);

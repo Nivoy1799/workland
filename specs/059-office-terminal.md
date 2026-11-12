@@ -143,7 +143,46 @@ AC12 play-test; answer or accept the open questions.
 6. Who may change prices and the menu. [anyone; the log names them]
 
 ## Implementation notes
-(Builder fills this in.)
+Built on main after 062a part A and 057 (062b and 058 are not built).
+
+**Left out until 062b / 058.** No door row, no build-mode row (Services shows the counter and the four stage 3 channels only);
+the clipboard has no door line. AC5's door and build parts join 062b's build. The rival line is hidden: `ServiceRecord.RivalPermille`
+stays -1; the 058 follow-up is one call, set it in `CustomerService.RecordOf` (`ResultsRules.Page1` already draws
+`ResultsRules.RivalText` when it is known).
+
+**057 reconciled: one way to do each thing.** A dish goes on or off only through `ShopStage.ServerToggleRecipe` / the shared private
+`Toggle` (the goal board's toggle press calls the same method; same `GoalBoardRules.Decide` rules). Buying recipes and renting stay at
+the goal board (spending, two presses). A price moves only through `MenuBoardDesk.ServerStepPrice` (the board's buttons now call it too).
+Both UIs stay, as open question 2 says for prices; the office log records changes from either.
+
+**Deviations.**
+- Clipboard key is **J**, not Tab: Tab is already the players list (`ControlAction.Players`, 047/048). Hard-coded in `PlayerInputReader`
+  until 048 binds it. Human: confirm J, or pick another.
+- The piece sits at the far right end of the back wall (x 14150, over the end worktop): "by the back door" is taken by the 034
+  ordering terminal and the stock is 1.80 m high.
+- Sold counts: six fixed result lines (fries, grilled veggies, seitan wrap, falafel wrap in MenuPrices order, drinks, other dishes).
+  "Came" is the join ordinal (guests that joined the service).
+- Text rules: "15 came, 12 served. More than usual." and "Waits about 40 s." (the spec's longer wording breaks 40 characters).
+- Special: scripted guests (tutorial, tours) keep their orders. A special off the current menu does nothing until it is on again.
+- AC10: no separate `office` tour (it would need a new `LaunchArgs` tour id and a stage 2 fixture). The restaurant tour got the steps:
+  fries +$0.50 at the terminal (board shows it), wrap the special, a locked service refused, Results page 1 after the next service,
+  the clipboard. Its timeout is now 900 s.
+
+**Out-of-scope touches (glue the spec's design needs):** `CookOutcome` (+`AlwaysOn`, `ComesLater`, `NotOnMenu`) and their HUD texts;
+`ShopStageRules` (the terminal is open at every stage); `PickupInteractor` (aim words, click: tabs and pages stay local);
+`AimTarget.OfficeButton`; `InteractionRules` (prompt line); `EconomyService.UseMenuBoard(option, playerSlot)`; `MenuBoardRules`
+(`DisplayText` overload with the special tag); `ArtKey`/`ArtCatalogRules`/`ArtSizeTable`/`ArtCatalogBuilder` +
+`Scripts/Art/OfficeTerminalArtRules.cs` (every station kind needs a catalog entry); `RestaurantTourRunner`; tests that list every
+station kind, the piece count, the save version and the revision.
+
+**Wire and save.** `ProtocolSurface.Revision` 8 (062a part B may also take 8). Save format 5 (`office` part); `V4ToV5` adds empty
+defaults and backfills the piece. The regenerated assets were trimmed to the office's own: `DefaultPrefabObjects` is main's order plus
+one entry; the other graybox churn the builder makes (palette drift) was reverted.
+
+**Checks (2026-11-12).** `scripts/verify.sh` PASS (EditMode 1619/1619); `git diff --stat 2fb753e -- sim` empty; BuildAll OK;
+`visual-check.sh --tours look,restaurant,menu --out .verify/visual059` PASS, 0 Exception lines (restaurant: 20 shots, the office
+steps 11-13 and 16-17). Seen in the shots: the terminal's text is small and the tour's office shots sit behind the shift summary
+(the tour visits during it); the art pass sizes the screen. Follow-up: the log shows the roster's name as it comes.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

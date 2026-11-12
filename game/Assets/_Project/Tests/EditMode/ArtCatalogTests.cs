@@ -151,6 +151,11 @@ namespace Worktown.Game.Tests
                             CheckGoalBoard(station, catalog); // spec 057: a new piece, not one of the old indices
                             continue;
                         }
+                        if (station.Kind == StationKind.OfficeTerminal)
+                        {
+                            CheckOfficeTerminal(station, catalog); // spec 059: a new piece too
+                            continue;
+                        }
                         int index = station.Id - 1; // spec 062a: the default layout's station ids are the old indices + 1
                         Assert.AreEqual(kinds[index], station.Kind, station.name);
                         bool stock = StockLayout.IsStock(station.Kind);
@@ -212,7 +217,7 @@ namespace Worktown.Game.Tests
                         if (stock) Assert.AreEqual(box.bounds.size.y, b.size.y, 0.01f, station.name + " cabinet as high as its body");
                     }
                 }
-                Assert.AreEqual(19, count, "the twelve before, (spec 035) the dish return, the sink, the trash can and the bin, (spec 036) the spit, (spec 037) the menu board, (spec 057) the goal board");
+                Assert.AreEqual(20, count, "the twelve before, (spec 035) the dish return, the sink, the trash can and the bin, (spec 036) the spit, (spec 037) the menu board, (spec 057) the goal board, (spec 059) the office terminal");
             }
             finally { LayoutScene.Close(scene); }
         }
@@ -234,6 +239,27 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(catalog.TryGet(ArtCatalogRules.StationKey(station.Kind), out GameObject expectedPrefab));
             Assert.AreSame(expectedPrefab, PrefabUtility.GetCorrespondingObjectFromSource(visual.gameObject));
             Assert.AreEqual(Worktown.Game.Climb.GoalBoardRules.RowCount, station.SlotCount, "one slot per row");
+        }
+
+        /// <summary>Spec 059: the office terminal hangs on the back wall over the end worktop (x 14.15, z 14.91), with its catalog art.</summary>
+        private static void CheckOfficeTerminal(Station station, ArtCatalog catalog)
+        {
+            Transform body = station.transform.Find("Body");
+            Assert.IsNotNull(body, "the office terminal's Body");
+            Assert.AreEqual(Vector3.zero, body.localPosition);
+            var box = body.GetComponent<BoxCollider>();
+            Assert.AreEqual(Vector3.one, box.size);
+            Assert.AreEqual(new Vector3(OfficeTerminalArtRules.Width, OfficeTerminalArtRules.Height, OfficeTerminalArtRules.Depth), body.localScale);
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(14.15f, OfficeTerminalArtRules.CentreHeight, 14.91f), box.bounds.center),
+                0.001f, "the office terminal moved");
+            Assert.IsNull(body.GetComponent<MeshRenderer>());
+            Transform visual = station.transform.Find("Art_" + ArtCatalogRules.StationKey(station.Kind));
+            Assert.IsNotNull(visual, "the office terminal has no catalog visual");
+            Assert.IsTrue(catalog.TryGet(ArtCatalogRules.StationKey(station.Kind), out GameObject expectedPrefab));
+            Assert.AreSame(expectedPrefab, PrefabUtility.GetCorrespondingObjectFromSource(visual.gameObject));
+            Assert.AreEqual(Worktown.Game.Office.TerminalOptions.SlotCount, station.SlotCount, "one slot per tab, page button and row button");
+            Assert.IsNotNull(station.GetComponent<Worktown.Game.Office.OfficeTerminal>(), "its synced state");
+            Assert.IsNotNull(station.GetComponent<Worktown.Game.Office.OfficeTerminalView>(), "its screen");
         }
 
         // AC7

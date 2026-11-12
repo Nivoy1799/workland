@@ -48,7 +48,10 @@ namespace Worktown.Game.Shop
         /// One click of button <paramref name="option"/> at <paramref name="stage"/>: the previous or next visible line (wrapping), or the
         /// selected line's price one step down or up (kept within its bounds). A selection the stage does not show snaps to its first line.
         /// </summary>
-        public CookOutcome Use(int option, byte stage)
+        public CookOutcome Use(int option, byte stage) => Use(option, stage, -1);
+
+        /// <summary>Spec 059: the same, by player <paramref name="playerSlot"/> (a price step goes through <see cref="ServerStepPrice"/>).</summary>
+        public CookOutcome Use(int option, byte stage, int playerSlot)
         {
             if (option < 0 || option >= MenuBoardRules.OptionCount) return CookOutcome.InvalidOption;
             IReadOnlyList<int> visible = MenuBoardRules.VisibleLines(stage);
@@ -60,17 +63,36 @@ namespace Worktown.Game.Shop
                 case MenuBoardRules.PreviousOption: at = (at + visible.Count - 1) % visible.Count; break;
                 case MenuBoardRules.NextOption: at = (at + 1) % visible.Count; break;
                 default:
-                {
-                    int line = visible[at];
-                    int steps = option == MenuBoardRules.DearerOption ? 1 : -1;
-                    _prices[line] = MenuPricing.Step(MenuPrices.Lines[line].Reference, _prices[line], steps);
-                    break;
-                }
+                    Selected = visible[at];
+                    return ServerStepPrice(visible[at], option == MenuBoardRules.DearerOption ? 1 : -1, playerSlot);
             }
             Selected = visible[at];
             Changed?.Invoke();
             return CookOutcome.Ok;
         }
+
+        /// <summary>
+        /// Spec 059: the one server method that moves a price, used by the menu board's buttons and the office terminal's Menu app: line
+        /// <paramref name="line"/>'s price <paramref name="delta"/> steps of $0.50 (kept within its bounds, MenuPricing.Step), by player
+        /// <paramref name="playerSlot"/> (-1 unknown). A guest who joined before keeps its quote (037 fix 1). The caller checked that the stage
+        /// sells the line. Raises <see cref="PriceStepped"/> when the price moved.
+        /// </summary>
+        public CookOutcome ServerStepPrice(int line, int delta, int playerSlot)
+        {
+            if (line < 0 || line >= _prices.Length || delta == 0) return CookOutcome.InvalidOption;
+            long before = _prices[line];
+            _prices[line] = MenuPricing.Step(MenuPrices.Lines[line].Reference, _prices[line], delta);
+            Changed?.Invoke();
+            if (_prices[line] != before)
+            {
+                try { PriceStepped?.Invoke(line, _prices[line], playerSlot); }
+                catch (Exception e) { UnityEngine.Debug.LogException(e); }
+            }
+            return CookOutcome.Ok;
+        }
+
+        /// <summary>Spec 059: a price moved: the line, its new price (cents) and the player (-1 unknown); the office terminal's log follows.</summary>
+        public event Action<int, long, int> PriceStepped;
 
         /// <summary>
         /// What a guest's order line costs at the board: the price of its dish, or (<paramref name="drink"/>) of the drink it ordered;

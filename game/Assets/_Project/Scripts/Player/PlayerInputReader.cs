@@ -22,6 +22,7 @@ namespace Worktown.Game.Player
         private bool _crouchToggled;
         private bool _jumpPressed;
         private bool _togglePressed;
+        private bool _clipboardPressed;
         private int _uiOpenCount;
         private int _lastUiClosedFrame = -1;
 
@@ -69,6 +70,21 @@ namespace Worktown.Game.Player
             // Spec 048: quick chat and the emote wheel by their bound keys and buttons (T, G, LB).
             return !GameInput.Held(ControlAction.QuickChat) && !GameInput.Held(ControlAction.EmoteWheel);
         }
+
+        /// <summary>
+        /// Spec 059: true once per press of the clipboard key (<see cref="ClipboardKey"/>; open question 4 said Tab, but Tab is the players list
+        /// of spec 047, so the clipboard takes J until spec 048 makes it bindable). False while a menu is open or a held key (quick chat, the
+        /// emote wheel) is down. Read once per frame.
+        /// </summary>
+        public bool ConsumeClipboard()
+        {
+            bool pressed = _clipboardPressed;
+            _clipboardPressed = false;
+            return _active && pressed && !IsUiOpen && !GameInput.Held(ControlAction.QuickChat) && !GameInput.Held(ControlAction.EmoteWheel);
+        }
+
+        /// <summary>Spec 059: the pocket clipboard's key (fixed until spec 048 binds it).</summary>
+        public const Key ClipboardKey = Key.J;
 
         /// <summary>Spec 011: menus call this when they open (true) and close (false).</summary>
         public void SetUiOpen(bool open)
@@ -123,6 +139,7 @@ namespace Worktown.Game.Player
                 if (GameInput.Pressed(ControlAction.Jump)) _jumpPressed = true;
             }
             if (GameInput.Pressed(ControlAction.ToggleView)) _togglePressed = true;
+            if (Keyboard.current != null && Keyboard.current[ClipboardKey].wasPressedThisFrame) _clipboardPressed = true; // spec 059
 
             Keyboard keyboard = Keyboard.current;
 

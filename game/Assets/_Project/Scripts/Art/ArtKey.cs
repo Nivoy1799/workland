@@ -127,6 +127,8 @@ namespace Worktown.Game.Art
         /// <summary>Spec 037: the menu board hanging above the front counter (graybox, MenuBoardArtRules: a frame and a Charcoal board).</summary>
         StationMenuBoard,
         /// <summary>Spec 057: the goal board on the back wall (graybox, GoalBoardArtRules: a WoodDark frame round a Cream face, Ink text).</summary>
-        StationGoalBoard
+        StationGoalBoard,
+        /// <summary>Spec 059: the office terminal on the back wall (graybox, OfficeTerminalArtRules: a WoodLight case round a Charcoal screen).</summary>
+        StationOfficeTerminal
     }
 }

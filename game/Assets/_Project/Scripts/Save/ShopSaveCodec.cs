@@ -210,6 +210,9 @@ namespace Worktown.Game.Save
                 part.cents = normal;
             }
 
+            // Spec 059: the office part: a special that names no dish line is none; the history keeps its newest 8 records, each in range.
+            ClampOffice(s, notes);
+
             // Spec 062a: the layout's values in range (LayoutCodec); a piece of an unknown type stays in the file.
             if (s.layout.pieces != null && s.layout.pieces.Length > 0)
                 s.layout = Worktown.Game.Layout.LayoutCodec.ToPart(
@@ -222,6 +225,31 @@ namespace Worktown.Game.Save
                 if (line < 0) continue; // unknown: ignored, kept for the next save
                 part.count = (int)Range(part.slot, part.count, 0L, StockCatalog.Goods[line].Capacity, notes);
             }
+        }
+
+        /// <summary>Spec 059: the office part in range (ServiceRecord.Of clamps each record; ServiceHistory keeps the newest 8).</summary>
+        private static void ClampOffice(ShopSave s, List<string> notes)
+        {
+            s.office ??= new ShopSave.OfficePart();
+            s.office.special ??= string.Empty;
+            s.office.history ??= new ShopSave.RecordPart[0];
+            if (s.office.special.Length > 0 && Worktown.Game.Office.SpecialRules.FromLineId(s.office.special) == Worktown.Game.Npc.Menu.None)
+            {
+                notes.Add("office special " + s.office.special + " -> none");
+                s.office.special = string.Empty;
+            }
+            Worktown.Game.Office.ServiceRecord[] records = SaveService.RecordsOf(s.office);
+            int given = 0;
+            foreach (ShopSave.RecordPart p in s.office.history) if (p != null) given++;
+            if (given > records.Length) notes.Add("office history " + given + " records -> the newest " + records.Length);
+            ShopSave.RecordPart[] parts = SaveService.PartsOf(records);
+            int skip = s.office.history.Length - parts.Length;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                ShopSave.RecordPart was = i + skip >= 0 && i + skip < s.office.history.Length ? s.office.history[i + skip] : null;
+                if (was != null && !SaveService.SameRecord(was, parts[i])) notes.Add("office history day " + was.day + " clamped");
+            }
+            s.office.history = parts;
         }
 
         /// <summary>Spec 057: the most rent a save may owe: the owed cap (two services) of the largest crew (16 players, D40).</summary>

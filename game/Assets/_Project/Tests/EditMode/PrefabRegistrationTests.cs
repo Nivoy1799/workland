@@ -119,7 +119,7 @@ namespace Worktown.Game.Tests
                 if (prefab != null) registered.Add(AssetDatabase.GetAssetPath(prefab));
             }
             Worktown.Game.Layout.PiecePrefabs prefabs = LayoutScene.Prefabs;
-            Assert.AreEqual(20, prefabs.PieceEntries.Length, "one prefab per piece type of the default layout (spec 057: and the goal board)");
+            Assert.AreEqual(21, prefabs.PieceEntries.Length, "one prefab per piece type of the default layout (spec 057: and the goal board; spec 059: the office terminal)");
             foreach (Worktown.Game.Layout.PiecePrefabs.PieceEntry e in prefabs.PieceEntries)
             {
                 Assert.IsNotNull(e.Prefab, e.TypeId);

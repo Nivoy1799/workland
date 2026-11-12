@@ -549,6 +549,9 @@ namespace Worktown.Game.UI
                     return Worktown.Game.Climb.GoalBoardRules.MenuFullText(
                         Worktown.Game.Climb.RestaurantRules.MaxDishes(Worktown.Game.Climb.FoodCornerRules.DefaultClimb));
                 case CookOutcome.MoveWaits: return Worktown.Game.Climb.GoalBoardRules.MoveWaitsText;
+                case CookOutcome.AlwaysOn: return Worktown.Game.Office.MenuAppRules.AlwaysOnText; // spec 059
+                case CookOutcome.ComesLater: return Worktown.Game.Office.ServicesAppRules.ComesLaterText;
+                case CookOutcome.NotOnMenu: return Worktown.Game.Office.SpecialRules.NotOnMenuText;
                 default: return outcome.ToString();
             }
         }

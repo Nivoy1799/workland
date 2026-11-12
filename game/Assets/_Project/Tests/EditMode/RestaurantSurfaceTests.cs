@@ -38,8 +38,8 @@ namespace Worktown.Game.Tests
             Assert.IsFalse(lines.Any(l => l.Contains("Worktown.Game.Climb.") && !l.StartsWith("sync ", StringComparison.Ordinal)), "no RPC on the stage");
             Assert.IsFalse(lines.Any(l => l.Contains("GoalBoard")), "the goal board syncs nothing of its own (its piece's fields only)");
             Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
-            Assert.AreEqual(7, ProtocolSurface.Revision);
-            Assert.Contains("revision 7", lines);
+            Assert.AreEqual(8, ProtocolSurface.Revision); // spec 059 made it 8
+            Assert.Contains("revision 8", lines);
         }
 
         [Test]

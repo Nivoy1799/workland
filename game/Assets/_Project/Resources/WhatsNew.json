@@ -842,6 +842,23 @@
         "Does the rent feel fair for your crew size, alone and with friends?",
         "Close the shop and Continue: are you still in the restaurant with your recipes and menu?"
       ]
+    },
+    {
+      "id": "2026-11-12-spec-059",
+      "date": "2026-11-12",
+      "title": "The office terminal",
+      "items": [
+        "An office terminal hangs on the back wall at the far end of the kitchen: Menu, Services and Results",
+        "Menu: set each dish's price, switch recipes on or off for the next service, and pick a special of the day",
+        "The special: guests who wanted a dish you do not sell take it, and so does every 4th guest",
+        "Results: how the last service went in plain words and bars, the last 5 services, and who changed what",
+        "Press J for your pocket clipboard: today's menu, the goal and the last service, anywhere"
+      ],
+      "test": [
+        "Run three services from the terminal: does it read like a note, not a spreadsheet?",
+        "Set a special: do more guests order it, and does the menu board show it?",
+        "Change a price with a friend: does the log say who did it?"
+      ]
     }
   ]
 }

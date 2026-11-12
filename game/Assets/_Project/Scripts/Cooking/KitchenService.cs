@@ -234,9 +234,12 @@ namespace Worktown.Game.Cooking
                 // Spec 034: a row of the ordering terminal (an order option); paid once, the boxes come after the delay.
                 case StationKind.Terminal: return _supply != null ? _supply.Order(player, option) : CookOutcome.UnknownStation;
                 // Spec 037: a button of the menu board (a line, or its price $0.50 down or up); the economy keeps the prices.
-                case StationKind.MenuBoard: return _economy != null ? _economy.UseMenuBoard(option) : CookOutcome.UnknownStation;
+                case StationKind.MenuBoard: return _economy != null ? _economy.UseMenuBoard(option, player.OwnerId) : CookOutcome.UnknownStation;
                 // Spec 057: a row of the goal board (rent the restaurant, buy or toggle a recipe); the stage decides, the money is the shop's.
                 case StationKind.GoalBoard: return _shopStage != null ? _shopStage.ServerPressBoard(player.OwnerId, option) : CookOutcome.UnknownStation;
+                // Spec 059: a row button of the office terminal (Office.TerminalOptions: app, row, action); the terminal decides and logs who.
+                case StationKind.OfficeTerminal:
+                    return station.TryGetComponent(out Worktown.Game.Office.OfficeTerminal office) ? office.ServerPress(player.OwnerId, option) : CookOutcome.UnknownStation;
                 default: return CookOutcome.UnknownStation;
             }
         }

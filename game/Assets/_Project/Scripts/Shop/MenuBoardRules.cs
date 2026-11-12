@@ -86,7 +86,10 @@ namespace Worktown.Game.Shop
         /// The board's text: "MENU", then up to <see cref="ShownLines"/> visible lines around the selected one, each "Fries  $4.00" (the
         /// selected one marked with "&gt;"). <paramref name="prices"/> are cents per MenuPrices line (a missing one reads as its reference).
         /// </summary>
-        public static string DisplayText(byte stage, IReadOnlyList<int> prices, int selected)
+        public static string DisplayText(byte stage, IReadOnlyList<int> prices, int selected) => DisplayText(stage, prices, selected, Menu.None);
+
+        /// <summary>Spec 059: the same, with the special of the day's line tagged ("Falafel wrap  $9.00  Special"; <paramref name="special"/> a dish id).</summary>
+        public static string DisplayText(byte stage, IReadOnlyList<int> prices, int selected, byte special)
         {
             IReadOnlyList<int> visible = VisibleLines(stage);
             var sb = new StringBuilder("MENU");
@@ -99,9 +102,13 @@ namespace Worktown.Game.Shop
                 MenuPrices.Line l = MenuPrices.Lines[line];
                 long price = prices != null && line < prices.Count ? prices[line] : l.Reference;
                 sb.Append('\n').Append(i == at ? "> " : "  ").Append(Title(l.Name)).Append("  ").Append(EconomyRules.Money(price));
+                if (special != Menu.None && l.Drink == null && l.Dish == special) sb.Append("  ").Append(SpecialTag);
             }
             return sb.ToString();
         }
+
+        /// <summary>Spec 059: the tag the board shows on the special of the day's line.</summary>
+        public const string SpecialTag = "Special";
 
         /// <summary>The index of <paramref name="line"/> in <paramref name="visible"/>, or -1.</summary>
         public static int IndexIn(IReadOnlyList<int> visible, int line)

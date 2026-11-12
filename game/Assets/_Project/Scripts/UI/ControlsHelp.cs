@@ -21,6 +21,7 @@ namespace Worktown.Game.UI
             "{Use} (third person): the same as left click on the nearest thing",
             "{ToggleView}: first / third person   {Move}: walk   {Sprint}: run   {Crouch}: sneak   {Jump}: jump",
             "{Players}: who is in the shop (invite friends, kick, leave the shop)", // spec 047
+            "J: the pocket clipboard (today's menu, the goal, the last service)", // spec 059 (fixed key until 048 binds it)
             "Gamepad: RT = left click, LT = right click, Y = turn",
         };
 

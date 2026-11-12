@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using Worktown.Game.Climb;
@@ -8,6 +9,7 @@ using Worktown.Game.Economy;
 using Worktown.Game.Net;
 using Worktown.Game.Net.Rules;
 using Worktown.Game.Npc;
+using Worktown.Game.Office;
 using Worktown.Game.Player;
 using Worktown.Game.Save;
 using Worktown.Game.Shop;
@@ -27,7 +29,7 @@ namespace Worktown.Game.Dev
     public sealed class RestaurantTourRunner : MonoBehaviour
     {
         private const float StepLimit = 60f;
-        private const float WholeLimit = 600f;
+        private const float WholeLimit = 780f; // spec 059: + the office terminal
 
         private NetBootstrap _bootstrap;
         private MainMenuView _menu;
@@ -231,6 +233,39 @@ namespace Worktown.Game.Dev
             }
             else Fail("no ordering terminal");
 
+            // Spec 059 (AC10): the office terminal at the end of the back wall: the fries $0.50 dearer, the falafel wrap the special.
+            Station officeStation = Worktown.Game.Layout.LayoutRegistry.First(StationKind.OfficeTerminal);
+            OfficeTerminal office = officeStation != null ? officeStation.GetComponent<OfficeTerminal>() : null;
+            OfficeTerminalView officeView = officeStation != null ? officeStation.GetComponent<OfficeTerminalView>() : null;
+            if (office == null || officeView == null) Fail("no office terminal in the kitchen");
+            else
+            {
+                yield return actor.WalkTo(new Vector3(officeStation.transform.position.x, 0f, laneZ), false, false);
+                yield return actor.AimAt(officeStation.transform.position, 0.8f);
+                officeView.ShowApp(TerminalApp.Menu);
+                yield return Wait(0.5f);
+                yield return _capture.Shot("office-menu");
+                MenuBoard menuBoard = Worktown.Game.Layout.LayoutRegistry.First(StationKind.MenuBoard)?.GetComponent<MenuBoard>();
+                int friesLine = MenuPrices.LineOfDish(Menu.Fries), wrapLine = MenuPrices.LineOfDish(Menu.FalafelWrap);
+                int friesBefore = menuBoard != null && friesLine < menuBoard.Prices.Count ? menuBoard.Prices[friesLine] : -1;
+                yield return Press(hands, officeStation, TerminalOptions.Pack(TerminalApp.Menu, OfficeRow(stage, friesLine), TerminalOptions.Plus), a => answer = a);
+                if (answer != CookOutcome.Ok) Fail("the terminal's fries + answered " + answer);
+                yield return Until(() => menuBoard != null && menuBoard.Prices[friesLine] == friesBefore + 50, "the board shows the fries $0.50 dearer");
+                yield return Press(hands, officeStation, TerminalOptions.Pack(TerminalApp.Menu, OfficeRow(stage, wrapLine), TerminalOptions.Special), a => answer = a);
+                if (answer != CookOutcome.Ok) Fail("the terminal's special answered " + answer);
+                yield return Until(() => office.Special.Value == Menu.FalafelWrap, "the falafel wrap is the special");
+                yield return Wait(0.8f);
+                Debug.Log("[Tour] restaurant: the office screen: " + officeView.ScreenText.Replace('\n', '/'));
+                if (!officeView.ScreenText.Contains("special")) Fail("the screen does not show the special");
+                yield return _capture.Shot("office-special");
+                // Spec 059: a locked service refuses with its text.
+                officeView.ShowApp(TerminalApp.Services);
+                yield return Press(hands, officeStation, TerminalOptions.Pack(TerminalApp.Services, 1, TerminalOptions.Press), a => answer = a);
+                if (answer != CookOutcome.ComesLater) Fail("delivery answered " + answer + ", not ComesLater");
+                yield return Wait(0.5f);
+                yield return _capture.Shot("office-services");
+            }
+
             // The next service opens with the wrap on the frozen menu: meal guests come for it.
             yield return Until(() => rail().SummaryOpen.Value == false && RestaurantMenu.Has(stage.MenuNow.Value, falafelRow - 1),
                 "the next service opened with the falafel wrap on the menu", 40f);
@@ -245,6 +280,29 @@ namespace Worktown.Game.Dev
             yield return EndService("the restaurant's first service ended");
             yield return Wait(1f);
             yield return _capture.Shot("summary-rent-gate");
+            if (office != null && officeView != null)
+            {
+                // Spec 059 (AC10): Results page 1 shows the service; J shows the clipboard (the tour toggles it: its input is scripted).
+                yield return Until(() => office.History.Count > 0, "the office terminal recorded the service");
+                yield return actor.WalkTo(new Vector3(officeStation.transform.position.x, 0f, laneZ), false, false);
+                yield return actor.AimAt(officeStation.transform.position, 0.8f);
+                officeView.ShowApp(TerminalApp.Results);
+                yield return Wait(0.8f);
+                Debug.Log("[Tour] restaurant: the office results: " + officeView.ScreenText.Replace('\n', '/'));
+                if (!officeView.ScreenText.Contains(" came, ")) Fail("Results page 1 does not show the service");
+                yield return _capture.Shot("office-results");
+                ClipboardView clipboard = ClipboardView.Find();
+                if (clipboard == null) Fail("no clipboard");
+                else
+                {
+                    clipboard.Toggle();
+                    yield return Wait(0.8f);
+                    Debug.Log("[Tour] restaurant: the clipboard: " + clipboard.Text.Replace('\n', '/'));
+                    if (!clipboard.IsOpen || !clipboard.Text.Contains(ClipboardRules.MenuTitle)) Fail("the clipboard does not show the menu");
+                    yield return _capture.Shot("clipboard");
+                    clipboard.Toggle();
+                }
+            }
             Debug.Log("[Tour] restaurant: owed " + EconomyRules.Money(stage.RentOwed.Value) + ", window " + stage.WindowCount.Value + " service(s), average "
                 + GateRules.Stars(stage.WindowAverageTenths.Value) + ", the wallet " + EconomyRules.Money(Balance(me)));
 
@@ -272,6 +330,14 @@ namespace Worktown.Game.Dev
         }
 
         private static TicketRailView rail() => FindFirstObjectByType<TicketRailView>();
+
+        /// <summary>Spec 059: the Menu app's row of MenuPrices line <paramref name="line"/> now (-1 when it has none).</summary>
+        private static int OfficeRow(ShopStage stage, int line)
+        {
+            IReadOnlyList<int> lines = MenuAppRules.Lines(stage.StageNow, stage.Climb, stage.RecipesOwned.Value);
+            for (int i = 0; i < lines.Count; i++) if (lines[i] == line) return i;
+            return -1;
+        }
 
         private static bool AnyGuestWants(byte dish)
         {
