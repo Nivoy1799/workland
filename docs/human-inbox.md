@@ -70,6 +70,15 @@ every question has a default, and work continues on other items until you answer
   - Clean-up: old Mini Characters and unused Kenney clips removed.
 
 ## Open questions
+32. **Crew size and one-time prices (spec 057, being fixed).** Your rule D40 makes goals and one-time prices (rent,
+    recipes, licence) grow with the crew. A crew could leave for a moment to make the rent cheap (solo rent $41
+    instead of $300 for 4 players). Default, being built now:
+    - prices use the largest crew of the last 3 services, or the players connected now if that is more;
+    - leaving for a moment makes nothing cheaper;
+    - if people really leave, the prices drop after 3 services.
+
+    Also by default: paying the rent requires the rent plus a $25 reserve, so a new restaurant can still order stock
+    and doesn't get stuck. Say if you want it different.
 31. **Please play-test: players block each other (spec 054b, merged).** You can no longer walk through a friend.
     Bumping into one slides you around them, and a sprint shoves them aside. Visible jumps when bumping are about 9x
     rarer than with hard blocking (3.5 against 31.7 per minute in the 16-player test), but the few that remain are
