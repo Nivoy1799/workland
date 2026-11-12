@@ -106,7 +106,9 @@ namespace Worktown.Sim.Layout
             new PieceDef(MenuBoard,         700,   30, PieceMount.Overhead, false, false, true,  false, true,  0,    0),
             new PieceDef(Bin,               620,  740, PieceMount.Yard,     false, false, true,  false, false, 0,    0),
             // Reserved for later specs (not in the default layout).
-            new PieceDef(GoalBoard,         800,   30, PieceMount.Wall,     false, false, false, false, true,  0,    0),
+            // Spec 062a Part B: the goal board is a station (pressed in first person), so rule 4 checks a cook reaches it; 20 mm deep like the
+            // terminal (its panel is 18 mm), so it fits between the back line and the wall.
+            new PieceDef(GoalBoard,         800,   20, PieceMount.Wall,     false, false, true,  false, true,  0,    0),
             new PieceDef(DoorSign,          400,   30, PieceMount.Wall,     false, false, false, false, true,  0,    0),
             new PieceDef(OfficeTerminal,   1000,   20, PieceMount.Wall,     false, false, true,  false, true,  0,    0),
         });

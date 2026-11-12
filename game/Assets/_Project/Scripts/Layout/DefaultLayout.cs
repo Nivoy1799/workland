@@ -96,6 +96,6 @@ namespace Worktown.Game.Layout
         }
 
         /// <summary>Spec 062a rule 2's bands: floor and counter-line pieces together, wall pieces, overhead pieces (the yard is the floor's).</summary>
-        public static int Band(PieceMount mount) => mount == PieceMount.Wall ? 1 : mount == PieceMount.Overhead ? 2 : 0;
+        public static int Band(PieceMount mount) => LayoutRules.Band(mount);
     }
 }

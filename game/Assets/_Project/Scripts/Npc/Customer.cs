@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
@@ -14,6 +15,8 @@ namespace Worktown.Game.Npc
     /// waits and what it says on the way out, coloured by mood.
     /// Spec 024: the body is a low-poly person (a CharacterVisual on the same object picks one of the customer variants
     /// and animates it); the wish colour is a light tint over the character's own colours (spec 025: palette colours).
+    /// Spec 062a: the server walks it through a list of points (the layout's route corners, <see cref="ServerWalkVia"/>) before its
+    /// target, at <see cref="CustomerRules.WalkSpeed"/>; with no corners it walks straight, as before.
     /// </summary>
     public sealed class Customer : NetworkBehaviour
     {
@@ -68,7 +71,7 @@ namespace Worktown.Game.Npc
         {
             get
             {
-                if (_leaving) return false;
+                if (_leaving || _via.Count > 0) return false;
                 Vector3 d = transform.position - _target;
                 d.y = 0f;
                 return d.sqrMagnitude < 0.0025f;
@@ -80,6 +83,7 @@ namespace Worktown.Game.Npc
         private Vector3 _facing; // spec 027a: the way to face once at the target (zero: keep the walking direction)
         private bool _leaving;
         private Action<Customer> _onExit;
+        private readonly List<Vector3> _via = new List<Vector3>(); // spec 062a: the corners still to walk before the target
 
         private void Awake()
         {
@@ -124,8 +128,19 @@ namespace Worktown.Game.Npc
             _target = target;
             _facing = Vector3.zero;
             _leaving = false;
+            _via.Clear(); // a pooled guest starts without the last one's corners
             Refresh();
         }
+
+        /// <summary>Spec 062a, server: walk through <paramref name="points"/> (in order) before the target; replaces the corners left.</summary>
+        internal void ServerWalkVia(IReadOnlyList<Vector3> points)
+        {
+            _via.Clear();
+            if (points != null) _via.AddRange(points);
+        }
+
+        /// <summary>Spec 062a, server: the corners still to walk before the target.</summary>
+        internal int ServerViaLeft => _via.Count;
 
         /// <summary>Spec 027a: <paramref name="facing"/> is the way to turn once the slot is reached (zero: none).</summary>
         internal void ServerSetTarget(Vector3 target, Vector3 facing)
@@ -162,8 +177,12 @@ namespace Worktown.Game.Npc
             Refresh();
         }
 
-        internal void ServerLeave(string bubble, byte mood, Vector3 exit, Action<Customer> onExit)
+        internal void ServerLeave(string bubble, byte mood, Vector3 exit, Action<Customer> onExit) => ServerLeave(bubble, mood, exit, null, onExit);
+
+        /// <summary>Spec 062a: leaves through <paramref name="via"/> (the route's corners out; null or empty: straight to the exit).</summary>
+        internal void ServerLeave(string bubble, byte mood, Vector3 exit, IReadOnlyList<Vector3> via, Action<Customer> onExit)
         {
+            ServerWalkVia(via);
             Bubble.Value = bubble;
             Mood.Value = mood;
             _target = exit;
@@ -180,18 +199,36 @@ namespace Worktown.Game.Npc
         private void ServerWalk()
         {
             Vector3 position = transform.position;
-            Vector3 next = Vector3.MoveTowards(position, _target, CustomerRules.WalkSpeed * Time.deltaTime);
+            Vector3 next = Step(position, _target, _via, CustomerRules.WalkSpeed * Time.deltaTime);
             Vector3 step = next - position;
             step.y = 0f;
             if (step.sqrMagnitude > 0.000001f) transform.rotation = Quaternion.LookRotation(step);
             else if (!_leaving && _facing.sqrMagnitude > 0.0001f)
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(_facing), TurnSpeed * Time.deltaTime);
             transform.position = next;
-            if (_leaving && (next - _target).sqrMagnitude < 0.01f)
+            if (_leaving && _via.Count == 0 && (next - _target).sqrMagnitude < 0.01f)
             {
                 _leaving = false;
                 _onExit?.Invoke(this);
             }
+        }
+
+        /// <summary>
+        /// Spec 062a, pure: one frame's walk of up to <paramref name="distance"/> from <paramref name="position"/>: through the corners in
+        /// <paramref name="via"/> (each reached corner is removed; what is left of the step goes on to the next), then towards
+        /// <paramref name="target"/>. Returns the new position.
+        /// </summary>
+        public static Vector3 Step(Vector3 position, Vector3 target, List<Vector3> via, float distance)
+        {
+            while (via != null && via.Count > 0)
+            {
+                float toCorner = Vector3.Distance(position, via[0]);
+                if (toCorner > distance) return Vector3.MoveTowards(position, via[0], distance);
+                position = via[0];
+                distance -= toCorner;
+                via.RemoveAt(0);
+            }
+            return Vector3.MoveTowards(position, target, distance);
         }
 
         private void LateUpdate()
