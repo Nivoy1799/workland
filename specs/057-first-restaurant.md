@@ -307,6 +307,12 @@ Built 2026-11-12 on top of 56c482c and 2223270, after merging main (054b, revisi
    - `BoardConfirm` is disarmed when a player disconnects (`ShopStage.ServerPlayerLeft`, from `OnRemoteConnectionState`).
 7. **Merge:** `ProtocolSurface` keeps main's revision 6 line and adds 057's line for 7. `NetReview054Tests` pins 7 and refuses
    4, 5 and 6. `LayoutSurfaceTests` and `MenuBoardTests` pin "revision 7".
+8. **Checks:**
+   - `verify.sh` is green: EditMode 1589/1589 (with main's 054b tests and 13 new ones), sim 833, gateway 216.
+   - `BuildAll` succeeded.
+   - `visual-check.sh --tours restaurant,corner,cook --out .verify/visual057b` passed with 0 Exception lines. The corner's solo goal reads
+     $22.12 / $41.00; the restaurant tour has 0 failures.
+   - DefaultPrefabObjects came back from the runs reordered only (no new entries), so it was reset to the committed order.
 
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
