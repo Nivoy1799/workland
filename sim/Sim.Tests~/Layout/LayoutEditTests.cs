@@ -70,19 +70,25 @@ namespace Worktown.Sim.Tests.Layout
             Assert.False(LayoutEdit.Move(1, 0, 0, 0).TryApply(null!, out _, out _));
         }
 
-        /// <summary>062b review: an edit may carry the layout's new item homes; its inverse carries the old ones.</summary>
+        /// <summary>062b re-review: an edit moves only the homes it names; its inverse swaps back only those that still match.</summary>
         [Fact]
-        public void AnEditsHomes_ApplyAndComeBackWithTheInverse()
+        public void AnEditsHomeChanges_ApplyAndComeBack_LeavingOtherHomesAlone()
         {
-            var moved = new[] { new ItemHome("knife", 1, 0, 2) };
-            LayoutEdit store = LayoutEdit.Store(2) with { Homes = moved };
+            var knife = new ItemHome("knife", 2, 0, 3);
+            var moved = new ItemHome("knife", 1, 0, 2);
+            LayoutEdit store = LayoutEdit.Store(2) with { HomeChanges = new[] { new HomeChange(knife, moved) } };
             Assert.True(store.TryApply(Start(), out ShopLayout stored, out LayoutEdit inverse));
-            Assert.Equal(moved, stored.Homes);
-            Assert.Equal(Start().Homes, inverse.Homes);
+            Assert.Equal(new[] { moved }, stored.Homes);
+            Assert.Equal(new[] { new HomeChange(moved, knife) }, inverse.HomeChanges);
             Assert.True(inverse.TryApply(stored, out ShopLayout back, out _));
             Assert.Equal(Start(), back);
+            // Someone else moved that home since: the undo leaves it where it is now.
+            ShopLayout changed = stored.WithHomes(new[] { new ItemHome("knife", 1, 0, 5) });
+            Assert.True(inverse.TryApply(changed, out ShopLayout kept, out LayoutEdit none));
+            Assert.Equal(changed.Homes, kept.Homes);
+            Assert.Empty(none.HomeChanges!);
             Assert.True(LayoutEdit.Move(1, 0, 0, 0).TryApply(Start(), out _, out LayoutEdit plain));
-            Assert.Null(plain.Homes); // an edit without homes keeps them
+            Assert.Null(plain.HomeChanges); // an edit without homes keeps them
         }
 
         [Fact]

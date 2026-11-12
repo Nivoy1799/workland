@@ -177,6 +177,11 @@ namespace Worktown.Game.Layout
             if (PieceId <= 0) return;
             _registered = true;
             LayoutRegistry.Register(this);
+            // 062b re-review: a late joiner may get a piece waiting on the pallet before the pallet: once the pallet registers, every
+            // registered piece looks again whether it is parked.
+            if (StoragePallet.Is(this))
+                foreach (PieceBehaviour p in new List<PieceBehaviour>(LayoutRegistry.Pieces))
+                    if (p != null && p != this) p.RefreshParked();
         }
 
         private void Unregister()
@@ -196,10 +201,16 @@ namespace Worktown.Game.Layout
             int id = PieceId;
             for (int i = 0; i < _surfaces.Length; i++)
                 if (_surfaces[i] != null) _surfaces[i].AssignId(id > 0 ? SurfaceId.Of(id, i) : SurfaceId.None, id > 0 ? id : 0);
+            RefreshParked();
+        }
+
+        /// <summary>062b review: whether it waits on a pallet now; registered again (with or without its stations and surfaces) when that changed.</summary>
+        public void RefreshParked()
+        {
             bool parked = StoragePallet.Covers(this);
             if (parked == Parked) return;
             Parked = parked;
-            if (_registered) LayoutRegistry.Register(this); // again: with or without its stations and surfaces
+            if (_registered) LayoutRegistry.Register(this);
         }
 
         /// <summary>A counter's colliders, tops and scaled parts take the length; its cabinet modules are laid out again (ArtSizeTable).</summary>

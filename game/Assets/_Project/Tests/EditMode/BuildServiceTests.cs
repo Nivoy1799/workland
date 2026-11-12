@@ -248,7 +248,8 @@ namespace Worktown.Game.Tests
             int spot = 0;
             Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Host, knifeWorktop, false, 0, out _, out _));
             Assert.AreEqual(BuildOutcome.Ok, desk.TryStore(Host, 0, h => new ItemHome(h.ItemKind, target, 0, 20 + spot++), out LayoutEdit stored, out _));
-            Assert.IsNotNull(stored.Homes);
+            Assert.IsNotNull(stored.HomeChanges);
+            Assert.AreEqual(start.Homes.Count(h => h.PieceId == knifeWorktop), stored.HomeChanges.Count, "every home on it moved");
             Assert.IsFalse(desk.Layout.Homes.Any(h => h.PieceId == knifeWorktop), "no home on a stored piece");
             Assert.AreEqual(start.Homes.Count, desk.Layout.Homes.Count);
 
@@ -337,6 +338,105 @@ namespace Worktown.Game.Tests
                 piece.ServerSetPose(PosePacking.Pack(stove.XMm, stove.ZMm, stove.Turns, 0));
                 Assert.IsFalse(piece.Parked, "placed again: usable");
                 Assert.IsNotNull(LayoutRegistry.Station(stove.Id));
+            }
+            finally
+            {
+                LayoutScene.Close(scene);
+            }
+        }
+
+        // ---- 062b re-review ----
+
+        /// <summary>A stores one worktop, B another; A's undo restores A's tools' homes and leaves B's re-homed ones alone.</summary>
+        [Test]
+        public void AnUndo_RestoresOnlyItsOwnHomes_NotAnotherPlayersRehoming()
+        {
+            BuildDesk desk = Desk();
+            ShopLayout start = desk.Layout;
+            int w19 = IdOf(desk, PieceCatalog.Worktop, 0), w20 = IdOf(desk, PieceCatalog.Worktop, 1), w21 = IdOf(desk, PieceCatalog.Worktop, 2),
+                w22 = IdOf(desk, PieceCatalog.Worktop, 3);
+            Assert.IsTrue(start.Homes.Any(h => h.PieceId == w20) && start.Homes.Any(h => h.PieceId == w22), "tools on both");
+            int a = 0, b = 0;
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Host, w20, false, 0, out _, out _));
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryStore(Host, 0, h => new ItemHome(h.ItemKind, w19, 0, a++), out _, out _));
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryClaim(Guest, w22, false, 0, out _, out _));
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryStore(Guest, 0, h => new ItemHome(h.ItemKind, w21, 0, 20 + b++), out _, out _));
+            List<ItemHome> guestHomes = desk.Layout.Homes.Where(h => h.PieceId == w21 && h.Spot >= 20).ToList();
+            Assert.IsNotEmpty(guestHomes);
+
+            Assert.AreEqual(BuildOutcome.Ok, desk.TryUndo(Host, 0, out LayoutEdit undone, out _, out _, out _));
+            Assert.AreEqual(a, undone.HomeChanges.Count, "only the host's homes come back");
+            Assert.IsFalse(desk.Layout.Homes.Any(h => h.PieceId == w22), "the guest's tools stay on placed pieces (they come back on the next load)");
+            CollectionAssert.IsSubsetOf(guestHomes, desk.Layout.Homes.ToList());
+            CollectionAssert.AreEqual(start.Homes.Where(h => h.PieceId == w20).ToList(), desk.Layout.Homes.Where(h => h.PieceId == w20).ToList());
+            Assert.IsTrue(desk.Layout.Homes.All(h => desk.Layout.Piece(h.PieceId) != null), "every home on a placed piece");
+        }
+
+        /// <summary>A delivery box (not in the spot table) on worktop 19 counts as on it, by its footprint; spot-table items by their surface.</summary>
+        [Test]
+        public void OnPiece_KnowsADeliveryBox_ByItsFootprint()
+        {
+            PieceCatalog catalog = PieceCatalog.CreateDefault();
+            LayoutPiece w19 = DefaultLayout.Load().Pieces.First(p => p.TypeId == PieceCatalog.Worktop);
+            Assert.IsTrue(catalog.TryGet(w19.TypeId, out PieceDef def));
+            var onTop = new Vector3(w19.XMm / 1000f, 1.1f, w19.ZMm / 1000f - 0.38f);
+            Assert.IsTrue(BuildService.OnPiece(onTop, false, 0, false, w19, def, false), "a box on its delivery spot");
+            Assert.IsFalse(BuildService.OnPiece(new Vector3(onTop.x, 0.2f, onTop.z), false, 0, false, w19, def, false), "on the floor below");
+            Assert.IsFalse(BuildService.OnPiece(new Vector3(onTop.x + 3f, 1.1f, onTop.z), false, 0, false, w19, def, false), "elsewhere");
+            Assert.IsFalse(BuildService.OnPiece(onTop, false, 0, false, w19, def, true), "one of its own parts");
+            Assert.IsTrue(BuildService.OnPiece(onTop, true, w19.Id, true, w19, def, false), "a knife on its spot");
+            Assert.IsFalse(BuildService.OnPiece(onTop, true, 7, true, w19, def, false), "the spot table says another piece");
+            Assert.IsFalse(BuildService.OnPiece(onTop, true, w19.Id, false, w19, def, false), "picked off its spot since");
+        }
+
+        /// <summary>
+        /// The world side in the built scene: PlanHome picks the nearest free worktop spot that is no home and not planned twice; MoveTools
+        /// moves a home's tool to its new home, only an item of the home's kind (the same code moves them on a store and back on an undo).
+        /// </summary>
+        [Test]
+        public void PlanHome_AndMoveTools_InTheBuiltScene()
+        {
+            var scene = LayoutScene.Open();
+            try
+            {
+                ShopLayout layout = DefaultLayout.Load();
+                ItemHome knifeHome = layout.Homes.First(h => h.ItemKind == "knife");
+                ItemHome boardHome = layout.Homes.First(h => h.ItemKind == "board");
+                PieceBehaviour leaving = LayoutRegistry.Piece(knifeHome.PieceId);
+                PlaceSurface top = LayoutRegistry.Surface(SurfaceId.Of(knifeHome.PieceId, knifeHome.LocalSurface));
+                HashSet<long> homes = BuildService.HomeSpots(layout);
+                var planned = new HashSet<int>();
+                ItemHome first = BuildService.PlanHome(knifeHome, top.SpotWorldPosition(knifeHome.Spot), LayoutRegistry.Pieces, leaving, homes, planned,
+                    (id, spot) => true);
+                ItemHome second = BuildService.PlanHome(boardHome, top.SpotWorldPosition(knifeHome.Spot), LayoutRegistry.Pieces, leaving, homes, planned,
+                    (id, spot) => true);
+                Assert.IsNotNull(first);
+                Assert.IsNotNull(second);
+                Assert.AreNotEqual(knifeHome.PieceId, first.PieceId, "on another worktop");
+                Assert.AreEqual(PieceCatalog.Worktop, layout.Piece(first.PieceId).TypeId);
+                Assert.IsFalse(homes.Contains(((long)SurfaceId.Of(first.PieceId, first.LocalSurface) << 32) | (uint)first.Spot), "not another tool's home");
+                Assert.AreNotEqual((first.PieceId, first.LocalSurface, first.Spot), (second.PieceId, second.LocalSurface, second.Spot), "planned once");
+                Assert.AreEqual("knife", first.ItemKind);
+                Assert.IsNull(BuildService.PlanHome(knifeHome, Vector3.zero, LayoutRegistry.Pieces, leaving, homes, new HashSet<int>(), (id, spot) => false),
+                    "no free spot: the home stays");
+
+                Pickup knife = Object.FindObjectsByType<Pickup>(FindObjectsSortMode.None).First(p => p.GetComponent<Knife>() != null);
+                Assert.AreEqual("knife", BuildService.KindOf(knife.gameObject));
+                Component OccupantOf(int surfaceId, int spot) =>
+                    surfaceId == SurfaceId.Of(knifeHome.PieceId, knifeHome.LocalSurface) && spot == knifeHome.Spot ? knife : null;
+                var puts = new List<(Component, int)>();
+                bool Put(Component tool, PlaceSurface target, int spot)
+                {
+                    puts.Add((tool, spot));
+                    tool.transform.position = target.SpotWorldPosition(spot);
+                    return true;
+                }
+                Assert.AreEqual(0, BuildService.MoveTools(new[] { new HomeChange(knifeHome with { ItemKind = "board" }, second) }, OccupantOf,
+                    LayoutRegistry.Surface, Put), "a knife on a board's home is not the board");
+                Assert.AreEqual(1, BuildService.MoveTools(new[] { new HomeChange(knifeHome, first) }, OccupantOf, LayoutRegistry.Surface, Put));
+                Assert.AreEqual(first.Spot, puts.Single().Item2);
+                PlaceSurface target = LayoutRegistry.Surface(SurfaceId.Of(first.PieceId, first.LocalSurface));
+                Assert.Less(Vector3.Distance(knife.transform.position, target.SpotWorldPosition(first.Spot)), 0.001f, "on its new home");
             }
             finally
             {

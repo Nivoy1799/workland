@@ -13,10 +13,11 @@ namespace Worktown.Sim.Layout
     public sealed record LayoutEdit(LayoutEditKind Kind, int PieceId, int XMm, int ZMm, int Turns)
     {
         /// <summary>
-        /// 062b review: the layout's item homes after the edit (all of them), or null to keep them. A stored worktop's tools get homes on
-        /// another worktop (else they would not come back on the next load); the inverse edit carries the homes from before.
+        /// 062b review: the item homes the edit moves (old to new), or null. A stored worktop's tools get homes on another worktop (else they
+        /// would not come back on the next load). Applying replaces each old home that the layout still has; the inverse carries only the
+        /// changes that were made, swapped, so an undo restores these homes and leaves every other home (another player's) as it is.
         /// </summary>
-        public IReadOnlyList<ItemHome>? Homes { get; init; }
+        public IReadOnlyList<HomeChange>? HomeChanges { get; init; }
 
         public static LayoutEdit Move(int pieceId, int xMm, int zMm, int turns) => new LayoutEdit(LayoutEditKind.Move, pieceId, xMm, zMm, Wrap(turns));
         public static LayoutEdit Store(int pieceId) => new LayoutEdit(LayoutEditKind.Store, pieceId, 0, 0, 0);
@@ -32,9 +33,19 @@ namespace Worktown.Sim.Layout
             result = null!;
             inverse = null!;
             if (layout == null || !TryApplyPieces(layout, out result, out inverse)) return false;
-            if (Homes == null) return true;
-            result = result.WithHomes(Homes);
-            inverse = inverse with { Homes = layout.Homes };
+            if (HomeChanges == null) return true;
+            var homes = new List<ItemHome>(result.Homes);
+            var made = new List<HomeChange>();
+            foreach (HomeChange change in HomeChanges)
+            {
+                if (change == null) continue;
+                int at = homes.IndexOf(change.Old);
+                if (at < 0) continue; // that home changed since: left as it is
+                homes[at] = change.New;
+                made.Add(new HomeChange(change.New, change.Old));
+            }
+            result = result.WithHomes(homes);
+            inverse = inverse with { HomeChanges = made.AsReadOnly() };
             return true;
         }
 

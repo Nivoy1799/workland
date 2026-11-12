@@ -29,6 +29,8 @@ namespace Worktown.Game.Layout
     {
         /// <summary>An item farther than this (horizontally, m) from its recorded spot no longer lies there.</summary>
         private const float SpotTolerance = 0.1f;
+        /// <summary>How far above the floor an item not in the spot table lies on a piece (lower: on the floor).</summary>
+        public const float OnPieceHeight = 0.4f;
 
         private NetworkManager _networkManager;
         private LayoutSpawner _spawner;
@@ -170,7 +172,7 @@ namespace Worktown.Game.Layout
                     outcome = desk.TryMove(slot, x, z, turns, IsOn(held), now, out LayoutEdit applied, out problem);
                     if (outcome == BuildOutcome.Ok)
                     {
-                        ApplyInWorld(applied, null);
+                        ApplyInWorld(applied);
                         SetClaim(held, 0);
                     }
                     break;
@@ -180,11 +182,12 @@ namespace Worktown.Game.Layout
                     int held = desk.HeldBy(slot, out bool fromStorage);
                     PieceBehaviour piece = LayoutRegistry.Piece(held);
                     var planned = new HashSet<int>();
-                    IReadOnlyList<ItemHome> homesBefore = desk.Layout.Homes;
-                    outcome = desk.TryStore(slot, now, h => PlanHome(h, piece, planned), out LayoutEdit applied, out problem);
+                    HashSet<long> homes = HomeSpots(desk.Layout);
+                    outcome = desk.TryStore(slot, now, h => PlanHome(h, HomeSpot(h, piece), LayoutRegistry.Pieces, piece, homes, planned, IsFree),
+                        out LayoutEdit applied, out problem);
                     if (outcome == BuildOutcome.Ok)
                     {
-                        if (applied != null) ApplyInWorld(applied, homesBefore);
+                        if (applied != null) ApplyInWorld(applied);
                         else if (fromStorage) AfterRelease(held, true); // back onto the pallet
                     }
                     break;
@@ -202,12 +205,11 @@ namespace Worktown.Game.Layout
                 }
                 case BuildIntent.Undo:
                 {
-                    IReadOnlyList<ItemHome> homesBefore = desk.Layout.Homes;
                     outcome = desk.TryUndo(slot, now, IsOn, out LayoutEdit applied, out problem, out int released, out bool fromStorage);
                     if (outcome == BuildOutcome.Ok)
                     {
                         AfterRelease(released, fromStorage);
-                        ApplyInWorld(applied, homesBefore);
+                        ApplyInWorld(applied);
                     }
                     break;
                 }
@@ -247,7 +249,7 @@ namespace Worktown.Game.Layout
                 return;
             }
             PieceBehaviour piece = LayoutRegistry.Piece(pieceId);
-            if (piece != null) MoveItemsOff(piece, null, null); // 062b review: nothing it holds is lost with it
+            if (piece != null) MoveItemsOff(piece); // 062b review: nothing it holds is lost with it
             if (_spawner != null) _spawner.ServerDespawnPiece(pieceId);
         }
 
@@ -272,10 +274,11 @@ namespace Worktown.Game.Layout
         }
 
         /// <summary>
-        /// The world follows an edit the desk applied (its layout is already the new one). <paramref name="homesBefore"/>: the item homes
-        /// before it (a store moves the tools to their new homes; an undo of a store moves them back).
+        /// The world follows an edit the desk applied (its layout is already the new one; the edit's home changes are those it made): a
+        /// store moves the stored piece's tools to their new homes, then its other items off; an undo of a store moves them back once the
+        /// piece stands again.
         /// </summary>
-        private void ApplyInWorld(LayoutEdit edit, IReadOnlyList<ItemHome> homesBefore)
+        private void ApplyInWorld(LayoutEdit edit)
         {
             if (edit == null) return;
             ShopLayout layout = Desk.Layout;
@@ -291,13 +294,14 @@ namespace Worktown.Game.Layout
                     if (piece == null) break;
                     MovePiece(piece, placed, layout);
                     piece.ServerSetClaim(0);
-                    if (edit.Homes != null && homesBefore != null) MoveToHomes(homesBefore, layout.Homes); // an undo of a store
+                    MoveTools(edit.HomeChanges);
                     break;
                 }
                 case LayoutEditKind.Store:
                 {
                     PieceBehaviour piece = LayoutRegistry.Piece(edit.PieceId);
-                    if (piece != null) MoveItemsOff(piece, edit.Homes != null ? homesBefore : null, edit.Homes);
+                    MoveTools(edit.HomeChanges);
+                    if (piece != null) MoveItemsOff(piece);
                     if (_spawner != null) _spawner.ServerDespawnPiece(edit.PieceId);
                     break;
                 }
@@ -305,23 +309,87 @@ namespace Worktown.Game.Layout
             if (_spawner != null) _spawner.ServerSetCurrent(layout);
             _changedSinceOpen = true;
             Debug.Log("[Build] " + edit.Kind + " piece " + edit.PieceId + (edit.Kind == LayoutEditKind.Store ? string.Empty
-                : " to (" + edit.XMm + ", " + edit.ZMm + ") turns " + edit.Turns) + "; " + layout.Pieces.Count + " placed, " + layout.Stored.Count + " stored");
+                : " to (" + edit.XMm + ", " + edit.ZMm + ") turns " + edit.Turns) + "; " + layout.Pieces.Count + " placed, " + layout.Stored.Count + " stored"
+                + (edit.HomeChanges != null && edit.HomeChanges.Count > 0 ? "; " + edit.HomeChanges.Count + " item homes moved" : string.Empty));
+        }
+
+        private bool IsFree(int surfaceId, int spot) => _pickups != null && _pickups.IsSpotFree(surfaceId, spot);
+
+        /// <summary>Where a home's spot is in the world (else the piece's centre).</summary>
+        private static Vector3 HomeSpot(ItemHome home, PieceBehaviour piece)
+        {
+            PlaceSurface from = LayoutRegistry.Surface(SurfaceId.Of(home.PieceId, home.LocalSurface));
+            if (from == null && piece != null)
+                foreach (PlaceSurface s in piece.Surfaces)
+                    if (s != null && s.Id == SurfaceId.Of(home.PieceId, home.LocalSurface)) from = s;
+            return from != null && home.Spot < from.SpotCount ? from.SpotWorldPosition(home.Spot) : piece != null ? piece.transform.position : Vector3.zero;
+        }
+
+        /// <summary>Every item home's spot as a key (surface id and spot), so nothing else is put on a home.</summary>
+        public static HashSet<long> HomeSpots(ShopLayout layout)
+        {
+            var used = new HashSet<long>();
+            if (layout != null)
+                foreach (ItemHome h in layout.Homes) used.Add(HomeKey(SurfaceId.Of(h.PieceId, h.LocalSurface), h.Spot));
+            return used;
+        }
+
+        private static long HomeKey(int surfaceId, int spot) => ((long)surfaceId << 32) | (uint)spot;
+
+        /// <summary>
+        /// 062b review: a new home for <paramref name="home"/> (on the piece <paramref name="leaving"/>, being stored; its spot at
+        /// <paramref name="from"/>): the nearest spot on another placed worktop of <paramref name="pieces"/> that is free
+        /// (<paramref name="isFree"/>: the spot table and the world), no other home (<paramref name="homes"/>) and not planned already in
+        /// this store (<paramref name="planned"/>, which gets it); null when there is none (the home stays: its tool waits for the piece).
+        /// </summary>
+        public static ItemHome PlanHome(ItemHome home, Vector3 from, IEnumerable<PieceBehaviour> pieces, PieceBehaviour leaving, ISet<long> homes,
+            ISet<int> planned, System.Func<int, int, bool> isFree)
+        {
+            if (home == null || !NearestWorktopSpot(from, pieces, leaving, homes, planned, isFree, out PlaceSurface surface, out int spot)) return null;
+            planned.Add(SurfaceKey(surface.Id, spot));
+            return new ItemHome(home.ItemKind, SurfaceId.PieceOf(surface.Id), SurfaceId.LocalOf(surface.Id), spot);
         }
 
         /// <summary>
-        /// 062b review: a new home for an item home on the piece being stored: the nearest free spot on another placed worktop (not taken in
-        /// the world, by another home or by this store's plan); null when there is none (the home stays: its tool then waits for the piece).
+        /// 062b review: moves each tool of a home change from its old home's spot to its new one: the spot table's occupant there
+        /// (<paramref name="occupantOf"/>), only if it is the home's kind of item (<see cref="KindOf"/>; else someone put another thing
+        /// there). <paramref name="put"/> places it (false: the new spot is taken). Returns how many moved.
         /// </summary>
-        private ItemHome PlanHome(ItemHome home, PieceBehaviour leaving, HashSet<int> planned)
+        public static int MoveTools(IReadOnlyList<HomeChange> changes, System.Func<int, int, Component> occupantOf, System.Func<int, PlaceSurface> surfaceOf,
+            System.Func<Component, PlaceSurface, int, bool> put)
         {
-            if (leaving == null) return null;
-            PlaceSurface from = LayoutRegistry.Surface(SurfaceId.Of(home.PieceId, home.LocalSurface));
-            Vector3 at = from != null && home.Spot < from.SpotCount ? from.SpotWorldPosition(home.Spot) : leaving.transform.position;
-            var used = new HashSet<long>();
-            foreach (ItemHome h in Desk.Layout.Homes) used.Add(((long)SurfaceId.Of(h.PieceId, h.LocalSurface) << 32) | (uint)h.Spot);
-            if (!TryNearestWorktopSpot(at, leaving, used, planned, out PlaceSurface surface, out int spot)) return null;
-            planned.Add(SurfaceKey(surface.Id, spot));
-            return new ItemHome(home.ItemKind, SurfaceId.PieceOf(surface.Id), SurfaceId.LocalOf(surface.Id), spot);
+            int moved = 0;
+            if (changes == null || occupantOf == null || surfaceOf == null || put == null) return 0;
+            foreach (HomeChange change in changes)
+            {
+                if (change == null) continue;
+                Component tool = occupantOf(SurfaceId.Of(change.Old.PieceId, change.Old.LocalSurface), change.Old.Spot);
+                PlaceSurface target = surfaceOf(SurfaceId.Of(change.New.PieceId, change.New.LocalSurface));
+                if (tool == null || target == null || KindOf(tool.gameObject) != change.Old.ItemKind) continue;
+                if (put(tool, target, change.New.Spot)) moved++;
+            }
+            return moved;
+        }
+
+        private void MoveTools(IReadOnlyList<HomeChange> changes)
+        {
+            if (_pickups == null) return;
+            MoveTools(changes, (surfaceId, spot) => _pickups.OccupantOf(surfaceId, spot), LayoutRegistry.Surface, (tool, target, spot) =>
+            {
+                var nob = tool.GetComponent<NetworkObject>();
+                return nob != null && _pickups.ServerPutOnSpot(nob, target, spot, LayoutSpawner.HomePose(tool.gameObject, target, spot));
+            });
+        }
+
+        /// <summary>The item home kind of an item ("knife", "board", "plate", ...; ItemHome.ItemKind), or null.</summary>
+        public static string KindOf(GameObject item)
+        {
+            if (item == null) return null;
+            if (item.TryGetComponent(out Knife _)) return "knife";
+            if (item.TryGetComponent(out Spatula _)) return "spatula";
+            if (item.TryGetComponent(out WipeCloth _)) return "cloth";
+            if (item.TryGetComponent(out Vessel vessel)) return vessel.Kind.ToString().ToLowerInvariant(); // board, pan, pot, plate, bowl
+            return null;
         }
 
         private static int SurfaceKey(int surfaceId, int spot) => surfaceId * 64 + spot;
@@ -385,31 +453,18 @@ namespace Worktown.Game.Layout
             Matrix4x4.TRS(new Vector3(xMm / 1000f, y, zMm / 1000f), Quaternion.Euler(0f, PosePacking.Yaw(turns), 0f), Vector3.one);
 
         /// <summary>
-        /// The items on a piece leaving the layout (stored, or put back on the pallet): a tool lying on a home that moved
-        /// (<paramref name="oldHomes"/> to <paramref name="newHomes"/>) goes to its new home; anything else to the nearest free worktop spot
-        /// (not another item's home), else onto the floor next to where the piece stood.
+        /// The other items on a piece leaving the layout (stored, or put back on the pallet; its tools went to their new homes first): each to
+        /// the nearest free worktop spot that is no item's home, else onto the floor next to where the piece stood. One walk grid per call.
         /// </summary>
-        private void MoveItemsOff(PieceBehaviour piece, IReadOnlyList<ItemHome> oldHomes, IReadOnlyList<ItemHome> newHomes)
+        private void MoveItemsOff(PieceBehaviour piece)
         {
-            var used = new HashSet<long>();
-            foreach (ItemHome h in Desk.Layout.Homes) used.Add(((long)SurfaceId.Of(h.PieceId, h.LocalSurface) << 32) | (uint)h.Spot);
+            HashSet<long> homes = HomeSpots(Desk.Layout);
             var planned = new HashSet<int>();
-            if (oldHomes != null && newHomes != null && oldHomes.Count == newHomes.Count && _pickups != null)
-                for (int i = 0; i < oldHomes.Count; i++)
-                {
-                    ItemHome was = oldHomes[i], now = newHomes[i];
-                    if (was.PieceId != piece.PieceId || now.PieceId == piece.PieceId) continue;
-                    NetworkObject tool = _pickups.OccupantOf(SurfaceId.Of(was.PieceId, was.LocalSurface), was.Spot);
-                    PlaceSurface target = LayoutRegistry.Surface(SurfaceId.Of(now.PieceId, now.LocalSurface));
-                    if (tool == null || target == null) continue;
-                    if (_pickups.ServerPutOnSpot(tool, target, now.Spot, LayoutSpawner.HomePose(tool.gameObject, target, now.Spot)))
-                        planned.Add(SurfaceKey(target.Id, now.Spot));
-                }
             WalkGrid grid = null;
             foreach (NetworkObject item in LooseItems())
             {
                 if (!LiesOn(item, piece)) continue;
-                if (TryNearestWorktopSpot(item.transform.position, piece, used, planned, out PlaceSurface surface, out int spot))
+                if (NearestWorktopSpot(item.transform.position, LayoutRegistry.Pieces, piece, homes, planned, IsFree, out PlaceSurface surface, out int spot))
                 {
                     Pose pose = LayoutSpawner.HomePose(item.gameObject, surface, spot);
                     if (_pickups != null && _pickups.ServerPutOnSpot(item, surface, spot, pose))
@@ -424,28 +479,14 @@ namespace Worktown.Game.Layout
             }
         }
 
-        /// <summary>An undo restored item homes: each tool on a home that changed goes back to its restored home (when that spot is free).</summary>
-        private void MoveToHomes(IReadOnlyList<ItemHome> before, IReadOnlyList<ItemHome> after)
-        {
-            if (_pickups == null || before == null || after == null || before.Count != after.Count) return;
-            for (int i = 0; i < before.Count; i++)
-            {
-                ItemHome was = before[i], now = after[i];
-                if (was == now) continue;
-                NetworkObject tool = _pickups.OccupantOf(SurfaceId.Of(was.PieceId, was.LocalSurface), was.Spot);
-                PlaceSurface target = LayoutRegistry.Surface(SurfaceId.Of(now.PieceId, now.LocalSurface));
-                if (tool == null || target == null) continue;
-                _pickups.ServerPutOnSpot(tool, target, now.Spot, LayoutSpawner.HomePose(tool.gameObject, target, now.Spot));
-            }
-        }
-
-        private bool TryNearestWorktopSpot(Vector3 from, PieceBehaviour leaving, HashSet<long> homes, HashSet<int> planned, out PlaceSurface best,
-            out int bestSpot)
+        private static bool NearestWorktopSpot(Vector3 from, IEnumerable<PieceBehaviour> pieces, PieceBehaviour leaving, ISet<long> homes, ISet<int> planned,
+            System.Func<int, int, bool> isFree, out PlaceSurface best, out int bestSpot)
         {
             best = null;
             bestSpot = -1;
             float bestSqr = float.MaxValue;
-            foreach (PieceBehaviour p in LayoutRegistry.Pieces)
+            if (pieces == null) return false;
+            foreach (PieceBehaviour p in pieces)
             {
                 if (p == null || p == leaving || p.Parked || p.TypeId != PieceCatalog.Worktop) continue;
                 foreach (PlaceSurface surface in p.Surfaces)
@@ -454,8 +495,9 @@ namespace Worktown.Game.Layout
                     for (int s = 0; s < surface.SpotCount; s++)
                     {
                         float sqr = (surface.SpotWorldPosition(s) - from).sqrMagnitude;
-                        if (sqr >= bestSqr || planned.Contains(SurfaceKey(surface.Id, s)) || homes.Contains(((long)surface.Id << 32) | (uint)s)) continue;
-                        if (_pickups == null || !_pickups.IsSpotFree(surface.Id, s)) continue;
+                        if (sqr >= bestSqr || (planned != null && planned.Contains(SurfaceKey(surface.Id, s)))
+                            || (homes != null && homes.Contains(HomeKey(surface.Id, s)))) continue;
+                        if (isFree != null && !isFree(surface.Id, s)) continue;
                         bestSqr = sqr;
                         best = surface;
                         bestSpot = s;
@@ -493,20 +535,42 @@ namespace Worktown.Game.Layout
         }
 
         /// <summary>
-        /// 062b review: whether an item lies on <paramref name="piece"/>: the spot table has it on one of the piece's surfaces (its surface
-        /// id's piece), and it still lies near that spot.
+        /// 062b review: whether an item lies on <paramref name="piece"/>: the spot table has it on one of the piece's surfaces and it still
+        /// lies near that spot; an item the spot table does not know (a delivery box on its delivery spot) by the old footprint check.
         /// </summary>
         private bool LiesOn(NetworkObject item, PieceBehaviour piece)
         {
-            if (_pickups == null || !_pickups.TryGetSpotOf(item, out int surfaceId, out int spot) || SurfaceId.PieceOf(surfaceId) != piece.PieceId)
-                return false;
-            PlaceSurface surface = LayoutRegistry.Surface(surfaceId);
-            if (surface == null)
+            if (item == null || piece == null) return false;
+            bool known = _pickups != null && _pickups.TryGetSpotOf(item, out _, out _);
+            int surfaceId = SurfaceId.None, spot = -1;
+            if (known) _pickups.TryGetSpotOf(item, out surfaceId, out spot);
+            bool nearSpot = false;
+            if (known && SurfaceId.PieceOf(surfaceId) == piece.PieceId)
+            {
+                PlaceSurface surface = null;
                 foreach (PlaceSurface s in piece.Surfaces)
                     if (s != null && s.Id == surfaceId) surface = s;
-            if (surface == null || spot < 0 || spot >= surface.SpotCount) return false;
-            Vector3 offset = item.transform.position - surface.SpotWorldPosition(spot);
-            return Vector3.ProjectOnPlane(offset, Vector3.up).sqrMagnitude <= SpotTolerance * SpotTolerance;
+                nearSpot = surface != null && spot >= 0 && spot < surface.SpotCount
+                    && Vector3.ProjectOnPlane(item.transform.position - surface.SpotWorldPosition(spot), Vector3.up).sqrMagnitude <= SpotTolerance * SpotTolerance;
+            }
+            if (!Desk.Catalog.TryGet(piece.TypeId, out PieceDef def)) return false;
+            var at = new LayoutPiece(piece.PieceId, piece.TypeId, piece.XMm, piece.ZMm, piece.Turns, piece.LengthMm, 1, 0);
+            return OnPiece(item.transform.position, known, SurfaceId.PieceOf(surfaceId), nearSpot, at, def, item.transform.IsChildOf(piece.transform));
+        }
+
+        /// <summary>
+        /// 062b re-review, pure: an item on a piece. In the spot table (<paramref name="inSpotTable"/>): on it when its surface is the piece's
+        /// (<paramref name="spotPieceId"/>) and it still lies there (<paramref name="nearSpot"/>). Not in it (a delivery box): above the floor
+        /// (over <see cref="OnPieceHeight"/>, under 2.2 m) and inside the piece's footprint (20 mm margin). Never one of the piece's own parts.
+        /// </summary>
+        public static bool OnPiece(Vector3 position, bool inSpotTable, int spotPieceId, bool nearSpot, LayoutPiece piece, PieceDef def, bool partOfPiece)
+        {
+            if (piece == null || def == null || partOfPiece) return false;
+            if (inSpotTable) return spotPieceId == piece.Id && nearSpot;
+            if (position.y <= OnPieceHeight || position.y >= 2.2f) return false;
+            RectMm r = def.Footprint(piece);
+            int x = Mathf.RoundToInt(position.x * 1000f), z = Mathf.RoundToInt(position.z * 1000f);
+            return x >= r.MinX - 20 && x <= r.MaxX + 20 && z >= r.MinZ - 20 && z <= r.MaxZ + 20;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

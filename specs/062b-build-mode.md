@@ -230,5 +230,18 @@ Built 2026-11-12 on top of ef6cc8b.
 - Checks: verify.sh green (EditMode 1658/1658, sim 893/893, gateway 216/216); BuildAll ok; `visual-check.sh --tours build,restaurant
   --out .verify/visual062b2`: both ok, 0 Exception lines, 0 timeouts, 0 aim fallbacks.
 
+### 062b re-review fixes
+Built 2026-11-12 on top of 083baab.
+1. **Undo restores only its own homes.** A `LayoutEdit` carries `HomeChange` pairs (old, new), not the whole homes list; applying
+   replaces only the old homes still there, and the inverse swaps back only the changes that were made. The desk hands the world
+   the changes really made. Test: A stores one worktop, B another, A undoes: B's tools stay homed on a placed worktop.
+2. **Delivery boxes travel again.** `BuildService.OnPiece` (pure): spot-table items by their surface id, items not in the table
+   (delivery boxes) by the old footprint check. Tested.
+- Nits: a tool moves only when it is the home's kind (`KindOf`); `PeekUndo` and the `UseDoor()` overload are gone; `PlanHome` and
+  `MoveTools` (one function for a store and for its undo) are static and tested in the built scene; when the pallet registers on a
+  late joiner, every piece looks again whether it is parked.
+- Checks: verify.sh green (EditMode 1661/1661, sim 893/893, gateway 216/216); BuildAll ok; `visual-check.sh --tours build --out
+  .verify/visual062b3`: ok, 0 Exception lines, 0 timeouts ("Store piece 22 ... 2 item homes moved").
+
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

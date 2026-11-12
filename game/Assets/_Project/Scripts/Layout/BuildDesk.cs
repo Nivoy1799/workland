@@ -146,7 +146,7 @@ namespace Worktown.Game.Layout
             }
             LayoutPiece at = BuildSnap.Pose(Layout, _catalog, _room, piece, aimXMm, aimZMm, turns);
             LayoutEdit edit = c.FromStorage ? LayoutEdit.TakeOut(piece.Id, at.XMm, at.ZMm, at.Turns) : LayoutEdit.Move(piece.Id, at.XMm, at.ZMm, at.Turns);
-            BuildOutcome outcome = Apply(slot, edit, out problem);
+            BuildOutcome outcome = Apply(slot, ref edit, out problem);
             if (outcome != BuildOutcome.Ok) return outcome;
             _claims.Remove(slot);
             applied = edit;
@@ -179,9 +179,9 @@ namespace Worktown.Game.Layout
             if (piece == null) return BuildOutcome.Unknown;
             if ((_catalog.TryGet(piece.TypeId, out PieceDef def) && def.Required) || NeverStored.Contains(piece.TypeId)) return BuildOutcome.Required;
             LayoutEdit edit = LayoutEdit.Store(piece.Id);
-            IReadOnlyList<ItemHome> homes = target != null ? Rehome(Layout, piece.Id, target) : null;
-            if (homes != null) edit = edit with { Homes = homes };
-            BuildOutcome outcome = Apply(slot, edit, out problem);
+            IReadOnlyList<HomeChange> homes = target != null ? Rehome(Layout, piece.Id, target) : null;
+            if (homes != null) edit = edit with { HomeChanges = homes };
+            BuildOutcome outcome = Apply(slot, ref edit, out problem);
             if (outcome != BuildOutcome.Ok) return outcome;
             _claims.Remove(slot);
             applied = edit;
@@ -214,9 +214,6 @@ namespace Worktown.Game.Layout
         public BuildOutcome TryUndo(byte slot, double now, out LayoutEdit applied, out LayoutProblem problem, out int released, out bool releasedFromStorage) =>
             TryUndo(slot, now, null, out applied, out problem, out released, out releasedFromStorage);
 
-        /// <summary>The edit an undo of <paramref name="slot"/> would apply (null: nothing to undo).</summary>
-        public LayoutEdit PeekUndo(byte slot) => _histories.TryGetValue(slot, out UndoHistory h) && h.TryPeek(out LayoutEdit e) ? e : null;
-
         /// <summary>062b review: as above; <paramref name="stationOn"/> says whether a piece's heat is on (an undo never moves a hot piece: StationOn).</summary>
         public BuildOutcome TryUndo(byte slot, double now, System.Func<int, bool> stationOn, out LayoutEdit applied, out LayoutProblem problem,
             out int released, out bool releasedFromStorage)
@@ -229,13 +226,13 @@ namespace Worktown.Game.Layout
             byte holder = HolderOf(inverse.PieceId);
             if (holder != 0 && holder != slot) return BuildOutcome.Claimed;
             if (stationOn != null && Layout.Piece(inverse.PieceId) != null && stationOn(inverse.PieceId)) return BuildOutcome.StationOn;
-            if (!inverse.TryApply(Layout, out ShopLayout result, out _)) return BuildOutcome.Blocked;
+            if (!inverse.TryApply(Layout, out ShopLayout result, out LayoutEdit redo)) return BuildOutcome.Blocked;
             problem = FirstProblem(result);
             if (problem != null) return BuildOutcome.Blocked;
             if (holder == slot) released = Release(slot, out releasedFromStorage);
             history.TryPop(out _);
             Layout = result;
-            applied = inverse;
+            applied = Made(inverse, redo);
             return BuildOutcome.Ok;
         }
 
@@ -277,28 +274,45 @@ namespace Worktown.Game.Layout
         }
 
         /// <summary>
-        /// 062b review: the item homes of <paramref name="layout"/> after <paramref name="pieceId"/> is stored: each home on it becomes
-        /// <paramref name="target"/>'s answer (a home on another piece; null keeps it); null when no home lies on the piece.
+        /// 062b review: the item homes that move when <paramref name="pieceId"/> is stored: each home on it to <paramref name="target"/>'s
+        /// answer (a home on another piece; null or the same keeps it); null when none moves.
         /// </summary>
-        public static IReadOnlyList<ItemHome> Rehome(ShopLayout layout, int pieceId, System.Func<ItemHome, ItemHome> target)
+        public static IReadOnlyList<HomeChange> Rehome(ShopLayout layout, int pieceId, System.Func<ItemHome, ItemHome> target)
         {
-            if (layout == null || target == null || !layout.Homes.Any(h => h.PieceId == pieceId)) return null;
-            var homes = new List<ItemHome>();
+            if (layout == null || target == null) return null;
+            var changes = new List<HomeChange>();
             foreach (ItemHome h in layout.Homes)
-                homes.Add(h.PieceId == pieceId ? target(h) ?? h : h);
-            return homes.AsReadOnly();
+            {
+                if (h.PieceId != pieceId) continue;
+                ItemHome to = target(h);
+                if (to != null && to != h) changes.Add(new HomeChange(h, to));
+            }
+            return changes.Count > 0 ? changes.AsReadOnly() : null;
         }
 
-        private BuildOutcome Apply(byte slot, LayoutEdit edit, out LayoutProblem problem)
+        private BuildOutcome Apply(byte slot, ref LayoutEdit edit, out LayoutProblem problem)
         {
             problem = null;
             if (!edit.TryApply(Layout, out ShopLayout result, out LayoutEdit inverse)) return BuildOutcome.Unknown;
+            edit = Made(edit, inverse);
             problem = FirstProblem(result);
             if (problem != null) return BuildOutcome.Invalid;
             Layout = result;
             if (!_histories.TryGetValue(slot, out UndoHistory history)) _histories[slot] = history = new UndoHistory();
             history.Push(inverse);
             return BuildOutcome.Ok;
+        }
+
+        /// <summary>
+        /// 062b re-review: <paramref name="edit"/> with the home changes it really made (its inverse's, swapped back): a home another player
+        /// moved meanwhile is not among them, so the world moves only the tools of those.
+        /// </summary>
+        private static LayoutEdit Made(LayoutEdit edit, LayoutEdit inverse)
+        {
+            if (edit.HomeChanges == null || inverse == null || inverse.HomeChanges == null) return edit;
+            var made = new List<HomeChange>();
+            foreach (HomeChange c in inverse.HomeChanges) made.Add(new HomeChange(c.New, c.Old));
+            return edit with { HomeChanges = made.AsReadOnly() };
         }
 
         /// <summary>The first problem of <paramref name="layout"/> (LayoutRules.Validate), or null when it keeps every rule.</summary>

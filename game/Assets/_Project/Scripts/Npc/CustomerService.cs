@@ -239,9 +239,7 @@ namespace Worktown.Game.Npc
         /// services; closing goes back to open; closed opens the shop and starts the next service at once (the guests' route is rebuilt
         /// from the layout first: build mode may have changed it).
         /// </summary>
-        public CookOutcome UseDoor() => UseDoor(-1);
-
-        /// <summary>062b review: as above; the press is logged at the office terminal under <paramref name="player"/> (ChangeLog action 5).</summary>
+        /// <remarks>062b review: the press is logged at the office terminal under <paramref name="player"/> (ChangeLog action 5).</remarks>
         public CookOutcome UseDoor(int player)
         {
             Worktown.Game.Layout.ShopDoor door = Worktown.Game.Layout.ShopDoor.Current;
