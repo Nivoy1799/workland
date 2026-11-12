@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Worktown.Sim.Clock;
 using Worktown.Sim.Core;
@@ -126,5 +127,16 @@ namespace Worktown.Sim.Tests.Clock
                     foreach (var p in m.GetParameters())
                         Assert.DoesNotContain(p.ParameterType.Name, new[] { "DateTime", "DateTimeOffset", "TimeSpan", "Stopwatch" });
         }
+
+        [Fact]
+        public void Spans_AcceptsExactlyMaxSpanSeconds()
+        {
+            var s = TownClock.Spans(C, 0, TownClock.MaxSpanSeconds);
+            Assert.Equal(TownClock.MaxSpanSeconds, s.Sum(x => (long)x.Seconds));
+        }
+
+        [Fact]
+        public void Spans_RefusesLongerThanMaxSpanSeconds() =>
+            Assert.Throws<ArgumentException>(() => TownClock.Spans(C, 0, TownClock.MaxSpanSeconds + 1));
     }
 }
