@@ -65,7 +65,7 @@ namespace Worktown.Sim.Tests.Layout
             ShopLayout layout = DefaultLayoutFile.Load();
             LayoutReport r = LayoutRules.Validate(layout, RoomDef.CreateDefault(), PieceCatalog.CreateDefault());
             Assert.True(r.IsValid, Describe(r));
-            Assert.Equal(28, layout.Pieces.Count);
+            Assert.Equal(29, layout.Pieces.Count); // spec 059: the office terminal
         }
 
         [Fact]

@@ -53,6 +53,8 @@ MonoBehaviour:
     Prefab: {fileID: 9028725748987553107, guid: 0b1197da62ddbc74b86e027b9abfc98f, type: 3}
   - TypeId: goal_board
     Prefab: {fileID: 4685417788306155817, guid: 8e66eb2a582705449b4817224cb67cad, type: 3}
+  - TypeId: office_terminal
+    Prefab: {fileID: 2208056896798606813, guid: 405c7a8c1fbfc1142b112365b54dd3b8, type: 3}
   _items:
   - Kind: board
     Prefab: {fileID: 121300522431551966, guid: 5ab649aa09caa0343b6be6bc814128d3, type: 3}

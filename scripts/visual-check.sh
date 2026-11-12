@@ -14,7 +14,8 @@
 #   restaurant (spec 057): one window, its own host: a version 1 food corner save (the rent goal reached) is copied into
 #                  <out>/restaurant-saves; Continue, rent the restaurant at the goal board (two presses), the move at the service end
 #                  (the covers gone), buy the falafel wrap, a terminal order, the next service with the wrap on the menu, the summary
-#                  with the rent and the gate line, Close the shop, Continue at stage 2.
+#                  with the rent and the gate line, Close the shop, Continue at stage 2. Spec 059: at the office terminal the fries $0.50
+#                  dearer and the wrap the special (before the next service), a locked service refused, Results page 1 after it, the clipboard.
 #
 #   menu (spec 047): the tour window starts on the title screen (-tour menu, no -connect) and joins the observer window (-host -observe
 #                  menu) through Join by address; the host kicks it; it then opens its own shop (the open kitchen, no save: follow-up
@@ -76,7 +77,7 @@ timeout_for() {
     tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)
     menu) echo 360 ;; # spec 047: title, join by address, lobby, kick, own shop
     corner) echo 720 ;; # spec 053: new shop, two fries guests, the service end, close, continue
-    restaurant) echo 720 ;; # spec 057: continue, rent, move, a recipe, a stage 2 service, close, continue
+    restaurant) echo 900 ;; # spec 057: continue, rent, move, a recipe, a stage 2 service, close, continue; spec 059: the office terminal and the clipboard
     *) echo 420 ;;
   esac
 }

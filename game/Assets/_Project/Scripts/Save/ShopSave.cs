@@ -6,7 +6,7 @@ namespace Worktown.Game.Save
     /// Spec 053: what the host's save file holds: the business, not the players (D33). A [Serializable] DTO for JsonUtility (like
     /// GameSettings): plain public fields, nested parts as classes that always exist. Spec 037 (D39 revises D23): money in cents, format
     /// version 2 (a version 1 save held the old scale's whole dollars; SaveMigrations.V1ToV2 converts it when it loads), and the menu
-    /// board's prices (<see cref="menu"/>). Spec 062a: format version 3, the kitchen's layout (<see cref="layout"/>). Spec 057: format version 4, the restaurant's climb fields (<see cref="ClimbPart"/>). Validated, clamped and
+    /// board's prices (<see cref="menu"/>). Spec 062a: format version 3, the kitchen's layout (<see cref="layout"/>). Spec 057: format version 4, the restaurant's climb fields (<see cref="ClimbPart"/>). Spec 059: format version 5, the office terminal (<see cref="office"/>). Validated, clamped and
     /// migrated by <see cref="ShopSaveCodec"/>.
     /// </summary>
     [Serializable]
@@ -15,7 +15,7 @@ namespace Worktown.Game.Save
         public const string Format = "worktown-shop-save";
 
         public string format = Format;
-        public int formatVersion = 4;
+        public int formatVersion = 5;
         /// <summary>Informational: Application.version and the 047 build hash of the build that wrote it.</summary>
         public string gameVersion = string.Empty;
         public string buildHash = string.Empty;
@@ -41,6 +41,36 @@ namespace Worktown.Game.Save
         /// layout (SaveMigrations.V2ToV3). Unknown piece types are kept in the file but not spawned.
         /// </summary>
         public LayoutPart layout = new LayoutPart();
+        /// <summary>Spec 059 (format version 5): the office terminal's special of the day and its last services (at most 8, newest last).</summary>
+        public OfficePart office = new OfficePart();
+
+        [Serializable]
+        public sealed class OfficePart
+        {
+            /// <summary>The special's MenuPrices line id ("falafel_wrap"); empty for none (a drink or an unknown id reads as none).</summary>
+            public string special = string.Empty;
+            public RecordPart[] history = new RecordPart[0];
+        }
+
+        /// <summary>Spec 059: one service of the office terminal's Results (Office.ServiceRecord).</summary>
+        [Serializable]
+        public sealed class RecordPart
+        {
+            public int day = 1;
+            public int came;
+            public int served;
+            public int missed;
+            public long earned;
+            public long tips;
+            /// <summary>Tenths of a star, -1 when the service had no guest to count.</summary>
+            public int starsTenths = -1;
+            /// <summary>Whole seconds, -1 when nobody was served.</summary>
+            public int waitSeconds = -1;
+            /// <summary>Six counts in Office.ResultsRules order (the restaurant dishes, the drinks, other dishes).</summary>
+            public int[] sold = new int[0];
+            /// <summary>Spec 058's town share (permille), -1 while unknown.</summary>
+            public int rivalPermille = -1;
+        }
 
         [Serializable]
         public sealed class ClimbPart

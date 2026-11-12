@@ -122,6 +122,12 @@ namespace Worktown.Game.Net.Rules
             return new AimTarget(AimKind.Button, station, default, 0, null, option, flags, null, -1, PlaceSpots.None, false, false);
         }
 
+        /// <summary>Spec 059: a slot of the office terminal's screen with the words of its click (null: it does nothing).</summary>
+        public static AimTarget OfficeButton(int slot, string words)
+        {
+            return new AimTarget(AimKind.Button, StationKind.OfficeTerminal, default, 0, null, slot, 0, words, -1, PlaceSpots.None, false, false);
+        }
+
         /// <summary>A station other than a crate: the counter, a stove's body, the plate shelf.</summary>
         public static AimTarget OnStation(StationKind kind)
         {

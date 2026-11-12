@@ -587,6 +587,8 @@ namespace Worktown.Game.Net
                         PlaySound(SoundKey.Button, boardButton.Anchor); // spec 037: a menu board button (the server moves the price); spec 057: a goal board row
                         SendStation(boardButton.Station.Id, boardButton.Option);
                     }
+                    else if (Target is StockSlot officeSlot && officeSlot.Station != null && officeSlot.Station.Kind == StationKind.OfficeTerminal)
+                        OfficeClick(officeSlot); // spec 059
                     break;
                 case InteractionAction.Shake:
                     if (Target is Vessel shaken)
@@ -1171,6 +1173,8 @@ namespace Worktown.Game.Net
                     if (slot.Station != null && slot.Station.Kind == StationKind.Spit) return WithStock(DescribeSpit(slot), slot); // spec 036
                     if (slot.Station != null && slot.Station.Kind == StationKind.MenuBoard) return AimTarget.Button(StationKind.MenuBoard, slot.Option, 0); // spec 037
                     if (slot.Station != null && slot.Station.Kind == StationKind.GoalBoard) return AimTarget.Button(StationKind.GoalBoard, slot.Option, 0); // spec 057
+                    if (slot.Station != null && slot.Station.Kind == StationKind.OfficeTerminal) // spec 059: the screen's words (its own tab and page)
+                        return AimTarget.OfficeButton(slot.Option, slot.Station.TryGetComponent(out Worktown.Game.Office.OfficeTerminalView office) ? office.WordsFor(slot.Option) : null);
                     return WithStock(DescribeStock(slot.IngredientIndex), slot); // spec 028b: a slot takes like a crate (034: from its count)
                 case Station station:
                     // Spec 032: the register's body (between its slots) is no slot: nothing to click, no prompt.
@@ -1406,6 +1410,24 @@ namespace Worktown.Game.Net
             if (!slot.Station.TryGetComponent(out Worktown.Game.Shop.TerminalView view)) return AimTarget.TerminalSlot(slot.Option, null, -1);
             string words = view.WordsFor(slot.Option, out long price); // cached per page and pack count
             return AimTarget.TerminalSlot(slot.Option, words, price);
+        }
+
+        /// <summary>
+        /// Spec 059: an office terminal click: a tab or a page button changes this client's screen at once (nothing is sent); a row button
+        /// sends its press (RequestStation(terminal, TerminalOptions: app, row, action)); the server decides and the HUD shows a refusal.
+        /// </summary>
+        private void OfficeClick(StockSlot slot)
+        {
+            if (!slot.Station.TryGetComponent(out Worktown.Game.Office.OfficeTerminalView view)) return;
+            if (view.TryLocal(slot.Option))
+            {
+                PlaySound(SoundKey.Button, slot.Anchor);
+                return;
+            }
+            int option = view.OptionFor(slot.Option);
+            if (option < 0) return;
+            PlaySound(SoundKey.Beep, slot.Anchor);
+            SendStation(slot.Station.Id, option);
         }
 
         /// <summary>

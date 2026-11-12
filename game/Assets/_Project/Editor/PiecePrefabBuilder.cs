@@ -85,6 +85,7 @@ namespace Worktown.Game.Editor
                 GameObject root = type == PieceCatalog.Worktop ? BuildWorktop(catalog, def, parts)
                     : type == PieceCatalog.FrontCounter ? BuildFrontCounter(catalog, def)
                     : type == PieceCatalog.GoalBoard ? BuildGoalBoard(catalog, def, first) // spec 057: not in the builder's kitchen
+                    : type == PieceCatalog.OfficeTerminal ? BuildOfficeTerminal(catalog, def, first) // spec 059: nor is the office terminal
                     : CarveStation(catalog, def, first, parts, numbered);
                 root.name = type;
                 string path = Folder + "/" + type + ".prefab";
@@ -346,6 +347,122 @@ namespace Worktown.Game.Editor
             return root;
         }
 
+        public const string OfficeTerminalName = "Office terminal";
+        public const string OfficeSlotName = "Office slot";
+
+        /// <summary>
+        /// Spec 059: the office terminal, a wall piece (OfficeTerminalArtRules; a stand-in until the art pass: a wooden case, a dark screen,
+        /// Mustard and Cream text): the station at the screen's middle with a "Body" box collider of the screen's size (the aim: the slot
+        /// nearest the hit), the catalog's graybox, the sign under it, one slot per tab, page button and row button (option = the slot,
+        /// Office.TerminalOptions), the texts the client's OfficeTerminalView writes, and the synced Office.OfficeTerminal.
+        /// </summary>
+        private static GameObject BuildOfficeTerminal(ArtCatalog catalog, PieceDef def, LayoutPiece piece)
+        {
+            GameObject root = NewRoot(def.TypeId, piece);
+            var stationObject = new GameObject(OfficeTerminalName);
+            stationObject.transform.SetParent(root.transform, false);
+            stationObject.transform.localPosition = new Vector3(0f, OfficeTerminalArtRules.CentreHeight, 0f);
+            var station = stationObject.AddComponent<Station>();
+            GrayboxSceneBuilder.SetField(station, "_kind", (int)StationKind.OfficeTerminal);
+            GrayboxSceneBuilder.SetField(station, "_displayName", OfficeTerminalName);
+            GrayboxSceneBuilder.SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(stationObject.transform, false);
+            body.transform.localScale = new Vector3(def.WidthMm / 1000f, OfficeTerminalArtRules.Height, OfficeTerminalArtRules.Depth);
+            body.AddComponent<BoxCollider>(); // size one: the body's scale is the screen
+            float h = OfficeTerminalArtRules.Height;
+            if (catalog.TryGet(ArtCatalogRules.StationKey(StationKind.OfficeTerminal), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, stationObject.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = GrayboxSceneBuilder.ArtFrontRotation; // the model's front (+Z) towards the aisle
+            }
+            else Debug.LogError("[Graybox] no office terminal model in the catalog");
+            TextMesh sign = Label(stationObject.transform, new Vector3(0f, -h * 0.5f - 0.03f, OfficeTerminalArtRules.FrontZ - StationSign.Standoff), 60, 0.05f);
+            sign.anchor = TextAnchor.UpperCenter;
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = OfficeTerminalName + " · menu, services, results";
+
+            Material back = GrayboxSceneBuilder.CreateMaterial(GrayboxSceneBuilder.Root + "/Settings/OfficeButton.mat", Palette.WoodDark);
+            var slots = new List<StockSlot>();
+            var tabs = new TextMesh[Worktown.Game.Office.TerminalOptions.AppCount];
+            var rows = new TextMesh[Worktown.Game.Office.TerminalOptions.ScreenRows];
+            var buttons = new TextMesh[Worktown.Game.Office.TerminalOptions.ScreenRows * Worktown.Game.Office.OfficeTerminalView.RowButtons];
+            for (int s = 0; s < Worktown.Game.Office.TerminalOptions.SlotCount; s++)
+            {
+                if (!OfficeTerminalArtRules.IsSlot(s))
+                {
+                    slots.Add(null); // 5 to 7: free numbers
+                    continue;
+                }
+                var slotObject = new GameObject(OfficeSlotName + " " + s);
+                slotObject.transform.SetParent(stationObject.transform, false);
+                slotObject.transform.localPosition = OfficeTerminalArtRules.SlotCentre(s);
+                var slot = slotObject.AddComponent<StockSlot>();
+                GrayboxSceneBuilder.SetField(slot, "_station", station);
+                GrayboxSceneBuilder.SetField(slot, "_option", s);
+                GrayboxSceneBuilder.SetField(slot, "_ingredientIndex", -1);
+                slots.Add(slot);
+                bool isRow = Worktown.Game.Office.TerminalOptions.TryRowSlot(s, out int screenRow, out int action);
+                if (isRow && action == Worktown.Game.Office.TerminalOptions.Press)
+                {
+                    TextMesh text = Label(stationObject.transform, OfficeTerminalArtRules.RowTextCorner(screenRow), 40, 0.0072f);
+                    text.name = "Row " + screenRow;
+                    text.anchor = TextAnchor.MiddleLeft;
+                    text.alignment = TextAlignment.Left;
+                    text.color = Palette.Mustard; // D32: Mustard text on the dark screen
+                    text.text = string.Empty;
+                    rows[screenRow] = text;
+                    continue;
+                }
+                GameObject plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                plate.name = "Back";
+                UnityEngine.Object.DestroyImmediate(plate.GetComponent<Collider>());
+                plate.transform.SetParent(slotObject.transform, false);
+                plate.transform.localScale = OfficeTerminalArtRules.SlotSize(s);
+                plate.GetComponent<MeshRenderer>().sharedMaterial = back;
+                TextMesh label = Label(stationObject.transform, OfficeTerminalArtRules.SlotCentre(s) + new Vector3(0f, 0f, -0.003f), 40, 0.0072f);
+                label.name = "Label " + s;
+                label.anchor = TextAnchor.MiddleCenter;
+                label.color = Palette.Cream;
+                label.text = OfficeTerminalArtRules.PageLabel(s);
+                if (Worktown.Game.Office.TerminalOptions.IsTabSlot(s, out Worktown.Game.Office.TerminalApp app))
+                {
+                    tabs[(int)app] = label;
+                    label.text = Worktown.Game.Office.OfficeTerminalView.AppName(app);
+                }
+                else if (isRow) buttons[screenRow * Worktown.Game.Office.OfficeTerminalView.RowButtons + action - 1] = label;
+            }
+            TextMesh header = Label(stationObject.transform, OfficeTerminalArtRules.HeaderCentre, 44, 0.0085f);
+            header.name = "Header";
+            header.anchor = TextAnchor.MiddleCenter;
+            header.color = Palette.Mustard;
+            header.text = "MENU";
+            TextMesh footer = Label(stationObject.transform, OfficeTerminalArtRules.FooterCorner, 36, 0.0062f);
+            footer.name = "Footer";
+            footer.anchor = TextAnchor.UpperLeft;
+            footer.alignment = TextAlignment.Left;
+            footer.color = Palette.Cream;
+            footer.text = string.Empty;
+            GrayboxSceneBuilder.SetField(station, "_slots", slots);
+            foreach (Transform t in stationObject.GetComponentsInChildren<Transform>(true))
+                if (t.GetComponent<TextMesh>() == null) t.gameObject.isStatic = true; // only the text changes
+            PieceBehaviour behaviour = AddPiece(root, def.TypeId); // the NetworkObject first: FishNet adds one for a NetworkBehaviour without it
+            var terminal = stationObject.AddComponent<Worktown.Game.Office.OfficeTerminal>();
+            var view = stationObject.AddComponent<Worktown.Game.Office.OfficeTerminalView>();
+            GrayboxSceneBuilder.SetField(view, "_terminal", terminal);
+            GrayboxSceneBuilder.SetField(view, "_header", header);
+            GrayboxSceneBuilder.SetField(view, "_tabs", tabs);
+            GrayboxSceneBuilder.SetField(view, "_rows", rows);
+            GrayboxSceneBuilder.SetField(view, "_buttons", buttons);
+            GrayboxSceneBuilder.SetField(view, "_footer", footer);
+
+            GrayboxSceneBuilder.SetField(behaviour, "_surfaces", new List<PlaceSurface>());
+            GrayboxSceneBuilder.SetField(behaviour, "_stations", new List<Station> { station });
+            return root;
+        }
+
         /// <summary>A world label (the builder's: the built-in font, Cream unless set).</summary>
         private static TextMesh Label(Transform parent, Vector3 localPosition, int fontSize, float characterSize)
         {
@@ -398,6 +515,7 @@ namespace Worktown.Game.Editor
                 case PieceCatalog.SpitModule: return StationKind.Spit;
                 case PieceCatalog.MenuBoard: return StationKind.MenuBoard;
                 case PieceCatalog.GoalBoard: return StationKind.GoalBoard; // spec 057
+                case PieceCatalog.OfficeTerminal: return StationKind.OfficeTerminal; // spec 059
                 default: throw new InvalidOperationException("no station kind for piece type " + type);
             }
         }

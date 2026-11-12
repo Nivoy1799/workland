@@ -203,6 +203,10 @@ namespace Worktown.Game.Save
         {
             _current = save;
             SpawnLayout(save.layout); // spec 062a: the furniture first, so everything after finds its stations
+            // Spec 059: the office terminal (a piece of the layout just spawned) gets the save's special and its last services.
+            Worktown.Game.Office.OfficeTerminal office = Worktown.Game.Office.OfficeTerminal.Find();
+            if (office != null) office.ServerBegin(Worktown.Game.Office.SpecialRules.FromLineId(save.office?.special), RecordsOf(save.office));
+            else Debug.Log("[Save] no office terminal in this layout: its part is kept as it was");
             _unknownStock.Clear();
             _unknownMenu.Clear();
             _unknownMenuOff.Clear();
@@ -244,6 +248,9 @@ namespace Worktown.Game.Save
         private void OnServiceClosed()
         {
             StageEnd end = _stage != null && _customers != null ? _stage.ServerServiceEnded(_customers.LastSummary) : StageEnd.None;
+            // Spec 059: the office terminal records the service (its Results), before the save below writes its history.
+            Worktown.Game.Office.OfficeTerminal office = _customers != null ? Worktown.Game.Office.OfficeTerminal.Find() : null;
+            if (office != null) office.ServerRecord(_customers.LastRecord);
             if (_current == null || _customers == null) return;
             AddService(_current, _customers.LastSummary);
             SaveNow(TriggerOf(end));
@@ -328,6 +335,58 @@ namespace Worktown.Game.Save
                     _unknownMenuOff, _stage.ServerCrewStarts);
             if (_economy != null) save.menu = MenuParts(_economy.Menu.Capture(), _unknownMenu); // spec 037: the board's prices
             if (_layout != null && _layout.Current != null) save.layout = Worktown.Game.Layout.LayoutCodec.ToPart(_layout.Current); // spec 062a
+            Worktown.Game.Office.OfficeTerminal office = Worktown.Game.Office.OfficeTerminal.Find(); // spec 059 (none: the loaded part stays)
+            if (office != null) save.office = OfficePartOf(office.ServerSpecial, office.ServerHistory);
+        }
+
+        /// <summary>Spec 059: the office terminal's save part: the special's line id and the history (at most 8, newest last).</summary>
+        public static ShopSave.OfficePart OfficePartOf(byte special, IReadOnlyList<Worktown.Game.Office.ServiceRecord> history) =>
+            new ShopSave.OfficePart { special = Worktown.Game.Office.SpecialRules.ToLineId(special), history = PartsOf(history) };
+
+        /// <summary>Spec 059: a save part's records (null parts skipped), each clamped (ServiceRecord.Of), the newest 8.</summary>
+        public static Worktown.Game.Office.ServiceRecord[] RecordsOf(ShopSave.OfficePart office)
+        {
+            var list = new List<Worktown.Game.Office.ServiceRecord>();
+            if (office?.history != null)
+                foreach (ShopSave.RecordPart p in office.history)
+                    if (p != null)
+                        list.Add(Worktown.Game.Office.ServiceRecord.Of(p.day, p.came, p.served, p.missed, p.earned, p.tips, p.starsTenths, p.waitSeconds,
+                            p.sold, p.rivalPermille));
+            return Worktown.Game.Office.ServiceHistory.Newest(list);
+        }
+
+        /// <summary>Spec 059: records as save parts (the newest 8).</summary>
+        public static ShopSave.RecordPart[] PartsOf(IReadOnlyList<Worktown.Game.Office.ServiceRecord> history)
+        {
+            Worktown.Game.Office.ServiceRecord[] records = Worktown.Game.Office.ServiceHistory.Newest(history);
+            var parts = new ShopSave.RecordPart[records.Length];
+            for (int i = 0; i < records.Length; i++)
+            {
+                Worktown.Game.Office.ServiceRecord r = records[i];
+                var sold = new int[Worktown.Game.Office.ResultsRules.SoldLines];
+                for (int s = 0; s < sold.Length; s++) sold[s] = r.SoldAt(s);
+                parts[i] = new ShopSave.RecordPart
+                {
+                    day = r.Day, came = r.Came, served = r.Served, missed = r.Missed, earned = r.Earned, tips = r.Tips, starsTenths = r.StarsTenths,
+                    waitSeconds = r.WaitSeconds, sold = sold, rivalPermille = r.RivalPermille,
+                };
+            }
+            return parts;
+        }
+
+        /// <summary>Spec 059: whether two save parts hold the same record (a missing sold count reads as 0).</summary>
+        public static bool SameRecord(ShopSave.RecordPart a, ShopSave.RecordPart b)
+        {
+            if (a == null || b == null) return a == b;
+            if (a.day != b.day || a.came != b.came || a.served != b.served || a.missed != b.missed || a.earned != b.earned || a.tips != b.tips
+                || a.starsTenths != b.starsTenths || a.waitSeconds != b.waitSeconds || a.rivalPermille != b.rivalPermille) return false;
+            int n = System.Math.Max(a.sold?.Length ?? 0, b.sold?.Length ?? 0);
+            for (int i = 0; i < n; i++)
+            {
+                int x = a.sold != null && i < a.sold.Length ? a.sold[i] : 0, y = b.sold != null && i < b.sold.Length ? b.sold[i] : 0;
+                if (x != y) return false;
+            }
+            return true;
         }
 
         /// <summary>Spec 037: the menu board's changed prices as the save's parts (line id, cents).</summary>

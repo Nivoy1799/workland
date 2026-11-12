@@ -125,6 +125,12 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 057: the menu holds no more dishes (the stage's most dishes, the fries included).</summary>
         MenuFull,
         /// <summary>Spec 057: the restaurant is rented; the crew moves in when this service ends.</summary>
-        MoveWaits
+        MoveWaits,
+        /// <summary>Spec 059: the office terminal: that row cannot be switched off (the fries, the counter).</summary>
+        AlwaysOn,
+        /// <summary>Spec 059: the office terminal: a service that comes with stage 3 (delivery, custom orders, tables, buffet).</summary>
+        ComesLater,
+        /// <summary>Spec 059: the office terminal: only a dish on the menu can be the special of the day.</summary>
+        NotOnMenu
     }
 }

@@ -55,6 +55,9 @@ namespace Worktown.Game.Cooking
         MenuBoard,
         /// <summary>Spec 057: the goal board on the wall: its rows are its options: the stage's step (rent the restaurant, the gate) and the
         /// stage 2 recipes (buy, on or off the menu); Climb.GoalBoardRules.</summary>
-        GoalBoard
+        GoalBoard,
+        /// <summary>Spec 059: the office terminal in the back office: its screen's tabs, page buttons and row buttons are its slots; a row
+        /// button sends Office.TerminalOptions (app, row, action) as the option; Office.OfficeTerminal decides.</summary>
+        OfficeTerminal
     }
 }

@@ -51,9 +51,9 @@ namespace Worktown.Game.Economy
         }
 
         /// <summary>Spec 037, server: one click on the menu board's buttons (RequestStation; reach and the stage were checked).</summary>
-        public Worktown.Game.Cooking.CookOutcome UseMenuBoard(int option)
+        public Worktown.Game.Cooking.CookOutcome UseMenuBoard(int option, int playerSlot = -1)
         {
-            Worktown.Game.Cooking.CookOutcome outcome = _menu.Use(option, _menuStage);
+            Worktown.Game.Cooking.CookOutcome outcome = _menu.Use(option, _menuStage, playerSlot); // spec 059: who, for the office log
             if (outcome == Worktown.Game.Cooking.CookOutcome.Ok)
             {
                 int line = _menu.Selected;

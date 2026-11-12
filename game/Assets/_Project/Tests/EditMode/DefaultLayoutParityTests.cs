@@ -76,6 +76,9 @@ namespace Worktown.Game.Tests
             for (int i = 0; i < snapshot.surfaces.Length; i++) Assert.AreEqual(i, snapshot.surfaces[i].oldIndex);
         }
 
+        /// <summary>The stations the old kitchen's snapshot does not have: spec 057's goal board, spec 059's office terminal.</summary>
+        private static bool IsNew(StationKind kind) => kind == StationKind.GoalBoard || kind == StationKind.OfficeTerminal;
+
         [Test]
         public void EveryStation_IsWhereItWas()
         {
@@ -83,10 +86,11 @@ namespace Worktown.Game.Tests
             Scene scene = LayoutScene.Open();
             try
             {
-                // Spec 057: the goal board is new (not in the old kitchen's snapshot); every other station is where it was.
-                Assert.AreEqual(snapshot.stations.Length, LayoutRegistry.Stations.Count(s => s.Kind != StationKind.GoalBoard), "as many stations");
+                // Spec 057: the goal board is new (not in the old kitchen's snapshot), spec 059 the office terminal; every other station is where it was.
+                Assert.AreEqual(snapshot.stations.Length, LayoutRegistry.Stations.Count(s => !IsNew(s.Kind)), "as many stations");
                 Assert.AreEqual(1, LayoutRegistry.Stations.Count(s => s.Kind == StationKind.GoalBoard), "and the goal board");
-                Assert.AreEqual(snapshot.stations.Length + 1, All<Station>(scene).Count, "and none outside the registry");
+                Assert.AreEqual(1, LayoutRegistry.Stations.Count(s => s.Kind == StationKind.OfficeTerminal), "and the office terminal");
+                Assert.AreEqual(snapshot.stations.Length + 2, All<Station>(scene).Count, "and none outside the registry");
                 foreach (KitchenSnapshot.StationEntry e in snapshot.stations)
                 {
                     Station s = LayoutRegistry.Station(e.piece);
@@ -167,8 +171,8 @@ namespace Worktown.Game.Tests
             Scene scene = LayoutScene.Open();
             try
             {
-                // Spec 057: the goal board's rows are new slots (not in the snapshot).
-                List<StockSlot> slots = All<StockSlot>(scene).Where(s => s.Station == null || s.Station.Kind != StationKind.GoalBoard).ToList();
+                // Spec 057: the goal board's rows are new slots (not in the snapshot); spec 059: so are the office terminal's.
+                List<StockSlot> slots = All<StockSlot>(scene).Where(s => s.Station == null || !IsNew(s.Station.Kind)).ToList();
                 Assert.AreEqual(snapshot.slots.Length, slots.Count, "as many slots");
                 foreach (KitchenSnapshot.PointEntry e in snapshot.slots)
                 {
