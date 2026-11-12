@@ -219,3 +219,8 @@ pan, pot and griddle (griddle "grilled" from 9 s, pan "fried" from 10 s), and th
 - Follow-ups 2026-11-11 evening (053, 044, 048; approved with nits): the covers' "nothing pokes out" test reuses the
   builder's own rule (add an independent check); two magic numbers in ClosedCoverRules; the sign face is computed
   twice; DeliveryText can print "-$0"; no tour presses the title's own host button now (note in spec 047).
+- 057 (merged 2026-11-12): crewStarts counts only heads at service start (friends who join after a solo start and leave
+  before the next are never counted; push max(start, peak during the service) at service end); the spec still quotes
+  "Rent and upkeep: $12.00"; dead `_rentCrew ?? _crew` fallback. Open from the build: AC11 partial (no wrap, card or
+  wash in the tour), AC12 calibration needs played stage 2 services, board UX (prompt on refusing rows, red confirm
+  toast, "Player 0" in feed lines), the goal_board catalog row has HasStation=false (062b reachability).
