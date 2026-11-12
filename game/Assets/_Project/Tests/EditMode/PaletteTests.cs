@@ -10,7 +10,7 @@ using Worktown.Game.Art;
 namespace Worktown.Game.Tests
 {
     /// <summary>
-    /// Spec 026 AC3: one palette (D32). <see cref="Palette"/> has the 16 colours of <c>docs/art-direction.md</c> with their
+    /// Spec 026 AC3: one palette (D32). <see cref="Palette"/> has the town colours of <c>docs/art-direction.md</c> with their
     /// hex values, <c>UI/Palette.uss</c> defines the same as variables, and no other script or stylesheet holds a colour.
     /// </summary>
     public class PaletteTests
@@ -25,20 +25,23 @@ namespace Worktown.Game.Tests
             var colours = new List<(string, string, float)>();
             foreach (string[] row in ArtSizeTests.TableRows(File.ReadAllLines(GuidePath), "| Name | Hex | Use |"))
             {
-                Match hex = Regex.Match(row[1], "#([0-9A-Fa-f]{6})");
-                Assert.IsTrue(hex.Success, "no hex for " + row[0]);
+                // A row may hold several colours: "Leaf, Plant" with "`#5E8F4F`, `#3F6B3A`" gives two entries.
+                string[] names = row[0].Split(',');
+                MatchCollection hexes = Regex.Matches(row[1], "#([0-9A-Fa-f]{6})");
+                Assert.AreEqual(names.Length, hexes.Count, "one hex per name for " + row[0]);
                 Match alpha = Regex.Match(row[1], @"at (\d+) ?%");
-                colours.Add((row[0], "#" + hex.Groups[1].Value.ToUpperInvariant(),
-                    alpha.Success ? int.Parse(alpha.Groups[1].Value, CultureInfo.InvariantCulture) / 100f : 1f));
+                for (int n = 0; n < names.Length; n++)
+                    colours.Add((names[n].Trim(), "#" + hexes[n].Groups[1].Value.ToUpperInvariant(),
+                        alpha.Success ? int.Parse(alpha.Groups[1].Value, CultureInfo.InvariantCulture) / 100f : 1f));
             }
             return colours;
         }
 
         [Test]
-        public void Palette_HasTheSixteenGuideColours_WithTheGuidesHexValues()
+        public void Palette_HasTheGuidesTownColours_WithTheGuidesHexValues()
         {
             List<(string Name, string Hex, float Alpha)> guide = GuideColours();
-            Assert.AreEqual(16, guide.Count, "the guide's palette");
+            Assert.AreEqual(21, guide.Count, "the guide's town palette: 19 rows, 21 colours");
             Assert.AreEqual(guide.Count, Palette.GuideColours.Count);
             for (int i = 0; i < guide.Count; i++)
             {
@@ -59,7 +62,7 @@ namespace Worktown.Game.Tests
             string uss = File.ReadAllText(PaletteUssPath);
             var variables = new Dictionary<string, string>();
             foreach (Match m in Regex.Matches(uss, @"--wt-([a-z0-9-]+)\s*:\s*([^;]+);")) variables[m.Groups[1].Value] = m.Groups[2].Value.Trim();
-            foreach ((string name, Color color) in Palette.GuideColours)
+            foreach ((string name, Color color) in System.Linq.Enumerable.Concat(Palette.GuideColours, Palette.UiColours))
             {
                 string variable = Kebab(name);
                 Assert.IsTrue(variables.TryGetValue(variable, out string value), "Palette.uss has no --wt-" + variable);
@@ -106,7 +109,7 @@ namespace Worktown.Game.Tests
         [TestCase("public static Color Red => new(1f, 0f, 0f);", true)]
         [TestCase("Color[] all = { new(1f, 0f, 0f) };", true)]
         [TestCase("var pixels = new Color32[n * n];", false)]
-        [TestCase("Color c = Palette.WithAlpha(Palette.Sage, 0.5f);", false)]
+        [TestCase("Color c = Palette.WithAlpha(Palette.Ground, 0.5f);", false)]
         [TestCase("var block = new MaterialPropertyBlock();", false)]
         public void ColourConstructorPattern_FindsEveryForm(string line, bool found)
         {
@@ -149,9 +152,9 @@ namespace Worktown.Game.Tests
         [TestCase(".a { border-color: Red; }", false, 1)]
         [TestCase(".a { color: #fff; }", false, 1)]
         [TestCase(".a { background-color: rgba(0, 0, 0, 0.5); }", false, 1)]
-        [TestCase(".a { color: var(--wt-soft-blue); -unity-font-style: bold; }", false, 0)]
+        [TestCase(".a { color: var(--wt-sky); -unity-font-style: bold; }", false, 0)]
         [TestCase("@import url(\"unity-theme://default\");\n#fade-box { color: var(--wt-ink); }", false, 0)]
-        [TestCase(":root { --wt-cream: #F2E6D0; }", true, 0)]
+        [TestCase(":root { --wt-cream: #F3E9D2; }", true, 0)]
         public void ColourValuePattern_FindsHexRgbAndKeywords(string stylesheet, bool allowHexAndRgb, int count)
         {
             Assert.AreEqual(count, ColourValues(stylesheet, allowHexAndRgb).Count, stylesheet);
@@ -171,13 +174,14 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void PaletteUss_DefinesOnlyTheSixteenColours()
+        public void PaletteUss_DefinesOnlyTheTownAndUiColours()
         {
             var expected = new List<string>();
             foreach ((string name, Color _) in Palette.GuideColours) expected.Add(Kebab(name));
+            foreach ((string name, Color _) in Palette.UiColours) expected.Add(Kebab(name));
             var defined = new List<string>();
             foreach (Match m in Regex.Matches(File.ReadAllText(PaletteUssPath), @"--wt-([a-z0-9-]+)\s*:")) defined.Add(m.Groups[1].Value);
-            CollectionAssert.AreEquivalent(expected, defined, "Palette.uss holds exactly the guide's 16 colours");
+            CollectionAssert.AreEquivalent(expected, defined, "Palette.uss holds exactly the guide's town colours plus the three UI colours");
         }
 
         [Test]
@@ -190,13 +194,13 @@ namespace Worktown.Game.Tests
                 Assert.LessOrEqual(saturation, Palette.MaxFoodSaturation + 1e-4f, name);
             }
             Assert.AreEqual(Palette.FoodPotato, FoodArtRules.IngredientColor(0));
-            Assert.AreEqual(Palette.Steel, FoodArtRules.IngredientColor(200), "unknown ingredient");
+            Assert.AreEqual(Palette.Chrome, FoodArtRules.IngredientColor(200), "unknown ingredient");
         }
 
         [Test]
         public void CustomerTints_PickFromTheGuidesSix_AndWrap()
         {
-            Color[] expected = { Palette.Cream, Palette.Terracotta, Palette.Mustard, Palette.Sage, Palette.SoftBlue, Palette.DeepBlue };
+            Color[] expected = { Palette.Cream, Palette.Terracotta, Palette.Mustard, Palette.Ground, Palette.Sky, Palette.DeepBlue };
             Assert.AreEqual(expected.Length, Palette.CustomerTintCount);
             for (int i = 0; i < expected.Length; i++)
             {
@@ -209,14 +213,14 @@ namespace Worktown.Game.Tests
         [Test]
         public void WithAlphaAndShade_KeepThePaletteHue()
         {
-            Color c = Palette.WithAlpha(Palette.Sage, 0.45f);
+            Color c = Palette.WithAlpha(Palette.Ground, 0.45f);
             Assert.AreEqual(0.45f, c.a, 1e-6f);
-            Assert.AreEqual(Palette.Hex(Palette.Sage), Palette.Hex(c));
-            Color dark = Palette.Shade(Palette.WithAlpha(Palette.Brick, 0.2f), 0.5f);
-            Assert.AreEqual(Palette.Brick.r * 0.5f, dark.r, 1e-6f);
-            Assert.AreEqual(Palette.Brick.b * 0.5f, dark.b, 1e-6f);
+            Assert.AreEqual(Palette.Hex(Palette.Ground), Palette.Hex(c));
+            Color dark = Palette.Shade(Palette.WithAlpha(Palette.WoodDark, 0.2f), 0.5f);
+            Assert.AreEqual(Palette.WoodDark.r * 0.5f, dark.r, 1e-6f);
+            Assert.AreEqual(Palette.WoodDark.b * 0.5f, dark.b, 1e-6f);
             Assert.AreEqual(1f, dark.a, "shaded colours are opaque");
-            Assert.AreEqual("#F2E6D0", Palette.Hex(Palette.Cream));
+            Assert.AreEqual("#F3E9D2", Palette.Hex(Palette.Cream));
         }
 
         /// <summary>"SoftBlue" to "soft-blue".</summary>

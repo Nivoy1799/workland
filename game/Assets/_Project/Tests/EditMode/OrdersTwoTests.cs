@@ -479,7 +479,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void ThePatienceRing_DrainsAndTurnsTerracottaNearTheEnd()
         {
-            Assert.AreEqual(Worktown.Game.Art.Palette.Sage, PatienceRingRules.FillColor(0.9f));
+            Assert.AreEqual(Worktown.Game.Art.Palette.Ground, PatienceRingRules.FillColor(0.9f));
             Assert.AreEqual(Worktown.Game.Art.Palette.Mustard, PatienceRingRules.FillColor(0.4f));
             Assert.AreEqual(Worktown.Game.Art.Palette.Terracotta, PatienceRingRules.FillColor(0.2f));
             Assert.AreEqual(1f, PatienceRingRules.Pulse(0.8f, 0.3f));

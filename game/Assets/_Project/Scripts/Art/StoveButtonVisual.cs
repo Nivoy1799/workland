@@ -14,8 +14,8 @@ namespace Worktown.Game.Art
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         // Spec 026: palette colours (a sage knob when on, dark brick when off, a glowing terracotta ring).
-        private static readonly Color On = Palette.Sage;
-        private static readonly Color Off = Palette.Shade(Palette.Brick, 0.6f);
+        private static readonly Color On = Palette.Ground;
+        private static readonly Color Off = Palette.Shade(Palette.WoodDark, 0.6f);
         private static readonly Color Fry = Palette.Terracotta;
         private static readonly Color Saute = Palette.Mustard;
         private static readonly Color RingOn = Palette.Terracotta;

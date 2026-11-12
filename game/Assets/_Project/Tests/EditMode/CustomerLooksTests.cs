@@ -64,7 +64,7 @@ namespace Worktown.Game.Tests
             foreach (bool female in new[] { false, true })
             {
                 Color32[] source = Atlas(size, female);
-                Color32[] result = SkinRecolourRules.Apply(source, size, female, Palette.Sage, Palette.Mustard, Palette.Ink);
+                Color32[] result = SkinRecolourRules.Apply(source, size, female, Palette.Ground, Palette.Mustard, Palette.Ink);
                 int changed = 0;
                 for (int i = 0; i < source.Length; i++)
                 {
@@ -76,7 +76,7 @@ namespace Worktown.Game.Tests
                 Assert.Greater(changed, 100, "shirt, trousers and hair are painted");
                 Color shirt = result[(size - 1 - (int)(700f / 1024f * size)) * size + (int)(200f / 1024f * size)];
                 Color.RGBToHSV(shirt, out float h, out _, out _);
-                Color.RGBToHSV(Palette.Sage, out float sageHue, out _, out _);
+                Color.RGBToHSV(Palette.Ground, out float sageHue, out _, out _);
                 Assert.AreEqual(sageHue, h, 0.02f, "the shirt takes the palette hue");
             }
         }

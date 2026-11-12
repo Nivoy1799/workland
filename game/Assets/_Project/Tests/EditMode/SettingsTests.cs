@@ -238,12 +238,12 @@ namespace Worktown.Game.Tests
             var t = new List<int>();
             HeatRingRules.Build(1f, HeatZone.Perfect, v, c, t);
             CollectionAssert.Contains(c, Palette.SafeSkyBlue, "the good window's mark");
-            CollectionAssert.DoesNotContain(c, Palette.Sage);
+            CollectionAssert.DoesNotContain(c, Palette.Ground);
 
             GameSettings.Use(GameSettings.Defaults());
             Assert.AreSame(RingPalette.Standard, RingPalette.Current);
-            Assert.AreEqual(Palette.Sage, HeatRingRules.FillColor(HeatZone.Good));
-            Assert.AreEqual(Palette.Sage, PatienceRingRules.FillColor(0.9f));
+            Assert.AreEqual(Palette.Ground, HeatRingRules.FillColor(HeatZone.Good));
+            Assert.AreEqual(Palette.Ground, PatienceRingRules.FillColor(0.9f));
         }
 
         [Test]

@@ -70,7 +70,7 @@ namespace Worktown.Game.UI
         private static readonly Color CrosshairOnTarget = Palette.Interact;
         // Spec 020: a grey prompt says why a click would do nothing.
         private static readonly Color PromptAction = Palette.Cream;
-        private static readonly Color PromptReason = Palette.Steel;
+        private static readonly Color PromptReason = Palette.Chrome;
         private VisualElement _crosshair;
         private Label _aimPrompt;
         private VisualElement _aimPromptRow;
@@ -289,7 +289,7 @@ namespace Worktown.Game.UI
         /// <summary>Spec 035, pure: Sage while guests do not mind, Mustard below 50 % (reviews lose a star), Terracotta below 30 % (patience too).</summary>
         public static Color HygieneColour(int percent) =>
             percent < Worktown.Sim.Economy.HygieneRules.PatienceBelow ? Palette.Terracotta
-            : percent < Worktown.Sim.Economy.HygieneRules.ReviewBelow ? Palette.Mustard : Palette.Sage;
+            : percent < Worktown.Sim.Economy.HygieneRules.ReviewBelow ? Palette.Mustard : Palette.Ground;
 
         /// <summary>Spec 034, pure: "Low stock: tomato, cups" for every line below a quarter (StockCatalog.IsLow), or empty.</summary>
         public static string LowStockText(IReadOnlyList<byte> counts)

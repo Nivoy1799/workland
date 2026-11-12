@@ -12,8 +12,8 @@ namespace Worktown.Game.Art
     /// </summary>
     public sealed class RingPalette
     {
-        public static readonly RingPalette Standard = new RingPalette(Palette.Cream, Palette.Sage, Palette.Mustard, Palette.Terracotta,
-            Palette.Brick);
+        public static readonly RingPalette Standard = new RingPalette(Palette.Cream, Palette.Ground, Palette.Mustard, Palette.Terracotta,
+            Palette.WoodDark);
         public static readonly RingPalette ColourBlind = new RingPalette(Palette.Cream, Palette.SafeSkyBlue, Palette.SafeYellow,
             Palette.SafeOrange, Palette.SafeVermillion);
 

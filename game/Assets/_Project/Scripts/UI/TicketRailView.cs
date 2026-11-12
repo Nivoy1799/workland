@@ -20,7 +20,7 @@ namespace Worktown.Game.UI
     public sealed class TicketRailView : NetworkBehaviour
     {
         private static readonly Color TitleOpen = Palette.Mustard; // spec 026
-        private static readonly Color TitleClosed = Palette.Steel;
+        private static readonly Color TitleClosed = Palette.Chrome;
         /// <summary>Spec 032: modifier lines per card.</summary>
         public const int ModLines = 2;
 
@@ -172,7 +172,7 @@ namespace Worktown.Game.UI
             return text + "\n" + CustomerRules.TicketMinutes(ticket) + " min";
         }
 
-        private static readonly string DoneColour = ColorUtility.ToHtmlStringRGB(Palette.Sage);
+        private static readonly string DoneColour = ColorUtility.ToHtmlStringRGB(Palette.Ground);
         private static readonly string DrinkColour = ColorUtility.ToHtmlStringRGB(Palette.DeepBlue);
 
         private static readonly string ExtraColour = ColorUtility.ToHtmlStringRGB(Palette.Leaf);

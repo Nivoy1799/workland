@@ -161,7 +161,7 @@ namespace Worktown.Game.Shop
                 _textShown = shown;
                 _shownText = paidState == 2 ? "APPROVED" : paidState == 1 ? "PAID" : RegisterRules.DisplayText(payment, shown);
                 _display.text = _shownText;
-                _display.color = paidState != 0 ? Palette.Sage
+                _display.color = paidState != 0 ? Palette.Ground
                     : RegisterRules.IsCash(payment) && shown > RegisterRules.ChangeDue(payment) ? Palette.Terracotta : Palette.Mustard;
             }
         }
@@ -247,11 +247,11 @@ namespace Worktown.Game.Shop
             {
                 case 10:
                 case 20:
-                case 50: return Palette.Steel;
+                case 50: return Palette.Chrome;
                 case 100:
                 case 200: return Palette.Mustard;
-                case 500: return Palette.Sage;
-                case 1000: return Palette.SoftBlue;
+                case 500: return Palette.Ground;
+                case 1000: return Palette.Sky;
                 case 2000: return Palette.Terracotta;
                 default: return Palette.DeepBlue;
             }

@@ -573,7 +573,7 @@ namespace Worktown.Game.Editor
         internal static int CreateClosedCovers(IEnumerable<Station> stations, Renderer[] renderers)
         {
             // Follow-up 2026-11-11 evening: a calm Sage cloth (Plaster read as grey) and a small Cream sign card with Ink text.
-            Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Sage);
+            Material cloth = CreateMaterial(ClosedCoverMaterialPath, Palette.Ground);
             Material card = CreateMaterial(ClosedSignMaterialPath, Palette.Cream);
             int covers = 0;
             foreach (Station station in stations)
@@ -1217,7 +1217,7 @@ namespace Worktown.Game.Editor
                 AssetDatabase.CreateAsset(material, PlaceMarkerMaterialPath);
             }
             else if (material.shader != shader) material.shader = shader;
-            material.SetColor("_BaseColor", Palette.WithAlpha(Palette.Sage, 0.45f)); // spec 026: the "use" colour
+            material.SetColor("_BaseColor", Palette.WithAlpha(Palette.Ground, 0.45f)); // spec 026: the "use" colour
             material.SetFloat("_Surface", 1f); // transparent
             material.SetFloat("_Blend", 0f);   // alpha
             material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -1739,7 +1739,7 @@ namespace Worktown.Game.Editor
             root.AddComponent<StationContents>();
             var dispenserView = root.AddComponent<DrinkDispenserView>();
             SetField(dispenserView, "_dispenser", station);
-            SetField(dispenserView, "_puddleMaterial", CreateMaterial(Root + "/Settings/DrinkSpill.mat", Palette.SoftBlue));
+            SetField(dispenserView, "_puddleMaterial", CreateMaterial(Root + "/Settings/DrinkSpill.mat", Palette.Sky));
 
             Material stream = CreateMaterial(Root + "/Settings/DrinkStream.mat", Palette.Cream);
             Material lidMaterial = CreateMaterial(Root + "/Settings/DrinkLid.mat", Palette.Cream);
@@ -1925,7 +1925,7 @@ namespace Worktown.Game.Editor
             plate.transform.SetParent(root.transform, false);
             plate.transform.localPosition = SpitArtRules.FrontPlateCentre + down;
             plate.transform.localScale = SpitArtRules.FrontPlateSize;
-            plate.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Steel);
+            plate.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Chrome);
 
             // The panel's glowing face.
             Material glowMaterial = CreateMaterial(Root + "/Settings/SpitGlow.mat", Palette.Charcoal);
@@ -1986,7 +1986,7 @@ namespace Worktown.Game.Editor
             blade.transform.SetParent(knife.transform, false);
             blade.transform.localPosition = new Vector3(0.1f, 0f, 0f);
             blade.transform.localScale = new Vector3(0.2f, 0.035f, 0.004f);
-            blade.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitKnife.mat", Palette.Steel);
+            blade.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitKnife.mat", Palette.Chrome);
             GameObject handle = GameObject.CreatePrimitive(PrimitiveType.Cube);
             handle.name = "Handle";
             UnityEngine.Object.DestroyImmediate(handle.GetComponent<Collider>());
@@ -2046,7 +2046,7 @@ namespace Worktown.Game.Editor
                 pan.transform.SetParent(root.transform, false);
                 pan.transform.localPosition = new Vector3(0f, -SpitArtRules.TraySize.y * 0.5f, 0f);
                 pan.transform.localScale = SpitArtRules.TraySize;
-                pan.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Steel);
+                pan.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SpitTray.mat", Palette.Chrome);
                 food = anchor.AddComponent<FoodVisual>();
                 SetField(food, "_catalog", catalog);
                 SetField(food, "_partScale", 0.6f);
@@ -2333,7 +2333,7 @@ namespace Worktown.Game.Editor
                 StockZ(StationKind.Fridge), 0f, CreateMaterial(Root + "/Settings/Station_Fridge.mat", Palette.Cream), 0);
             CreateStockSlots(catalog, fridge);
             stations.Add(fridge);
-            Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Steel);
+            Material stoveMat = CreateMaterial(Root + "/Settings/Station_Pan.mat", Palette.Chrome);
             Station stoveA = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 1", StoveAX, KitchenZ, 0f, stoveMat, 0);
             stations.Add(stoveA);
             Station stoveB = CreateStation(catalog, parent.transform, stations.Count, StationKind.Stove, "Stove 2", StoveBX, KitchenZ, 0f, stoveMat, 0);
@@ -2642,7 +2642,7 @@ namespace Worktown.Game.Editor
             cloth.transform.SetParent(root.transform, false);
             cloth.transform.localScale = new Vector3(s, t, s * 0.7f);
             cloth.transform.localPosition = new Vector3(0f, t * 0.5f, 0f);
-            cloth.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/WipeCloth.mat", Palette.SoftBlue);
+            cloth.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/WipeCloth.mat", Palette.Sky);
             GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
             stripe.name = "Stripe";
             UnityEngine.Object.DestroyImmediate(stripe.GetComponent<Collider>());
@@ -2690,7 +2690,7 @@ namespace Worktown.Game.Editor
             float top = CleaningArtRules.SinkHeight - rootY;
             Vector3 c = CleaningArtRules.BasinCentre;
             Vector2 size = CleaningArtRules.BasinSize;
-            Material steel = CreateMaterial(Root + "/Settings/SinkFaucet.mat", Palette.Steel);
+            Material steel = CreateMaterial(Root + "/Settings/SinkFaucet.mat", Palette.Chrome);
             var faucet = new GameObject(FaucetName);
             faucet.transform.SetParent(sink.transform, false);
             FramePart(faucet.transform, "Neck", new Vector3(c.x, top + 0.14f, c.z + size.y * 0.5f + 0.06f), new Vector3(0.035f, 0.28f, 0.035f), steel);
@@ -2712,7 +2712,7 @@ namespace Worktown.Game.Editor
             UnityEngine.Object.DestroyImmediate(surface.GetComponent<Collider>());
             surface.transform.SetParent(basin.transform, false);
             surface.transform.localScale = new Vector3(size.x * 0.96f, 0.001f, size.y * 0.96f);
-            surface.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SinkWater.mat", Palette.SoftBlue);
+            surface.GetComponent<MeshRenderer>().sharedMaterial = CreateMaterial(Root + "/Settings/SinkWater.mat", Palette.Sky);
             surface.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             float plate = PlateHeight(catalog);
@@ -2984,7 +2984,7 @@ namespace Worktown.Game.Editor
             sign.text = "Orders · deliveries at the back door";
 
             Material rowMaterial = CreateMaterial(Root + "/Settings/TerminalRow.mat", Palette.Charcoal);
-            Material buttonMaterial = CreateMaterial(Root + "/Settings/TerminalButton.mat", Palette.SoftBlue);
+            Material buttonMaterial = CreateMaterial(Root + "/Settings/TerminalButton.mat", Palette.Sky);
             TextMesh header = CreateLabel(root.transform, TerminalArtRules.HeaderCentre, 48, 0.0085f);
             header.name = "Header";
             header.anchor = TextAnchor.MiddleCenter;

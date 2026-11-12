@@ -80,7 +80,7 @@ namespace Worktown.Game.Tests
                     Assert.IsNotNull(clothT, station.name + " has no cloth");
                     Renderer clothR = clothT.GetComponent<Renderer>();
                     Bounds cloth = clothR.bounds;
-                    Assert.Less(Vector4.Distance(Palette.Sage, clothR.sharedMaterial.color), 0.01f, station.name + ": a Sage cloth");
+                    Assert.Less(Vector4.Distance(Palette.Ground, clothR.sharedMaterial.color), 0.01f, station.name + ": a Ground cloth");
                     Assert.GreaterOrEqual(cloth.max.y, b.max.y, station.name + ": the station's top is under the cloth");
                     Assert.Less(cloth.min.y, b.max.y, station.name);
                     if (ClosedCover.TryRestingBounds(station, b, renderers, out Bounds on))
