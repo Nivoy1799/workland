@@ -71,6 +71,9 @@ namespace Worktown.Game.Layout
             Changed();
         }
 
+        /// <summary>Spec 062b: a registered piece moved (build mode): the version changes, so the aim caches look again.</summary>
+        public static void Touch() => Changed();
+
         /// <summary>Forgets everything (a test's teardown, a reset).</summary>
         public static void Clear()
         {

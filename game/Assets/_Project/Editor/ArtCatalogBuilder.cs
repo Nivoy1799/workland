@@ -122,6 +122,7 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationMenuBoard, Mode = Fit.Graybox },
             // Spec 057: no goal board in the packs: a graybox (a WoodDark frame round a Cream face).
             new Def { Key = ArtKey.StationGoalBoard, Mode = Fit.Graybox },
+            new Def { Key = ArtKey.StationDoorSign, Mode = Fit.Graybox }, // spec 062b
             // Spec 059: no office terminal in the packs: a graybox (a WoodLight case round a Charcoal screen).
             new Def { Key = ArtKey.StationOfficeTerminal, Mode = Fit.Graybox },
             // Spec 034: the delivery box is the Furniture Kit's cardboard box (the crate's model), 0.40 m.
@@ -924,6 +925,7 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationSpit) return BuildSpit(parent); // spec 036
             if (key == ArtKey.StationMenuBoard) return BuildMenuBoard(parent); // spec 037
             if (key == ArtKey.StationGoalBoard) return BuildGoalBoard(parent); // spec 057
+            if (key == ArtKey.StationDoorSign) return BuildDoorSign(parent); // spec 062b
             if (key == ArtKey.StationOfficeTerminal) return BuildOfficeTerminal(parent); // spec 059
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
@@ -1168,6 +1170,22 @@ namespace Worktown.Game.Editor
             float w = OfficeTerminalArtRules.Width, h = OfficeTerminalArtRules.Height, d = OfficeTerminalArtRules.Depth;
             Box(model, "Case", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
             Box(model, "Screen", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.04f, h - 0.04f, 0.002f), screen);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 062b: the graybox door sign as the wrapper's "Model" (its bottom at the origin, front on +Z like the kit): a Teal frame round
+        /// a Cream face; the scene's text says OPEN or CLOSED.
+        /// </summary>
+        private static GameObject BuildDoorSign(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material frame = GrayboxMaterial("DoorSignFrame", Palette.Teal);
+            Material face = GrayboxMaterial("DoorSignFace", Palette.Cream);
+            float w = ArtSizeTable.DoorSignWidth, h = ArtSizeTable.DoorSignHeight, d = ArtSizeTable.DoorSignDepth;
+            Box(model, "Frame", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
+            Box(model, "Face", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.04f, h - 0.04f, 0.002f), face);
             return model;
         }
 

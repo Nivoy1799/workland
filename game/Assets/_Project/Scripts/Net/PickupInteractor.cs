@@ -281,6 +281,22 @@ namespace Worktown.Game.Net
         private void Update()
         {
             if (!IsOwner) return;
+            // Spec 062b: in build mode the aim targets pieces and the floor only (BuildModeView); every cooking input does nothing.
+            if (Worktown.Game.Layout.BuildModeView.LocalActive)
+            {
+                Target = null;
+                CurrentHeld = Held.Nothing;
+                CurrentAim = AimTarget.Nothing;
+                CurrentAction = InteractionAction.None;
+                AimClosed = false;
+                TargetTooFar = false;
+                ClearQueuedClick();
+                _click.Cancel();
+                _gesture.Reset();
+                ConsumeScripted(out _, out _, out _);
+                _lockedLastFrame = Cursor.lockState == CursorLockMode.Locked;
+                return;
+            }
             if (_rig == null) _rig = FindFirstObjectByType<PlayerCameraRig>();
             bool firstPerson = IsFirstPerson;
             Pickup held = FindHeldPickup();
@@ -582,7 +598,8 @@ namespace Worktown.Game.Net
                             SendStation(button.Station.Id, button.Option);
                     }
                     else if (Target is StockSlot boardButton && boardButton.Station != null
-                        && (boardButton.Station.Kind == StationKind.MenuBoard || boardButton.Station.Kind == StationKind.GoalBoard))
+                        && (boardButton.Station.Kind == StationKind.MenuBoard || boardButton.Station.Kind == StationKind.GoalBoard
+                            || boardButton.Station.Kind == StationKind.DoorSign)) // spec 062b: the door sign
                     {
                         PlaySound(SoundKey.Button, boardButton.Anchor); // spec 037: a menu board button (the server moves the price); spec 057: a goal board row
                         SendStation(boardButton.Station.Id, boardButton.Option);
@@ -1175,6 +1192,8 @@ namespace Worktown.Game.Net
                     if (slot.Station != null && slot.Station.Kind == StationKind.GoalBoard) return AimTarget.Button(StationKind.GoalBoard, slot.Option, 0); // spec 057
                     if (slot.Station != null && slot.Station.Kind == StationKind.OfficeTerminal) // spec 059: the screen's words (its own tab and page)
                         return AimTarget.OfficeButton(slot.Option, slot.Station.TryGetComponent(out Worktown.Game.Office.OfficeTerminalView office) ? office.WordsFor(slot.Option) : null);
+                    if (slot.Station != null && slot.Station.Kind == StationKind.DoorSign) // spec 062b: the flags carry the door's state
+                        return AimTarget.Button(StationKind.DoorSign, slot.Option, (byte)Worktown.Game.Layout.ShopDoor.Now);
                     return WithStock(DescribeStock(slot.IngredientIndex), slot); // spec 028b: a slot takes like a crate (034: from its count)
                 case Station station:
                     // Spec 032: the register's body (between its slots) is no slot: nothing to click, no prompt.
@@ -2970,6 +2989,10 @@ namespace Worktown.Game.Net
                 }
                 case StationKind.Counter:
                     if (!holding) return false;
+                    PlaySound(SoundKey.Button, station.transform.position);
+                    SendStation(station.Id, 0);
+                    return true;
+                case StationKind.DoorSign: // spec 062b: E opens or closes the shop
                     PlaySound(SoundKey.Button, station.transform.position);
                     SendStation(station.Id, 0);
                     return true;

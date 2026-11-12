@@ -17,6 +17,11 @@ namespace Worktown.Game.Art
         public const float ServingCounterHeight = 1.05f;
         /// <summary>Spec 028b: the fridge and the dry shelf (m; the guide's fridge row).</summary>
         public const float StockHeight = 1.80f;
+        /// <summary>Spec 062b: the door sign (0.4 m wide, 0.3 m high, 3 cm deep; its middle 1.5 m above the floor).</summary>
+        public const float DoorSignHeight = 0.30f;
+        public const float DoorSignWidth = 0.40f;
+        public const float DoorSignDepth = 0.03f;
+        public const float DoorSignCentreHeight = 1.50f;
         /// <summary>Spec 034: the delivery box, largest side (docs/art-direction.md "Delivery box").</summary>
         public const float DeliveryBoxSize = 0.40f;
         /// <summary>Spec 029: a fryer basket's real length with its handle (m; x1.15 in the game).</summary>
@@ -77,6 +82,8 @@ namespace Worktown.Game.Art
             World(ArtKey.StationGoalBoard, GoalBoardArtRules.Height, SizeAxis.Height),
             // Spec 059: the office terminal on the back wall (the screen's height; the art pass sizes it).
             World(ArtKey.StationOfficeTerminal, OfficeTerminalArtRules.Height, SizeAxis.Height),
+            // Spec 062b: the door sign by the front (the sign's height; graybox until the art pass).
+            World(ArtKey.StationDoorSign, DoorSignHeight, SizeAxis.Height),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).

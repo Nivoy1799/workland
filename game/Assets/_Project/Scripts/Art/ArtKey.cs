@@ -129,6 +129,8 @@ namespace Worktown.Game.Art
         /// <summary>Spec 057: the goal board on the back wall (graybox, GoalBoardArtRules: a WoodDark frame round a Cream face, Ink text).</summary>
         StationGoalBoard,
         /// <summary>Spec 059: the office terminal on the back wall (graybox, OfficeTerminalArtRules: a WoodLight case round a Charcoal screen).</summary>
-        StationOfficeTerminal
+        StationOfficeTerminal,
+        /// <summary>Spec 062b: the door sign on the wall by the front (graybox: a Teal frame round a Cream face, Ink text: OPEN or CLOSED).</summary>
+        StationDoorSign
     }
 }

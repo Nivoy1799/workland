@@ -38,9 +38,12 @@ namespace Worktown.Game.Net
         /// DefaultPrefabObjects; RequestStation's option is a goal board row). 8: spec 059 (OfficeTerminal's Special, History and Log; the
         /// office terminal, a new spawned station piece with its own NetworkObject; RequestStation's option is a terminal press, app, row and
         /// action; CookOutcome gains AlwaysOn, ComesLater and NotOnMenu, enum values the lines do not hash).
+        /// 9: spec 062b (build mode: BuildInteractor's RequestBuild and BuildAnswer, ShopDoor.State, PieceBehaviour's claim; the player
+        /// prefab's new last behaviour; the door sign and the storage pallet, new spawned pieces in DefaultPrefabObjects; a piece's pose
+        /// changes while it is spawned).
         /// Every wire change bumps it (docs/architecture.md).
         /// </summary>
-        public const int Revision = 8;
+        public const int Revision = 9;
 
         /// <summary>The line that carries <see cref="Revision"/>.</summary>
         public static string RevisionLine => "revision " + Revision;

@@ -48,7 +48,7 @@ namespace Worktown.Game.Tests
         {
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(V1GoalReached);
             Assert.IsTrue(r.Ok, r.Error.ToString());
-            Assert.AreEqual(5, r.Save.formatVersion); // spec 059: then v4 to v5
+            Assert.AreEqual(6, r.Save.formatVersion); // spec 059: then v4 to v5; spec 062b: v5 to v6
             Assert.AreEqual(1, r.Save.climb.stage);
             Assert.IsTrue(r.Save.climb.goalReached);
             Assert.AreEqual(30000, r.Save.money.balance, "037's cents: the old $34,500 is $300.00");
@@ -68,7 +68,7 @@ namespace Worktown.Game.Tests
             ShopLayout standard = DefaultLayout.Load();
             ShopLayout withoutBoard = standard.WithPieces(standard.Pieces.Where(p => p.TypeId != PieceCatalog.GoalBoard).ToList());
             v3.layout = LayoutCodec.ToPart(withoutBoard);
-            string json = ShopSaveCodec.Default.ToJson(v3).Replace("\"formatVersion\": 5", "\"formatVersion\": 3");
+            string json = ShopSaveCodec.Default.ToJson(v3).Replace("\"formatVersion\": 6", "\"formatVersion\": 3");
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(json);
             Assert.IsTrue(r.Ok, r.Error.ToString());
             ShopSave.PiecePart board = r.Save.layout.pieces.Single(p => p.type == PieceCatalog.GoalBoard);
@@ -125,7 +125,7 @@ namespace Worktown.Game.Tests
         public void Version99_IsNewer()
         {
             Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(Version99).Error);
-            string v6 = ShopSaveCodec.Default.ToJson(FullV4()).Replace("\"formatVersion\": 5", "\"formatVersion\": 6"); // spec 059 writes 5
+            string v6 = ShopSaveCodec.Default.ToJson(FullV4()).Replace("\"formatVersion\": 6", "\"formatVersion\": 7"); // spec 062b writes 6
             Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(v6).Error);
         }
 

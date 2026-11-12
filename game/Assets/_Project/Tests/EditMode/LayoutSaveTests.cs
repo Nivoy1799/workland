@@ -22,11 +22,11 @@ namespace Worktown.Game.Tests
         {
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(V2);
             Assert.IsTrue(r.Ok, r.Error.ToString());
-            Assert.AreEqual(5, r.Save.formatVersion); // spec 057: then v3 to v4; spec 059: v4 to v5
+            Assert.AreEqual(6, r.Save.formatVersion); // spec 057: then v3 to v4; spec 059: v4 to v5; spec 062b: v5 to v6
             Assert.AreEqual(12345, r.Save.money.balance, "nothing else changes");
             ShopLayout migrated = LayoutCodec.ToLayout(r.Save.layout, PieceCatalog.CreateDefault());
             Assert.AreEqual(DefaultLayout.Load(), migrated);
-            Assert.AreEqual(29, migrated.Pieces.Count); // spec 057: the goal board; spec 059: the office terminal
+            Assert.AreEqual(31, migrated.Pieces.Count); // spec 057: the goal board; spec 059: the office terminal; spec 062b: the door sign, the pallet
         }
 
         [Test]
@@ -41,6 +41,53 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(r.Ok, r.Error.ToString());
             Assert.IsFalse(r.Notes.Any(n => n.Contains("piece")), string.Join(", ", r.Notes)); // nothing of the layout was clamped
             Assert.AreEqual(layout, LayoutCodec.ToLayout(r.Save.layout, PieceCatalog.CreateDefault()));
+        }
+
+        /// <summary>Spec 062b: a stored piece keeps its record (type, length, pose) through the save file.</summary>
+        [Test]
+        public void StoredPieces_RoundTripWithTheirRecords()
+        {
+            ShopLayout standard = DefaultLayout.Load();
+            LayoutPiece worktop = standard.Pieces.Where(p => p.TypeId == PieceCatalog.Worktop).ElementAt(3);
+            Assert.IsTrue(LayoutEdit.Store(worktop.Id).TryApply(standard, out ShopLayout stored, out _));
+            ShopSave save = ShopSaveCodecTests.Full();
+            save.layout = LayoutCodec.ToPart(stored);
+            SaveLoadResult r = ShopSaveCodec.Default.TryParse(ShopSaveCodec.Default.ToJson(save));
+            Assert.IsTrue(r.Ok, r.Error.ToString());
+            ShopLayout back = LayoutCodec.ToLayout(r.Save.layout, PieceCatalog.CreateDefault());
+            Assert.AreEqual(stored, back);
+            Assert.AreEqual(worktop, back.StoredPiece(worktop.Id));
+            // A record without its id in the stored list is dropped (noted); an id without a record stays stored.
+            var part = LayoutCodec.ToPart(stored);
+            part.stored = new int[0];
+            var notes = new List<string>();
+            Assert.IsEmpty(LayoutCodec.ToLayout(part, PieceCatalog.CreateDefault(), notes).StoredPieces);
+            Assert.IsTrue(notes.Any(n => n.StartsWith("a stored piece record dropped")), string.Join("; ", notes));
+        }
+
+        /// <summary>Spec 062b, v5 to v6: a version 5 save gets the door sign and the storage pallet at their default places.</summary>
+        [Test]
+        public void AVersion5Save_GetsTheDoorSignAndThePallet()
+        {
+            ShopLayout standard = DefaultLayout.Load();
+            ShopLayout without = standard.WithPieces(standard.Pieces.Where(p => p.TypeId != PieceCatalog.DoorSign && p.TypeId != PieceCatalog.StoragePallet).ToList());
+            ShopSave v5 = ShopSaveCodecTests.Full();
+            v5.layout = LayoutCodec.ToPart(without);
+            v5.layout.storedPieces = null;
+            string json = ShopSaveCodec.Default.ToJson(v5).Replace("\"formatVersion\": 6", "\"formatVersion\": 5");
+            SaveLoadResult r = ShopSaveCodec.Default.TryParse(json);
+            Assert.IsTrue(r.Ok, r.Error.ToString());
+            Assert.AreEqual(6, r.Save.formatVersion);
+            foreach (string type in new[] { PieceCatalog.DoorSign, PieceCatalog.StoragePallet })
+            {
+                ShopSave.PiecePart added = r.Save.layout.pieces.Single(p => p.type == type);
+                LayoutPiece model = standard.Pieces.Single(p => p.TypeId == type);
+                Assert.AreEqual((model.XMm, model.ZMm, model.Turns), (added.xMm, added.zMm, added.turns), type + " at its default place");
+            }
+            CollectionAssert.AreEqual(new[] { PieceCatalog.DoorSign, PieceCatalog.StoragePallet }, SaveMigrations.AddedInV6.ToArray());
+            Assert.IsNotNull(r.Save.layout.storedPieces);
+            Assert.IsTrue(LayoutRules.Validate(LayoutCodec.ToLayout(r.Save.layout, PieceCatalog.CreateDefault()), RoomDef.CreateDefault(),
+                PieceCatalog.CreateDefault()).IsValid);
         }
 
         [Test]
@@ -96,7 +143,7 @@ namespace Worktown.Game.Tests
         public void Version99_IsNewer()
         {
             ShopSave save = ShopSaveCodecTests.Full();
-            string json = ShopSaveCodec.Default.ToJson(save).Replace("\"formatVersion\": 5", "\"formatVersion\": 99");
+            string json = ShopSaveCodec.Default.ToJson(save).Replace("\"formatVersion\": 6", "\"formatVersion\": 99");
             Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(json).Error);
         }
 
@@ -181,12 +228,12 @@ namespace Worktown.Game.Tests
         public void ANewShop_AndTheOpenKitchen_SaveTheLayoutTheySpawned()
         {
             ShopSave save = SaveService.NewSave(Id, 7, 1000, Time1, "0.1", "hash");
-            Assert.AreEqual(5, save.formatVersion); // spec 057: 4; spec 059: 5
+            Assert.AreEqual(6, save.formatVersion); // spec 057: 4; spec 059: 5; spec 062b: 6
             Assert.IsNotNull(save.layout);
             ShopSave.LayoutPart part = DefaultLayout.Part();
-            Assert.AreEqual(29, part.pieces.Length); // spec 057: the goal board; spec 059: the office terminal
+            Assert.AreEqual(31, part.pieces.Length); // spec 057: the goal board; spec 059: the office terminal; spec 062b: the door sign, the pallet
             Assert.AreEqual(9, part.homes.Length);
-            Assert.AreEqual(30, part.nextId); // spec 059: the office terminal took 29
+            Assert.AreEqual(32, part.nextId); // spec 059: the office terminal took 29; spec 062b: the door sign 30, the pallet 31
         }
     }
 }

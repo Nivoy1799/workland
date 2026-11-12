@@ -402,6 +402,51 @@ namespace Worktown.Game.Net
             ItemMoved?.Invoke(item, null);
         }
 
+        // ---- Spec 062b, server: build mode moves items that lie on a moved, stored or covering piece ----
+
+        /// <summary>
+        /// Spec 062b, server: an item lying on a piece that moved goes with it to <paramref name="position"/> (it keeps its surface id and
+        /// spot: the piece's surfaces keep their ids). A held item is never moved.
+        /// </summary>
+        public void ServerCarry(NetworkObject item, Vector3 position, Quaternion rotation)
+        {
+            if (item == null || !item.TryGetComponent(out Pickup pickup) || pickup.IsHeld) return;
+            pickup.ServerPlaceAt(position, rotation);
+            PlaceSurface surface = _spots.TryGetSpotOf(item.ObjectId, out int surfaceId, out _) ? SurfaceAt(surfaceId) : null;
+            ItemMoved?.Invoke(item, surface);
+        }
+
+        /// <summary>Spec 062b, server: whether spot <paramref name="spot"/> of surface <paramref name="surfaceId"/> is free in the spot table and in the world.</summary>
+        public bool IsSpotFree(int surfaceId, int spot)
+        {
+            PlaceSurface surface = SurfaceAt(surfaceId);
+            if (surface == null || spot < 0 || spot >= surface.SpotCount) return false;
+            Vector3 at = surface.SpotWorldPosition(spot);
+            FreeIfStale(surfaceId, spot, at);
+            return !_spots.IsTaken(surfaceId, spot) && !IsSpotOccupied(at, _probe);
+        }
+
+        /// <summary>Spec 062b, server: an item (not held) goes onto a free spot (its piece was stored). False when the spot is taken.</summary>
+        public bool ServerPutOnSpot(NetworkObject item, PlaceSurface surface, int spot, Pose pose)
+        {
+            if (item == null || surface == null || !item.TryGetComponent(out Pickup pickup) || pickup.IsHeld) return false;
+            if (!IsSpotFree(surface.Id, spot)) return false;
+            _spots.Free(item.ObjectId);
+            pickup.ServerPlaceAt(pose.position, pose.rotation);
+            _spots.TryTake(surface.Id, spot, item.ObjectId);
+            ItemMoved?.Invoke(item, surface);
+            return true;
+        }
+
+        /// <summary>Spec 062b, server: an item (not held) goes to a pose off every spot (the floor: pushed out from under a placed piece).</summary>
+        public void ServerPutLoose(NetworkObject item, Vector3 position, Quaternion rotation)
+        {
+            if (item == null || !item.TryGetComponent(out Pickup pickup) || pickup.IsHeld) return;
+            _spots.Free(item.ObjectId);
+            pickup.ServerPlaceAt(position, rotation);
+            ItemMoved?.Invoke(item, null);
+        }
+
         /// <summary>Spec 021, server: the place surface by id (spec 062a: SurfaceId, from the LayoutRegistry), or null.</summary>
         public PlaceSurface SurfaceAt(int surfaceId) => Layout.LayoutRegistry.Surface(surfaceId);
 

@@ -30,6 +30,12 @@ namespace Worktown.Game.Art
 
         public bool IsShown => _root != null && _root.activeSelf;
 
+        /// <summary>Spec 062b: the ghost's tint (build mode: Mint where the piece fits, Terracotta where it does not).</summary>
+        public void SetColor(Color color)
+        {
+            if (_material != null && _material.HasProperty(BaseColorId)) _material.SetColor(BaseColorId, color);
+        }
+
         /// <summary>World position of the ghost (for tests and the visual check log).</summary>
         public Vector3 Position => _root != null ? _root.transform.position : Vector3.zero;
 

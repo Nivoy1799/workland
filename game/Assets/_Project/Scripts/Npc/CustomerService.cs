@@ -216,7 +216,9 @@ namespace Worktown.Game.Npc
         private Vector3 QueueHeadPosition => _route != null ? _route.QueueHead : _queueHead.position;
         private Vector3 QueueDirection => _route != null ? _route.QueueDirection : _queueDirection;
         private Vector3 QueueFacing => _route != null ? _route.QueueFacing : _queueFacing;
-        private IReadOnlyList<Vector3> LeaveVia => _route != null ? _route.LeaveVia : null;
+        /// <summary>Spec 062b (062a Part B review): the corners from where this guest stands (its queue slot, the pay line) to the entry.</summary>
+        private IReadOnlyList<Vector3> LeaveFor(Customer customer) =>
+            _route == null ? null : customer != null ? _route.LeaveFrom(customer.transform.position) : _route.LeaveVia;
 
         /// <summary>
         /// Spec 062a, server: guests walk <paramref name="route"/> from now on (null: back to the scene's anchors). Called when the layout is
@@ -232,6 +234,33 @@ namespace Worktown.Game.Npc
             if (!route.Walkable) Debug.LogWarning("[Customers] the guests' way in or out has no grid path in this layout; they walk straight");
         }
 
+        /// <summary>
+        /// Spec 062b, server: a press on the door sign. Open becomes "closing after this service" during a service and closed between
+        /// services; closing goes back to open; closed opens the shop and starts the next service at once (the guests' route is rebuilt
+        /// from the layout first: build mode may have changed it).
+        /// </summary>
+        public CookOutcome UseDoor()
+        {
+            Worktown.Game.Layout.ShopDoor door = Worktown.Game.Layout.ShopDoor.Current;
+            if (door == null || !door.IsServerInitialized) return CookOutcome.UnknownStation;
+            Worktown.Game.Layout.ShopDoorState before = door.StateNow;
+            Worktown.Game.Layout.ShopDoorState after = Worktown.Game.Layout.ShopDoorRules.Next(before, _shift.IsOpen, true);
+            door.ServerSet(after);
+            if (_feed != null) _feed.ServerAdd(Worktown.Game.Layout.ShopDoorRules.FeedLine(after));
+            return CookOutcome.Ok;
+        }
+
+        private void OnDoorChanged(Worktown.Game.Layout.ShopDoorState before, Worktown.Game.Layout.ShopDoorState after)
+        {
+            if (_networkManager == null || !_networkManager.IsServerStarted || _economy == null) return;
+            bool closed = after == Worktown.Game.Layout.ShopDoorState.Closed;
+            _economy.ClockHeld = closed && !_shift.IsOpen && !_shift.SummaryShowing && Shift.IsShiftHour(_economy.Tick);
+            if (before != Worktown.Game.Layout.ShopDoorState.Closed || closed) return;
+            // Opened from closed: the route from the layout as it is now, then the next service at once (the clock waited at 08:00).
+            if (_layoutSpawner != null && _layoutSpawner.Current != null) OnLayoutSpawned(_layoutSpawner.Current);
+            if (_synced && !_shift.IsOpen && !_shift.SummaryShowing) OnHour();
+        }
+
         private void OnLayoutSpawned(Worktown.Sim.Layout.ShopLayout layout)
         {
             Worktown.Game.Layout.NpcRoute route = _layoutSpawner != null
@@ -243,6 +272,7 @@ namespace Worktown.Game.Npc
         private void Awake()
         {
             // Spec 062a: the LayoutSpawner lives next to this service (on the NetworkManager); its layout gives the guests' route.
+            Worktown.Game.Layout.ShopDoor.ServerChanged += OnDoorChanged; // spec 062b
             _layoutSpawner = GetComponent<Worktown.Game.Layout.LayoutSpawner>();
             if (_layoutSpawner == null) return;
             _layoutSpawner.Spawned += OnLayoutSpawned;
@@ -273,6 +303,7 @@ namespace Worktown.Game.Npc
 
         private void OnDestroy()
         {
+            Worktown.Game.Layout.ShopDoor.ServerChanged -= OnDoorChanged; // spec 062b
             if (_layoutSpawner != null) _layoutSpawner.Spawned -= OnLayoutSpawned;
             if (_economy != null) _economy.HourTicked -= OnHour;
             if (_networkManager != null && _networkManager.ServerManager != null)
@@ -326,10 +357,26 @@ namespace Worktown.Game.Npc
             }
             if (_shift.UpdateSummary(Time.time))
             {
-                // The 15 s summary is over: the night passes at once, the next shift opens at 08:00 (HourTicked).
+                // The 15 s summary is over: the night passes at once, the next shift opens at 08:00 (HourTicked). Spec 062b: a shop that
+                // was closing is closed now; its clock then waits at 08:00 and no shift opens until the door opens again.
+                Worktown.Game.Layout.ShopDoor door = Worktown.Game.Layout.ShopDoor.Current;
+                if (door != null && door.IsServerInitialized)
+                {
+                    Worktown.Game.Layout.ShopDoorState next = Worktown.Game.Layout.ShopDoorRules.AfterSummary(door.StateNow);
+                    if (next != door.StateNow)
+                    {
+                        door.ServerSet(next);
+                        if (_feed != null) _feed.ServerAdd(Worktown.Game.Layout.ShopDoorRules.FeedLine(next));
+                    }
+                }
                 PublishShift();
+                _economy.ClockHeld = false;
                 _economy.SkipHours(Shift.HoursToNextOpen(_economy.Tick));
             }
+            // Spec 062b: while closed (no service, no summary left, the clock at the shift's start) no hour passes: no demand, no upkeep,
+            // no rent.
+            _economy.ClockHeld = !_shift.IsOpen && !_shift.SummaryShowing && Shift.IsShiftHour(_economy.Tick)
+                && Worktown.Game.Layout.ShopDoorRules.HoldsClock(Worktown.Game.Layout.ShopDoor.Now, false);
             Flow.HygienePercent = Hygiene; // spec 035: reviews notice a dirty shop
             // Spec 053: the card terminal is closed at the food corner (cash only).
             Flow.Desk.AcceptsCard = Worktown.Game.Climb.ShopStageRules.IsOpen(ShopStageNow, StationKind.Register, RegisterRules.CardOption);
@@ -355,7 +402,9 @@ namespace Worktown.Game.Npc
         {
             if (!_networkManager.IsServerStarted) return;
             bool wasOpen = _shift.IsOpen;
-            _shift.OnClock(_economy.Tick, Time.time, _queue.Entries.Count);
+            // Spec 062b: no new shift while the shop is closed (the clock waits at 08:00 meanwhile).
+            _shift.OnClock(_economy.Tick, Time.time, _queue.Entries.Count,
+                Worktown.Game.Layout.ShopDoorRules.MayOpenService(Worktown.Game.Layout.ShopDoor.Now));
             if (wasOpen && !_shift.IsOpen) CloseQueue();
             else if (!_shift.IsOpen && !_shift.SummaryShowing && !Shift.IsShiftHour(_economy.Tick))
             {
@@ -388,7 +437,7 @@ namespace Worktown.Game.Npc
                 _guests.Remove(waiting.Id);
                 _patience.Remove(waiting.Id);
                 if (_customers.TryGetValue(waiting.Id, out Customer customer))
-                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Closed), CustomerRules.MoodMissed, EntryPosition, LeaveVia, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Closed), CustomerRules.MoodMissed, EntryPosition, LeaveFor(customer), OnExited);
             }
             _queue.Clear();
             _arrivedAt.Clear();
@@ -637,7 +686,7 @@ namespace Worktown.Game.Npc
             public void Leave(int guestId, string bubble, byte mood)
             {
                 if (_s._customers.TryGetValue(guestId, out Customer c) && c != null)
-                    c.ServerLeave(bubble, mood, _s.EntryPosition, _s.LeaveVia, _s.OnExited);
+                    c.ServerLeave(bubble, mood, _s.EntryPosition, _s.LeaveFor(c), _s.OnExited);
             }
 
             public void LineMoved() => _s.MovePayers();
@@ -703,7 +752,7 @@ namespace Worktown.Game.Npc
                 if (_customers.TryGetValue(id, out Customer customer))
                 {
                     customer.ServerSetPatience(0);
-                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Patience), CustomerRules.MoodMissed, EntryPosition, LeaveVia, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Patience), CustomerRules.MoodMissed, EntryPosition, LeaveFor(customer), OnExited);
                     Debug.Log("[Customers] a guest ran out of patience (" + Menu.NameOf(customer.Dish.Value) + ")");
                 }
             }
@@ -729,7 +778,7 @@ namespace Worktown.Game.Npc
                 _guests.Remove(gone.Id);
                 _patience.Remove(gone.Id);
                 if (_customers.TryGetValue(gone.Id, out Customer customer))
-                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Gone), CustomerRules.MoodMissed, EntryPosition, LeaveVia, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Gone), CustomerRules.MoodMissed, EntryPosition, LeaveFor(customer), OnExited);
             }
             _shift.RecordMissed(_leaving.Count, MissReason.Gone);
 

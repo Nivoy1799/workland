@@ -15,7 +15,8 @@ namespace Worktown.Sim.Layout
     /// counters and have no aisle of their own.</item>
     /// <item>Reachable: each piece with a station (<see cref="PieceDef.HasStation"/>) has a free cell in its access strip that a cook
     /// reaches from the staff spawn on the <see cref="WalkGrid"/>. A wall or overhead piece is reached across the counter under it: its
-    /// strip is <see cref="ReachOverMm"/> + <see cref="AisleMm"/> deep from its face.</item>
+    /// strip is <see cref="ReachOverMm"/> + <see cref="AisleMm"/> deep from its face. Spec 062b: only counter-height pieces may stand under
+    /// it or in the first <see cref="ReachOverMm"/> (a <see cref="PieceDef.Tall"/> one, the fridge, is in the way).</item>
     /// <item>Guests: at least one serving counter has its guest strip inside the guest area with a free cell guests reach from the guest
     /// entry through free cells of the guest area only.</item>
     /// <item>Guest side: every piece with a guest side has its guest strip inside the guest area and its cook strip inside the cook area.</item>
@@ -107,7 +108,13 @@ namespace Worktown.Sim.Layout
             foreach (var k in known)
             {
                 if (!k.Def.HasStation) continue;
-                if (!AnyReached(grid, staff, AccessStrip(k.Piece, k.Def, false)))
+                // Spec 062b (062a Part B review): a wall or overhead piece is reached across counter-height pieces only; a tall one (the
+                // fridge, the dry shelf) under or in front of it is in the way.
+                LayoutPiece? tall = Band(k.Def.Mount) == 0 ? null : TallUnder(k.Piece, k.Def, known);
+                if (tall != null)
+                    problems.Add(At(LayoutProblemKind.Unreachable, k.Piece, tall.Id,
+                        "Nobody can reach the " + NameOf(k.Piece.TypeId) + " over the " + NameOf(tall.TypeId)));
+                else if (!AnyReached(grid, staff, AccessStrip(k.Piece, k.Def, false)))
                     problems.Add(At(LayoutProblemKind.Unreachable, k.Piece, 0, "Nobody can reach the " + NameOf(k.Piece.TypeId)));
             }
 
@@ -140,6 +147,28 @@ namespace Worktown.Sim.Layout
                     problems.Add(new LayoutProblem(LayoutProblemKind.Missing, 0, 0, 0, 0, "The shop needs a " + NameOf(row.TypeId)));
 
             return new LayoutReport(problems);
+        }
+
+        /// <summary>
+        /// Spec 062b, rule 4: the strip a cook reaches across to a wall or overhead piece (<see cref="ReachOverMm"/> deep from its face,
+        /// across its width): only counter-height pieces may stand in it.
+        /// </summary>
+        public static RectMm ReachOverStrip(LayoutPiece piece, PieceDef def)
+        {
+            if (piece == null || def == null) throw new ArgumentException("a piece and its row are required");
+            return Strip(def.Footprint(piece), CookDirection(piece.Turns), ReachOverMm);
+        }
+
+        private static LayoutPiece? TallUnder(LayoutPiece piece, PieceDef def, List<(LayoutPiece Piece, PieceDef Def, RectMm Rect)> known)
+        {
+            RectMm over = ReachOverStrip(piece, def);
+            RectMm face = def.Footprint(piece);
+            foreach (var other in known) // ascending id: the first tall piece in the way
+            {
+                if (!other.Def.Tall || Band(other.Def.Mount) != 0) continue;
+                if (other.Rect.Intersects(over) || other.Rect.Intersects(face)) return other.Piece;
+            }
+            return null;
         }
 
         /// <summary>Rule 2's bands: floor, counter-line and yard pieces together (0), wall pieces (1), overhead pieces (2).</summary>

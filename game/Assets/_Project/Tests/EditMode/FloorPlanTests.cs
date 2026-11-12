@@ -48,6 +48,7 @@ namespace Worktown.Game.Tests
             public Station Spit;
             /// <summary>Spec 037: the menu board hanging above the front counter.</summary>
             public Station Board;
+            public Station Door; // spec 062b
 
             /// <summary>Spec 032-036: the stations standing on (or in line with) the front counter: their fronts face back across it.</summary>
             public bool OnFront(Station s) => s != null && (s == Serving || s == Register || s == Drinks || s == Return || s == Trash || s == Spit
@@ -126,6 +127,7 @@ namespace Worktown.Game.Tests
                 else if (s.Kind == StationKind.Bin) plan.Bin = s; // spec 035: outside the staff gap
                 else if (s.Kind == StationKind.Spit) plan.Spit = s; // spec 036: on the front counter
                 else if (s.Kind == StationKind.MenuBoard) plan.Board = s; // spec 037: above the front counter
+                else if (s.Kind == StationKind.DoorSign) plan.Door = s; // spec 062b: on the side wall by the front, not the back line
                 else plan.BackStations.Add(s);
                 if (s.Kind == StationKind.PlateShelf) plan.Shelf = s;
             }
@@ -340,7 +342,8 @@ namespace Worktown.Game.Tests
                     // Spec 032: the register stands on the front counter like the serving counter: its front faces back across it.
                     // Spec 035: so do the dish return and the trash can; the bin outside faces the staff gap (the kitchen's way, +Right).
                     bool front = plan.OnFront(station); // spec 036: the spit too
-                    Vector3 intoAisle = station == plan.Bin ? plan.Right : front ? -plan.Street : plan.Street; // spec 033 too
+                    Vector3 intoAisle = station == plan.Bin ? plan.Right : station == plan.Door ? -plan.Right // spec 062b: on the right wall, facing west
+                        : front ? -plan.Street : plan.Street; // spec 033 too
                     Assert.Greater(Vector3.Dot(Flat(-station.transform.forward), intoAisle), 0.7f, station.name + " faces the aisle");
                     // The catalog wrappers show their front (knobs, oven door, crate opening) on their local +z.
                     Transform art = station.transform.Find("Art_" + Worktown.Game.Art.ArtCatalogRules.StationKey(station.Kind));

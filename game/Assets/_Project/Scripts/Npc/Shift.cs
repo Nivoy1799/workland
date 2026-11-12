@@ -53,7 +53,13 @@ namespace Worktown.Game.Npc
         /// the open one outside them or on another day; <paramref name="stillWaiting"/> customers then count as missed.
         /// True when <see cref="IsOpen"/> or <see cref="SummaryShowing"/> changed.
         /// </summary>
-        public bool OnClock(long tick, float now, int stillWaiting)
+        public bool OnClock(long tick, float now, int stillWaiting) => OnClock(tick, now, stillWaiting, true);
+
+        /// <summary>
+        /// Spec 062b: as above; with <paramref name="mayOpen"/> false (the shop is closed) no new shift opens (an open one still closes at
+        /// its hour).
+        /// </summary>
+        public bool OnClock(long tick, float now, int stillWaiting, bool mayOpen)
         {
             bool inHours = IsShiftHour(tick);
             if (IsOpen)
@@ -67,7 +73,7 @@ namespace Worktown.Game.Npc
                 _closedAt = now;
                 return true;
             }
-            if (SummaryShowing || !inHours) return false;
+            if (SummaryShowing || !inHours || !mayOpen) return false;
             IsOpen = true;
             Day = DayOf(tick);
             Live = ShiftSummary.Empty;

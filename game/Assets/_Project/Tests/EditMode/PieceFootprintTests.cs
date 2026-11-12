@@ -51,9 +51,10 @@ namespace Worktown.Game.Tests
             PiecePrefabs prefabs = LayoutScene.Prefabs;
             ShopLayout layout = DefaultLayout.Load();
             foreach (LayoutPiece p in layout.Pieces) Assert.IsNotNull(prefabs.Piece(p.TypeId), p.TypeId);
-            // Spec 057 places its reserved goal board, spec 059 the office terminal; the door sign (062b) stays unplaced.
+            // Spec 057 places its reserved goal board, spec 059 the office terminal, spec 062b the door sign: every reserved row is placed now.
             foreach (string reserved in PieceCatalog.ReservedTypes)
-                Assert.AreEqual(reserved == PieceCatalog.GoalBoard || reserved == PieceCatalog.OfficeTerminal ? 1 : 0, layout.CountOf(reserved), reserved);
+                Assert.AreEqual(1, layout.CountOf(reserved), reserved);
+            Assert.AreEqual(1, layout.CountOf(PieceCatalog.StoragePallet), "spec 062b: the pallet by the back door");
             foreach (PiecePrefabs.PieceEntry e in prefabs.PieceEntries)
             {
                 Assert.AreEqual(e.TypeId, e.Prefab.TypeId, e.TypeId);

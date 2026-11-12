@@ -29,6 +29,7 @@ namespace Worktown.Game.Climb
             if (stage == OpenKitchen || stage >= FirstRestaurant) return true;
             if (kind == StationKind.GoalBoard) return true; // spec 057: the board refuses by its own rules (GoalBoardRules)
             if (kind == StationKind.OfficeTerminal) return true; // spec 059: the terminal refuses by its own rules (Office.*AppRules)
+            if (kind == StationKind.DoorSign) return true; // spec 062b: the shop can be closed at every stage (build mode decides by stage)
             switch (kind)
             {
                 case StationKind.Shelf:

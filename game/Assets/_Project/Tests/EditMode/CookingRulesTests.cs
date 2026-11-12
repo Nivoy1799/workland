@@ -56,7 +56,8 @@ namespace Worktown.Game.Tests
                     StationKind.Spit, // spec 036
                     StationKind.MenuBoard, // spec 037
                     StationKind.GoalBoard, // spec 057
-                    StationKind.OfficeTerminal }, // spec 059
+                    StationKind.OfficeTerminal, // spec 059
+                    StationKind.DoorSign }, // spec 062b
                 System.Enum.GetValues(typeof(StationKind)));
         }
 

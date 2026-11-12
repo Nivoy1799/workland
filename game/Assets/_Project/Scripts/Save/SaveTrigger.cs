@@ -16,6 +16,8 @@ namespace Worktown.Game.Save
         /// <summary>Every <see cref="AutosaveRules.PeriodicSeconds"/> while a service is open.</summary>
         Periodic,
         /// <summary>Spec 057: the stage moved (the crew rented the restaurant and moved in), at once between services or at a service end.</summary>
-        StageChanged
+        StageChanged,
+        /// <summary>Spec 062b: the shop opened after the crew rearranged the kitchen in build mode (once per opening, when the layout changed).</summary>
+        LayoutChanged
     }
 }

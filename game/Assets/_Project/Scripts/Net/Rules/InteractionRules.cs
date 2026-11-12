@@ -673,6 +673,8 @@ namespace Worktown.Game.Net.Rules
                     if (target.Station == StationKind.MenuBoard) return Click(Worktown.Game.Shop.MenuBoardRules.ButtonWords(target.Option)); // spec 037
                     if (target.Station == StationKind.GoalBoard) return Click(Worktown.Game.Climb.GoalBoardRules.PressWords(target.Option)); // spec 057
                     if (target.Station == StationKind.OfficeTerminal) return target.Name != null ? Click(target.Name) : null; // spec 059: the screen's words
+                    if (target.Station == StationKind.DoorSign) // spec 062b: the flags are the door's state
+                        return Click(Worktown.Game.Layout.ShopDoorRules.PressWords((Worktown.Game.Layout.ShopDoorState)target.StoveFlags, false));
                     return target.Station == StationKind.Fryer
                         ? FryerButtonPrompt(target.Option, target.StoveFlags)
                         : ButtonPrompt(target.Option, target.StoveFlags);

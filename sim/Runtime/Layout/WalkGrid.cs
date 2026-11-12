@@ -15,6 +15,8 @@ namespace Worktown.Sim.Layout
         public const int CellMm = 100;
         /// <summary>A body's half width plus a margin: how far a walker's centre stays from furniture and walls.</summary>
         public const int ClearanceMm = 400;
+        /// <summary>Spec 062b: the most cells a grid may have (1,000,000: a 100 m square site).</summary>
+        public const long MaxCells = 1_000_000;
 
         private readonly bool[] _free;
 
@@ -22,9 +24,13 @@ namespace Worktown.Sim.Layout
         public WalkGrid(RectMm bounds, IEnumerable<RectMm>? blocks)
         {
             if (bounds.IsEmpty) throw new ArgumentException("the bounds must have an area", nameof(bounds));
+            // Spec 062b (062a Part B review): a site too large for the grid (over a million cells, 100 x 100 m) is refused, not allocated.
+            long columns = bounds.Width / CellMm + 1L, rows = bounds.Depth / CellMm + 1L;
+            if (columns * rows > MaxCells)
+                throw new ArgumentException("the bounds " + bounds + " need " + columns * rows + " cells, more than " + MaxCells, nameof(bounds));
             Bounds = bounds;
-            Columns = bounds.Width / CellMm + 1;
-            Rows = bounds.Depth / CellMm + 1;
+            Columns = (int)columns;
+            Rows = (int)rows;
             _free = new bool[Columns * Rows];
             for (int i = 0; i < _free.Length; i++) _free[i] = true;
             if (blocks == null) return;

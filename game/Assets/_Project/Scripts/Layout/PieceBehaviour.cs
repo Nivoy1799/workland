@@ -43,6 +43,8 @@ namespace Worktown.Game.Layout
         private readonly SyncVar<int> _pieceId = new SyncVar<int>();
         private readonly SyncVar<long> _posePacked = new SyncVar<long>();
         private readonly SyncVar<byte> _number = new SyncVar<byte>();
+        // Spec 062b: the slot (client id + 1) of the player who holds this piece in build mode; 0: nobody.
+        private readonly SyncVar<byte> _claimedBySlot = new SyncVar<byte>();
 
         private readonly List<GameObject> _modules = new List<GameObject>();
         private List<(Transform Target, string Name)> _markedNames;
@@ -56,6 +58,10 @@ namespace Worktown.Game.Layout
         public long PosePacked => _posePacked.Value;
         /// <summary>The number in its names when its type is placed more than once (0: none).</summary>
         public int Number => _number.Value;
+        /// <summary>Spec 062b: the slot of the player holding it in build mode (BuildService.SlotOf), 0 when nobody does.</summary>
+        public byte ClaimedBySlot => _claimedBySlot.Value;
+        /// <summary>Spec 062b, client: the pose shown before the server's answer (a predicted place), else none.</summary>
+        public bool IsPredicted { get; private set; }
         /// <summary>The place surfaces in local order (SurfaceId's local number).</summary>
         public IReadOnlyList<PlaceSurface> Surfaces => _surfaces;
         public IReadOnlyList<Station> Stations => _stations;
@@ -74,6 +80,47 @@ namespace Worktown.Game.Layout
             _pieceId.Value = pieceId;
             _posePacked.Value = posePacked;
             _number.Value = (byte)Mathf.Clamp(number, 0, 255);
+            Apply();
+        }
+
+        private void Awake()
+        {
+            // Spec 062b: a moved piece (build mode) moves on every client when its pose changes; the aim caches look again.
+            _posePacked.OnChange += (_, __, asServer) =>
+            {
+                if (asServer || IsServerInitialized || PieceId <= 0) return;
+                IsPredicted = false;
+                Apply();
+                LayoutRegistry.Touch();
+            };
+        }
+
+        /// <summary>Spec 062b, server: the piece's new pose (build mode); applied at once, sent to every client.</summary>
+        public void ServerSetPose(long posePacked)
+        {
+            _posePacked.Value = posePacked;
+            Apply();
+            LayoutRegistry.Touch();
+        }
+
+        /// <summary>Spec 062b, server: who holds the piece in build mode (0: nobody).</summary>
+        public void ServerSetClaim(byte slot) => _claimedBySlot.Value = slot;
+
+        /// <summary>
+        /// Spec 062b, client: shows the piece at a pose before the server answers (feel.md 1: it moves at the click); <see cref="EndPrediction"/>
+        /// puts it back at its synced pose when the server refused.
+        /// </summary>
+        public void Predict(int xMm, int zMm, int turns)
+        {
+            IsPredicted = true;
+            transform.SetPositionAndRotation(new Vector3(xMm / 1000f, transform.position.y, zMm / 1000f), Quaternion.Euler(0f, PosePacking.Yaw(turns), 0f));
+        }
+
+        /// <summary>Spec 062b, client: back to the synced pose (a refused place).</summary>
+        public void EndPrediction()
+        {
+            if (!IsPredicted) return;
+            IsPredicted = false;
             Apply();
         }
 

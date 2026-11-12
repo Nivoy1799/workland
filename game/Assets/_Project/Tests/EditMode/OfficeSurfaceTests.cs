@@ -30,8 +30,8 @@ namespace Worktown.Game.Tests
             foreach (string field in OfficeFields) Assert.Contains(field, lines);
             CollectionAssert.AreEquivalent(OfficeFields, lines.Where(l => l.Contains("Worktown.Game.Office.")).ToList(), "nothing else of the office");
             Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
-            Assert.AreEqual(8, ProtocolSurface.Revision);
-            Assert.Contains("revision 8", lines);
+            Assert.AreEqual(9, ProtocolSurface.Revision); // spec 062b made it 9
+            Assert.Contains("revision 9", lines);
         }
 
         private static IEnumerable<string> Screens()

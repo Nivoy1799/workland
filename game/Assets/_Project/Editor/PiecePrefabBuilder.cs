@@ -85,6 +85,8 @@ namespace Worktown.Game.Editor
                 GameObject root = type == PieceCatalog.Worktop ? BuildWorktop(catalog, def, parts)
                     : type == PieceCatalog.FrontCounter ? BuildFrontCounter(catalog, def)
                     : type == PieceCatalog.GoalBoard ? BuildGoalBoard(catalog, def, first) // spec 057: not in the builder's kitchen
+                    : type == PieceCatalog.DoorSign ? BuildDoorSign(catalog, def, first) // spec 062b
+                    : type == PieceCatalog.StoragePallet ? BuildStoragePallet(def, first) // spec 062b
                     : type == PieceCatalog.OfficeTerminal ? BuildOfficeTerminal(catalog, def, first) // spec 059: nor is the office terminal
                     : CarveStation(catalog, def, first, parts, numbered);
                 root.name = type;
@@ -463,6 +465,89 @@ namespace Worktown.Game.Editor
             return root;
         }
 
+        public const string DoorSignName = "Door sign";
+        public const string StoragePalletName = "Storage pallet";
+
+        /// <summary>
+        /// Spec 062b: the door sign, a wall piece by the front (graybox stand-in until the art pass): the station at the sign's middle with a
+        /// "Body" box collider and one slot (option 0: a press opens or closes the shop), the catalog's graybox, and its Ink text, which the
+        /// piece's ShopDoor writes from the synced state (OPEN, CLOSED).
+        /// </summary>
+        private static GameObject BuildDoorSign(ArtCatalog catalog, PieceDef def, LayoutPiece piece)
+        {
+            GameObject root = NewRoot(def.TypeId, piece);
+            float w = ArtSizeTable.DoorSignWidth, h = ArtSizeTable.DoorSignHeight, d = ArtSizeTable.DoorSignDepth;
+            var stationObject = new GameObject(DoorSignName);
+            stationObject.transform.SetParent(root.transform, false);
+            stationObject.transform.localPosition = new Vector3(0f, ArtSizeTable.DoorSignCentreHeight, 0f);
+            var station = stationObject.AddComponent<Station>();
+            GrayboxSceneBuilder.SetField(station, "_kind", (int)StationKind.DoorSign);
+            GrayboxSceneBuilder.SetField(station, "_displayName", DoorSignName);
+            GrayboxSceneBuilder.SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(stationObject.transform, false);
+            body.transform.localScale = new Vector3(w, h, d);
+            body.AddComponent<BoxCollider>();
+            if (catalog.TryGet(ArtCatalogRules.StationKey(StationKind.DoorSign), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, stationObject.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = GrayboxSceneBuilder.ArtFrontRotation; // the model's front (+Z) towards the aisle
+            }
+            else Debug.LogError("[Graybox] no door sign model in the catalog");
+            var slotObject = new GameObject("Door sign press");
+            slotObject.transform.SetParent(stationObject.transform, false);
+            slotObject.transform.localPosition = new Vector3(0f, 0f, -d * 0.5f);
+            var slot = slotObject.AddComponent<StockSlot>();
+            GrayboxSceneBuilder.SetField(slot, "_station", station);
+            GrayboxSceneBuilder.SetField(slot, "_option", 0);
+            GrayboxSceneBuilder.SetField(slot, "_ingredientIndex", -1);
+            GrayboxSceneBuilder.SetField(station, "_slots", new List<StockSlot> { slot });
+            TextMesh sign = Label(stationObject.transform, new Vector3(0f, -h * 0.5f - 0.03f, -d * 0.5f - StationSign.Standoff), 60, 0.05f);
+            sign.anchor = TextAnchor.UpperCenter;
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = DoorSignName + " · open or close the shop";
+            TextMesh text = Label(stationObject.transform, new Vector3(0f, 0f, -d * 0.5f - 0.004f), 60, 0.012f);
+            text.name = "Door sign text";
+            text.anchor = TextAnchor.MiddleCenter;
+            text.color = Palette.Ink; // D32: Ink on the Cream face
+            text.text = ShopDoorRules.OpenSign;
+
+            PieceBehaviour behaviour = AddPiece(root, def.TypeId);
+            var door = root.AddComponent<ShopDoor>();
+            GrayboxSceneBuilder.SetField(door, "_sign", text);
+            GrayboxSceneBuilder.SetField(behaviour, "_surfaces", new List<PlaceSurface>());
+            GrayboxSceneBuilder.SetField(behaviour, "_stations", new List<Station> { station });
+            return root;
+        }
+
+        /// <summary>
+        /// Spec 062b: the storage pallet in the yard by the back door (a fixed yard piece; graybox: a low WoodLight deck with its sign), where
+        /// stored pieces wait. No station: build mode aims at its body.
+        /// </summary>
+        private static GameObject BuildStoragePallet(PieceDef def, LayoutPiece piece)
+        {
+            GameObject root = NewRoot(def.TypeId, piece);
+            GameObject deck = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            deck.name = "Body"; // the footprint's collider (PieceFootprintTests); build mode aims at it
+            deck.transform.SetParent(root.transform, false);
+            deck.transform.localPosition = new Vector3(0f, 0.075f, 0f);
+            deck.transform.localScale = new Vector3(def.WidthMm / 1000f, 0.15f, def.DepthMm / 1000f);
+            var material = AssetDatabase.LoadAssetAtPath<Material>(GrayboxSceneBuilder.WorktopMaterialPath);
+            if (material != null) deck.GetComponent<MeshRenderer>().sharedMaterial = material;
+            TextMesh text = Label(root.transform, new Vector3(0f, 0.16f, 0f), 60, 0.03f);
+            text.name = "Storage pallet sign";
+            text.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // lies on the deck, read from above
+            text.anchor = TextAnchor.MiddleCenter;
+            text.text = StoragePallet.SignText;
+            PieceBehaviour behaviour = AddPiece(root, def.TypeId);
+            root.AddComponent<StoragePallet>();
+            GrayboxSceneBuilder.SetField(behaviour, "_surfaces", new List<PlaceSurface>());
+            GrayboxSceneBuilder.SetField(behaviour, "_stations", new List<Station>());
+            return root;
+        }
+
         /// <summary>A world label (the builder's: the built-in font, Cream unless set).</summary>
         private static TextMesh Label(Transform parent, Vector3 localPosition, int fontSize, float characterSize)
         {
@@ -515,6 +600,7 @@ namespace Worktown.Game.Editor
                 case PieceCatalog.SpitModule: return StationKind.Spit;
                 case PieceCatalog.MenuBoard: return StationKind.MenuBoard;
                 case PieceCatalog.GoalBoard: return StationKind.GoalBoard; // spec 057
+                case PieceCatalog.DoorSign: return StationKind.DoorSign; // spec 062b
                 case PieceCatalog.OfficeTerminal: return StationKind.OfficeTerminal; // spec 059
                 default: throw new InvalidOperationException("no station kind for piece type " + type);
             }

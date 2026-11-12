@@ -36,6 +36,18 @@ namespace Worktown.Game.Layout
                     if (id < 1 || id > ShopLayout.MaxPieceId || !seen.Add(id)) { notes?.Add("stored piece " + id + " dropped"); continue; }
                     stored.Add(id);
                 }
+            // Spec 062b: the stored pieces' records (type, length, last pose); an id without a record stays stored but cannot come out.
+            var records = new List<LayoutPiece>();
+            if (part.storedPieces != null)
+                foreach (ShopSave.PiecePart p in part.storedPieces)
+                {
+                    if (p == null || p.id < 1 || p.id > ShopLayout.MaxPieceId || !stored.Contains(p.id) || records.Exists(r => r.Id == p.id))
+                    {
+                        notes?.Add("a stored piece record dropped: " + (p != null ? p.id + " (" + p.type + ")" : "null"));
+                        continue;
+                    }
+                    records.Add(Read(p, catalog, notes));
+                }
             var homes = new List<ItemHome>();
             if (part.homes != null)
                 foreach (ShopSave.HomePart h in part.homes)
@@ -50,7 +62,7 @@ namespace Worktown.Game.Layout
             // 062a review: the next id stays in 1 to ShopLayout.MaxPieceId (an id past it could not be a surface id's piece).
             int nextId = part.nextId < 1 ? 1 : part.nextId > ShopLayout.MaxPieceId ? ShopLayout.MaxPieceId : part.nextId;
             if (nextId != part.nextId) notes?.Add("nextId " + part.nextId + " -> " + nextId);
-            return new ShopLayout(part.version, pieces, stored, homes, nextId);
+            return new ShopLayout(part.version, pieces, stored, homes, nextId, records);
         }
 
         private static LayoutPiece Read(ShopSave.PiecePart p, PieceCatalog catalog, List<string> notes)
@@ -85,6 +97,13 @@ namespace Worktown.Game.Layout
             part.pieces = pieces.ToArray();
             var stored = new List<int>(layout.Stored);
             part.stored = stored.ToArray();
+            var records = new List<ShopSave.PiecePart>();
+            foreach (LayoutPiece p in layout.StoredPieces)
+                records.Add(new ShopSave.PiecePart
+                {
+                    id = p.Id, type = p.TypeId, xMm = p.XMm, zMm = p.ZMm, turns = p.Turns, lengthMm = p.LengthMm, tier = p.Tier, paidCents = p.PaidCents,
+                });
+            part.storedPieces = records.ToArray();
             var homes = new List<ShopSave.HomePart>();
             foreach (ItemHome h in layout.Homes) homes.Add(new ShopSave.HomePart { item = h.ItemKind, piece = h.PieceId, local = h.LocalSurface, spot = h.Spot });
             part.homes = homes.ToArray();

@@ -15,7 +15,7 @@ namespace Worktown.Game.Save
         public const string Format = "worktown-shop-save";
 
         public string format = Format;
-        public int formatVersion = 5;
+        public int formatVersion = 6; // spec 062b: v6 (the stored pieces' records, the door sign and the pallet)
         /// <summary>Informational: Application.version and the 047 build hash of the build that wrote it.</summary>
         public string gameVersion = string.Empty;
         public string buildHash = string.Empty;
@@ -137,8 +137,10 @@ namespace Worktown.Game.Save
             /// <summary>The layout data's version (ShopLayout.CurrentVersion).</summary>
             public int version = 1;
             public PiecePart[] pieces = new PiecePart[0];
-            /// <summary>Reserved for spec 062b: ids of pieces that are owned but not placed.</summary>
+            /// <summary>Spec 062b: ids of pieces that are owned but not placed (on the storage pallet).</summary>
             public int[] stored = new int[0];
+            /// <summary>Spec 062b (save v6): the stored pieces' records (type, length, the pose they were stored from).</summary>
+            public PiecePart[] storedPieces = new PiecePart[0];
             public HomePart[] homes = new HomePart[0];
             /// <summary>The next free piece id (ids are never reused).</summary>
             public int nextId = 1;

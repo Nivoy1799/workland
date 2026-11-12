@@ -859,6 +859,24 @@
         "Set a special: do more guests order it, and does the menu board show it?",
         "Change a price with a friend: does the log say who did it?"
       ]
+    },
+    {
+      "id": "2026-11-12-spec-062b",
+      "date": "2026-11-12",
+      "title": "Build mode: rearrange your kitchen",
+      "items": [
+        "A door sign by the front opens and closes the shop: during a service it closes after that service; while closed no time passes",
+        "With the shop closed press B for build mode: left click picks a piece up, right click places it where the ghost shows, the wheel turns it",
+        "Pieces snap to a 0.25 m grid and flush to the end of a counter line; the ghost turns red with the reason when a place breaks a rule",
+        "Right click on the storage pallet by the back door stores a piece; left click there takes one out again; Ctrl+Z undoes your last action",
+        "Several cooks can build at once; things on a moved counter move with it, and the guests walk the new layout when the shop opens"
+      ],
+      "test": [
+        "Close the shop, move a worktop with a friend: does it feel like moving things, not filling a form?",
+        "Try a bad place (into the aisle): is the red ghost's reason clear?",
+        "Store a piece and take it out again; undo once: does everything come back where you expect?",
+        "Open the shop: do the guests find the counter and do your moved stations work?"
+      ]
     }
   ]
 }

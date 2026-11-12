@@ -324,6 +324,8 @@ namespace Worktown.Game.Editor
             var highlight = root.AddComponent<InteractionHighlight>();
             SetField(highlight, "_markerMaterial", CreatePlaceMarkerMaterial());
             root.AddComponent<WorldLabelFade>();
+            // Spec 062b: build mode's request and answer (last, so the other behaviours keep their indexes on the wire).
+            root.AddComponent<Worktown.Game.Layout.BuildInteractor>();
 
             SetLayerRecursive(root, PhysicsLayers.Player); // spec 039: the body walks through items
             GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PlayerPrefabPath);

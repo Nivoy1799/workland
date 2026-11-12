@@ -95,6 +95,12 @@ namespace Worktown.Game.Economy
             _menu.Changed += PublishMenu;
         }
 
+        /// <summary>
+        /// Spec 062b, server: while true the in-game clock stands still (the shop is closed between services: no demand, no upkeep, no
+        /// rent; time runs only while playing). Set by the CustomerService from the door.
+        /// </summary>
+        public bool ClockHeld { get; set; }
+
         /// <summary>Spec 014: raised on the server after every in-game hour (demand changed).</summary>
         public event System.Action HourTicked;
 
@@ -201,7 +207,8 @@ namespace Worktown.Game.Economy
         {
             if (!_networkManager.IsServerStarted) return;
             if (_menuLayoutVersion != Worktown.Game.Layout.LayoutRegistry.Version) PublishMenu(); // spec 062a: a menu board was spawned
-            _secondsIntoHour += Time.deltaTime;
+            // Spec 062b: the shop is closed (build mode): no hour passes; SkipHours still moves the clock on.
+            if (!ClockHeld) _secondsIntoHour += Time.deltaTime;
             if (_secondsIntoHour < EconomyRules.SecondsPerHour)
             {
                 if (_board != null && _board.IsSpawned && _board.Clock.Value.Length == 0) PublishBoard();

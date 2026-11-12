@@ -127,5 +127,14 @@ namespace Worktown.Sim.Tests.Layout
             Assert.True(Free(300, 12950), "the staff door");
             Assert.Throws<ArgumentException>(() => WalkGrid.ForLayout(null!, room, PieceCatalog.CreateDefault()));
         }
+
+        /// <summary>Spec 062b (062a Part B review): a site over a million cells is refused before anything is allocated.</summary>
+        [Fact]
+        public void AHugeSite_IsRefused()
+        {
+            Assert.NotNull(new WalkGrid(new RectMm(0, 0, 99_900, 99_900), null)); // 1000 x 1000 cells: the most
+            Assert.Throws<ArgumentException>(() => new WalkGrid(new RectMm(0, 0, 100_000, 99_900), null));
+            Assert.Throws<ArgumentException>(() => new WalkGrid(new RectMm(-1_000_000_000, -1_000_000_000, 1_000_000_000, 1_000_000_000), null));
+        }
     }
 }

@@ -65,7 +65,7 @@ namespace Worktown.Sim.Tests.Layout
             ShopLayout layout = DefaultLayoutFile.Load();
             LayoutReport r = LayoutRules.Validate(layout, RoomDef.CreateDefault(), PieceCatalog.CreateDefault());
             Assert.True(r.IsValid, Describe(r));
-            Assert.Equal(29, layout.Pieces.Count); // spec 059: the office terminal
+            Assert.Equal(31, layout.Pieces.Count); // spec 059: the office terminal; spec 062b: + the door sign and the storage pallet
         }
 
         [Fact]
@@ -201,6 +201,44 @@ namespace Worktown.Sim.Tests.Layout
             Assert.Equal(kinds.OrderBy(k => k).ToList(), kinds);
             Assert.Equal(LayoutProblemKind.Outside, kinds.First());
             Assert.Equal(LayoutProblemKind.Missing, kinds.Last());
+        }
+
+        /// <summary>Spec 062b (062a Part B review): a wall or overhead station is reached across counter-height pieces only.</summary>
+        [Fact]
+        public void Rule4_ATallPieceUnderAWallStation_IsInTheWay()
+        {
+            var catalog = new PieceCatalog(Catalog.Rows.Concat(new[]
+            {
+                new PieceDef("tall", 600, 400, PieceMount.InLine, false, false, false, false, true, 0, 0, Tall: true),
+            }));
+            LayoutReport Run(IEnumerable<LayoutPiece> pieces) => LayoutRules.Validate(new ShopLayout(1, pieces, null, null, 1), Room(), catalog);
+            // The panel on the back wall at x 4600-5400 over a counter-height cabinet: reachable.
+            Assert.True(Run(With(P(5, "cabinet", 5000, 3800))).IsValid, Describe(Run(With(P(5, "cabinet", 5000, 3800)))));
+            // The same place with a tall piece under it: in the way (OtherId names it).
+            LayoutReport r = Run(With(P(5, "tall", 5000, 3800)));
+            LayoutProblem p = Assert.Single(r.Problems);
+            Assert.Equal(LayoutProblemKind.Unreachable, p.Kind);
+            Assert.Equal(3, p.PieceId);
+            Assert.Equal(5, p.OtherId);
+            Assert.Equal("Nobody can reach the panel over the tall", p.Text);
+            // A tall piece beside the panel (touching its strip's edge) is not under it.
+            Assert.True(Run(With(P(5, "tall", 5700, 3800))).IsValid);
+            Assert.Equal(new RectMm(4600, 2780, 5400, 3980), LayoutRules.ReachOverStrip(P(3, "panel", 5000, 3990), Catalog.Rows.Single(d => d.TypeId == "panel")));
+        }
+
+        /// <summary>Spec 062b (062a Part B review): problems sort by kind, then piece id, then the other piece's id.</summary>
+        [Fact]
+        public void Problems_SortByKindPieceAndOther()
+        {
+            var report = new LayoutReport(new[]
+            {
+                new LayoutProblem(LayoutProblemKind.Aisle, 7, 3, 0, 0, "b"),
+                new LayoutProblem(LayoutProblemKind.Overlap, 9, 2, 0, 0, "c"),
+                new LayoutProblem(LayoutProblemKind.Aisle, 7, 1, 0, 0, "a"),
+                new LayoutProblem(LayoutProblemKind.Aisle, 2, 9, 0, 0, "d"),
+                new LayoutProblem(LayoutProblemKind.Aisle, 7, 1, 0, 0, "a2"),
+            });
+            Assert.Equal(new[] { "c", "d", "a", "a2", "b" }, report.Problems.Select(p => p.Text));
         }
 
         [Fact]

@@ -7,7 +7,8 @@ namespace Worktown.Game.Save
     /// Spec 053: the ordered steps that bring an older save up to this build's format: step (n, f) turns a version n save into a version
     /// n + 1 one. They run in order, each once, up to <see cref="Latest"/>. Spec 037 (inbox question 17, D39): this build's steps are
     /// <see cref="Current"/>: <see cref="V1ToV2"/>, money from the old scale's whole dollars to cents; spec 062a: <see cref="V2ToV3"/>, the
-    /// kitchen's layout (the default one); spec 057: <see cref="V3ToV4"/>; spec 059: <see cref="V4ToV5"/>, the office terminal. Immutable once built.
+    /// kitchen's layout (the default one); spec 057: <see cref="V3ToV4"/>; spec 059: <see cref="V4ToV5"/>, the office terminal; spec 062b:
+    /// <see cref="V5ToV6"/>, the door sign, the storage pallet and the stored pieces' records. Immutable once built.
     /// </summary>
     public sealed class SaveMigrations
     {
@@ -21,7 +22,7 @@ namespace Worktown.Game.Save
 
         /// <summary>Spec 037: this build's steps (spec 062a: format version 3; spec 057: 4).</summary>
         public static readonly SaveMigrations Current =
-            new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2), (2, V2ToV3), (3, V3ToV4), (4, V4ToV5) }); // spec 059: 5
+            new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2), (2, V2ToV3), (3, V3ToV4), (4, V4ToV5), (5, V5ToV6) }); // spec 059: 5; spec 062b: 6
 
         /// <summary>
         /// Spec 057, v3 to v4: the climb part's new fields get their defaults (no move pending, no rent owed, an empty star window, every
@@ -72,6 +73,31 @@ namespace Worktown.Game.Save
 
         /// <summary>Spec 059: the piece types a version 5 save gains.</summary>
         public static readonly IReadOnlyList<string> AddedInV5 = new[] { Worktown.Sim.Layout.PieceCatalog.OfficeTerminal };
+
+        /// <summary>
+        /// Spec 062b, v5 to v6: the layout part gains the stored pieces' records (none yet: a v5 save stored nothing), and the layout gets the
+        /// door sign and the storage pallet (DefaultLayout.Backfill with them flagged) at their default places when free, else stored.
+        /// </summary>
+        public static ShopSave V5ToV6(ShopSave save)
+        {
+            if (save == null) throw new ArgumentNullException(nameof(save));
+            if (save.layout != null && save.layout.pieces != null && save.layout.pieces.Length > 0)
+            {
+                save.layout.storedPieces ??= new ShopSave.PiecePart[0];
+                var catalog = Worktown.Sim.Layout.PieceCatalog.CreateDefault();
+                Worktown.Sim.Layout.ShopLayout saved = Worktown.Game.Layout.LayoutCodec.ToLayout(save.layout, catalog);
+                Worktown.Sim.Layout.ShopLayout filled = Worktown.Game.Layout.DefaultLayout.Backfill(saved,
+                    Worktown.Game.Layout.DefaultLayout.Load(catalog), catalog, AddedInV6);
+                save.layout = Worktown.Game.Layout.LayoutCodec.ToPart(filled);
+            }
+            return save;
+        }
+
+        /// <summary>Spec 062b: the piece types a version 6 save gains.</summary>
+        public static readonly IReadOnlyList<string> AddedInV6 = new[]
+        {
+            Worktown.Sim.Layout.PieceCatalog.DoorSign, Worktown.Sim.Layout.PieceCatalog.StoragePallet,
+        };
 
         /// <summary>
         /// Spec 062a, v2 to v3: a version 2 save has no layout part; it gets the default layout (Resources/Layouts/default.json), the

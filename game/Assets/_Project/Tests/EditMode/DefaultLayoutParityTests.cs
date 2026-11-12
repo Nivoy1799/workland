@@ -77,7 +77,7 @@ namespace Worktown.Game.Tests
         }
 
         /// <summary>The stations the old kitchen's snapshot does not have: spec 057's goal board, spec 059's office terminal.</summary>
-        private static bool IsNew(StationKind kind) => kind == StationKind.GoalBoard || kind == StationKind.OfficeTerminal;
+        private static bool IsNew(StationKind kind) => kind == StationKind.GoalBoard || kind == StationKind.OfficeTerminal || kind == StationKind.DoorSign; // 062b
 
         [Test]
         public void EveryStation_IsWhereItWas()
@@ -90,7 +90,8 @@ namespace Worktown.Game.Tests
                 Assert.AreEqual(snapshot.stations.Length, LayoutRegistry.Stations.Count(s => !IsNew(s.Kind)), "as many stations");
                 Assert.AreEqual(1, LayoutRegistry.Stations.Count(s => s.Kind == StationKind.GoalBoard), "and the goal board");
                 Assert.AreEqual(1, LayoutRegistry.Stations.Count(s => s.Kind == StationKind.OfficeTerminal), "and the office terminal");
-                Assert.AreEqual(snapshot.stations.Length + 2, All<Station>(scene).Count, "and none outside the registry");
+                Assert.AreEqual(1, LayoutRegistry.Stations.Count(s => s.Kind == StationKind.DoorSign), "and the door sign (spec 062b)");
+                Assert.AreEqual(snapshot.stations.Length + 3, All<Station>(scene).Count, "and none outside the registry"); // 057, 059, 062b
                 foreach (KitchenSnapshot.StationEntry e in snapshot.stations)
                 {
                     Station s = LayoutRegistry.Station(e.piece);
