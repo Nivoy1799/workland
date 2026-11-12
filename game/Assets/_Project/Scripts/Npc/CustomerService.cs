@@ -195,6 +195,51 @@ namespace Worktown.Game.Npc
         /// <summary>Spec 032, tests and the tour log: the register's line.</summary>
         public RegisterDesk Desk => Flow.Desk;
 
+        // Spec 062a: the guests' route from the spawned layout (null until a layout is spawned: the scene's anchors, today's values).
+        private Worktown.Game.Layout.NpcRoute _route;
+        private Worktown.Game.Layout.LayoutSpawner _layoutSpawner;
+
+        /// <summary>Spec 062a, server: the route the guests walk now (null: the scene's anchors).</summary>
+        public Worktown.Game.Layout.NpcRoute Route => _route;
+
+        private Vector3 EntryPosition => _route != null ? _route.Entry : _entry.position;
+        private Quaternion EntryRotation => _route != null ? Quaternion.Euler(0f, _route.EntryYaw, 0f) : _entry.rotation;
+        private Vector3 QueueHeadPosition => _route != null ? _route.QueueHead : _queueHead.position;
+        private Vector3 QueueDirection => _route != null ? _route.QueueDirection : _queueDirection;
+        private Vector3 QueueFacing => _route != null ? _route.QueueFacing : _queueFacing;
+        private IReadOnlyList<Vector3> LeaveVia => _route != null ? _route.LeaveVia : null;
+
+        /// <summary>
+        /// Spec 062a, server: guests walk <paramref name="route"/> from now on (null: back to the scene's anchors). Called when the layout is
+        /// spawned (LayoutSpawner.Spawned), from spec 062b also after a layout change while no guest is inside; guests already walking keep
+        /// their targets until the next queue sync.
+        /// </summary>
+        public void ApplyRoute(Worktown.Game.Layout.NpcRoute route)
+        {
+            _route = route;
+            if (route == null) return;
+            Debug.Log("[Customers] route: queue head " + route.QueueHead.ToString("F2") + ", pay head " + route.PayHead.ToString("F2") + ", "
+                + route.ArriveVia.Count + " corners in, " + route.LeaveVia.Count + " out" + (route.Walkable ? string.Empty : " (no grid path: straight lines)"));
+            if (!route.Walkable) Debug.LogWarning("[Customers] the guests' way in or out has no grid path in this layout; they walk straight");
+        }
+
+        private void OnLayoutSpawned(Worktown.Sim.Layout.ShopLayout layout)
+        {
+            Worktown.Game.Layout.NpcRoute route = _layoutSpawner != null
+                ? Worktown.Game.Layout.NpcRoutes.Build(layout, _layoutSpawner.Room, _layoutSpawner.Catalog) : null;
+            if (route == null) Debug.LogWarning("[Customers] the layout has no serving counter for a route; the scene's anchors stay");
+            ApplyRoute(route);
+        }
+
+        private void Awake()
+        {
+            // Spec 062a: the LayoutSpawner lives next to this service (on the NetworkManager); its layout gives the guests' route.
+            _layoutSpawner = GetComponent<Worktown.Game.Layout.LayoutSpawner>();
+            if (_layoutSpawner == null) return;
+            _layoutSpawner.Spawned += OnLayoutSpawned;
+            if (_layoutSpawner.Current != null) OnLayoutSpawned(_layoutSpawner.Current);
+        }
+
         private void Start()
         {
             if (_economy != null) _economy.HourTicked += OnHour;
@@ -219,6 +264,7 @@ namespace Worktown.Game.Npc
 
         private void OnDestroy()
         {
+            if (_layoutSpawner != null) _layoutSpawner.Spawned -= OnLayoutSpawned;
             if (_economy != null) _economy.HourTicked -= OnHour;
             if (_networkManager != null && _networkManager.ServerManager != null)
                 _networkManager.ServerManager.OnServerConnectionState -= OnServerConnectionState;
@@ -331,7 +377,7 @@ namespace Worktown.Game.Npc
                 _guests.Remove(waiting.Id);
                 _patience.Remove(waiting.Id);
                 if (_customers.TryGetValue(waiting.Id, out Customer customer))
-                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Closed), CustomerRules.MoodMissed, _entry.position, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Closed), CustomerRules.MoodMissed, EntryPosition, LeaveVia, OnExited);
             }
             _queue.Clear();
             _arrivedAt.Clear();
@@ -531,13 +577,13 @@ namespace Worktown.Game.Npc
             public void Paying(int guestId, string bubble, int lineIndex)
             {
                 if (_s._customers.TryGetValue(guestId, out Customer c) && c != null)
-                    c.ServerPay(bubble, _s.PaySlot(lineIndex), _s._queueFacing);
+                    c.ServerPay(bubble, _s.PaySlot(lineIndex), _s.QueueFacing);
             }
 
             public void Leave(int guestId, string bubble, byte mood)
             {
                 if (_s._customers.TryGetValue(guestId, out Customer c) && c != null)
-                    c.ServerLeave(bubble, mood, _s._entry.position, _s.OnExited);
+                    c.ServerLeave(bubble, mood, _s.EntryPosition, _s.LeaveVia, _s.OnExited);
             }
 
             public void LineMoved() => _s.MovePayers();
@@ -603,7 +649,7 @@ namespace Worktown.Game.Npc
                 if (_customers.TryGetValue(id, out Customer customer))
                 {
                     customer.ServerSetPatience(0);
-                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Patience), CustomerRules.MoodMissed, _entry.position, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Patience), CustomerRules.MoodMissed, EntryPosition, LeaveVia, OnExited);
                     Debug.Log("[Customers] a guest ran out of patience (" + Menu.NameOf(customer.Dish.Value) + ")");
                 }
             }
@@ -629,7 +675,7 @@ namespace Worktown.Game.Npc
                 _guests.Remove(gone.Id);
                 _patience.Remove(gone.Id);
                 if (_customers.TryGetValue(gone.Id, out Customer customer))
-                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Gone), CustomerRules.MoodMissed, _entry.position, OnExited);
+                    customer.ServerLeave(CustomerRules.MissedText(MissReason.Gone), CustomerRules.MoodMissed, EntryPosition, LeaveVia, OnExited);
             }
             _shift.RecordMissed(_leaving.Count, MissReason.Gone);
 
@@ -655,10 +701,11 @@ namespace Worktown.Game.Npc
                 RecipeTemplate template = dish.Template != null ? RecipeTemplates.ById(dish.Template) : null;
                 byte modifiers = OrderModifiers.Pack(template, order.Modifiers);
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_customerPrefab, true);
-                nob.transform.SetPositionAndRotation(_entry.position, _entry.rotation);
+                nob.transform.SetPositionAndRotation(EntryPosition, EntryRotation);
                 var customer = nob.GetComponent<Customer>();
                 byte drinkByte = DrinkRules.DrinkByte(drink); // spec 033
-                customer.ServerInit(wish, dish.Id, modifiers, drinkByte, eatIn, _entry.position); // before Spawn: values go out with the spawn
+                customer.ServerInit(wish, dish.Id, modifiers, drinkByte, eatIn, EntryPosition); // before Spawn: values go out with the spawn
+                if (_route != null) customer.ServerWalkVia(_route.ArriveVia); // spec 062a: the corners on the way in (none in the default)
                 _networkManager.ServerManager.Spawn(nob);
                 _customers[nob.ObjectId] = customer;
                 _queue.Add(nob.ObjectId, wish, dish.Id, modifiers, drinkByte);
@@ -676,7 +723,7 @@ namespace Worktown.Game.Npc
             IReadOnlyList<QueuedCustomer> entries = _queue.Entries;
             for (int i = 0; i < entries.Count; i++)
                 if (_customers.TryGetValue(entries[i].Id, out Customer customer))
-                    customer.ServerSetTarget(CustomerRules.QueueSlot(_queueHead.position, _queueDirection, i), _queueFacing);
+                    customer.ServerSetTarget(CustomerRules.QueueSlot(QueueHeadPosition, QueueDirection, i), QueueFacing);
 
             if (_leaving.Count > 0 || spawned > 0)
                 Debug.Log("[Customers] queue " + entries.Count + ": " + spawned + " walking in, "
@@ -744,11 +791,12 @@ namespace Worktown.Game.Npc
             IReadOnlyList<RegisterPayment> line = Flow.Desk.Line;
             for (int i = 0; i < line.Count; i++)
                 if (_customers.TryGetValue(line[i].GuestId, out Customer customer))
-                    customer.ServerSetTarget(PaySlot(i), _queueFacing);
+                    customer.ServerSetTarget(PaySlot(i), QueueFacing);
         }
 
         private Vector3 PaySlot(int index)
         {
+            if (_route != null) return CustomerRules.QueueSlot(_route.PayHead, _route.PayDirection, index); // spec 062a
             Vector3 head = _payHead != null ? _payHead.position : _queueHead.position;
             return CustomerRules.QueueSlot(head, _payDirection, index);
         }

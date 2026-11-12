@@ -268,5 +268,37 @@ walker and the AC2 rules tests, AC7, and AC8's "an overlapping layout falls back
   Exception lines, 0 timeouts, 0 aim fallbacks, "[Layout] spawned 27 pieces and 9 items" on both hosts, the joined client put the
   knife on Counter top 1.
 
+### Part B (2026-11-12, branch spec/062a-part-b)
+Built: `LayoutRules`, `LayoutReport`, `LayoutProblem(Kind)`, `RoomDef`, `PointMm`, `WalkGrid`, `GridPath` (/sim), `NpcRoute(s)` (game),
+the waypoint walker in `Customer`, `CustomerService.ApplyRoute`, the rules check in `LayoutSpawner.Choose`; AC2, AC7 and AC8's
+overlap case. No wire change (Revision stays 7), no scene or prefab change.
+- **RoomDef (deviation).** Two fields beyond the sketch: `Site` (the walk grid's extent: room, yard, street) and `Walls` (the 4 wall
+  bodies; the grid needs them). `RoomDef.CreateDefault()` holds today's shell in mm (floor x 0.46-14.80, z 11.50-14.92; staff door
+  z 12.20-13.70, one keep-out 0.9 m either side of it; staff spawn = Spawn 1; guest entry = StreetEntry). `NpcRoutesTests` pins it
+  against the built scene's wall colliders and the snapshot. The guest area is z 9.0-11.5, x 0-25 (sidewalk plus the near half of the
+  road, no traffic), so a path can go round a block. The delivery spots are not a keep-out: they lie on worktop 19's top.
+- **Grid.** Cell centres are lattice points (multiples of 100 mm from the site's corner), so the queue line z 11.10 is a row of
+  centres exactly 400 mm from the counter (exactly the clearance counts as free). A* breaks ties by f, then cell index.
+- **Rules, choices.** Unknown types are skipped (kept, not spawned, not checked). Wall and overhead pieces have no aisle (rule 3);
+  for rule 4 their strip is `ReachOverMm` 1200 + 900 deep from the face (reached across the counter under them). Floor-band pieces
+  must not go into a wall (rule 2, `OtherId` 0). Staff may walk anywhere on the site (the bin in the yard is reached through the
+  staff door); guests only in the guest area. Problem texts use the type id ("dish_return_module" is "dish return").
+- **goal_board (review nit).** The row now has `HasStation = true` (it is a `Station`, pressed in first person) and is 20 mm deep
+  (was 30; its panel is 18 mm; 30 mm poked 5 mm into the back wall and failed rule 1). Rule 4 checks a cook reaches it across
+  worktop 20; a test turns it to face the wall and gets `Unreachable`.
+- **Fallback.** `LayoutSpawner.Choose` runs `Validate` in the default room after the backfill and the required/prefab checks; each
+  problem becomes a note ("rule: Overlap 7/8: The fryer overlaps the griddle"); the feed line comes from `FeedLineFor(reset)`.
+- **Routes.** `NpcRoutes.Build` takes the first serving counter and register by id: queue head and pay head 400 mm in front of the
+  guest side, the queue along the counter's own +x turned (today west), payers the other way, facing the cook side. `ArriveVia` and
+  `LeaveVia` are the path corners between the exact ends: empty for the default layout (test), so guests walk today's straight
+  lines. `CustomerService` gets the route from `LayoutSpawner.Spawned` (same GameObject, subscribed in Awake); with no route
+  (no spawner, no serving counter) it keeps the scene's anchors, which stay in the scene. Guests leaving from the queue also walk
+  `LeaveVia`. `ApplyRoute` changes targets only at the next queue sync.
+- **Checks.** verify.sh green (EditMode 1597, sim 870, gateway 216); BuildAll ok; visual check look, cook, restaurant, corner in
+  `.verify/visual062b-partb`: all ok, 0 Exception lines, 0 timeouts, 0 aim fallbacks; every host logged "[Customers] route: queue
+  head (11.64, 0.00, 11.10), pay head (12.79, 0.00, 11.10), 0 corners in, 0 out"; guests queued and paid ("Guest paid $4.20").
+- **Follow-ups for 062b.** A route change while guests walk; whether rule 2's keep-out should cover only floor pieces; the soft
+  1.2 m "tight aisle" note.
+
 ## Blockers
 (Builder fills this in after 3 failed attempts.)
