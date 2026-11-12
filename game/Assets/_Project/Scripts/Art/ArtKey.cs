@@ -125,6 +125,8 @@ namespace Worktown.Game.Art
         /// <summary>Spec 036: the seitan spit on the front counter (graybox, SpitArtRules: base, heat panel, skewer, motor housing).</summary>
         StationSpit,
         /// <summary>Spec 037: the menu board hanging above the front counter (graybox, MenuBoardArtRules: a frame and a Charcoal board).</summary>
-        StationMenuBoard
+        StationMenuBoard,
+        /// <summary>Spec 057: the goal board on the back wall (graybox, GoalBoardArtRules: a WoodDark frame round a Cream face, Ink text).</summary>
+        StationGoalBoard
     }
 }

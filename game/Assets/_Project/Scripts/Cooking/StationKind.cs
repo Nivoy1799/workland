@@ -52,6 +52,9 @@ namespace Worktown.Game.Cooking
         Spit,
         /// <summary>Spec 037: the menu board above the counter: four buttons pick a line and move its price $0.50 down or up
         /// (Shop.MenuBoardRules; the buttons are its options).</summary>
-        MenuBoard
+        MenuBoard,
+        /// <summary>Spec 057: the goal board on the wall: its rows are its options: the stage's step (rent the restaurant, the gate) and the
+        /// stage 2 recipes (buy, on or off the menu); Climb.GoalBoardRules.</summary>
+        GoalBoard
     }
 }

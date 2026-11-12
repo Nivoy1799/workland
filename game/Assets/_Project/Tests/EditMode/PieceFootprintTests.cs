@@ -51,7 +51,8 @@ namespace Worktown.Game.Tests
             PiecePrefabs prefabs = LayoutScene.Prefabs;
             ShopLayout layout = DefaultLayout.Load();
             foreach (LayoutPiece p in layout.Pieces) Assert.IsNotNull(prefabs.Piece(p.TypeId), p.TypeId);
-            foreach (string reserved in PieceCatalog.ReservedTypes) Assert.AreEqual(0, layout.CountOf(reserved), reserved);
+            foreach (string reserved in PieceCatalog.ReservedTypes) // spec 057 places its reserved goal board; the others stay unplaced
+                Assert.AreEqual(reserved == PieceCatalog.GoalBoard ? 1 : 0, layout.CountOf(reserved), reserved);
             foreach (PiecePrefabs.PieceEntry e in prefabs.PieceEntries)
             {
                 Assert.AreEqual(e.TypeId, e.Prefab.TypeId, e.TypeId);

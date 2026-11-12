@@ -22,11 +22,11 @@ namespace Worktown.Game.Tests
         {
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(V2);
             Assert.IsTrue(r.Ok, r.Error.ToString());
-            Assert.AreEqual(3, r.Save.formatVersion);
+            Assert.AreEqual(4, r.Save.formatVersion); // spec 057: then v3 to v4
             Assert.AreEqual(12345, r.Save.money.balance, "nothing else changes");
             ShopLayout migrated = LayoutCodec.ToLayout(r.Save.layout, PieceCatalog.CreateDefault());
             Assert.AreEqual(DefaultLayout.Load(), migrated);
-            Assert.AreEqual(27, migrated.Pieces.Count);
+            Assert.AreEqual(28, migrated.Pieces.Count); // spec 057: the goal board
         }
 
         [Test]
@@ -66,7 +66,7 @@ namespace Worktown.Game.Tests
         public void Version99_IsNewer()
         {
             ShopSave save = ShopSaveCodecTests.Full();
-            string json = ShopSaveCodec.Default.ToJson(save).Replace("\"formatVersion\": 3", "\"formatVersion\": 99");
+            string json = ShopSaveCodec.Default.ToJson(save).Replace("\"formatVersion\": 4", "\"formatVersion\": 99");
             Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(json).Error);
         }
 
@@ -151,12 +151,12 @@ namespace Worktown.Game.Tests
         public void ANewShop_AndTheOpenKitchen_SaveTheLayoutTheySpawned()
         {
             ShopSave save = SaveService.NewSave(Id, 7, 1000, Time1, "0.1", "hash");
-            Assert.AreEqual(3, save.formatVersion);
+            Assert.AreEqual(4, save.formatVersion); // spec 057
             Assert.IsNotNull(save.layout);
             ShopSave.LayoutPart part = DefaultLayout.Part();
-            Assert.AreEqual(27, part.pieces.Length);
+            Assert.AreEqual(28, part.pieces.Length); // spec 057: the goal board
             Assert.AreEqual(9, part.homes.Length);
-            Assert.AreEqual(28, part.nextId);
+            Assert.AreEqual(29, part.nextId);
         }
     }
 }

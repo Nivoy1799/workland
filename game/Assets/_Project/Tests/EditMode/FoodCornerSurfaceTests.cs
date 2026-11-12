@@ -28,7 +28,7 @@ namespace Worktown.Game.Tests
                 "sync Worktown.Game.Climb.ShopStage.Stage:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>",
                 "sync Worktown.Game.Climb.ShopStage.GoalMoney:FishNet.Object.Synchronizing.SyncVar`1<System.Int64>",
                 "sync Worktown.Game.Climb.ShopStage.GoalReached:FishNet.Object.Synchronizing.SyncVar`1<System.Boolean>",
-            }, stage, "no RPC, no broadcast: three synced fields");
+            }.Concat(RestaurantSurfaceTests.RestaurantFields), stage, "no RPC, no broadcast: three synced fields (spec 057: and the restaurant's)");
             Assert.IsFalse(lines.Any(l => l.Contains("Worktown.Game.Save.")), "the save is never on the wire (only the host reads and writes it)");
             Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
         }

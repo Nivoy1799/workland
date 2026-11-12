@@ -40,6 +40,8 @@ namespace Worktown.Game.Save
         private readonly List<ShopSave.StockPart> _unknownStock = new List<ShopSave.StockPart>();
         /// <summary>037 review: menu lines of a loaded save this build does not know, kept for the next save (like the stock's).</summary>
         private readonly List<ShopSave.MenuPart> _unknownMenu = new List<ShopSave.MenuPart>();
+        /// <summary>Spec 057: menuOff ids of a loaded save that name no recipe this build knows, kept for the next save.</summary>
+        private readonly List<string> _unknownMenuOff = new List<string>();
         private bool _begun;
         private bool _layoutSpawned;
         private float _lastSaveAt;
@@ -70,6 +72,7 @@ namespace Worktown.Game.Save
                 _customers.ServiceOpened += OnServiceOpened;
                 _customers.ServiceClosed += OnServiceClosed;
             }
+            if (_stage != null) _stage.StageChanged += OnStageChanged; // spec 057: the move between services
             if (_networkManager != null && _networkManager.IsServerStarted) Begin();
         }
 
@@ -82,6 +85,7 @@ namespace Worktown.Game.Save
                 _customers.ServiceOpened -= OnServiceOpened;
                 _customers.ServiceClosed -= OnServiceClosed;
             }
+            if (_stage != null) _stage.StageChanged -= OnStageChanged;
         }
 
         private void OnServerConnectionState(ServerConnectionStateArgs args)
@@ -201,6 +205,8 @@ namespace Worktown.Game.Save
             SpawnLayout(save.layout); // spec 062a: the furniture first, so everything after finds its stations
             _unknownStock.Clear();
             _unknownMenu.Clear();
+            _unknownMenuOff.Clear();
+            _unknownMenuOff.AddRange(UnknownMenuOff(save));
             foreach (ShopSave.StockPart part in save.stock)
                 if (part != null && ShopSaveCodec.LineOfSlot(part.slot) < 0) _unknownStock.Add(part);
             if (_economy != null)
@@ -219,9 +225,10 @@ namespace Worktown.Game.Save
             if (_cleaning != null) _cleaning.RestoreHygiene(save.hygienePercent);
             ClimbCatalog climb = ClimbCatalog.CreateDefault();
             EconomyCatalog economy = _economy != null ? _economy.Catalog : EconomyCatalog.CreateDefault();
+            // Spec 057: the goal follows the stage and the crew (D40, measured again at each service start); the restaurant's fields carry on.
             if (_stage != null)
-                _stage.ServerBegin(ShopStageRules.ClampSaved(save.climb.stage), FoodCornerRules.RentGoal(economy, climb),
-                    FoodCornerRules.PitchFee(economy, climb), save.climb.goalReached);
+                _stage.ServerBegin(ShopStageRules.ClampSaved(save.climb.stage), FoodCornerRules.PitchFee(economy, climb), save.climb.goalReached,
+                    save.climb.movePending, save.climb.unlocks, save.climb.rentOwed, save.climb.starWindow, save.climb.menuOff, save.climb.crewStarts);
             _playSecondsBefore = save.clock.playSeconds;
             _playStartedAt = Time.unscaledTime;
             _lastSaveAt = Time.unscaledTime;
@@ -236,10 +243,20 @@ namespace Worktown.Game.Save
 
         private void OnServiceClosed()
         {
-            bool goal = _stage != null && _stage.ServerServiceEnded();
+            StageEnd end = _stage != null && _customers != null ? _stage.ServerServiceEnded(_customers.LastSummary) : StageEnd.None;
             if (_current == null || _customers == null) return;
             AddService(_current, _customers.LastSummary);
-            SaveNow(goal ? SaveTrigger.GoalReached : SaveTrigger.ServiceEnd);
+            SaveNow(TriggerOf(end));
+        }
+
+        /// <summary>Spec 057: the save trigger of a service end: the move, the goal, else the service end.</summary>
+        public static SaveTrigger TriggerOf(StageEnd end) =>
+            end == StageEnd.Moved ? SaveTrigger.StageChanged : end == StageEnd.GoalReached ? SaveTrigger.GoalReached : SaveTrigger.ServiceEnd;
+
+        /// <summary>Spec 057: the crew moved between services (the rent was paid at the goal board): saved at once.</summary>
+        private void OnStageChanged()
+        {
+            if (_current != null) SaveNow(SaveTrigger.StageChanged);
         }
 
         private void Update()
@@ -306,6 +323,9 @@ namespace Worktown.Game.Save
             Fill(save, balance + pending, _economy != null ? _economy.Earned : save.money.earnedTotal, _economy != null ? _economy.Spent : save.money.spentTotal,
                 day, play, counts, _unknownStock, _cleaning != null ? _cleaning.HygienePercent : save.hygienePercent,
                 _stage != null ? _stage.ServerStage : (byte)save.climb.stage, _stage != null && _stage.ServerReached);
+            if (_stage != null) // spec 057: the restaurant's fields and the unlocks (unknown ids came in with the load and stay)
+                FillClimb(save, _stage.ServerMovePending, _stage.ServerRentOwed, _stage.ServerWindow, _stage.ServerMenuOff, _stage.ServerUnlocks,
+                    _unknownMenuOff, _stage.ServerCrewStarts);
             if (_economy != null) save.menu = MenuParts(_economy.Menu.Capture(), _unknownMenu); // spec 037: the board's prices
             if (_layout != null && _layout.Current != null) save.layout = Worktown.Game.Layout.LayoutCodec.ToPart(_layout.Current); // spec 062a
         }
@@ -384,6 +404,45 @@ namespace Worktown.Game.Save
             save.hygienePercent = Math.Max(0, Math.Min(100, hygiene));
             save.climb.stage = ShopStageRules.ClampSaved(stage);
             save.climb.goalReached = goalReached;
+        }
+
+        /// <summary>
+        /// Spec 057: the restaurant's climb fields into <paramref name="save"/> (its stage set already): a pending move (only at the food corner),
+        /// the rent owed, the star window (at most 8, newest last), the owned recipes off the menu plus the unknown ids a load brought, the
+        /// unlocks, and the shop's name for its stage ("Your restaurant" from stage 2).
+        /// </summary>
+        public static void FillClimb(ShopSave save, bool movePending, long rentOwed, IReadOnlyList<int> window, IReadOnlyList<string> menuOff,
+            IReadOnlyList<string> unlocks, IReadOnlyList<string> unknownMenuOff = null, IReadOnlyList<int> crewStarts = null)
+        {
+            if (save == null) throw new ArgumentNullException(nameof(save));
+            save.climb.movePending = movePending && save.climb.stage == ShopStageRules.FoodCorner;
+            save.climb.rentOwed = Math.Max(0L, rentOwed);
+            save.climb.starWindow = GateRules.Push(window, GateRules.NotCounted);
+            var off = new List<string>();
+            if (menuOff != null) foreach (string id in menuOff) if (!string.IsNullOrEmpty(id) && !off.Contains(id)) off.Add(id);
+            if (unknownMenuOff != null) foreach (string id in unknownMenuOff) if (!string.IsNullOrEmpty(id) && !off.Contains(id)) off.Add(id);
+            save.climb.menuOff = off.ToArray();
+            if (unlocks != null)
+            {
+                var list = new List<string>();
+                foreach (string id in unlocks) if (!string.IsNullOrEmpty(id) && !list.Contains(id)) list.Add(id);
+                save.climb.unlocks = list.ToArray();
+            }
+            save.climb.crewStarts = RestaurantRules.PushCrew(crewStarts, 0); // 057 review: the last 3 service starts' crew
+            save.shopName = ShopNameOf(save.climb.stage);
+        }
+
+        /// <summary>Spec 057: the shop's fixed name at a stage (O6: no name entry yet).</summary>
+        public static string ShopNameOf(int stage) => stage >= ShopStageRules.FirstRestaurant ? GoalBoardRules.RestaurantName : FoodCornerRules.ShopName;
+
+        /// <summary>Spec 057: the save's menuOff ids that name no recipe of this build (kept for the next save).</summary>
+        public static List<string> UnknownMenuOff(ShopSave save)
+        {
+            var list = new List<string>();
+            if (save?.climb?.menuOff != null)
+                foreach (string id in save.climb.menuOff)
+                    if (!string.IsNullOrEmpty(id) && RestaurantMenu.RowOf(FoodCornerRules.DefaultClimb, id) < 0) list.Add(id);
+            return list;
         }
 
         /// <summary>A closed service's numbers into the save's stats and its count.</summary>

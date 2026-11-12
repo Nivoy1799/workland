@@ -6,7 +6,7 @@ namespace Worktown.Game.Save
     /// Spec 053: what the host's save file holds: the business, not the players (D33). A [Serializable] DTO for JsonUtility (like
     /// GameSettings): plain public fields, nested parts as classes that always exist. Spec 037 (D39 revises D23): money in cents, format
     /// version 2 (a version 1 save held the old scale's whole dollars; SaveMigrations.V1ToV2 converts it when it loads), and the menu
-    /// board's prices (<see cref="menu"/>). Spec 062a: format version 3, the kitchen's layout (<see cref="layout"/>). Validated, clamped and
+    /// board's prices (<see cref="menu"/>). Spec 062a: format version 3, the kitchen's layout (<see cref="layout"/>). Spec 057: format version 4, the restaurant's climb fields (<see cref="ClimbPart"/>). Validated, clamped and
     /// migrated by <see cref="ShopSaveCodec"/>.
     /// </summary>
     [Serializable]
@@ -15,7 +15,7 @@ namespace Worktown.Game.Save
         public const string Format = "worktown-shop-save";
 
         public string format = Format;
-        public int formatVersion = 3;
+        public int formatVersion = 4;
         /// <summary>Informational: Application.version and the 047 build hash of the build that wrote it.</summary>
         public string gameVersion = string.Empty;
         public string buildHash = string.Empty;
@@ -45,11 +45,24 @@ namespace Worktown.Game.Save
         [Serializable]
         public sealed class ClimbPart
         {
-            /// <summary>The climb stage (1, the food corner: the only stage of this build).</summary>
+            /// <summary>The climb stage (1, the food corner; spec 057: 2, the first restaurant).</summary>
             public int stage = 1;
             /// <summary>The 052 ids owned (["dish_fries"] at the start); unknown ids are kept for the next save.</summary>
             public string[] unlocks = new string[0];
             public bool goalReached;
+            /// <summary>Spec 057: the rent was paid during a service that was saved before it ended; the crew moves in when the save loads.</summary>
+            public bool movePending;
+            /// <summary>Spec 057: rent owed in cents (RentRules), paid first at the next service end.</summary>
+            public long rentOwed;
+            /// <summary>Spec 057: the stage 2 star window, each service's average in tenths (10 to 50), newest last, at most 8.</summary>
+            public int[] starWindow = new int[0];
+            /// <summary>Spec 057: the owned recipe ids (052 purchase ids) that are off the menu; unknown ids are kept.</summary>
+            public string[] menuOff = new string[0];
+            /// <summary>
+            /// 057 review: the players connected at the last service starts (at most 3, newest last, 1 to 16). One-time prices and the stage's
+            /// goal use the largest of them and the players connected now, so a load or a short drop never makes them solo prices.
+            /// </summary>
+            public int[] crewStarts = new int[0];
         }
 
         [Serializable]

@@ -34,8 +34,26 @@ namespace Worktown.Game.Shop
                 return lines;
             }
             int fries = MenuPrices.LineOfDish(FoodCornerRules.GameDish);
-            if (fries >= 0) lines.Add(fries);
+            if (stage < ShopStageRules.FirstRestaurant)
+            {
+                if (fries >= 0) lines.Add(fries);
+                return lines;
+            }
+            // Spec 057: the restaurant prices every dish its recipes can put on the menu (the fries, the 052 stage 2 dishes) and the drinks,
+            // so a recipe's price is set before it goes on; guests still order only what the menu holds.
+            for (int i = 0; i < MenuPrices.Lines.Count; i++)
+            {
+                MenuPrices.Line line = MenuPrices.Lines[i];
+                if (i == fries || line.Drink != null || IsRecipeDish(line.Dish)) lines.Add(i);
+            }
             return lines;
+        }
+
+        private static bool IsRecipeDish(byte dish)
+        {
+            foreach (Worktown.Sim.Climb.PurchaseDef recipe in RestaurantRules.Recipes(FoodCornerRules.DefaultClimb))
+                if (RestaurantMenu.TryMap(recipe.Effect.UnlocksDish, out byte mapped, out bool drinks) && !drinks && mapped == dish) return true;
+            return false;
         }
 
         /// <summary>The prompt's words for a button: "previous dish", "next dish", "price down $0.50", "price up $0.50".</summary>

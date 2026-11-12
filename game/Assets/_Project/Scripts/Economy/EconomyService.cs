@@ -144,6 +144,18 @@ namespace Worktown.Game.Economy
             return paid;
         }
 
+        /// <summary>
+        /// Spec 057, server: an exact debit of the shop wallet (the rent goal, a recipe): <paramref name="amount"/> is paid in full, or nothing
+        /// when the balance is short (refused, false). Published like every money step; <paramref name="what"/> names it in the log.
+        /// </summary>
+        public bool TrySpend(long amount, string what)
+        {
+            if (amount <= 0 || ShopBalance < amount) return false;
+            long paid = PayFee(amount);
+            Debug.Log("[Economy] the shop paid " + EconomyRules.Money(paid) + " for " + (what ?? "something") + ", it has " + EconomyRules.Money(ShopBalance));
+            return paid == amount;
+        }
+
         /// <summary>Spec 053, server: whether the shop could pay <paramref name="cost"/> now (no charge).</summary>
         public bool CanAffordShop(long cost) => ShopBalance >= cost;
 

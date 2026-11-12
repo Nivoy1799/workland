@@ -120,6 +120,8 @@ namespace Worktown.Game.Editor
             new Def { Key = ArtKey.StationSpit, Mode = Fit.Graybox },
             // Spec 037: no menu board in the packs: a graybox (a WoodDark frame round a Charcoal board).
             new Def { Key = ArtKey.StationMenuBoard, Mode = Fit.Graybox },
+            // Spec 057: no goal board in the packs: a graybox (a WoodDark frame round a Cream face).
+            new Def { Key = ArtKey.StationGoalBoard, Mode = Fit.Graybox },
             // Spec 034: the delivery box is the Furniture Kit's cardboard box (the crate's model), 0.40 m.
             Fitted(ArtKey.PropDeliveryBox, Furniture + "cardboardBoxOpen.fbx", Fit.Max),
 
@@ -919,6 +921,7 @@ namespace Worktown.Game.Editor
             if (key == ArtKey.StationBin) return BuildBin(parent);
             if (key == ArtKey.StationSpit) return BuildSpit(parent); // spec 036
             if (key == ArtKey.StationMenuBoard) return BuildMenuBoard(parent); // spec 037
+            if (key == ArtKey.StationGoalBoard) return BuildGoalBoard(parent); // spec 057
             var model = new GameObject("Model");
             model.transform.SetParent(parent, false);
             var cabinet = new GameObject(StockCabinetName);
@@ -1130,6 +1133,22 @@ namespace Worktown.Game.Editor
             float w = MenuBoardArtRules.Width, h = MenuBoardArtRules.Height, d = MenuBoardArtRules.Depth;
             Box(model, "Frame", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
             Box(model, "Board", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.04f, h - 0.04f, 0.002f), board);
+            return model;
+        }
+
+        /// <summary>
+        /// Spec 057: the graybox goal board as the wrapper's "Model" (GoalBoardArtRules, its bottom at the origin): a WoodDark frame round a
+        /// Cream face (D32: Cream with Ink text). The rows' text is the scene's (it changes). Front on +Z like the kit.
+        /// </summary>
+        private static GameObject BuildGoalBoard(Transform parent)
+        {
+            var model = new GameObject("Model");
+            model.transform.SetParent(parent, false);
+            Material frame = GrayboxMaterial("GoalBoardFrame", Palette.WoodDark);
+            Material face = GrayboxMaterial("GoalBoardFace", Palette.Cream);
+            float w = GoalBoardArtRules.Width, h = GoalBoardArtRules.Height, d = GoalBoardArtRules.Depth;
+            Box(model, "Frame", new Vector3(0f, h * 0.5f, 0f), new Vector3(w, h, d), frame);
+            Box(model, "Face", new Vector3(0f, h * 0.5f, d * 0.5f + 0.001f), new Vector3(w - 0.04f, h - 0.04f, 0.002f), face);
             return model;
         }
 

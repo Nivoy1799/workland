@@ -19,8 +19,36 @@ namespace Worktown.Game.Save
         /// <summary>No steps (format version 1), for tests of the mechanism.</summary>
         public static readonly SaveMigrations None = new SaveMigrations(Array.Empty<(int, Func<ShopSave, ShopSave>)>());
 
-        /// <summary>Spec 037: this build's steps (spec 062a: format version 3).</summary>
-        public static readonly SaveMigrations Current = new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2), (2, V2ToV3) });
+        /// <summary>Spec 037: this build's steps (spec 062a: format version 3; spec 057: 4).</summary>
+        public static readonly SaveMigrations Current = new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2), (2, V2ToV3), (3, V3ToV4) });
+
+        /// <summary>
+        /// Spec 057, v3 to v4: the climb part's new fields get their defaults (no move pending, no rent owed, an empty star window, every
+        /// owned recipe on the menu, no crew counted yet), and the layout gets the goal board (062a's reserved row, DefaultLayout.Backfill with it flagged) at its
+        /// default place when that is free, else stored. Everything else is kept.
+        /// </summary>
+        public static ShopSave V3ToV4(ShopSave save)
+        {
+            if (save == null) throw new ArgumentNullException(nameof(save));
+            save.climb ??= new ShopSave.ClimbPart();
+            save.climb.movePending = false;
+            save.climb.rentOwed = 0;
+            save.climb.starWindow = new int[0];
+            save.climb.menuOff = new string[0];
+            save.climb.crewStarts = new int[0];
+            if (save.layout != null && save.layout.pieces != null && save.layout.pieces.Length > 0)
+            {
+                var catalog = Worktown.Sim.Layout.PieceCatalog.CreateDefault();
+                Worktown.Sim.Layout.ShopLayout saved = Worktown.Game.Layout.LayoutCodec.ToLayout(save.layout, catalog);
+                Worktown.Sim.Layout.ShopLayout filled = Worktown.Game.Layout.DefaultLayout.Backfill(saved,
+                    Worktown.Game.Layout.DefaultLayout.Load(catalog), catalog, AddedInV4);
+                save.layout = Worktown.Game.Layout.LayoutCodec.ToPart(filled);
+            }
+            return save;
+        }
+
+        /// <summary>Spec 057: the piece types a version 4 save gains (DefaultLayout.Backfill's flagged types).</summary>
+        public static readonly IReadOnlyList<string> AddedInV4 = new[] { Worktown.Sim.Layout.PieceCatalog.GoalBoard };
 
         /// <summary>
         /// Spec 062a, v2 to v3: a version 2 save has no layout part; it gets the default layout (Resources/Layouts/default.json), the

@@ -328,7 +328,7 @@ namespace Worktown.Game.Tests
                 + "\"stats\":{\"guestsServed\":17,\"guestsMissed\":1,\"starSum\":70,\"bestServiceEarned\":2876}}";
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(v1);
             Assert.IsTrue(r.Ok, r.Error.ToString());
-            Assert.AreEqual(3, r.Save.formatVersion); // spec 062a: then v2 to v3 (the layout)
+            Assert.AreEqual(4, r.Save.formatVersion); // spec 062a: then v2 to v3 (the layout); spec 057: v3 to v4
             Assert.AreEqual(15000, r.Save.money.balance, "$17,250 of the old scale is $150.00: half the $300.00 goal, as before ($34,500)");
             Assert.AreEqual(20000, r.Save.money.earnedTotal);
             Assert.AreEqual(7500, r.Save.money.spentTotal);
@@ -378,7 +378,7 @@ namespace Worktown.Game.Tests
                 "sync Worktown.Game.Shop.MenuBoard.Selected:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>",
             }, lines.Where(l => l.Contains("Worktown.Game.Shop.MenuBoard.")).ToList(), "no RPC: two synced fields");
             Assert.Contains("sync Worktown.Game.Shop.Register.Tray:FishNet.Object.Synchronizing.SyncVar`1<System.UInt16>", lines);
-            Assert.Contains("revision 6", lines); // spec 062a, then spec 054b: Revision + 1 each
+            Assert.Contains("revision 7", lines); // spec 062a, spec 054b, then spec 057: Revision + 1 each
             Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
         }
 

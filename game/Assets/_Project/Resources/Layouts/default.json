@@ -270,6 +270,16 @@
             "lengthMm": 90,
             "tier": 1,
             "paidCents": 0
+        },
+        {
+            "id": 28,
+            "type": "goal_board",
+            "xMm": 4600,
+            "zMm": 14910,
+            "turns": 0,
+            "lengthMm": 0,
+            "tier": 1,
+            "paidCents": 0
         }
     ],
     "stored": [],
@@ -329,5 +339,5 @@
             "spot": 3
         }
     ],
-    "nextId": 28
+    "nextId": 29
 }

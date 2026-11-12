@@ -40,9 +40,10 @@ namespace Worktown.Game.Tests
             // Spec 037 re-pin: 4, money on the wire is cents (D39), which no reflected line shows.
             // Spec 062a re-pin: 5, the surface and station numbers on the wire are stable ids (the same int parameters).
             // Spec 054b re-pin: 6, the collision mode byte, the soft separation and MoveData.ViewTick.
-            Assert.AreEqual(6, ProtocolSurface.Revision, "054, the 053 review, spec 037, spec 062a, then spec 054b changed the wire (bump on every wire change)");
+            // Spec 057 re-pin: 7, ShopStage's restaurant fields and the goal board, a new spawned station piece.
+            Assert.AreEqual(7, ProtocolSurface.Revision, "054, the 053 review, spec 037, spec 062a, spec 054b, then spec 057 changed the wire (bump on every wire change)");
             List<string> lines = ProtocolSurface.Lines(Game);
-            Assert.AreEqual(1, lines.Count(l => l == "revision 6"));
+            Assert.AreEqual(1, lines.Count(l => l == "revision 7"));
             Assert.AreEqual(1, lines.Count(l => l.StartsWith("revision ", StringComparison.Ordinal)));
             List<string> before = lines.Where(l => !l.StartsWith("revision ", StringComparison.Ordinal)).ToList();
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before), BuildHash.Compute("0.1.0", lines), "a build without the revision is refused");
@@ -51,6 +52,7 @@ namespace Worktown.Game.Tests
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 3")), BuildHash.Compute("0.1.0", lines), "a whole-dollar build is refused");
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 4")), BuildHash.Compute("0.1.0", lines), "a pass-through build is refused");
             Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 5")), BuildHash.Compute("0.1.0", lines), "a 062a build without 054b is refused");
+            Assert.AreNotEqual(BuildHash.Compute("0.1.0", before.Append("revision 6")), BuildHash.Compute("0.1.0", lines), "a 054b build without 057 is refused");
         }
 
         [Test]
