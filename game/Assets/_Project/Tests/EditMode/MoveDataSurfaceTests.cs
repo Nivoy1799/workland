@@ -12,6 +12,8 @@ namespace Worktown.Game.Tests
     /// name and attribute name, so it does not depend on FishNet's types (like RpcSurfaceTests).
     /// Spec 020 AC6 (changed on purpose): one new request, RequestPlace(int surface, int spot); MoveData unchanged.
     /// Spec 021 AC7 (changed on purpose): one more request, RequestUse(NetworkObject target, int action).
+    /// Spec 054b option (a) (changed on purpose): MoveData gains ViewTick (uint), the server tick the owner's drawn players stand for;
+    /// the server clamps it and uses it only for the separation push (LagCompensation).
     /// </summary>
     public class MoveDataSurfaceTests
     {
@@ -30,9 +32,18 @@ namespace Worktown.Game.Tests
         public void MoveData_HasExactlyTheSpec018Fields()
         {
             string[] names = Find(MoveDataType).GetFields(Fields).Select(f => f.Name).OrderBy(n => n).ToArray();
-            // Spec 010 fields plus FishNet's tick, plus FirstPerson (spec 018). Nothing else.
-            string[] expected = { "CameraYaw", "Crouch", "FirstPerson", "Jump", "Move", "Sprint", "_tick" };
+            // Spec 010 fields plus FishNet's tick, plus FirstPerson (spec 018), plus ViewTick (spec 054b option (a)). Nothing else.
+            string[] expected = { "CameraYaw", "Crouch", "FirstPerson", "Jump", "Move", "Sprint", "ViewTick", "_tick" };
             CollectionAssert.AreEqual(expected.OrderBy(n => n).ToArray(), names, string.Join(", ", names));
+        }
+
+        [Test]
+        public void MoveData_ViewTickIsAUint()
+        {
+            FieldInfo field = Find(MoveDataType).GetField("ViewTick", Fields);
+            Assert.IsNotNull(field);
+            Assert.AreEqual(typeof(uint), field.FieldType, "a server tick");
+            Assert.IsTrue(field.IsPublic);
         }
 
         [Test]

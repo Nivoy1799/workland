@@ -133,14 +133,19 @@ namespace Worktown.Game.Tests
         }
 
         [Test]
-        public void LaunchArgs_PlayerCollision_DefaultsOff_TheHostDecides()
+        public void LaunchArgs_PlayerCollision_DefaultsSoft_TheHostDecides()
         {
-            // 053 review (inbox question 23, default A): players pass through each other unless -player-collision on (the A/B).
-            Assert.IsFalse(LaunchArgs.Parse(new[] { "-host" }).PlayerCollision, "off by default");
+            // Spec 054b (D48, replaces the 053 review's pass-through default): soft unless -player-collision hard|off (the A/B).
+            LaunchArgs plain = LaunchArgs.Parse(new[] { "-host" });
+            Assert.AreEqual(PlayerCollisionMode.Soft, plain.PlayerCollision, "soft by default");
+            Assert.IsFalse(plain.PlayerCollisionGiven);
             LaunchArgs off = LaunchArgs.Parse(new[] { "-host", "-player-collision", "off" });
             Assert.IsTrue(off.IsValid, off.Error);
-            Assert.IsFalse(off.PlayerCollision);
-            Assert.IsTrue(LaunchArgs.Parse(new[] { "-server", "-player-collision", "on" }).PlayerCollision);
+            Assert.AreEqual(PlayerCollisionMode.Off, off.PlayerCollision);
+            Assert.IsTrue(off.PlayerCollisionGiven);
+            Assert.AreEqual(PlayerCollisionMode.Hard, LaunchArgs.Parse(new[] { "-server", "-player-collision", "hard" }).PlayerCollision);
+            Assert.AreEqual(PlayerCollisionMode.Soft, LaunchArgs.Parse(new[] { "-host", "-player-collision", "soft" }).PlayerCollision);
+            Assert.IsFalse(LaunchArgs.Parse(new[] { "-host", "-player-collision", "on" }).IsValid, "054's on/off is gone: soft, hard or off");
             Assert.IsFalse(LaunchArgs.Parse(new[] { "-host", "-player-collision", "maybe" }).IsValid);
             Assert.IsFalse(LaunchArgs.Parse(new[] { "-host", "-player-collision" }).IsValid);
             Assert.IsFalse(LaunchArgs.Parse(new[] { "-connect", "127.0.0.1", "-player-collision", "off" }).IsValid,

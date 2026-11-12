@@ -378,7 +378,7 @@ namespace Worktown.Game.Tests
                 "sync Worktown.Game.Shop.MenuBoard.Selected:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>",
             }, lines.Where(l => l.Contains("Worktown.Game.Shop.MenuBoard.")).ToList(), "no RPC: two synced fields");
             Assert.Contains("sync Worktown.Game.Shop.Register.Tray:FishNet.Object.Synchronizing.SyncVar`1<System.UInt16>", lines);
-            Assert.Contains("revision 7", lines); // spec 062a: Revision + 1; spec 057: 7 (054b takes 6)
+            Assert.Contains("revision 7", lines); // spec 062a, spec 054b, then spec 057: Revision + 1 each
             Assert.AreEqual(3, lines.Count(l => l.StartsWith("broadcast ", StringComparison.Ordinal)), "still the three connection messages");
         }
 

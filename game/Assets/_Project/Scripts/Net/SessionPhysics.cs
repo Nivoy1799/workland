@@ -1,44 +1,47 @@
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
+using Worktown.Game.Net.Rules;
 
 namespace Worktown.Game.Net
 {
     /// <summary>
-    /// 054 review: the session's one physics rule, on one global scene object instead of one copy per player: whether players collide
-    /// with each other. 053 review (inbox question 23, default A): they pass through each other by default in every build;
-    /// <c>-player-collision on</c> (dev builds) is the A/B flag that makes them collide. The host decides when its server
-    /// starts; every client applies the same layer rule (Player against Player) when the scene object arrives, which is before its own
+    /// 054 review: the session's one physics rule, on one global scene object instead of one copy per player: how players meet.
+    /// Spec 054b (D48): a mode byte (<see cref="PlayerCollisionMode"/>), default <see cref="PlayerCollisionMode.Soft"/> in every build:
+    /// no rigid contact, the players' own movement pushes them apart (<see cref="PlayerSeparation"/>). <c>-player-collision hard|off</c>
+    /// (dev builds) is the A/B: rigid capsules, or pass-through. The host decides when its server starts; every client applies the same
+    /// rule (the layer matrix, Player against Player, collides only in hard) when the scene object arrives, which is before its own
     /// player spawns, so the server and the owner's prediction never disagree. The world, stations and NPCs are unaffected. No RPC.
     /// </summary>
     public sealed class SessionPhysics : NetworkBehaviour
     {
-        /// <summary>The default rule: players pass through each other (053 review, inbox question 23).</summary>
-        public const bool DefaultCollide = false;
+        /// <summary>Spec 054b (D48): players block each other softly unless the dev A/B says otherwise; release builds always.</summary>
+        public const PlayerCollisionMode DefaultMode = PlayerCollisionMode.Soft;
 
-        public readonly SyncVar<bool> PlayersCollide = new SyncVar<bool>(DefaultCollide);
+        /// <summary>The host's <see cref="PlayerCollisionMode"/> as its byte (one byte on the wire).</summary>
+        public readonly SyncVar<byte> PlayerCollision = new SyncVar<byte>((byte)DefaultMode);
+
+        /// <summary>The rule this process uses now (the default before any session object arrived). Read by every player's tick.</summary>
+        public static PlayerCollisionMode ModeNow { get; private set; } = DefaultMode;
 
         private void Awake()
         {
-            PlayersCollide.OnChange += (_, _, asServer) => { if (!asServer) Apply(); };
+            PlayerCollision.OnChange += (_, _, asServer) => { if (!asServer) Apply(); };
         }
-
-        /// <summary>The rule this process uses now (the default before any session object arrived).</summary>
-        public static bool CollideNow => !Physics.GetIgnoreLayerCollision(Rules.PhysicsLayers.Player, Rules.PhysicsLayers.Player);
 
         public override void OnStartServer()
         {
             base.OnStartServer();
-            bool collide = DefaultCollide;
+            PlayerCollisionMode mode = DefaultMode;
             NetBootstrap boot = FindFirstObjectByType<NetBootstrap>();
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
-            if (boot != null && boot.Args.PlayerCollisionGiven) collide = boot.Args.PlayerCollision; // the A/B flag
+            if (boot != null && boot.Args.PlayerCollisionGiven) mode = boot.Args.PlayerCollision; // the A/B flag
 #else
             // 054 review: a release build never takes the experiment's flag, and says so instead of ignoring it silently.
             if (boot != null && boot.Args.PlayerCollisionGiven)
-                Debug.LogWarning("[Net] -player-collision is a development-build experiment; in this build players pass through each other");
+                Debug.LogWarning("[Net] -player-collision is a development-build experiment; in this build players block each other softly");
 #endif
-            if (PlayersCollide.Value != collide) PlayersCollide.Value = collide;
+            if (PlayerCollision.Value != (byte)mode) PlayerCollision.Value = (byte)mode;
             Apply();
         }
 
@@ -51,20 +54,35 @@ namespace Worktown.Game.Net
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            ApplyRule(DefaultCollide); // the next session starts from the default
+            ApplyRule(DefaultMode); // the next session starts from the default
         }
 
-        private void Apply() => ApplyRule(PlayersCollide.Value);
+        private void Apply() => ApplyRule(ModeOf(PlayerCollision.Value));
 
-        /// <summary>Player against Player in the physics layer matrix; the players' ground and headroom probes follow it.</summary>
-        public static void ApplyRule(bool collide)
+        /// <summary>The mode a received byte stands for; an unknown value is the default (a build with other values cannot join:
+        /// the protocol revision is in the build hash).</summary>
+        public static PlayerCollisionMode ModeOf(byte value) =>
+            value <= (byte)PlayerCollisionMode.Soft ? (PlayerCollisionMode)value : DefaultMode;
+
+        /// <summary>Player against Player in the physics layer matrix (rigid only in hard); the players' ground and headroom probes follow.</summary>
+        public static void ApplyRule(PlayerCollisionMode mode)
         {
-            bool before = CollideNow;
-            PlayerController.ApplyPlayerCollision(collide);
-            if (before == collide) return;
-            Debug.Log("[Net] players " + (collide ? "collide" : "walk through each other") + " (the host's rule)");
+            PlayerCollisionMode before = ModeNow;
+            bool rigidBefore = !Physics.GetIgnoreLayerCollision(PhysicsLayers.Player, PhysicsLayers.Player);
+            ModeNow = mode;
+            bool rigid = mode == PlayerCollisionMode.Hard;
+            PlayerController.ApplyPlayerCollision(rigid);
+            if (before != mode) Debug.Log("[Net] players: " + Describe(mode) + " (the host's rule)");
+            if (rigidBefore == rigid) return;
             foreach (PlayerController player in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
                 if (player != null) player.RefreshBodyMask();
         }
+
+        private static string Describe(PlayerCollisionMode mode) => mode switch
+        {
+            PlayerCollisionMode.Hard => "rigid capsules",
+            PlayerCollisionMode.Off => "walk through each other",
+            _ => "block each other softly",
+        };
     }
 }

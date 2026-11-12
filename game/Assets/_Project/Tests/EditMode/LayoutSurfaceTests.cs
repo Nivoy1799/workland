@@ -34,7 +34,7 @@ namespace Worktown.Game.Tests
                 string.Join("\n", lines.Where(l => l.Contains("RequestPlace"))));
             Assert.AreEqual(1, lines.Count(l => l.EndsWith("Worktown.Game.Net.PickupInteractor.RequestStation(System.Int32,System.Int32,System.Int32)", StringComparison.Ordinal)),
                 string.Join("\n", lines.Where(l => l.Contains("RequestStation"))));
-            Assert.Contains("revision 7", lines); // spec 057: Revision 7 (054b takes 6)
+            Assert.Contains("revision 7", lines); // 062a made it 5, spec 054b 6, spec 057 7
         }
     }
 }
