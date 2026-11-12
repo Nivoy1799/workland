@@ -284,5 +284,29 @@ Reserve: the starting money, $25, unscaled (stock prices do not scale). Upkeep b
   `08/09-covers-gone`, `07-recipe-bought`, `12-summary-rent-gate` ("Rent and upkeep: $12.00 per service", the gate line, pips
   "o - - - -", feed "Rent and upkeep: -$12.00"), `14-continued-restaurant`; look `06-griddle-first` shows the board's corner.
 
+### 057 review fixes
+Built 2026-11-12 on top of 56c482c and 2223270, after merging main (054b, revision 6) into the branch. 057 stays revision 7.
+1. **Must-fix: the crew was solo right after a load.** One-time costs (the rent goal, recipes, the licence) and the stage's goal
+   now use `RestaurantRules.OneTimePlayers` = max(players at the last 3 service starts, players connected now), clamped 1..16
+   (the coordinator's default; inbox question 32). It is re-measured at a load, at each service start and end, and in
+   `ServerPressBoard` before `Decide` (then `Push`, so clients see the prices charged). The rent stays at the crew of the
+   service's start (a running cost, D40). The last 3 starts are saved as `climb.crewStarts` in v4 (the codec keeps the newest 3,
+   each 1..16; `V3ToV4` sets it empty). `CrewPlayers` syncs the one-time crew. A tenth synced field, `RentLast`, carries the
+   rent the last service end paid, so the summary shows what was really charged, not a price derived from the crew.
+   Tests: a load with one player, then 4 connect: a press charges $200; 4 leave: the 4-player licence holds for 3 services and
+   then drops; a short drop to 1: still the 4-player price; a load keeps the saved crew before anyone joins.
+2. **Second confirm on a row just bought by another player:** the press disarms and does nothing (no toggle). Tested.
+3. **Two players confirming the rent in one window:** tested. It is paid once, and the second confirm gets `MoveWaits`.
+4. **No soft-lock at the move:** renting needs the balance to cover the rent goal plus the $25 reserve. The row reads "Rent the
+   restaurant: $41.00 + $25.00 kept for stock (press twice)". Tests adapted.
+5. **AC6:** `ShopStageRules.DropsStock` (only stage 1), which ShopStage uses. A test shows a stage 2 service start drops and pays
+   nothing.
+6. **Nits:**
+   - `V3ToV4`'s doc is single again, and `V2ToV3`'s doc is back on its method.
+   - `RestaurantMenu.StageOrder` documents that a market with no dish on the menu sends no guest (`WantsMarket`).
+   - `BoardConfirm` is disarmed when a player disconnects (`ShopStage.ServerPlayerLeft`, from `OnRemoteConnectionState`).
+7. **Merge:** `ProtocolSurface` keeps main's revision 6 line and adds 057's line for 7. `NetReview054Tests` pins 7 and refuses
+   4, 5 and 6. `LayoutSurfaceTests` and `MenuBoardTests` pin "revision 7".
+
 ## Blockers
 (Builder fills this in after 3 failed attempts.)

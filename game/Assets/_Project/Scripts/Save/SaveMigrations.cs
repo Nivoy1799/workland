@@ -23,12 +23,8 @@ namespace Worktown.Game.Save
         public static readonly SaveMigrations Current = new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (1, V1ToV2), (2, V2ToV3), (3, V3ToV4) });
 
         /// <summary>
-        /// Spec 062a, v2 to v3: a version 2 save has no layout part; it gets the default layout (Resources/Layouts/default.json), the
-        /// kitchen every v2 game played in.
-        /// </summary>
-        /// <summary>
         /// Spec 057, v3 to v4: the climb part's new fields get their defaults (no move pending, no rent owed, an empty star window, every
-        /// owned recipe on the menu), and the layout gets the goal board (062a's reserved row, DefaultLayout.Backfill with it flagged) at its
+        /// owned recipe on the menu, no crew counted yet), and the layout gets the goal board (062a's reserved row, DefaultLayout.Backfill with it flagged) at its
         /// default place when that is free, else stored. Everything else is kept.
         /// </summary>
         public static ShopSave V3ToV4(ShopSave save)
@@ -39,6 +35,7 @@ namespace Worktown.Game.Save
             save.climb.rentOwed = 0;
             save.climb.starWindow = new int[0];
             save.climb.menuOff = new string[0];
+            save.climb.crewStarts = new int[0];
             if (save.layout != null && save.layout.pieces != null && save.layout.pieces.Length > 0)
             {
                 var catalog = Worktown.Sim.Layout.PieceCatalog.CreateDefault();
@@ -53,6 +50,10 @@ namespace Worktown.Game.Save
         /// <summary>Spec 057: the piece types a version 4 save gains (DefaultLayout.Backfill's flagged types).</summary>
         public static readonly IReadOnlyList<string> AddedInV4 = new[] { Worktown.Sim.Layout.PieceCatalog.GoalBoard };
 
+        /// <summary>
+        /// Spec 062a, v2 to v3: a version 2 save has no layout part; it gets the default layout (Resources/Layouts/default.json), the
+        /// kitchen every v2 game played in.
+        /// </summary>
         public static ShopSave V2ToV3(ShopSave save)
         {
             if (save == null) throw new ArgumentNullException(nameof(save));

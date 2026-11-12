@@ -40,7 +40,7 @@ namespace Worktown.Game.UI
         // 053 review: the goal line is rebuilt only when its inputs change, and the lookups run at most once a second.
         private Wallet _wallet;
         private float _nextLookup;
-        private (long Balance, long Goal, bool Reached, bool Shown, byte Stage, int Average, int Count, byte Pips, long Owed, byte Crew) _goalShown =
+        private (long Balance, long Goal, bool Reached, bool Shown, byte Stage, int Average, int Count, byte Pips, long Owed, long Rent) _goalShown =
             (-1, -1, false, true, 0, 0, 0, 0, 0, 0);
         private TicketRailView _rail;
         private bool _pinned;
@@ -136,13 +136,14 @@ namespace Worktown.Game.UI
             byte stage = shown ? _shopStage.StageNow : (byte)0;
             // Spec 057: stage 2's rent, the gate line and the window's pips.
             int average = shown ? _shopStage.WindowAverageTenths.Value : 0, count = shown ? _shopStage.WindowCount.Value : 0;
-            byte pips = shown ? _shopStage.WindowPips.Value : (byte)0, crew = shown ? _shopStage.CrewPlayers.Value : (byte)0;
+            byte pips = shown ? _shopStage.WindowPips.Value : (byte)0;
+            long rentPaid = shown ? _shopStage.RentLast.Value : 0L;
             long owed = shown ? _shopStage.RentOwed.Value : 0L;
-            var inputs = (balance, goal, reached, shown, stage, average, count, pips, owed, crew);
+            var inputs = (balance, goal, reached, shown, stage, average, count, pips, owed, rentPaid);
             if (inputs == _goalShown) return;
             _goalShown = inputs;
             _goal.text = !shown ? string.Empty : stage >= Worktown.Game.Climb.ShopStageRules.FirstRestaurant
-                ? RestaurantText(balance, goal, reached, average, count, pips, owed, crew) : GoalText(balance, goal, reached);
+                ? RestaurantText(balance, goal, reached, average, count, pips, owed, rentPaid) : GoalText(balance, goal, reached);
             _goal.style.display = shown ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
@@ -151,17 +152,15 @@ namespace Worktown.Game.UI
             reached ? Worktown.Game.Climb.FoodCornerRules.GoalReachedText : Worktown.Game.Climb.FoodCornerRules.GoalProgressLine(balance, goal);
 
         /// <summary>
-        /// Spec 057: the summary's stage 2 lines: the rent and upkeep per service for the crew measured at the service start (D40), the rent
+        /// Spec 057: the summary's stage 2 lines: the rent and upkeep the service end paid (057 review: synced, RentLast), the rent
         /// owed, the gate line (or the licence within reach) and one pip per window service ("*" reached the gate's stars, "o" not, "-" not
         /// played yet).
         /// </summary>
-        public static string RestaurantText(long balance, long goal, bool reached, int averageTenths, int count, byte pips, long owed, int crew)
+        public static string RestaurantText(long balance, long goal, bool reached, int averageTenths, int count, byte pips, long owed, long rentPaid)
         {
             Worktown.Sim.Climb.ClimbCatalog climb = Worktown.Game.Climb.FoodCornerRules.DefaultClimb;
-            Worktown.Sim.Climb.CrewFactors factors = Worktown.Game.Climb.RestaurantRules.Crew(climb, crew);
-            long rent = Worktown.Game.Climb.RestaurantRules.RentPerService(Worktown.Sim.Economy.EconomyCatalog.CreateDefault(), climb, factors);
             int window = Worktown.Game.Climb.RestaurantRules.GateWindow(climb);
-            var lines = new System.Collections.Generic.List<string> { "Rent and upkeep: " + Worktown.Game.Economy.EconomyRules.Money(rent) + " per service" };
+            var lines = new System.Collections.Generic.List<string> { Worktown.Game.Climb.RentRules.PaidText(rentPaid) };
             if (owed > 0) lines.Add(Worktown.Game.Climb.RentRules.OwedText(owed));
             lines.Add(reached ? Worktown.Game.Climb.GateRules.ReachedText
                 : Worktown.Game.Climb.GateRules.GateLine(averageTenths, count, window, Worktown.Game.Climb.RestaurantRules.GateStarsTenths(climb), balance, goal));

@@ -66,6 +66,12 @@ namespace Worktown.Game.Climb
             return kind != VesselKind.Griddle && kind != VesselKind.Assembly && kind != VesselKind.SpitCone && kind != VesselKind.SpitTray;
         }
 
+        /// <summary>
+        /// Spec 057 (AC6): whether the supplier's fixed drop fills the potato slot at a service start: only at the food corner; the
+        /// restaurant orders its stock at the terminal.
+        /// </summary>
+        public static bool DropsStock(byte stage) => stage == FoodCorner;
+
         /// <summary>A save's stage for this build: 1 up to <see cref="HighestStage"/> (an unknown or higher stage loads as the highest).</summary>
         public static byte ClampSaved(int stage) => (byte)(stage < FoodCorner ? FoodCorner : stage > HighestStage ? HighestStage : stage);
     }

@@ -18,6 +18,7 @@ namespace Worktown.Game.Tests
     public class ShopMoveTests
     {
         private static long Goal => RestaurantRules.RentGoal(OfflineShop.EconomyData, OfflineShop.Climb, OfflineShop.Solo);
+        private static long Reserve => RestaurantRules.RentReserve(OfflineShop.EconomyData, OfflineShop.Climb);
 
         [Test]
         public void APressBelowTheGoal_Refuses()
@@ -25,22 +26,25 @@ namespace Worktown.Game.Tests
             using OfflineShop shop = OfflineShop.Make(Goal - 1).Corner();
             Assert.AreEqual(CookOutcome.NotEnoughMoney, shop.Stage.ServerPressBoard(1, 0, 10f));
             Assert.AreEqual(CookOutcome.NotEnoughMoney, shop.Stage.ServerPressBoard(1, 0, 11f), "a refusal arms nothing");
+            shop.Economy.StartGame(7UL, 1, Goal + Reserve - 1);
+            Assert.AreEqual(CookOutcome.NotEnoughMoney, shop.Stage.ServerPressBoard(1, 0, 12f), "057 review: the $25 reserve stays (no soft-lock)");
+            Assert.AreEqual(CookOutcome.NotEnoughMoney, shop.Stage.ServerPressBoard(1, 0, 13f));
             Assert.AreEqual(ShopStageRules.FoodCorner, shop.Stage.ServerStage);
-            Assert.AreEqual(Goal - 1, shop.Economy.ShopBalance);
+            Assert.AreEqual(Goal + Reserve - 1, shop.Economy.ShopBalance);
         }
 
         [Test]
         public void OnePressArms_AnotherPlayerDoesNotConfirm_AndAfter4sItExpires()
         {
-            using OfflineShop shop = OfflineShop.Make(Goal + 900).Corner();
+            using OfflineShop shop = OfflineShop.Make(Goal + Reserve + 400).Corner();
             Assert.AreEqual(4100, Goal, "D40: a solo crew's rent goal ($300 x 0.137, floored to $41)");
             Assert.AreEqual(CookOutcome.ConfirmAgain, shop.Stage.ServerPressBoard(1, 0, 10f));
             Assert.AreEqual(CookOutcome.ConfirmAgain, shop.Stage.ServerPressBoard(2, 0, 11f), "player 2 arms its own confirm");
-            Assert.AreEqual(Goal + 900, shop.Economy.ShopBalance, "nothing paid yet");
+            Assert.AreEqual(Goal + Reserve + 400, shop.Economy.ShopBalance, "nothing paid yet");
             Assert.AreEqual(CookOutcome.ConfirmAgain, shop.Stage.ServerPressBoard(1, 0, 14.5f), "4.5 s later: armed again, not paid");
             Assert.AreEqual(ShopStageRules.FoodCorner, shop.Stage.ServerStage);
             Assert.AreEqual(CookOutcome.Ok, shop.Stage.ServerPressBoard(1, 0, 16f), "the second press within 4 s pays");
-            Assert.AreEqual(900, shop.Economy.ShopBalance, "the rent goal left the wallet, exactly");
+            Assert.AreEqual(Reserve + 400, shop.Economy.ShopBalance, "the rent goal left the wallet, exactly");
             Assert.AreEqual(ShopStageRules.FirstRestaurant, shop.Stage.ServerStage, "no service open: the move happens at once");
             Assert.AreEqual(1, shop.StageChanges, "the save writes StageChanged");
         }
@@ -48,7 +52,7 @@ namespace Worktown.Game.Tests
         [Test]
         public void DuringAService_TheMoveWaitsForItsEnd_AfterThePitchFee()
         {
-            using OfflineShop shop = OfflineShop.Make(Goal + 2000).Corner();
+            using OfflineShop shop = OfflineShop.Make(Goal + Reserve + 2000).Corner();
             shop.Stage.ServerServiceOpened();
             shop.Stage.ServerPressBoard(1, 0, 1f);
             Assert.AreEqual(CookOutcome.Ok, shop.Stage.ServerPressBoard(1, 0, 2f));
@@ -62,14 +66,14 @@ namespace Worktown.Game.Tests
             Assert.IsTrue(AutosaveRules.ShouldSave(SaveTrigger.StageChanged, true, true, 0f, false));
             Assert.AreEqual(ShopStageRules.FirstRestaurant, shop.Stage.ServerStage);
             Assert.IsFalse(shop.Stage.ServerMovePending);
-            Assert.AreEqual(2000 - 500, shop.Economy.ShopBalance, "the pitch fee came first, then the move");
+            Assert.AreEqual(Reserve + 2000 - 500, shop.Economy.ShopBalance, "the pitch fee came first, then the move");
             Assert.AreEqual(0, shop.StageChanges, "the service end's own save (StageChanged), not a second one");
         }
 
         [Test]
         public void TheMove_CarriesTheShopOver_AndRenamesIt()
         {
-            using OfflineShop shop = OfflineShop.Make(Goal + 1234).Corner(reached: true);
+            using OfflineShop shop = OfflineShop.Make(Goal + Reserve + 1234).Corner(reached: true);
             ShopSave before = ShopSaveCodecTests.Full();
             before.climb.unlocks = shop.Stage.ServerUnlocks.ToArray();
             shop.Stage.ServerPressBoard(3, 0, 1f);
@@ -88,7 +92,7 @@ namespace Worktown.Game.Tests
                 before.clock.playSeconds, counts, null, before.hygienePercent, shop.Stage.ServerStage, shop.Stage.ServerReached);
             SaveService.FillClimb(after, shop.Stage.ServerMovePending, shop.Stage.ServerRentOwed, shop.Stage.ServerWindow, shop.Stage.ServerMenuOff,
                 shop.Stage.ServerUnlocks);
-            Assert.AreEqual(1234, after.money.balance, "the wallet less the rent goal");
+            Assert.AreEqual(Reserve + 1234, after.money.balance, "the wallet less the rent goal");
             Assert.AreEqual(before.saveId, after.saveId);
             Assert.AreEqual(before.clock.day, after.clock.day);
             Assert.AreEqual(before.hygienePercent, after.hygienePercent);

@@ -111,6 +111,8 @@ namespace Worktown.Game.Climb
         /// The order a stage 2 guest gives on <paramref name="menu"/>. The draws were made as in the open kitchen; a drawn dish on the menu is
         /// kept with its modifiers; one that is not becomes the on dish of its market at <c>drawn dish id % count</c> (modifiers cleared);
         /// the drink goes when the drinks are off. Eat-in and the card stay as drawn.
+        /// 057 review: a market without any dish on the menu keeps the drawn dish; it cannot be reached, because <see cref="WantsMarket"/>
+        /// sends no guest of such a market (CustomerService.HasDishes), so no order is ever drawn for it.
         /// </summary>
         public static GuestOrder StageOrder(ClimbCatalog climb, byte menu, GuestOrder drawn, ref MenuDish dish, ref string drink)
         {

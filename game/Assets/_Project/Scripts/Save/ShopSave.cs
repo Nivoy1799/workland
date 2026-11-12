@@ -58,6 +58,11 @@ namespace Worktown.Game.Save
             public int[] starWindow = new int[0];
             /// <summary>Spec 057: the owned recipe ids (052 purchase ids) that are off the menu; unknown ids are kept.</summary>
             public string[] menuOff = new string[0];
+            /// <summary>
+            /// 057 review: the players connected at the last service starts (at most 3, newest last, 1 to 16). One-time prices and the stage's
+            /// goal use the largest of them and the players connected now, so a load or a short drop never makes them solo prices.
+            /// </summary>
+            public int[] crewStarts = new int[0];
         }
 
         [Serializable]

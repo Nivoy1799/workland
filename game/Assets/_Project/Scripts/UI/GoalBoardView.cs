@@ -63,7 +63,7 @@ namespace Worktown.Game.UI
         {
             IReadOnlyList<PurchaseDef> recipes = RestaurantRules.Recipes(climb);
             CrewFactors factors = RestaurantRules.Crew(climb, Math.Max(1, crew));
-            var state = new GoalBoardRules.State(stage, balance, goal, movePending, owned, menuNext, owed);
+            var state = new GoalBoardRules.State(stage, balance, goal, movePending, owned, menuNext, owed, RestaurantRules.RentReserve(economy, climb));
             string gate = reached ? GateRules.ReachedText
                 : GateRules.GateLine(averageTenths, count, RestaurantRules.GateWindow(climb), RestaurantRules.GateStarsTenths(climb), balance, goal);
             if (owed > 0) gate += "\n" + RentRules.OwedText(owed);

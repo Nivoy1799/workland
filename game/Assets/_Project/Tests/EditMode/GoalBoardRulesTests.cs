@@ -77,7 +77,9 @@ namespace Worktown.Game.Tests
         [Test]
         public void Decide_IsThePureRule()
         {
-            var corner = new GoalBoardRules.State(1, 30000, 30000, false, 0, 0, 0);
+            var corner = new GoalBoardRules.State(1, 32500, 30000, false, 0, 0, 0, 2500);
+            Assert.AreEqual(CookOutcome.NotEnoughMoney, GoalBoardRules.Decide(new GoalBoardRules.State(1, 32499, 30000, false, 0, 0, 0, 2500), 0, 4, 0, 4, out _),
+                "057 review: renting keeps the $25 reserve");
             Assert.AreEqual(CookOutcome.Ok, GoalBoardRules.Decide(corner, 0, 4, 0, 4, out GoalBoardAction rent));
             Assert.AreEqual(GoalBoardAction.Rent, rent);
             Assert.IsTrue(GoalBoardRules.NeedsConfirm(rent));
@@ -117,7 +119,7 @@ namespace Worktown.Game.Tests
         {
             ClimbCatalog climb = OfflineShop.Climb;
             string[] corner = GoalBoardView.Texts(1, 1000, 4100, false, 0, 0, 0, 0, 0, 0, 1, false, OfflineShop.EconomyData, climb);
-            Assert.AreEqual("Rent the restaurant: $41.00 (press twice)", corner[0]);
+            Assert.AreEqual("Rent the restaurant: $41.00 + $25.00 kept for stock (press twice)", corner[0]);
             Assert.AreEqual("Falafel Wrap Recipe: opens with your restaurant", corner[1]);
             string[] pending = GoalBoardView.Texts(1, 1000, 4100, true, 0, 0, 0, 0, 0, 0, 1, false, OfflineShop.EconomyData, climb);
             StringAssert.StartsWith("Restaurant rented", pending[0]);

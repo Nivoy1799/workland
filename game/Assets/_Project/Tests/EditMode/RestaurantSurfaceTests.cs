@@ -15,7 +15,7 @@ namespace Worktown.Game.Tests
     /// </summary>
     public class RestaurantSurfaceTests
     {
-        /// <summary>The synced fields spec 057 adds (the spec's seven, plus the window's pips and the crew size of D40).</summary>
+        /// <summary>The synced fields spec 057 adds (the spec's seven, plus the window's pips, the crew size of D40 and the last rent paid).</summary>
         public static readonly IReadOnlyList<string> RestaurantFields = new[]
         {
             "sync Worktown.Game.Climb.ShopStage.MovePending:FishNet.Object.Synchronizing.SyncVar`1<System.Boolean>",
@@ -27,6 +27,7 @@ namespace Worktown.Game.Tests
             "sync Worktown.Game.Climb.ShopStage.WindowPips:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>",
             "sync Worktown.Game.Climb.ShopStage.RentOwed:FishNet.Object.Synchronizing.SyncVar`1<System.Int64>",
             "sync Worktown.Game.Climb.ShopStage.CrewPlayers:FishNet.Object.Synchronizing.SyncVar`1<System.Byte>",
+            "sync Worktown.Game.Climb.ShopStage.RentLast:FishNet.Object.Synchronizing.SyncVar`1<System.Int64>", // 057 review: the summary's rent
         };
 
         [Test]
@@ -53,7 +54,7 @@ namespace Worktown.Game.Tests
                 GateRules.ReachedText, GateRules.GateLine(32, 5, 5, 35, 4120, 16400), GateRules.PipText(0b101, 4, 5), RentRules.PaidText(1200),
                 RentRules.OwedText(3050), RentRules.PayFirstText, FoodCornerRules.GoalReachedText,
                 HudView.GoalText(ShopStageRules.FirstRestaurant, 4120, 16400, false, 32, 3, 300),
-                ShiftSummaryView.RestaurantText(4120, 16400, false, 32, 3, 0b011, 300, 1),
+                ShiftSummaryView.RestaurantText(4120, 16400, false, 32, 3, 0b011, 300, 1200),
                 Cooking.StationRules.Prompt(Cooking.StationKind.GoalBoard, GoalBoardRules.Name, "E", "V"),
             };
             foreach (string row in GoalBoardView.Texts(2, 4120, 16400, false, 0b0011, 0b0111, 0b0011, 300, 32, 3, 1, false,

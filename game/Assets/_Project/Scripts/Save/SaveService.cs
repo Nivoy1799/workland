@@ -228,7 +228,7 @@ namespace Worktown.Game.Save
             // Spec 057: the goal follows the stage and the crew (D40, measured again at each service start); the restaurant's fields carry on.
             if (_stage != null)
                 _stage.ServerBegin(ShopStageRules.ClampSaved(save.climb.stage), FoodCornerRules.PitchFee(economy, climb), save.climb.goalReached,
-                    save.climb.movePending, save.climb.unlocks, save.climb.rentOwed, save.climb.starWindow, save.climb.menuOff);
+                    save.climb.movePending, save.climb.unlocks, save.climb.rentOwed, save.climb.starWindow, save.climb.menuOff, save.climb.crewStarts);
             _playSecondsBefore = save.clock.playSeconds;
             _playStartedAt = Time.unscaledTime;
             _lastSaveAt = Time.unscaledTime;
@@ -325,7 +325,7 @@ namespace Worktown.Game.Save
                 _stage != null ? _stage.ServerStage : (byte)save.climb.stage, _stage != null && _stage.ServerReached);
             if (_stage != null) // spec 057: the restaurant's fields and the unlocks (unknown ids came in with the load and stay)
                 FillClimb(save, _stage.ServerMovePending, _stage.ServerRentOwed, _stage.ServerWindow, _stage.ServerMenuOff, _stage.ServerUnlocks,
-                    _unknownMenuOff);
+                    _unknownMenuOff, _stage.ServerCrewStarts);
             if (_economy != null) save.menu = MenuParts(_economy.Menu.Capture(), _unknownMenu); // spec 037: the board's prices
             if (_layout != null && _layout.Current != null) save.layout = Worktown.Game.Layout.LayoutCodec.ToPart(_layout.Current); // spec 062a
         }
@@ -412,7 +412,7 @@ namespace Worktown.Game.Save
         /// unlocks, and the shop's name for its stage ("Your restaurant" from stage 2).
         /// </summary>
         public static void FillClimb(ShopSave save, bool movePending, long rentOwed, IReadOnlyList<int> window, IReadOnlyList<string> menuOff,
-            IReadOnlyList<string> unlocks, IReadOnlyList<string> unknownMenuOff = null)
+            IReadOnlyList<string> unlocks, IReadOnlyList<string> unknownMenuOff = null, IReadOnlyList<int> crewStarts = null)
         {
             if (save == null) throw new ArgumentNullException(nameof(save));
             save.climb.movePending = movePending && save.climb.stage == ShopStageRules.FoodCorner;
@@ -428,6 +428,7 @@ namespace Worktown.Game.Save
                 foreach (string id in unlocks) if (!string.IsNullOrEmpty(id) && !list.Contains(id)) list.Add(id);
                 save.climb.unlocks = list.ToArray();
             }
+            save.climb.crewStarts = RestaurantRules.PushCrew(crewStarts, 0); // 057 review: the last 3 service starts' crew
             save.shopName = ShopNameOf(save.climb.stage);
         }
 

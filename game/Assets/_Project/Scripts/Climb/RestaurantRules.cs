@@ -26,6 +26,38 @@ namespace Worktown.Game.Climb
             return CrewScaling.For(climb, Math.Max(MinPlayers, Math.Min(MaxPlayers, players)));
         }
 
+        /// <summary>057 review: how many service starts the one-time crew remembers.</summary>
+        public const int CrewMemory = 3;
+
+        /// <summary>
+        /// 057 review: the remembered service starts after one more with <paramref name="players"/> (0 or less: none added), each clamped to
+        /// 1..16, the newest <see cref="CrewMemory"/> kept, newest last.
+        /// </summary>
+        public static int[] PushCrew(IReadOnlyList<int> starts, int players)
+        {
+            var list = new List<int>();
+            if (starts != null) foreach (int n in starts) list.Add(Math.Max(MinPlayers, Math.Min(MaxPlayers, n)));
+            if (players > 0) list.Add(Math.Min(MaxPlayers, players));
+            while (list.Count > CrewMemory) list.RemoveAt(0);
+            return list.ToArray();
+        }
+
+        /// <summary>
+        /// 057 review (the coordinator's default, inbox question 32): the crew size of one-time costs (the rent goal, the recipes, the
+        /// licence) and of the stage's goal: the largest of the last <see cref="CrewMemory"/> service starts and the players connected now,
+        /// so a load (nobody joined yet) or a short drop never gives solo prices. Clamped to 1..16.
+        /// </summary>
+        public static int OneTimePlayers(IReadOnlyList<int> starts, int connectedNow)
+        {
+            int n = connectedNow;
+            if (starts != null)
+            {
+                int from = Math.Max(0, starts.Count - CrewMemory);
+                for (int i = from; i < starts.Count; i++) n = Math.Max(n, starts[i]);
+            }
+            return Math.Max(MinPlayers, Math.Min(MaxPlayers, n));
+        }
+
         /// <summary>The 4-player reference crew (every factor 1000).</summary>
         public static CrewFactors Reference(ClimbCatalog climb) => Crew(climb, CrewScaling.ReferencePlayers);
 

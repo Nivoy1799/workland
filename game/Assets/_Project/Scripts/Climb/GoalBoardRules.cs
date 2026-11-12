@@ -46,7 +46,7 @@ namespace Worktown.Game.Climb
         /// <summary>The board's state as the server (or a client, from the synced fields) sees it.</summary>
         public readonly struct State
         {
-            public State(byte stage, long balance, long rentGoal, bool movePending, byte owned, byte menuNext, long rentOwed)
+            public State(byte stage, long balance, long rentGoal, bool movePending, byte owned, byte menuNext, long rentOwed, long reserve = 0)
             {
                 Stage = stage;
                 Balance = balance;
@@ -55,6 +55,7 @@ namespace Worktown.Game.Climb
                 Owned = owned;
                 MenuNext = menuNext;
                 RentOwed = rentOwed;
+                Reserve = Math.Max(0L, reserve);
             }
 
             public byte Stage { get; }
@@ -65,6 +66,8 @@ namespace Worktown.Game.Climb
             public byte Owned { get; }
             public byte MenuNext { get; }
             public long RentOwed { get; }
+            /// <summary>057 review: the money the rent never takes (RestaurantRules.RentReserve): renting keeps it, so stock can be ordered.</summary>
+            public long Reserve { get; }
         }
 
         /// <summary>
@@ -82,7 +85,7 @@ namespace Worktown.Game.Climb
             {
                 if (row != StepRow) return CookOutcome.NotOpenYet;
                 if (s.MovePending) return CookOutcome.MoveWaits;
-                if (s.RentGoal <= 0 || s.Balance < s.RentGoal) return CookOutcome.NotEnoughMoney;
+                if (s.RentGoal <= 0 || s.Balance < s.RentGoal + s.Reserve) return CookOutcome.NotEnoughMoney; // 057 review: no soft-lock at the move
                 action = GoalBoardAction.Rent;
                 return CookOutcome.Ok;
             }
@@ -131,7 +134,8 @@ namespace Worktown.Game.Climb
             {
                 if (row == StepRow)
                     return s.MovePending ? "Restaurant rented: " + MoveWaitsText.ToLowerInvariant()
-                        : "Rent the restaurant: " + EconomyRules.Money(s.RentGoal) + " (press twice)";
+                        : "Rent the restaurant: " + EconomyRules.Money(s.RentGoal)
+                            + (s.Reserve > 0 ? " + " + EconomyRules.Money(s.Reserve) + " kept for stock" : string.Empty) + " (press twice)";
                 return recipes[row - 1].Name + ": " + ShopStageRules.NotOpenText.ToLowerInvariant();
             }
             if (row == StepRow) return firstService ? gateLine + "\n" + OrderStockText : gateLine;

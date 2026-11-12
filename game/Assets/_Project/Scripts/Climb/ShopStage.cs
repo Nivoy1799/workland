@@ -39,6 +39,8 @@ namespace Worktown.Game.Climb
         public readonly SyncVar<long> RentOwed = new SyncVar<long>(0L);
         /// <summary>Spec 057 (D40): the crew size measured at the last service start; the client derives every crew-scaled amount from it.</summary>
         public readonly SyncVar<byte> CrewPlayers = new SyncVar<byte>((byte)CrewScaling.ReferencePlayers);
+        /// <summary>057 review: the rent and upkeep the last stage 2 service end paid (the summary's line; the crew of that service).</summary>
+        public readonly SyncVar<long> RentLast = new SyncVar<long>(0L);
 
         [SerializeField] private EconomyService _economy;
         [SerializeField] private Worktown.Game.Shop.SupplyService _supply;
@@ -60,9 +62,14 @@ namespace Worktown.Game.Climb
         private byte _menuNow;
         private int[] _window = Array.Empty<int>();
         private long _rentOwed;
+        // 057 review: _crew is the one-time crew (goals, recipes, the licence: RestaurantRules.OneTimePlayers over _crewStarts and the
+        // players connected now, _players); _rentCrew is the crew at this service's start (the rent and upkeep, D40's running costs).
         private int _players = 1;
         private CrewFactors _crew;
+        private CrewFactors _rentCrew;
+        private int[] _crewStarts = Array.Empty<int>();
         private long _due;
+        private long _rentLast;
         private bool _serviceOpen;
 
         /// <summary>Server: the stage of the running game.</summary>
@@ -79,6 +86,10 @@ namespace Worktown.Game.Climb
         public IReadOnlyList<int> ServerWindow => _window;
         public IReadOnlyList<string> ServerUnlocks => _unlocks;
         public int ServerPlayers => _players;
+        /// <summary>057 review: the players at the last service starts (at most 3, newest last; the save's crewStarts).</summary>
+        public IReadOnlyList<int> ServerCrewStarts => _crewStarts;
+        /// <summary>057 review: the players connected now (null: the server's connections; the tests set it).</summary>
+        public Func<int> ConnectedPlayers { get; set; }
         /// <summary>Server: what the last stage 2 service end charged (AC12's log).</summary>
         public RentRules.Result LastRent { get; private set; }
         public ClimbCatalog Climb => _climb;
@@ -110,7 +121,7 @@ namespace Worktown.Game.Climb
         /// and the crew connected now (measured again at each service start).
         /// </summary>
         public void ServerBegin(byte stage, long pitchFee, bool reached, bool movePending, IReadOnlyList<string> unlocks, long rentOwed,
-            IReadOnlyList<int> window, IReadOnlyList<string> menuOff)
+            IReadOnlyList<int> window, IReadOnlyList<string> menuOff, IReadOnlyList<int> crewStarts = null)
         {
             _stage = stage;
             _pitchFee = pitchFee;
@@ -124,11 +135,12 @@ namespace Worktown.Game.Climb
             _window = GateRules.Push(window ?? Array.Empty<int>(), GateRules.NotCounted);
             _confirm.Clear();
             _serviceOpen = false;
-            _players = CountPlayers();
-            _crew = RestaurantRules.Crew(_climb, _players);
+            _crewStarts = RestaurantRules.PushCrew(crewStarts, 0);
+            _rentLast = 0L;
+            _rentCrew = RestaurantRules.Crew(_climb, CountPlayers());
             _rentOwed = Math.Max(0L, rentOwed);
-            _goal = GoalFor(_stage);
-            _due = _stage >= ShopStageRules.FirstRestaurant ? RestaurantRules.Due(EconomyData, _climb, _crew, _unlocks) : 0L;
+            RefreshCrew(); // 057 review: a load counts the saved service starts too, not only who joined yet
+            _due = _stage >= ShopStageRules.FirstRestaurant ? RestaurantRules.Due(EconomyData, _climb, _rentCrew, _unlocks) : 0L;
             Push();
             if (_economy != null) _economy.SetMenuStage(stage); // spec 037: the board sells this stage's lines
             Debug.Log("[Stage] " + Describe());
@@ -197,8 +209,19 @@ namespace Worktown.Game.Climb
 
         private int CountPlayers()
         {
-            int clients = ServerUp && ServerManager != null ? ServerManager.Clients.Count : 0;
+            int clients = ConnectedPlayers != null ? ConnectedPlayers() : ServerUp && ServerManager != null ? ServerManager.Clients.Count : 0;
             return Math.Max(RestaurantRules.MinPlayers, Math.Min(RestaurantRules.MaxPlayers, clients));
+        }
+
+        /// <summary>
+        /// 057 review: the one-time crew now (the largest of the last 3 service starts and the players connected now) and the stage's goal
+        /// for it. Called at a load, a service start and end, and before every goal board press, so the price charged is the one shown.
+        /// </summary>
+        private void RefreshCrew()
+        {
+            _players = RestaurantRules.OneTimePlayers(_crewStarts, CountPlayers());
+            _crew = RestaurantRules.Crew(_climb, _players);
+            _goal = GoalFor(_stage);
         }
 
         private CustomerService Customers => _customers != null ? _customers : _customers = FindFirstObjectByType<CustomerService>();
@@ -208,8 +231,23 @@ namespace Worktown.Game.Climb
         public override void OnStartServer()
         {
             base.OnStartServer();
+            if (ServerManager != null) ServerManager.OnRemoteConnectionState += OnRemoteConnectionState;
             Push();
         }
+
+        public override void OnStopServer()
+        {
+            base.OnStopServer();
+            if (ServerManager != null) ServerManager.OnRemoteConnectionState -= OnRemoteConnectionState;
+        }
+
+        private void OnRemoteConnectionState(FishNet.Connection.NetworkConnection conn, FishNet.Transporting.RemoteConnectionStateArgs args)
+        {
+            if (args.ConnectionState == FishNet.Transporting.RemoteConnectionState.Stopped) ServerPlayerLeft(conn.ClientId);
+        }
+
+        /// <summary>057 review, server: a player left: an armed goal board press of theirs is forgotten.</summary>
+        public void ServerPlayerLeft(int player) => _confirm.Disarm(player);
 
         private void Push()
         {
@@ -231,6 +269,7 @@ namespace Worktown.Game.Climb
             if (RentOwed.Value != _rentOwed) RentOwed.Value = _rentOwed;
             byte players = (byte)_players;
             if (CrewPlayers.Value != players) CrewPlayers.Value = players;
+            if (RentLast.Value != _rentLast) RentLast.Value = _rentLast;
         }
 
         /// <summary>
@@ -240,19 +279,20 @@ namespace Worktown.Game.Climb
         public int ServerServiceOpened()
         {
             _serviceOpen = true;
-            _players = CountPlayers();
-            _crew = RestaurantRules.Crew(_climb, _players);
-            _goal = GoalFor(_stage);
+            int starting = CountPlayers();
+            _crewStarts = RestaurantRules.PushCrew(_crewStarts, starting);
+            _rentCrew = RestaurantRules.Crew(_climb, starting);
+            RefreshCrew();
             int units = 0;
             if (_stage >= ShopStageRules.FirstRestaurant)
             {
                 _menuNow = _menuNext;
-                _due = RestaurantRules.Due(EconomyData, _climb, _crew, _unlocks);
-                Debug.Log("[Stage] the restaurant opens: crew " + _players + ", menu " + _menuNow + ", rent and upkeep " + EconomyRules.Money(_due)
+                _due = RestaurantRules.Due(EconomyData, _climb, _rentCrew, _unlocks);
+                Debug.Log("[Stage] the restaurant opens: crew " + starting + " (one-time prices for " + _players + "), menu " + _menuNow + ", rent and upkeep " + EconomyRules.Money(_due)
                     + ", licence " + EconomyRules.Money(_goal));
                 if (_window.Length == 0 && _feed != null) _feed.ServerAdd(GoalBoardRules.OrderStockText);
             }
-            else if (_stage == ShopStageRules.FoodCorner && _supply != null)
+            else if (ShopStageRules.DropsStock(_stage) && _supply != null)
             {
                 units = _supply.DropStock(FoodCornerRules.StockGood, out long cost);
                 string text = FoodCornerRules.DeliveryText(units, cost); // follow-up 2026-11-11 evening: "Potatoes delivered -$96"
@@ -282,6 +322,7 @@ namespace Worktown.Game.Climb
                     Debug.Log("[Stage] " + fee + ", the shop has " + EconomyRules.Money(_economy.ShopBalance));
                     if (_feed != null) _feed.ServerAdd(fee);
                 }
+                RefreshCrew();
                 if (!_movePending && FoodCornerRules.ReachesGoal(_reached, _economy.ShopBalance, _goal))
                 {
                     _reached = true;
@@ -306,6 +347,7 @@ namespace Worktown.Game.Climb
             long paidNow = rent.Paid > 0 ? _economy.PayFee(rent.Paid) : 0L;
             if (paidNow != rent.Paid) Debug.LogWarning("[Stage] the rent paid " + paidNow + " of " + rent.Paid);
             _rentOwed = rent.OwedAfter;
+            _rentLast = paidNow;
             LastRent = rent;
             if (_feed != null)
             {
@@ -315,7 +357,8 @@ namespace Worktown.Game.Climb
             int tenths = GateRules.ServiceStarsTenths(last);
             _window = GateRules.Push(_window, tenths);
             // AC12 (measurement for the stage 2 calibration): one line per stage 2 service.
-            Debug.Log("[Stage] restaurant service: crew " + _players + ", guests " + (last.Served + last.Missed) + ", served " + last.Served
+            RefreshCrew();
+            Debug.Log("[Stage] restaurant service: crew " + _rentCrew.Players + ", guests " + (last.Served + last.Missed) + ", served " + last.Served
                 + ", missed " + last.Missed + ", revenue " + EconomyRules.Money(last.Earned) + ", rent due " + EconomyRules.Money(due)
                 + ", rent paid " + EconomyRules.Money(paidNow) + ", owed " + EconomyRules.Money(_rentOwed) + ", forgiven "
                 + EconomyRules.Money(rent.Forgiven) + ", stars " + (tenths == GateRules.NotCounted ? "-" : GateRules.Stars(tenths))
@@ -340,7 +383,7 @@ namespace Worktown.Game.Climb
             if (!_unlocks.Contains(FoodCornerRules.GoalPurchase)) _unlocks.Add(FoodCornerRules.GoalPurchase);
             _reached = false;
             _goal = GoalFor(_stage);
-            _due = RestaurantRules.Due(EconomyData, _climb, _crew, _unlocks);
+            _due = RestaurantRules.Due(EconomyData, _climb, _rentCrew ?? _crew, _unlocks);
             _window = Array.Empty<int>();
             _confirm.Clear();
             Push();
@@ -362,16 +405,26 @@ namespace Worktown.Game.Climb
         public CookOutcome ServerPressBoard(int player, int row, float now)
         {
             if (_economy == null) return CookOutcome.UnknownStation;
+            RefreshCrew(); // 057 review: the crew now (a join since the service start raises the prices; a short drop does not lower them)
+            Push();
             IReadOnlyList<PurchaseDef> recipes = RestaurantRules.Recipes(_climb);
             int count = Math.Min(GoalBoardRules.RowCount - 1, recipes.Count);
             PurchaseDef recipe = row >= 1 && row <= count ? recipes[row - 1] : null;
             long cost = recipe != null ? RestaurantRules.RecipeCost(recipe.Id, EconomyData, _climb, _crew) : 0L;
-            var state = new GoalBoardRules.State(_stage, _economy.ShopBalance, _goal, _movePending, _owned, _menuNext, _rentOwed);
+            var state = new GoalBoardRules.State(_stage, _economy.ShopBalance, _goal, _movePending, _owned, _menuNext, _rentOwed,
+                RestaurantRules.RentReserve(EconomyData, _climb));
             CookOutcome outcome = GoalBoardRules.Decide(state, row, count, cost, RestaurantRules.MaxDishes(_climb), out GoalBoardAction action);
             if (outcome != CookOutcome.Ok || action == GoalBoardAction.None)
             {
                 _confirm.Disarm(player);
                 return outcome;
+            }
+            // 057 review: an armed purchase whose row got bought meanwhile (by another player) does nothing: no toggle by a second press.
+            if (action == GoalBoardAction.Toggle && _confirm.IsArmed(player, row, now))
+            {
+                _confirm.Disarm(player);
+                Debug.Log("[Stage] player " + player + " confirmed row " + row + ", which another player bought meanwhile: nothing changes");
+                return CookOutcome.Ok;
             }
             if (GoalBoardRules.NeedsConfirm(action) && !_confirm.Press(player, row, now))
             {
@@ -400,7 +453,7 @@ namespace Worktown.Game.Climb
                     _owned = RestaurantMenu.With(_owned, row - 1, true);
                     byte withIt = RestaurantMenu.With(_menuNext, row - 1, true);
                     if (RestaurantMenu.Fits(withIt, _owned, RestaurantRules.MaxDishes(_climb))) _menuNext = withIt;
-                    _due = RestaurantRules.Due(EconomyData, _climb, _crew, _unlocks);
+                    _due = RestaurantRules.Due(EconomyData, _climb, _rentCrew ?? _crew, _unlocks);
                     Push();
                     if (_feed != null)
                     {

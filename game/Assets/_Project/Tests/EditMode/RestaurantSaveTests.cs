@@ -38,6 +38,7 @@ namespace Worktown.Game.Tests
             s.climb.rentOwed = 3050;
             s.climb.starWindow = new[] { 31, 36, 40, 28, 35, 50 };
             s.climb.menuOff = new[] { "dish_lemonade", "dish_from_a_newer_build" };
+            s.climb.crewStarts = new[] { 4, 2, 1 };
             s.layout = LayoutCodec.ToPart(DefaultLayout.Load());
             return s;
         }
@@ -55,6 +56,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(0, r.Save.climb.rentOwed);
             CollectionAssert.IsEmpty(r.Save.climb.starWindow);
             CollectionAssert.IsEmpty(r.Save.climb.menuOff);
+            CollectionAssert.IsEmpty(r.Save.climb.crewStarts);
             Assert.AreEqual(9, r.Save.clock.day, "everything else is kept");
             Assert.AreEqual(1, r.Save.layout.pieces.Count(p => p.type == PieceCatalog.GoalBoard), "the goal board is in the layout");
         }
@@ -91,6 +93,7 @@ namespace Worktown.Game.Tests
             CollectionAssert.AreEqual(new[] { 31, 36, 40, 28, 35, 50 }, r.Save.climb.starWindow);
             CollectionAssert.Contains(r.Save.climb.menuOff, "dish_from_a_newer_build", "an unknown id is kept");
             CollectionAssert.AreEqual(new[] { "dish_from_a_newer_build" }, SaveService.UnknownMenuOff(r.Save).ToArray());
+            CollectionAssert.AreEqual(new[] { 4, 2, 1 }, r.Save.climb.crewStarts, "057 review: the last 3 service starts' crew");
         }
 
         [Test]
@@ -101,6 +104,7 @@ namespace Worktown.Game.Tests
             s.climb.movePending = true;
             s.climb.rentOwed = long.MaxValue;
             s.climb.starWindow = new[] { 99, 5, 60, 30, 30, 30, 30, 30, 30 };
+            s.climb.crewStarts = new[] { 3, 0, 40, 2 };
             SaveLoadResult r = ShopSaveCodec.Default.TryParse(JsonUtility.ToJson(s));
             Assert.IsTrue(r.Ok, r.Error.ToString());
             Assert.AreEqual(2, r.Save.climb.stage);
@@ -111,7 +115,8 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(GateRules.MinTenths, r.Save.climb.starWindow[0], "the oldest (99) dropped; 5 -> 10");
             Assert.AreEqual(GateRules.MaxTenths, r.Save.climb.starWindow[1], "60 -> 50");
             Assert.IsTrue(r.Save.climb.starWindow.All(v => v >= GateRules.MinTenths && v <= GateRules.MaxTenths));
-            Assert.GreaterOrEqual(r.Notes.Count, 4);
+            CollectionAssert.AreEqual(new[] { 1, 16, 2 }, r.Save.climb.crewStarts, "the newest 3, each 1 to 16");
+            Assert.GreaterOrEqual(r.Notes.Count, 5);
             s.climb.rentOwed = -5;
             Assert.AreEqual(0, ShopSaveCodec.Default.TryParse(JsonUtility.ToJson(s)).Save.climb.rentOwed);
         }

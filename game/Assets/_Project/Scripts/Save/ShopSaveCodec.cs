@@ -166,6 +166,11 @@ namespace Worktown.Game.Save
             // menuOff ids are kept (a newer build's recipe).
             s.climb.starWindow ??= new int[0];
             s.climb.menuOff ??= new string[0];
+            s.climb.crewStarts ??= new int[0];
+            int[] crew = RestaurantRules.PushCrew(s.climb.crewStarts, 0); // 057 review: at most 3, each 1 to 16
+            if (crew.Length != s.climb.crewStarts.Length || !System.Linq.Enumerable.SequenceEqual(crew, s.climb.crewStarts))
+                notes.Add("crewStarts " + string.Join(",", s.climb.crewStarts) + " -> " + string.Join(",", crew));
+            s.climb.crewStarts = crew;
             if (s.climb.movePending && s.climb.stage != ShopStageRules.FoodCorner)
             {
                 notes.Add("movePending at stage " + s.climb.stage + " -> false");
