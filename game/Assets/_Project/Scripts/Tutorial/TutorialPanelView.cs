@@ -77,7 +77,7 @@ namespace Worktown.Game.Tutorial
             buttons.Add(_skipAll);
             var hint = new Label();
             _hint = hint;
-            hint.style.color = Palette.Steel;
+            hint.style.color = Palette.Chrome;
             hint.style.fontSize = 11;
             hint.style.marginRight = 8;
             hint.style.alignSelf = Align.Center;

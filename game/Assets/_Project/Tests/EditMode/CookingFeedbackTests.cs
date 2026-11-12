@@ -95,9 +95,9 @@ namespace Worktown.Game.Tests
             foreach (Color color in c) CollectionAssert.Contains(allowed, color);
             foreach (Vector3 p in v) Assert.LessOrEqual(p.magnitude, 1.0001f);
             Assert.AreEqual(Palette.Cream, HeatRingRules.FillColor(HeatZone.Cooking));
-            Assert.AreEqual(Palette.Sage, HeatRingRules.FillColor(HeatZone.Good));
+            Assert.AreEqual(Palette.Ground, HeatRingRules.FillColor(HeatZone.Good));
             Assert.AreEqual(Palette.Terracotta, HeatRingRules.FillColor(HeatZone.Overdone));
-            Assert.AreEqual(Palette.Brick, HeatRingRules.FillColor(HeatZone.Burnt));
+            Assert.AreEqual(Palette.WoodDark, HeatRingRules.FillColor(HeatZone.Burnt));
             Assert.Less(Vector2.Distance(Vector2.up, HeatRingRules.Direction(0f)), 1e-5f, "starts at the top");
             Assert.Less(Vector2.Distance(Vector2.right, HeatRingRules.Direction(0.25f)), 1e-5f, "clockwise from the top");
         }

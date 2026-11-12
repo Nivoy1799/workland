@@ -11,32 +11,49 @@ namespace Worktown.Game.Art
     /// </summary>
     public static class Palette
     {
-        public static readonly Color Cream = Rgb(0xF2E6D0);
-        public static readonly Color Plaster = Rgb(0xE4D5BC);
-        public static readonly Color WoodLight = Rgb(0xC8A27A);
+        public static readonly Color Cream = Rgb(0xF3E9D2);
+        public static readonly Color Plaster = Rgb(0xE2EADD);
+        public static readonly Color WallOut = Rgb(0xF1E6CF);
+        public static readonly Color Mint = Rgb(0x8CC5AC);
+        public static readonly Color Teal = Rgb(0x4F9A85);
+        public static readonly Color TealDark = Rgb(0x2F6E5E);
+        public static readonly Color Mustard = Rgb(0xE3AE45);
+        public static readonly Color Orange = Rgb(0xE58436);
+        public static readonly Color Salmon = Rgb(0xE8957A);
+        public static readonly Color Sky = Rgb(0x9CC3D5);
+        public static readonly Color DeepBlue = Rgb(0x4E6E8E);
+        public static readonly Color Terracotta = Rgb(0xC9734F);
+        public static readonly Color WoodLight = Rgb(0xB98B5E);
         public static readonly Color WoodDark = Rgb(0x8A5A3B);
-        public static readonly Color Terracotta = Rgb(0xC8664A);
-        public static readonly Color Brick = Rgb(0xA4503C);
-        public static readonly Color Mustard = Rgb(0xD9A441);
-        public static readonly Color Sage = Rgb(0x8FA77E);
-        public static readonly Color Leaf = Rgb(0x5E7F4F);
-        public static readonly Color SoftBlue = Rgb(0x7FA3B8);
-        public static readonly Color DeepBlue = Rgb(0x3F5F78);
-        public static readonly Color Steel = Rgb(0x9AA0A3);
+        public static readonly Color Chrome = Rgb(0xC9CDD0);
         public static readonly Color Charcoal = Rgb(0x3A3532);
+        public static readonly Color Leaf = Rgb(0x5E8F4F);
+        public static readonly Color Plant = Rgb(0x3F6B3A);
+        public static readonly Color Ground = Rgb(0x9DB585);
+        public static readonly Color Pavement = Rgb(0xD8CDB8);
+        public static readonly Color Road = Rgb(0x6F6A66);
+
+        // UI colours (guide section 5.4, unchanged from D32): not part of the town palette.
         public static readonly Color Ink = Rgb(0x2A2624);
         /// <summary>UI panels: <c>#2E2A27</c> at 85 % opacity.</summary>
         public static readonly Color Panel = WithAlpha(Rgb(0x2E2A27), 0.85f);
         /// <summary>The interaction highlight only.</summary>
         public static readonly Color Interact = Rgb(0xF5D27A);
 
-        /// <summary>The 16 colours of the guide's table, in its order (names as the fields).</summary>
+        /// <summary>The town colours of the guide's section 5.1 table, in its order (a row with two names gives two entries).</summary>
         public static IReadOnlyList<(string Name, Color Color)> GuideColours { get; } = new[]
         {
-            ("Cream", Cream), ("Plaster", Plaster), ("WoodLight", WoodLight), ("WoodDark", WoodDark),
-            ("Terracotta", Terracotta), ("Brick", Brick), ("Mustard", Mustard), ("Sage", Sage), ("Leaf", Leaf),
-            ("SoftBlue", SoftBlue), ("DeepBlue", DeepBlue), ("Steel", Steel), ("Charcoal", Charcoal), ("Ink", Ink),
-            ("Panel", Panel), ("Interact", Interact)
+            ("Cream", Cream), ("Plaster", Plaster), ("WallOut", WallOut), ("Mint", Mint), ("Teal", Teal),
+            ("TealDark", TealDark), ("Mustard", Mustard), ("Orange", Orange), ("Salmon", Salmon), ("Sky", Sky),
+            ("DeepBlue", DeepBlue), ("Terracotta", Terracotta), ("WoodLight", WoodLight), ("WoodDark", WoodDark),
+            ("Chrome", Chrome), ("Charcoal", Charcoal), ("Leaf", Leaf), ("Plant", Plant), ("Ground", Ground),
+            ("Pavement", Pavement), ("Road", Road)
+        };
+
+        /// <summary>The UI colours of the guide's section 5.4.</summary>
+        public static IReadOnlyList<(string Name, Color Color)> UiColours { get; } = new[]
+        {
+            ("Ink", Ink), ("Panel", Panel), ("Interact", Interact)
         };
 
         // Spec 048: the colour-blind friendly ring set (the Okabe-Ito hues): blue, yellow, orange and vermillion stay apart for every
@@ -88,12 +105,12 @@ namespace Worktown.Game.Art
         /// <summary>Highest HSV saturation a food colour may have.</summary>
         public const float MaxFoodSaturation = 0.70f;
 
-        private static readonly Color[] CustomerTints = { Cream, Terracotta, Mustard, Sage, SoftBlue, DeepBlue };
+        private static readonly Color[] CustomerTints = { Cream, Terracotta, Mustard, Ground, Sky, DeepBlue };
 
         /// <summary>Number of customer tints (<see cref="Customer"/> wraps around).</summary>
         public static int CustomerTintCount => CustomerTints.Length;
 
-        /// <summary>Customer tint <paramref name="index"/>: Cream, Terracotta, Mustard, Sage, SoftBlue, DeepBlue, wrapping (negatives too).</summary>
+        /// <summary>Customer tint <paramref name="index"/>: Cream, Terracotta, Mustard, Ground, Sky, DeepBlue, wrapping (negatives too).</summary>
         public static Color Customer(int index)
         {
             int i = index % CustomerTints.Length;

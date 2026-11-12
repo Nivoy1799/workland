@@ -455,7 +455,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(1f, CleaningRules.HoldShare(CleaningRules.HoldScrub, 2.0));
             Assert.AreEqual(0.5f, CleaningRules.HoldShare(CleaningRules.HoldWipe, 0.5), 1e-4f);
             Assert.AreEqual("Hygiene 92 %", Worktown.Game.UI.HudView.HygieneText(92));
-            Assert.AreEqual(Palette.Sage, Worktown.Game.UI.HudView.HygieneColour(50));
+            Assert.AreEqual(Palette.Ground, Worktown.Game.UI.HudView.HygieneColour(50));
             Assert.AreEqual(Palette.Mustard, Worktown.Game.UI.HudView.HygieneColour(49));
             Assert.AreEqual(Palette.Terracotta, Worktown.Game.UI.HudView.HygieneColour(29));
         }
