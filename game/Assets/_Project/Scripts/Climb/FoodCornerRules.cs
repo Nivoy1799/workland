@@ -30,7 +30,8 @@ namespace Worktown.Game.Climb
         /// <summary>The NPC market the dish sells to (its price level is the scale).</summary>
         public const string Market = "snack";
 
-        public const string GoalReachedText = "Rent goal reached! Your first restaurant comes in a later update.";
+        /// <summary>Spec 057: the restaurant is in this build; the goal board rents it.</summary>
+        public const string GoalReachedText = "Rent goal reached! Rent the restaurant at the goal board.";
 
         /// <summary>ceil(<paramref name="simMoney"/> × <paramref name="gameDishPrice"/> / <paramref name="simDishPrice"/>); 0 for no money.</summary>
         public static long Scale(long simMoney, long gameDishPrice, long simDishPrice)
@@ -111,16 +112,39 @@ namespace Worktown.Game.Climb
         }
 
         /// <summary>Whether a guest wish of <paramref name="market"/> may come at <paramref name="stage"/> (stage 1: only the dish's market).</summary>
-        public static bool WantsMarket(byte stage, string market) => stage == ShopStageRules.OpenKitchen || market == Menu.ById(GameDish).Market;
+        public static bool WantsMarket(byte stage, string market) => WantsMarket(stage, 0, null, market);
+
+        /// <summary>
+        /// Spec 057: the same with stage 2's frozen <paramref name="menu"/>, which <see cref="RestaurantMenu.WantsMarket"/> decides (a market with a
+        /// dish on the menu); <paramref name="climb"/> null is the default catalog.
+        /// </summary>
+        public static bool WantsMarket(byte stage, byte menu, ClimbCatalog climb, string market)
+        {
+            if (stage == ShopStageRules.OpenKitchen) return true;
+            if (stage >= ShopStageRules.FirstRestaurant) return RestaurantMenu.WantsMarket(climb ?? DefaultClimb, menu, market);
+            return market == Menu.ById(GameDish).Market;
+        }
+
+        /// <summary>Spec 057: the default climb catalog (immutable), for callers without their own.</summary>
+        public static readonly ClimbCatalog DefaultClimb = ClimbCatalog.CreateDefault();
 
         /// <summary>
         /// The order a guest gives at <paramref name="stage"/>. The draws stay the same (same seed, same draw count: the caller drew them as
         /// in the open kitchen); stage 1 overrides the results: the dish, to go (never eat-in), no drink, cash (<c>PaysByCard</c> false).
         /// The patience base and the note are kept.
         /// </summary>
-        public static GuestOrder StageOrder(byte stage, GuestOrder drawn, ref MenuDish dish, ref string drink, ref bool eatIn)
+        public static GuestOrder StageOrder(byte stage, GuestOrder drawn, ref MenuDish dish, ref string drink, ref bool eatIn) =>
+            StageOrder(stage, 0, null, drawn, ref dish, ref drink, ref eatIn);
+
+        /// <summary>
+        /// Spec 057: the same with stage 2's frozen <paramref name="menu"/>: <see cref="RestaurantMenu.StageOrder"/> (the dish on the menu, the drink only
+        /// when the drinks are on; eat-in and the card as drawn).
+        /// </summary>
+        public static GuestOrder StageOrder(byte stage, byte menu, ClimbCatalog climb, GuestOrder drawn, ref MenuDish dish, ref string drink,
+            ref bool eatIn)
         {
             if (stage == ShopStageRules.OpenKitchen || drawn == null) return drawn;
+            if (stage >= ShopStageRules.FirstRestaurant) return RestaurantMenu.StageOrder(climb ?? DefaultClimb, menu, drawn, ref dish, ref drink);
             dish = Menu.ById(GameDish);
             drink = null;
             eatIn = false;

@@ -117,6 +117,14 @@ namespace Worktown.Game.Cooking
         /// <summary>Spec 036: the spit still has a cone with seitan on it.</summary>
         ConeLoaded,
         /// <summary>Spec 053: the station, slot or cookware is closed at this stage of the climb ("Opens with your restaurant").</summary>
-        NotOpenYet
+        NotOpenYet,
+        /// <summary>Spec 057: the goal board armed a purchase: the same player presses the same row again within 4 s to pay.</summary>
+        ConfirmAgain,
+        /// <summary>Spec 057: rent is owed, so the goal board buys nothing ("Pay the rent first"); stock orders still work.</summary>
+        PayRentFirst,
+        /// <summary>Spec 057: the menu holds no more dishes (the stage's most dishes, the fries included).</summary>
+        MenuFull,
+        /// <summary>Spec 057: the restaurant is rented; the crew moves in when this service ends.</summary>
+        MoveWaits
     }
 }

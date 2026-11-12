@@ -131,7 +131,7 @@ namespace Worktown.Game.Tests
             Assert.AreEqual(0, r.Save.money.balance);
             Assert.AreEqual(100, r.Save.hygienePercent);
             Assert.AreEqual(1, r.Save.clock.day);
-            Assert.AreEqual(1, r.Save.climb.stage, "the only stage this build has");
+            Assert.AreEqual(2, r.Save.climb.stage, "spec 057 re-pin: the highest stage this build has (the first restaurant)");
             Assert.AreEqual(StockCatalog.CapacityOf("potato"), r.Save.stock[0].count, "up to the slot's capacity");
             Assert.AreEqual(0, r.Save.stats.guestsServed);
             Assert.GreaterOrEqual(r.Notes.Count, 6, "each clamp is noted for the log");
@@ -166,9 +166,9 @@ namespace Worktown.Game.Tests
             codec.TryParse(JsonUtility.ToJson(v2));
             CollectionAssert.AreEqual(new[] { "2->3" }, ran, "a version 2 save skips the first step");
             Assert.Throws<ArgumentException>(() => new SaveMigrations(new (int, Func<ShopSave, ShopSave>)[] { (2, s => s) }), "steps start at 1");
-            Assert.AreEqual(3, ShopSaveCodec.Default.Version, "spec 062a re-pin: this build has two steps (v1 to v2, cents; v2 to v3, the layout)");
-            string v4 = codec.ToJson(Full()).Replace("\"formatVersion\": 3", "\"formatVersion\": 4");
-            Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(v4).Error, "a v4 save is newer here");
+            Assert.AreEqual(4, ShopSaveCodec.Default.Version, "spec 057 re-pin: this build has three steps (v1 to v2, cents; v2 to v3, the layout; v3 to v4, the restaurant)");
+            string v5 = codec.ToJson(Full()).Replace("\"formatVersion\": 3", "\"formatVersion\": 5");
+            Assert.AreEqual(SaveError.NewerVersion, ShopSaveCodec.Default.TryParse(v5).Error, "a v5 save is newer here");
         }
 
         [Test]

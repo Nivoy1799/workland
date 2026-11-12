@@ -96,6 +96,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Bin: return stationName + ": " + useKey + " throw the bag in";
                 // Spec 037: the menu board's buttons are aimed at.
                 case StationKind.MenuBoard: return stationName + ": set prices in first person (" + viewKey + ")";
+                // Spec 057: the goal board's rows are aimed at.
+                case StationKind.GoalBoard: return stationName + ": press a row in first person (" + viewKey + ")";
                 default: return stationName;
             }
         }

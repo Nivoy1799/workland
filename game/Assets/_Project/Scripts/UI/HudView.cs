@@ -44,7 +44,7 @@ namespace Worktown.Game.UI
         private Label _goal;
         private Worktown.Game.Climb.ShopStage _shopStage;
         private float _nextStageLookup;
-        private (byte Stage, long Balance, long Goal, bool Reached) _goalShown = (byte.MaxValue, 0, 0, false);
+        private (byte Stage, long Balance, long Goal, bool Reached, int Average, int Count, long Owed) _goalShown = (byte.MaxValue, 0, 0, false, 0, 0, 0);
         // Spec 034: "Low stock: tomato, cups" (lines below a quarter of their capacity), rebuilt only when the counts change.
         private Label _lowStock;
         private Worktown.Game.Shop.StockCounts _stockCounts;
@@ -197,10 +197,13 @@ namespace Worktown.Game.UI
             byte stage = _shopStage != null ? _shopStage.StageNow : Worktown.Game.Climb.ShopStageRules.OpenKitchen;
             long goal = _shopStage != null ? _shopStage.GoalMoney.Value : 0L;
             bool reached = _shopStage != null && _shopStage.GoalReached.Value;
-            var shown = (stage, balance, goal, reached);
+            int average = _shopStage != null ? _shopStage.WindowAverageTenths.Value : 0; // spec 057: the gate's window
+            int count = _shopStage != null ? _shopStage.WindowCount.Value : 0;
+            long owed = _shopStage != null ? _shopStage.RentOwed.Value : 0L;
+            var shown = (stage, balance, goal, reached, average, count, owed);
             if (shown == _goalShown) return;
             _goalShown = shown;
-            _goal.text = GoalText(stage, balance, goal, reached);
+            _goal.text = GoalText(stage, balance, goal, reached, average, count, owed);
             _goal.style.color = reached ? Palette.Mustard : Palette.Cream;
             Show(_goal, _goal.text.Length > 0);
         }
@@ -210,6 +213,22 @@ namespace Worktown.Game.UI
         {
             if (stage == Worktown.Game.Climb.ShopStageRules.OpenKitchen || goal <= 0) return string.Empty;
             return reached ? "Rent goal reached" : Worktown.Game.Climb.FoodCornerRules.GoalLine(balance, goal);
+        }
+
+        /// <summary>
+        /// Spec 057: the same at every stage. Stage 2: the gate line ("Next: service licence, stars, money"), the rent owed when there is
+        /// any, and "Order stock at the terminal" until the first stage 2 service ended (no counted service yet).
+        /// </summary>
+        public static string GoalText(byte stage, long balance, long goal, bool reached, int averageTenths, int count, long owed)
+        {
+            if (stage < Worktown.Game.Climb.ShopStageRules.FirstRestaurant) return GoalText(stage, balance, goal, reached);
+            Worktown.Sim.Climb.ClimbCatalog climb = Worktown.Game.Climb.FoodCornerRules.DefaultClimb;
+            string text = reached ? Worktown.Game.Climb.GateRules.ReachedText
+                : Worktown.Game.Climb.GateRules.GateLine(averageTenths, count, Worktown.Game.Climb.RestaurantRules.GateWindow(climb),
+                    Worktown.Game.Climb.RestaurantRules.GateStarsTenths(climb), balance, goal);
+            if (owed > 0) text += "\n" + Worktown.Game.Climb.RentRules.OwedText(owed);
+            if (count == 0) text += "\n" + Worktown.Game.Climb.GoalBoardRules.OrderStockText;
+            return text;
         }
 
         /// <summary>Spec 022: "Shift until 14:00" after the clock, and "Orders open: 3 · served 2 · missed 1".</summary>
@@ -524,6 +543,12 @@ namespace Worktown.Game.UI
                 case CookOutcome.NoCone: return "Load a seitan cone first"; // spec 036
                 case CookOutcome.ConeLoaded: return "The cone still has seitan on it";
                 case CookOutcome.NotOpenYet: return Worktown.Game.Climb.ShopStageRules.NotOpenText; // spec 053
+                case CookOutcome.ConfirmAgain: return Worktown.Game.Climb.GoalBoardRules.ConfirmText; // spec 057
+                case CookOutcome.PayRentFirst: return Worktown.Game.Climb.RentRules.PayFirstText;
+                case CookOutcome.MenuFull:
+                    return Worktown.Game.Climb.GoalBoardRules.MenuFullText(
+                        Worktown.Game.Climb.RestaurantRules.MaxDishes(Worktown.Game.Climb.FoodCornerRules.DefaultClimb));
+                case CookOutcome.MoveWaits: return Worktown.Game.Climb.GoalBoardRules.MoveWaitsText;
                 default: return outcome.ToString();
             }
         }

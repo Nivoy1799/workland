@@ -161,6 +161,27 @@ namespace Worktown.Game.Save
                 notes.Add("unlock " + FoodCornerRules.StartUnlock + " added");
             }
 
+            // Spec 057: the restaurant's fields. A move is pending only at the food corner; the rent owed is at most the cap of the largest
+            // crew (D40: the cap follows the crew at each service end); the window holds at most 8 values of 1.0 to 5.0 stars; unknown
+            // menuOff ids are kept (a newer build's recipe).
+            s.climb.starWindow ??= new int[0];
+            s.climb.menuOff ??= new string[0];
+            if (s.climb.movePending && s.climb.stage != ShopStageRules.FoodCorner)
+            {
+                notes.Add("movePending at stage " + s.climb.stage + " -> false");
+                s.climb.movePending = false;
+            }
+            s.climb.rentOwed = Range("rentOwed", s.climb.rentOwed, 0L, MaxRentOwed, notes);
+            if (s.climb.starWindow.Length > GateRules.Kept)
+            {
+                notes.Add("starWindow " + s.climb.starWindow.Length + " values -> the newest " + GateRules.Kept);
+                var newest = new int[GateRules.Kept];
+                Array.Copy(s.climb.starWindow, s.climb.starWindow.Length - GateRules.Kept, newest, 0, GateRules.Kept);
+                s.climb.starWindow = newest;
+            }
+            for (int i = 0; i < s.climb.starWindow.Length; i++)
+                s.climb.starWindow[i] = (int)Range("starWindow[" + i + "]", s.climb.starWindow[i], GateRules.MinTenths, GateRules.MaxTenths, notes);
+
             s.money.balance = Range("balance", s.money.balance, 0L, EconomyLimits.MaxBalance, notes);
             s.money.earnedTotal = Range("earnedTotal", s.money.earnedTotal, 0L, long.MaxValue, notes);
             s.money.spentTotal = Range("spentTotal", s.money.spentTotal, 0L, long.MaxValue, notes);
@@ -197,6 +218,10 @@ namespace Worktown.Game.Save
                 part.count = (int)Range(part.slot, part.count, 0L, StockCatalog.Goods[line].Capacity, notes);
             }
         }
+
+        /// <summary>Spec 057: the most rent a save may owe: the owed cap (two services) of the largest crew (16 players, D40).</summary>
+        public static long MaxRentOwed { get; } = RestaurantRules.OwedCap(RestaurantRules.Due(Worktown.Sim.Economy.EconomyCatalog.CreateDefault(),
+            FoodCornerRules.DefaultClimb, RestaurantRules.Crew(FoodCornerRules.DefaultClimb, RestaurantRules.MaxPlayers), null));
 
         private static long Range(string what, long value, long min, long max, List<string> notes)
         {

@@ -14,6 +14,8 @@ namespace Worktown.Game.Save
         /// <summary>The game quits (best effort).</summary>
         AppQuit,
         /// <summary>Every <see cref="AutosaveRules.PeriodicSeconds"/> while a service is open.</summary>
-        Periodic
+        Periodic,
+        /// <summary>Spec 057: the stage moved (the crew rented the restaurant and moved in), at once between services or at a service end.</summary>
+        StageChanged
     }
 }

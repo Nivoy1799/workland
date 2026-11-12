@@ -32,9 +32,11 @@ namespace Worktown.Game.Net
         /// 5: spec 062a (the kitchen is spawned layout pieces: RequestPlace's surface is a stable surface id, piece id &lt;&lt; 6 | local, not an
         /// index; RequestStation's station and every station number on the wire, such as the reward's counter, is a piece id; the stations
         /// and their nested objects are spawned prefabs, no longer scene objects; the same parameter types, so the reflection cannot see it).
+        /// 6: spec 054b (player blocking; merged separately). 7: spec 057 (ShopStage's restaurant fields; the goal board, a new spawned
+        /// station piece with its own NetworkObject in DefaultPrefabObjects; RequestStation's option is a goal board row).
         /// Every wire change bumps it (docs/architecture.md).
         /// </summary>
-        public const int Revision = 5;
+        public const int Revision = 7;
 
         /// <summary>The line that carries <see cref="Revision"/>.</summary>
         public static string RevisionLine => "revision " + Revision;

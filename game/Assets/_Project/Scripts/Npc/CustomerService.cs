@@ -86,6 +86,8 @@ namespace Worktown.Game.Npc
 
         /// <summary>Spec 053: the shop's stage now (the open kitchen without a stage object).</summary>
         private byte ShopStageNow => _shopStage != null ? _shopStage.StageNow : Worktown.Game.Climb.ShopStageRules.OpenKitchen;
+        /// <summary>Spec 057: stage 2's menu, frozen at the service start (ShopStage).</summary>
+        private byte MenuNow => _shopStage != null ? _shopStage.ServerMenuNow : (byte)0;
 
         private readonly CustomerQueue _queue = new CustomerQueue();
         private readonly Dictionary<int, Customer> _customers = new Dictionary<int, Customer>();
@@ -346,7 +348,8 @@ namespace Worktown.Game.Npc
 
         /// <summary>Spec 053: a market sends guests when it has a dish, and (stage 1) only the stage's dish's market.</summary>
         private bool HasDishes(string market) =>
-            Menu.HasDishes(market, Menu.CrateIngredients) && Worktown.Game.Climb.FoodCornerRules.WantsMarket(ShopStageNow, market);
+            Menu.HasDishes(market, Menu.CrateIngredients)
+            && Worktown.Game.Climb.FoodCornerRules.WantsMarket(ShopStageNow, MenuNow, null, market); // spec 057: stage 2's frozen menu
 
         /// <summary>Spec 035: the shop's hygiene score (100 without the cleaning service).</summary>
         private int Hygiene => _cleaning != null ? _cleaning.HygienePercent : HygieneRules.StartPercent;
@@ -647,7 +650,8 @@ namespace Worktown.Game.Npc
 #endif
                 if (_lastTutorialScripted) eatIn = _tutorial.Orders.LastEatIn; // spec 038
                 // Spec 053: the draws above stay the same (same seed, same count); stage 1 overrides the results: fries, to go, cash.
-                order = Worktown.Game.Climb.FoodCornerRules.StageOrder(ShopStageNow, order, ref dish, ref drink, ref eatIn);
+                // Spec 057: at stage 2 the menu frozen at the service start decides (the drawn dish if it is on it, the drink only when drinks are on).
+                order = Worktown.Game.Climb.FoodCornerRules.StageOrder(ShopStageNow, MenuNow, null, order, ref dish, ref drink, ref eatIn);
                 RecipeTemplate template = dish.Template != null ? RecipeTemplates.ById(dish.Template) : null;
                 byte modifiers = OrderModifiers.Pack(template, order.Modifiers);
                 NetworkObject nob = _networkManager.GetPooledInstantiated(_customerPrefab, true);

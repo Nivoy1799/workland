@@ -823,6 +823,25 @@
         "Join a friend's game: can you put things on the front counter and use every station?",
         "Continue an older save: is the kitchen as you left it?"
       ]
+    },
+    {
+      "id": "2026-11-12-spec-057",
+      "date": "2026-11-12",
+      "title": "Your first restaurant",
+      "items": [
+        "A goal board hangs on the back wall: once the food corner has saved the rent, press its top row twice to rent the restaurant",
+        "Moving day: every station opens, card payments work and you order stock at the terminal",
+        "Buy recipes at the goal board (falafel wrap, seitan wrap, grilled veggies, drinks) and turn them on or off the menu; the menu holds 4 dishes with the fries",
+        "The restaurant pays rent after each service; when money is short the rest is owed and new recipes wait until it is paid",
+        "The next goal: good stars over 5 services and money for the service licence",
+        "Goals, recipes and rent follow how many play: a solo cook saves less than a crew of four"
+      ],
+      "test": [
+        "Rent the restaurant with two presses: is it clear what happens and when?",
+        "Buy a recipe, then play the next service: do guests order it, and do some pay by card?",
+        "Does the rent feel fair for your crew size, alone and with friends?",
+        "Close the shop and Continue: are you still in the restaurant with your recipes and menu?"
+      ]
     }
   ]
 }

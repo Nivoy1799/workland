@@ -84,6 +84,7 @@ namespace Worktown.Game.Editor
                 bool numbered = layout.CountOf(type) > 1;
                 GameObject root = type == PieceCatalog.Worktop ? BuildWorktop(catalog, def, parts)
                     : type == PieceCatalog.FrontCounter ? BuildFrontCounter(catalog, def)
+                    : type == PieceCatalog.GoalBoard ? BuildGoalBoard(catalog, def, first) // spec 057: not in the builder's kitchen
                     : CarveStation(catalog, def, first, parts, numbered);
                 root.name = type;
                 string path = Folder + "/" + type + ".prefab";
@@ -277,6 +278,92 @@ namespace Worktown.Game.Editor
             return root;
         }
 
+        public const string GoalBoardName = "Goal board";
+        public const string GoalBoardRowName = "Goal row";
+
+        /// <summary>
+        /// Spec 057: the goal board, a wall piece (GoalBoardArtRules; a graybox stand-in until the art pass): the station at the board's middle
+        /// with a "Body" box collider of the board's size (the aim: the row nearest the hit), the catalog's graybox, the sign under it, and one
+        /// slot per row (option = the row) with its Ink text line, which the client's GoalBoardView writes from the synced stage.
+        /// </summary>
+        private static GameObject BuildGoalBoard(ArtCatalog catalog, PieceDef def, LayoutPiece piece)
+        {
+            GameObject root = NewRoot(def.TypeId, piece);
+            var stationObject = new GameObject(GoalBoardName);
+            stationObject.transform.SetParent(root.transform, false);
+            stationObject.transform.localPosition = new Vector3(0f, GoalBoardArtRules.CentreHeight, 0f);
+            var station = stationObject.AddComponent<Station>();
+            GrayboxSceneBuilder.SetField(station, "_kind", (int)StationKind.GoalBoard);
+            GrayboxSceneBuilder.SetField(station, "_displayName", GoalBoardName);
+            GrayboxSceneBuilder.SetField(station, "_ingredientIndex", -1);
+            var body = new GameObject("Body");
+            body.transform.SetParent(stationObject.transform, false);
+            body.transform.localScale = new Vector3(def.WidthMm / 1000f, GoalBoardArtRules.Height, GoalBoardArtRules.Depth); // 1.8 cm: clear of the back line
+            body.AddComponent<BoxCollider>(); // size one: the body's scale is the board
+            float h = GoalBoardArtRules.Height;
+            if (catalog.TryGet(ArtCatalogRules.StationKey(StationKind.GoalBoard), out GameObject wrapper))
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(wrapper, stationObject.transform);
+                visual.transform.localPosition = new Vector3(0f, -h * 0.5f, 0f);
+                visual.transform.localRotation = GrayboxSceneBuilder.ArtFrontRotation; // the model's front (+Z) towards the aisle
+            }
+            else Debug.LogError("[Graybox] no goal board model in the catalog");
+            TextMesh sign = Label(stationObject.transform, new Vector3(0f, -h * 0.5f - 0.03f, GoalBoardArtRules.FrontZ - StationSign.Standoff), 60, 0.05f);
+            sign.anchor = TextAnchor.UpperCenter;
+            sign.transform.localScale = Vector3.one * StationSign.BaseScale;
+            sign.gameObject.AddComponent<StationSign>();
+            sign.text = GoalBoardName + " · your next goal";
+
+            var slots = new List<StockSlot>(Worktown.Game.Climb.GoalBoardRules.RowCount);
+            var rows = new TextMesh[Worktown.Game.Climb.GoalBoardRules.RowCount];
+            for (int row = 0; row < rows.Length; row++)
+            {
+                var slotObject = new GameObject(GoalBoardRowName + " " + row);
+                slotObject.transform.SetParent(stationObject.transform, false);
+                slotObject.transform.localPosition = GoalBoardArtRules.RowCentre(row);
+                var slot = slotObject.AddComponent<StockSlot>();
+                GrayboxSceneBuilder.SetField(slot, "_station", station);
+                GrayboxSceneBuilder.SetField(slot, "_option", row);
+                GrayboxSceneBuilder.SetField(slot, "_ingredientIndex", -1);
+                slots.Add(slot);
+                TextMesh text = Label(stationObject.transform, GoalBoardArtRules.RowTextCorner(row), 40, 0.0075f);
+                text.name = GoalBoardRowName + " text " + row;
+                text.anchor = TextAnchor.MiddleLeft;
+                text.alignment = TextAlignment.Left;
+                text.color = Palette.Ink; // D32: Ink on the Cream face
+                text.text = row == 0 ? GoalBoardName : string.Empty;
+                rows[row] = text;
+            }
+            GrayboxSceneBuilder.SetField(station, "_slots", slots);
+            foreach (Transform t in stationObject.GetComponentsInChildren<Transform>(true))
+                if (t.GetComponent<TextMesh>() == null) t.gameObject.isStatic = true; // only the text changes
+            var view = stationObject.AddComponent<Worktown.Game.UI.GoalBoardView>();
+            GrayboxSceneBuilder.SetField(view, "_rows", rows);
+
+            PieceBehaviour behaviour = AddPiece(root, def.TypeId);
+            GrayboxSceneBuilder.SetField(behaviour, "_surfaces", new List<PlaceSurface>());
+            GrayboxSceneBuilder.SetField(behaviour, "_stations", new List<Station> { station });
+            return root;
+        }
+
+        /// <summary>A world label (the builder's: the built-in font, Cream unless set).</summary>
+        private static TextMesh Label(Transform parent, Vector3 localPosition, int fontSize, float characterSize)
+        {
+            var go = new GameObject("Label");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPosition;
+            var text = go.AddComponent<TextMesh>();
+            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = font;
+            go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            text.fontSize = fontSize;
+            text.characterSize = characterSize;
+            text.anchor = TextAnchor.LowerCenter;
+            text.alignment = TextAlignment.Center;
+            text.color = Palette.Cream;
+            return text;
+        }
+
         private static void SetModules(PieceBehaviour behaviour, GameObject wrapper, Transform parent, string name, float height, float depthScale)
         {
             GrayboxSceneBuilder.SetField(behaviour, "_moduleArt", wrapper);
@@ -310,6 +397,7 @@ namespace Worktown.Game.Editor
                 case PieceCatalog.Bin: return StationKind.Bin;
                 case PieceCatalog.SpitModule: return StationKind.Spit;
                 case PieceCatalog.MenuBoard: return StationKind.MenuBoard;
+                case PieceCatalog.GoalBoard: return StationKind.GoalBoard; // spec 057
                 default: throw new InvalidOperationException("no station kind for piece type " + type);
             }
         }

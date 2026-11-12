@@ -24,7 +24,8 @@ namespace Worktown.Game.Tests
 
         private static readonly StationKind[] OpenWhole =
             { StationKind.Fryer, StationKind.PlateShelf, StationKind.Counter, StationKind.TrashCan, StationKind.Bin,
-                StationKind.MenuBoard }; // spec 037: the fries' price is set at the food corner too
+                StationKind.MenuBoard, // spec 037: the fries' price is set at the food corner too
+                StationKind.GoalBoard }; // spec 057: open at every stage (GoalBoardRules refuses by itself)
 
         private static readonly StationKind[] Closed =
         {

@@ -15,6 +15,8 @@ namespace Worktown.Game.Net.Rules
         public const string MenuTour = "menu";
         /// <summary>Spec 053: the food corner tour (Dev/CornerTourRunner) starts on the title screen too, with <c>-save-dir</c>.</summary>
         public const string CornerTour = "corner";
+        /// <summary>Spec 057: the restaurant tour (Dev/RestaurantTourRunner) starts on the title screen with <c>-save-dir</c> holding a stage 1 save.</summary>
+        public const string RestaurantTour = "restaurant";
         /// <summary>Spec 047: the highest <c>-max-players</c>.</summary>
         public const int MaxPlayersLimit = 64;
 
@@ -80,7 +82,7 @@ namespace Worktown.Game.Net.Rules
         /// <summary>Spec 053: this host starts with a save (<c>-new-shop</c> or <c>-continue</c>); <c>-host</c> is the open kitchen.</summary>
         public bool HostsSave => NewShop || ContinueShop;
         /// <summary>Spec 053: a tour that starts on the title screen (no mode flag).</summary>
-        public bool TitleTour => Tour == MenuTour || Tour == CornerTour;
+        public bool TitleTour => Tour == MenuTour || Tour == CornerTour || Tour == RestaurantTour; // spec 057: the restaurant tour too
 
         /// <summary>Empty when parsing succeeded.</summary>
         public string Error { get; private set; } = string.Empty;
@@ -230,6 +232,7 @@ namespace Worktown.Game.Net.Rules
             if (result.Tour.Length > 0 && !result.TitleTour && result.Mode != LaunchMode.ClientTugboat) return Fail("-tour needs -connect");
             // Spec 053: the corner tour saves and continues, so it brings its own folder (never the player's saves).
             if (result.Tour == CornerTour && result.SaveDir.Length == 0) return Fail("-tour corner needs -save-dir");
+            if (result.Tour == RestaurantTour && result.SaveDir.Length == 0) return Fail("-tour restaurant needs -save-dir"); // spec 057
             if (result.SaveDir.Length > 0 && result.Mode != LaunchMode.Menu && !result.HostsSave)
                 return Fail("-save-dir needs the title screen, -new-shop or -continue");
             if (result.Observe.Length > 0 && result.Mode != LaunchMode.ClientTugboat && result.Mode != LaunchMode.Host)

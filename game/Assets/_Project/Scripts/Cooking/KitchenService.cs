@@ -235,6 +235,8 @@ namespace Worktown.Game.Cooking
                 case StationKind.Terminal: return _supply != null ? _supply.Order(player, option) : CookOutcome.UnknownStation;
                 // Spec 037: a button of the menu board (a line, or its price $0.50 down or up); the economy keeps the prices.
                 case StationKind.MenuBoard: return _economy != null ? _economy.UseMenuBoard(option) : CookOutcome.UnknownStation;
+                // Spec 057: a row of the goal board (rent the restaurant, buy or toggle a recipe); the stage decides, the money is the shop's.
+                case StationKind.GoalBoard: return _shopStage != null ? _shopStage.ServerPressBoard(player.OwnerId, option) : CookOutcome.UnknownStation;
                 default: return CookOutcome.UnknownStation;
             }
         }

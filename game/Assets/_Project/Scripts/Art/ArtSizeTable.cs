@@ -73,6 +73,8 @@ namespace Worktown.Game.Art
             World(ArtKey.StationSpit, SpitArtRules.Height, SizeAxis.Height, "Seitan spit"),
             // Spec 037: the menu board hangs above the front counter (the board's height).
             World(ArtKey.StationMenuBoard, MenuBoardArtRules.Height, SizeAxis.Height, "Menu board"),
+            // Spec 057: the goal board on the back wall (the board's height; no guide row yet: the art pass sizes it).
+            World(ArtKey.StationGoalBoard, GoalBoardArtRules.Height, SizeAxis.Height),
 
             // Street. Road tiles keep the 5 m strip of the street layout (two 2.5 m lanes; the guide's 3.0 m lane is the
             // target for a later street layout spec, so the road has no guide row here).

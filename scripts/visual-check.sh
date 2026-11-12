@@ -5,11 +5,16 @@
 # numbers to names). The tour client starts first and the observer second, so another window has focus while
 # the tour runs: the tour moves through its intents, not simulated keys.
 #
-#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu,corner] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
+#   bash scripts/visual-check.sh [--tours look,walk,cook,tutorial,menu,corner,restaurant] [--out .verify/visual] [--server local|wsl] [--gfx d3d11|d3d12|default]
 #
 #   corner (spec 053): one window, its own host: from the title screen (-tour corner, no mode flag) New shop, the food corner with its
 #                  covers and goal line, a closed station's refusal, two fries guests paid in cash, the service summary with the goal,
 #                  Close the shop, Continue with its line, Continue. Its saves go to <out>/corner-saves (-save-dir), never the player's.
+#
+#   restaurant (spec 057): one window, its own host: a version 1 food corner save (the rent goal reached) is copied into
+#                  <out>/restaurant-saves; Continue, rent the restaurant at the goal board (two presses), the move at the service end
+#                  (the covers gone), buy the falafel wrap, a terminal order, the next service with the wrap on the menu, the summary
+#                  with the rent and the gate line, Close the shop, Continue at stage 2.
 #
 #   menu (spec 047): the tour window starts on the title screen (-tour menu, no -connect) and joins the observer window (-host -observe
 #                  menu) through Join by address; the host kicks it; it then opens its own shop (the open kitchen, no save: follow-up
@@ -71,6 +76,7 @@ timeout_for() {
     tutorial) echo 1860 ;; # spec 038: the tutorial's steps through the cook tour's parts (fries, wrap, lemonade, cleaning, order, spit)
     menu) echo 360 ;; # spec 047: title, join by address, lobby, kick, own shop
     corner) echo 720 ;; # spec 053: new shop, two fries guests, the service end, close, continue
+    restaurant) echo 720 ;; # spec 057: continue, rent, move, a recipe, a stage 2 service, close, continue
     *) echo 420 ;;
   esac
 }
@@ -128,12 +134,17 @@ failed=0
 report=()
 IFS=',' read -r -a tour_list <<< "$TOURS"
 for tour in "${tour_list[@]}"; do
-  case "$tour" in look|walk|cook|tutorial|menu|corner) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
+  case "$tour" in look|walk|cook|tutorial|menu|corner|restaurant) ;; *) echo "unknown tour: $tour" >&2; failed=1; continue ;; esac
   if [ "$tour" = "menu" ] && [ "$SERVER" != "local" ]; then echo "the menu tour needs --server local (its host is the observer window)" >&2; failed=1; continue; fi
   rm -rf "${OUT:?}/${tour:?}" "${OUT:?}/${tour:?}-observer" "${OUT:?}/${tour:?}-native-crash"
   rm -f "${OUT:?}/${tour:?}-tour.crash.log" "${OUT:?}/${tour:?}-observer.crash.log"
   # Spec 053: the corner tour's own save folder starts empty (it must not see an older run's shop).
   if [ "$tour" = "corner" ]; then rm -rf "${OUT:?}/${tour:?}-saves"; mkdir -p "$OUT/$tour-saves"; fi
+  # Spec 057: the restaurant tour's save folder holds one version 1 food corner save (053's format, the rent goal reached, $1,000.00).
+  if [ "$tour" = "restaurant" ]; then
+    rm -rf "${OUT:?}/${tour:?}-saves"; mkdir -p "$OUT/$tour-saves"
+    printf '%s' '{"format":"worktown-shop-save","formatVersion":1,"saveId":"57057057057057057057057057057057","createdUtc":"2026-11-12T08:00:00.0000000Z","savedUtc":"2026-11-12T09:00:00.0000000Z","shopName":"Your food corner","worldSeed":5757,"climb":{"stage":1,"unlocks":["dish_fries"],"goalReached":true},"money":{"balance":115000,"earnedTotal":150000,"spentTotal":35000},"clock":{"day":12,"servicesPlayed":11,"playSeconds":4000},"hygienePercent":95,"stats":{"guestsServed":40,"guestsMissed":3,"starSum":160,"bestServiceEarned":12000}}' > "$OUT/$tour-saves/shop-570570570570.json"
+  fi
   tour_log="$OUT/$tour-tour.log"
   observer_log="$OUT/$tour-observer.log"
   # Spec 049b: each window writes its own crash log (049's CrashLog: exceptions from every thread, the tick watchdog's dump)
@@ -153,6 +164,8 @@ for tour in "${tour_list[@]}"; do
   if [ "$tour" = "menu" ]; then tour_connect=(); fi
   # Spec 053: the corner tour is its own host from the title screen, with its own save folder and the tutorial's calm guests.
   if [ "$tour" = "corner" ]; then tour_connect=(); tour_extra=(-save-dir "$(cygpath -w "$OUT/$tour-saves")" -tutorial); fi
+  # Spec 057: the restaurant tour hosts the fixture save from the title screen (no tutorial: the stage 2 guests draw as usual).
+  if [ "$tour" = "restaurant" ]; then tour_connect=(); tour_extra=(-save-dir "$(cygpath -w "$OUT/$tour-saves")"); fi
   "$GAME" "${tour_connect[@]}" -tour "$tour" -tour-out "$OUT_WIN" "${tour_extra[@]}" "${WINDOW[@]}" -crash-log "$(cygpath -w "$tour_crash")" -logFile "$(cygpath -w "$tour_log")" &
   tour_pid=$!
   # The observer starts second, so its window is in front and the tour client runs without focus.
@@ -163,14 +176,14 @@ for tour in "${tour_list[@]}"; do
   # Spec 038: the tutorial host has the tour's stock and trash set-up and the tutorial's calm guests (its scripted orders come first).
   if [ "$tour" = "tutorial" ]; then host_extra=(-tour-orders -tutorial); fi
   observer_pid=""
-  if [ "$tour" = "corner" ]; then
-    : # spec 053: no second window (the tour hosts its own shop on the port)
+  if [ "$tour" = "corner" ] || [ "$tour" = "restaurant" ]; then
+    : # spec 053 (057): no second window (the tour hosts its own shop on the port)
   elif [ "$SERVER" = "local" ]; then
     "$GAME" -host -observe "$tour" -tour-out "$OUT_WIN" "${host_extra[@]}" "${WINDOW[@]}" -crash-log "$(cygpath -w "$observer_crash")" -logFile "$(cygpath -w "$observer_log")" &
   else
     "$GAME" -connect "$ADDRESS" -observe "$tour" -tour-out "$OUT_WIN" "${WINDOW[@]}" -crash-log "$(cygpath -w "$observer_crash")" -logFile "$(cygpath -w "$observer_log")" &
   fi
-  if [ "$tour" != "corner" ]; then observer_pid=$!; fi
+  if [ "$tour" != "corner" ] && [ "$tour" != "restaurant" ]; then observer_pid=$!; fi
 
   wait_window "$tour_pid" "$deadline"
   tour_code=$WAIT_CODE
