@@ -109,6 +109,25 @@ netcode, Unity scenes or prefabs, debugging across many files, anything vague.
 `ANTHROPIC_*` variables into user settings: a running session keeps them and its haiku
 agents and web search break until it is restarted.
 
+### API builder (since 2026-11-13, not tried yet)
+
+The same idea with a stronger hosted model: DeepSeek through its Anthropic-format endpoint
+(`https://api.deepseek.com/anthropic`). It costs API money, not subscription usage, and is far
+faster than the local model, so it can take Sonnet-sized cards (several files in `/sim` or the UI).
+
+**Setup (the human, once).** Create `C:\Users\jovin\tools\claude-router\api-builder.env` with
+`API_BUILDER_KEY=<key>` and optionally `API_BUILDER_MODEL=<model name>` (default `deepseek-v4-pro`;
+an unknown name silently falls back to DeepSeek's small model, so check DeepSeek's Claude Code page).
+The file stays outside the repo; never print or commit it.
+
+**Run.** Like the local builder, in the background:
+`powershell -File C:\Users\jovin\tools\claude-router\api-build.ps1 -Dir <worktree> -Task "<task card>"`
+(`-MaxTurns 60` by default). Live view: `watch-local.ps1 -Api`.
+
+**What it can do.** Read, Grep, Glob, Edit, Write, and `dotnet build` / `dotnet test` only (no git,
+no other commands, no web, no Unity). Same card rules, same review, same "netcode stays with Opus".
+Start with one card to calibrate, as with the local builder.
+
 ## Running the builder
 
 1. `git checkout -b spec/NNN-name`
