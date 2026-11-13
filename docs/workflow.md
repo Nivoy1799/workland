@@ -45,8 +45,10 @@ HUMAN plays it 5 minutes ──► orchestrator merges to main the same day
 
 ## Who builds what
 
-Anthropic models through the Claude subscription, plus the free local builder (see
-"Local builder" below). Pick the cheapest option that can do the job; the spec's `builder:`
+Claude models through the Claude subscription, plus other models as builders (the human lifted the
+Anthropic-only rule on 2026-11-13): the free local builder (see "Local builder" below) and an API builder
+(a stronger hosted model, for cards too big for the local one). Opus reviews every result; netcode stays
+with Opus. Pick the cheapest option that can do the job; the spec's `builder:`
 field says which one (`local` is allowed for small, clearly specified parts).
 
 | Work | Agent | Model |

@@ -8,10 +8,11 @@
 In this repo, the main session (Opus) is the **architect, reviewer and netcode owner**.
 Routine implementation goes to the builder subagent on Sonnet, trivial edits on Haiku
 (see docs/workflow.md, "Who builds what"). Netcode and hard debugging stay on Opus.
-Anthropic models via the user's subscription, plus one exception: the **local builder**
-(Qwen on the Windows dev PC, free but slow). When it is running, small and clearly specified
-implementation tasks go to it first; Opus plans the task card and reviews the diff
-(see docs/workflow.md, "Local builder"). No other coding agents.
+Claude models come through the user's subscription. Other models may build too (the human
+lifted the Anthropic-only rule on 2026-11-13): the **local builder** (Qwen on the Windows dev PC,
+free but slow) and an **API builder** (a stronger hosted model, once the human has set its key).
+Small and clearly specified implementation tasks go to them first; Opus plans the task card and
+reviews every diff, and netcode stays with Opus (see docs/workflow.md, "Local builder").
 
 ### Subagents (in .claude/agents/)
 - `architect`: turns a short human idea into a spec in /specs. Never writes code.
