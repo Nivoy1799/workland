@@ -122,7 +122,9 @@ The file stays outside the repo; never print or commit it.
 
 **Run.** Like the local builder, in the background:
 `powershell -File C:\Users\jovin\tools\claude-router\api-build.ps1 -Dir <worktree> -Task "<task card>"`
-(`-MaxTurns 60` by default). Live view: `watch-local.ps1 -Api`.
+(`-MaxTurns 60` by default). Live view: `watch-local.ps1 -Api`. Another provider with an
+Anthropic-format endpoint gets its own file, e.g. `minimax.env` with
+`API_BUILDER_BASE_URL=https://api.minimax.io/anthropic` and `API_BUILDER_MODEL=MiniMax-M3`, run with `-Config minimax.env`.
 
 **What it can do.** Read, Grep, Glob, Edit, Write, and `dotnet build` / `dotnet test` only (no git,
 no other commands, no web, no Unity). Same card rules, same review, same "netcode stays with Opus".
